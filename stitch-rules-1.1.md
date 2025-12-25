@@ -229,3 +229,40 @@ Before output, verify:
 ---
 
 Begin conversion now using the provided Stitch design/code.
+
+
+### Lucide React Icon Usage Rules (STRICT)
+
+- Use lucide-react icons exclusively for all UI icons.
+- Icons MUST NOT receive Tailwind classes for color (className="text-...").
+- Since Lucide icons do not support Tailwind theming, apply inline color values using the color prop.
+
+✅ Correct Usage:
+<BellDotIcon
+  size={24}
+  color="red"
+/>
+
+❌ Forbidden:
+<BellDotIcon className="text-primary" />
+<BellDotIcon className="text-muted-foreground" />
+
+Color Selection Rules for Icons:
+
+1. Prefer semantic meaning, not theme surfaces.
+   Icons often represent status or action, not layout surfaces.
+
+2. Use inline colors ONLY when necessary, such as:
+   - Notification dots
+   - Status indicators (live, unread, error)
+   - Media or alert states
+
+3. Do NOT use:
+   - Raw layout colors
+   - Background or surface colors
+   - Arbitrary Tailwind classes
+
+Decision Rule:
+
+If the icon color represents status or emphasis, inline color is allowed.
+If the icon color affects theme, layout, or readability, redesign to rely on semantic shadcn tokens instead.

@@ -19,28 +19,34 @@ export function HomeFeedPostFooter({
         {tags.map((tag) => (
           <View
             key={tag}
-            className="px-2.5 py-1 rounded-md bg-primary/10 dark:bg-primary/20"
+            className="px-2.5 py-1 rounded-md bg-primary/10"
           >
-            <Text className="text-xs font-medium text-primary dark:text-blue-300">
+            <Text className="text-xs font-medium text-primary">
               {tag}
             </Text>
           </View>
         ))}
       </View>
       <View className="flex-row items-center gap-4">
-        <TouchableOpacity className="flex-row items-center gap-1 text-slate-400">
-          <MaterialIcons name="favorite-border" size={20} color="gray" />
-          <Text className="text-xs font-medium text-slate-400">{likes}</Text>
+        <TouchableOpacity className="flex-row items-center gap-1">
+          <MaterialIcons
+            name="favorite-border"
+            size={20}
+            className="text-muted-foreground"
+          />
+          <Text className="text-xs font-medium text-muted-foreground">
+            {likes}
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity>
           <MaterialIcons
             name={isBookmarked ? "bookmark" : "bookmark-border"}
             size={20}
-            color="gray"
+            className="text-muted-foreground"
           />
         </TouchableOpacity>
         <TouchableOpacity>
-          <MaterialIcons name="share" size={20} color="gray" />
+          <MaterialIcons name="share" size={20} className="text-muted-foreground" />
         </TouchableOpacity>
       </View>
     </View>

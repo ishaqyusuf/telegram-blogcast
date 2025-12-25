@@ -17,24 +17,28 @@ export function HomeFeedPostAuthorHeader({
       <View className="flex-row items-center gap-3">
         <Image
           source={{ uri: author.avatarUrl }}
-          className="w-10 h-10 rounded-full bg-slate-200"
+          className="w-10 h-10 rounded-full bg-muted"
         />
         <View>
           <View className="flex-row items-center gap-1">
-            <Text className="text-sm font-bold text-slate-900 dark:text-white">
+            <Text className="text-sm font-bold text-foreground">
               {author.name}
             </Text>
             {author.isVerified && (
-              <MaterialIcons name="verified" size={14} color="#3b82f6" />
+              <MaterialIcons name="verified" size={14} className="text-primary" />
             )}
           </View>
-          <Text className="text-xs text-slate-500 dark:text-slate-400">
+          <Text className="text-xs text-muted-foreground">
             {createdAt}
           </Text>
         </View>
       </View>
-      <TouchableOpacity className="p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700">
-        <MaterialIcons name="more-horiz" size={24} color="gray" />
+      <TouchableOpacity className="p-1 rounded-full">
+        <MaterialIcons
+          name="more-horiz"
+          size={24}
+          className="text-muted-foreground"
+        />
       </TouchableOpacity>
     </View>
   );

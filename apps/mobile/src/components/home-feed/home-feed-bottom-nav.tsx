@@ -11,7 +11,7 @@ const navItems = [
 
 export function HomeFeedBottomNav() {
   return (
-    <View className="absolute bottom-0 left-0 right-0 bg-white dark:bg-[#111422] border-t border-slate-200 dark:border-slate-800 pb-5 pt-2 px-6">
+    <View className="absolute bottom-0 left-0 right-0 bg-background border-t border-border pb-5 pt-2 px-6">
       <View className="flex-row items-center justify-between">
         {navItems.map((item, index) => (
           <>
@@ -24,11 +24,13 @@ export function HomeFeedBottomNav() {
               <MaterialIcons
                 name={item.icon as any}
                 size={24}
-                color={item.name === "Home" ? "#1430b8" : "gray"}
+                className={
+                  item.name === "Home" ? "text-primary" : "text-muted-foreground"
+                }
               />
               <Text
                 className={`text-[10px] font-medium ${
-                  item.name === "Home" ? "text-primary" : "text-slate-400"
+                  item.name === "Home" ? "text-primary" : "text-muted-foreground"
                 }`}
               >
                 {item.name}

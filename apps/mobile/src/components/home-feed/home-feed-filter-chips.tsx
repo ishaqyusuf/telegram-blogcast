@@ -6,7 +6,7 @@ export function HomeFeedFilterChips() {
   const [activeFilter, setActiveFilter] = useState("All");
 
   return (
-    <View className="py-3 pl-4 border-b border-slate-200 dark:border-slate-800/50 bg-background-light dark:bg-background-dark">
+    <View className="py-3 pl-4 border-b border-border bg-background">
       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
         <View className="flex-row gap-2 pr-4">
           {DUMMY_FILTERS.map((filter) => (
@@ -15,15 +15,15 @@ export function HomeFeedFilterChips() {
               onPress={() => setActiveFilter(filter)}
               className={`px-4 h-9 rounded-full items-center justify-center transition-colors ${
                 activeFilter === filter
-                  ? "bg-slate-900 dark:bg-white"
-                  : "bg-white dark:bg-surface-dark border border-slate-200 dark:border-slate-700"
+                  ? "bg-primary"
+                  : "bg-card border border-border"
               }`}
             >
               <Text
                 className={`text-sm font-medium whitespace-nowrap ${
                   activeFilter === filter
-                    ? "text-white dark:text-slate-900 font-bold"
-                    : "text-foreground"
+                    ? "text-primary-foreground font-bold"
+                    : "text-muted-foreground"
                 }`}
               >
                 {filter}
