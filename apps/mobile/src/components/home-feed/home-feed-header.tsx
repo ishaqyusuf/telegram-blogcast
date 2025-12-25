@@ -1,6 +1,6 @@
-import { View, Text, TouchableOpacity, Image } from "react-native";
-import { MaterialIcons } from "@expo/vector-icons";
-import { ArrowDownToDot, Bell, BellDotIcon } from "lucide-react-native";
+import { View, Text, Image } from "react-native";
+import { Icon } from "../ui/icon";
+import { ThemeToggle } from "../theme-toggle";
 
 export function HomeFeedHeader() {
   const userAvatar =
@@ -10,25 +10,18 @@ export function HomeFeedHeader() {
     <View className="px-4 py-3 flex-row items-center justify-between border-b border-border bg-background">
       <View className="flex-row items-center gap-3">
         <View className="bg-primary rounded-lg p-1.5 items-center justify-center">
-          <MaterialIcons
-            name="graphic-eq"
-            size={20}
-            className="text-primary-foreground"
-          />
+          {/* <AudioLines size={20} color="white" /> */}
+          <Icon name="AudioLines" className="text-foreground size-20" />
         </View>
         <Text className="text-xl font-bold tracking-tight text-foreground">
           Alghurobaa
         </Text>
       </View>
       <View className="flex-row items-center gap-3">
-        <TouchableOpacity className="relative p-2 rounded-full">
-          <BellDotIcon
-            // name="notifications"
-            size={24}
-            color={"red"}
-            className="text-red-400"
-          />
-        </TouchableOpacity>
+        <ThemeToggle />
+        {/* <TouchableOpacity className="relative p-2 rounded-full">
+          <BellDotIcon size={24} color="red" />
+        </TouchableOpacity> */}
         {/* <ArrowDownToDot color={"red"} className="text-foreground" /> */}
         <Image
           source={{ uri: userAvatar }}

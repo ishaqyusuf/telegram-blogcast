@@ -81,13 +81,14 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
               : typeof fn === "object"
               ? {}
               : null) as T);
+      const audio = isType("audio", blogAudio());
       return {
         type,
         id: blog.id,
         content: blogContent(type, blog.content),
         caption: blogCaption(type, blog.content),
         date: blog.blogDate,
-        audio: isType("audio", blogAudio()),
+        audio,
         video: blogVideo(type, blog),
         img: isType(
           "image",
@@ -96,6 +97,12 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
           }))
         ),
         doc: blogPdf(type, blog),
+        tags: [],
+        isBookmarked: false,
+        likes: 0,
+        coverImageUrl: null,
+        artwork: null,
+        title: audio?.title || blogCaption(type, blog.content),
         // images: blog.medias,
       };
     })

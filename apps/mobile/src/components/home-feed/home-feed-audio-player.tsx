@@ -1,19 +1,38 @@
-
 import { View, Text, TouchableOpacity } from "react-native";
-import { MaterialIcons } from "@expo/vector-icons";
+import { useCallback } from "react";
+import { ItemProps } from "./home-feed-post-card";
+import { useAudioStore } from "@/store/audio-store";
+import { Icon } from "../ui/icon";
 
-export function HomeFeedAudioPlayer({ duration }: { duration: string }) {
+export function HomeFeedAudioPlayer({
+  duration,
+  post,
+}: {
+  post: ItemProps;
+  duration: string;
+}) {
+  const store = useAudioStore();
+  const isCurrent = store.blog?.id === post?.id;
+  const isPlayying = isCurrent && store.isPlaying;
+  const playPause = useCallback(async () => {
+    if (isPlayying) store.pause();
+    else if (isCurrent) store.play();
+    else store.loadAudio(post);
+  }, [isPlayying, isCurrent]);
   // A fake waveform for display purposes
   const waveform = [4, 5, 4, 2, 3, 5, 2, 4, 3, 2, 5, 3];
   return (
     <View className="bg-muted rounded-xl p-3 mb-4 border border-border">
       <View className="flex-row items-center gap-3">
-        <TouchableOpacity className="w-10 h-10 rounded-full bg-primary items-center justify-center">
-          <MaterialIcons
-            name="play-arrow"
-            size={24}
-            className="text-primary-foreground"
+        <TouchableOpacity
+          onPress={playPause}
+          className="w-10 h-10 rounded-full bg-primary items-center justify-center"
+        >
+          <Icon
+            name={isPlayying ? "Pause" : "Play"}
+            className="text-foreground size-16"
           />
+          {/* <Play size={24} color="white" fill="white" /> */}
         </TouchableOpacity>
         <View className="flex-1 flex-col gap-1.5">
           <View className="flex-row items-center gap-px h-6">
@@ -28,10 +47,7 @@ export function HomeFeedAudioPlayer({ duration }: { duration: string }) {
             ))}
             <View className="flex-1 flex-row items-center gap-px h-6">
               {Array.from({ length: 20 }).map((_, i) => (
-                <View
-                  key={i}
-                  className="w-1 h-2 bg-border rounded-full"
-                />
+                <View key={i} className="w-1 h-2 bg-border rounded-full" />
               ))}
             </View>
           </View>

@@ -1,24 +1,48 @@
-import { cn } from '@/lib/utils';
-import type { LucideIcon, LucideProps } from 'lucide-react-native';
-import { cssInterop } from 'nativewind';
-
+import { cn } from "@/lib/utils";
+import type { LucideIcon, LucideProps } from "lucide-react-native";
+// import { cssInterop } from "react-native-css-interop";
+import { icons } from "lucide-react-native";
+import { useColorScheme } from "nativewind";
+import { camel } from "@gnd/utils";
+import { THEME } from "@/lib/theme";
 type IconProps = LucideProps & {
-  as: LucideIcon;
+  as?: LucideIcon;
+  name?: keyof typeof icons;
 };
 
-function IconImpl({ as: IconComponent, ...props }: IconProps) {
+function IconImpl({ as: IconComponent, name, ...props }: IconProps) {
+  const { colorScheme } = useColorScheme();
+  const spl = props.className?.split(" ")?.reverse();
+  const [, ...colorChunk] =
+    spl?.find((a) => a?.startsWith("text-"))?.split("-") || [];
+  const color = colorChunk?.length ? camel(colorChunk?.join(" ")) : undefined;
+  const _themColor =
+    colorScheme === "dark" ? THEME.dark[color!] : THEME.light[color!];
+
+  const [, _size] = spl?.find((a) => a?.startsWith("size-"))?.split("-") || [];
+
+  props.style = {
+    ...(props.style || ({} as any)),
+    color: _themColor || color,
+  };
+
+  if (_size) {
+    props.size = +_size;
+  }
+  if (!IconComponent) IconComponent = icons[name as any];
+  if (!IconComponent) throw new Error("Invalid icon");
   return <IconComponent {...props} />;
 }
 
-cssInterop(IconImpl, {
-  className: {
-    target: 'style',
-    nativeStyleToProp: {
-      height: 'size',
-      width: 'size',
-    },
-  },
-});
+// cssInterop(IconImpl, {
+//   className: {
+//     target: "style",
+//     nativeStyleToProp: {
+//       height: "size",
+//       width: "size",
+//     },
+//   },
+// });
 
 /**
  * A wrapper component for Lucide icons with Nativewind `className` support via `cssInterop`.
@@ -40,11 +64,16 @@ cssInterop(IconImpl, {
  * @param {number} size - Icon size (defaults to 14).
  * @param {...LucideProps} ...props - Additional Lucide icon props passed to the "as" icon.
  */
-function Icon({ as: IconComponent, className, size = 14, ...props }: IconProps) {
+function Icon({
+  as: IconComponent,
+  className,
+  size = 14,
+  ...props
+}: IconProps) {
   return (
     <IconImpl
       as={IconComponent}
-      className={cn('text-foreground', className)}
+      className={cn("text-foreground", className)}
       size={size}
       {...props}
     />
