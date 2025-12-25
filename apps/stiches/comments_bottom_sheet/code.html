@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Comments Bottom Sheet - Alghurobaa</title>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Fonts: Plus Jakarta Sans for English, Noto Sans Arabic for Arabic content -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@300;400;500;600;700&amp;family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1430b8",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#111421",
+                        "surface-dark": "#1a1d2d", // Slightly lighter for the sheet
+                        "surface-input": "#23263a",
+                    },
+                    fontFamily: {
+                        "display": ["Plus Jakarta Sans", "sans-serif"],
+                        "arabic": ["Noto Sans Arabic", "sans-serif"],
+                    },
+                    borderRadius: {"DEFAULT": "0.5rem", "lg": "1rem", "xl": "1.5rem", "2xl": "2rem", "3xl": "2.5rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        /* Custom scrollbar for webkit */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+        }
+        
+        /* Smooth backdrop blur simulation */
+        .backdrop-blur-overlay {
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-black font-display antialiased overflow-hidden h-screen w-full flex items-end justify-center">
+<!-- Background Simulation (The App Behind) -->
+<div class="fixed inset-0 z-0 w-full h-full bg-cover bg-center opacity-40" data-alt="Abstract blurry background representing an audio blog app interface" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCmxRorg-zC5ACzbWYoddNxysrG2EpqOY_WJ23AbY4hIvD2CMQMqa8xoZjiLuwI9s17EQ7IcjHSGkbfLbLTqRVa33oesVIM6kU-zr-5f4bvhzCVv1GFPGUTJ1p6U6F4Y8i6xKmTp6iG-gncCIIjRqHvw-jgl1kHaz5K14DxJEj3H5m4MkWV6kpx_0OY2WWrzJt0IuitNf4lwDmFICTODfGiPL3A6k0D8HKZ8OqVSLOnR9caa_mOhMajcGvBoGfLIP6CRorahWMfS_8');">
+</div>
+<!-- Overlay Dimmer -->
+<div class="fixed inset-0 z-10 bg-black/60 backdrop-blur-overlay transition-opacity"></div>
+<!-- Bottom Sheet Container -->
+<div class="relative z-20 w-full max-w-md mx-auto h-[85vh] flex flex-col bg-background-dark rounded-t-[32px] shadow-2xl overflow-hidden border-t border-white/5 animate-slide-up">
+<!-- Sheet Handle -->
+<div class="w-full flex justify-center pt-3 pb-1 shrink-0 bg-background-dark z-30" data-element="BottomSheetHandle">
+<div class="h-1.5 w-12 rounded-full bg-white/20"></div>
+</div>
+<!-- Header -->
+<div class="flex items-center justify-between px-6 py-4 bg-background-dark shrink-0 z-30">
+<h2 class="text-white text-xl font-bold tracking-tight">Comments (14)</h2>
+<button class="p-2 -mr-2 text-white/60 hover:text-white transition-colors rounded-full hover:bg-white/5">
+<span class="material-symbols-outlined text-2xl">close</span>
+</button>
+</div>
+<!-- Audio Context & Progress Bar -->
+<div class="px-6 pb-6 pt-1 bg-background-dark shrink-0 border-b border-white/5 z-30">
+<div class="flex justify-between items-center mb-3">
+<div class="flex items-center gap-2 overflow-hidden">
+<div class="w-6 h-6 rounded bg-primary/20 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary text-sm">music_note</span>
+</div>
+<span class="text-white/60 text-xs font-medium truncate">Episode 4: Finding Inner Peace</span>
+</div>
+<span class="text-primary text-xs font-bold">10:45</span>
+</div>
+<!-- Progress Bar with Comment Markers -->
+<div class="relative h-6 flex items-center group cursor-pointer">
+<!-- Track -->
+<div class="absolute w-full h-1.5 bg-[#343c65] rounded-full overflow-hidden">
+<!-- Progress Fill -->
+<div class="h-full bg-primary w-[35%] rounded-full"></div>
+</div>
+<!-- Comment Markers (Ticks) -->
+<!-- Marker 1 at 15% -->
+<div class="absolute left-[15%] h-2.5 w-0.5 bg-white/40 rounded-full group-hover:bg-white transition-colors top-1/2 -translate-y-1/2" title="Comment at 04:20"></div>
+<!-- Marker 2 at 35% (Current) -->
+<div class="absolute left-[35%] h-4 w-4 bg-white border-2 border-primary rounded-full shadow-lg z-10 top-1/2 -translate-y-1/2 transform scale-0 group-hover:scale-100 transition-transform duration-200"></div>
+<!-- Marker 3 at 70% -->
+<div class="absolute left-[70%] h-2.5 w-0.5 bg-white/40 rounded-full group-hover:bg-white transition-colors top-1/2 -translate-y-1/2"></div>
+</div>
+</div>
+<!-- Scrollable Comments List -->
+<div class="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-7 pb-32">
+<!-- Comment 1: Standard Arabic Comment -->
+<div class="flex w-full flex-row items-start justify-start gap-3 group">
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full w-10 h-10 shrink-0 border border-white/10" data-alt="User profile picture of SarahJ" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuCLPWOdXuzjUnPedo-Z-gZxdBY5mw7ySit97nU-jBOvDaIT0ssB7hTuNVnKv7rbN2HlHvbl8ik4oFd80tuRT-kXj1lhdrYZZcE6r_Ezu_xtzacujp74tXoc9BlW2t-rJj8p3h3C4XCe5qu9GJk07okpij_Gt2gGszvZLF-NyWMOY50kr2CABp6PPCnFbOq2cIAz2_HtI9IkXbPGHbTLj0MJPX8yoymKt5QJqA_nk29vyIvT5b5latOnggQ_4Xxku7j1ImJmN2zAGOs");'>
+</div>
+<div class="flex h-full flex-1 flex-col items-start justify-start min-w-0">
+<div class="flex w-full flex-row items-center justify-between">
+<div class="flex items-baseline gap-2">
+<p class="text-white text-sm font-bold leading-normal">SarahJ</p>
+<span class="text-white/40 text-[10px]">•</span>
+<p class="text-[#939cc8] text-xs font-medium">2m ago</p>
+</div>
+<div class="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+<button class="text-white/30 hover:text-white p-1"><span class="material-symbols-outlined text-lg">edit</span></button>
+<button class="text-white/30 hover:text-red-400 p-1"><span class="material-symbols-outlined text-lg">delete</span></button>
+</div>
+</div>
+<!-- Arabic Content: Text Right, Direction RTL -->
+<div class="w-full mt-1.5">
+<p class="text-white/90 text-[15px] font-normal leading-relaxed font-arabic text-right" dir="rtl">
+                            هذا المحتوى رائع جداً، شكراً لك على هذه المشاركة القيمة. أنتظر المزيد بفارغ الصبر!
+                        </p>
+</div>
+</div>
+</div>
+<!-- Comment 2: Timestamped Comment -->
+<div class="flex w-full flex-row items-start justify-start gap-3 group">
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full w-10 h-10 shrink-0 border border-white/10" data-alt="User profile picture of Ahmed_K" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuB4CdByCCkPG265vm0Jo41esVo10m8WuhvAJrcrd8GMP7p1xWoyXGZ55fQrfI1pLjnhVx3bXOTFqZAXh17w2Url_vdXnbd16CoW-zJNDWlG4I74MSebwQvKZLu14CEEIZqneKQeyvVFadrkKKCHUIFUBqDZWOivSsguc5wQSXQvcE6BmKYgaodmALzLtgCxhsuAve_6wIXrC0mf11_EQ6sFKXqK2Xsmp0Y1HPWIFC9426IWh1uWMEFpPNcX0s7iFY95jBsXG3rs-Fs");'>
+</div>
+<div class="flex h-full flex-1 flex-col items-start justify-start min-w-0">
+<div class="flex w-full flex-row items-center justify-between">
+<div class="flex items-baseline gap-2">
+<p class="text-white text-sm font-bold leading-normal">Ahmed_K</p>
+<span class="text-white/40 text-[10px]">•</span>
+<p class="text-[#939cc8] text-xs font-medium">15m ago</p>
+</div>
+<button class="opacity-0 group-hover:opacity-100 transition-opacity text-white/30 hover:text-white p-1">
+<span class="material-symbols-outlined text-lg">more_horiz</span>
+</button>
+</div>
+<!-- Arabic Content -->
+<div class="w-full mt-1.5">
+<p class="text-white/90 text-[15px] font-normal leading-relaxed font-arabic text-right" dir="rtl">
+                            أتفق معك تماماً في هذه النقطة، خاصة ما ذكرته بخصوص التأمل.
+                        </p>
+</div>
+<!-- Audio Timestamp Pill (Clickable) -->
+<div class="mt-2.5">
+<button class="group/pill flex items-center gap-1.5 pl-2 pr-3 py-1 rounded-full bg-primary/15 border border-primary/20 hover:bg-primary/25 transition-all">
+<span class="material-symbols-outlined text-primary text-base group-hover/pill:scale-110 transition-transform">play_arrow</span>
+<span class="text-primary text-xs font-bold font-display tracking-wide">04:20</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Comment 3: Another Standard -->
+<div class="flex w-full flex-row items-start justify-start gap-3 group">
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full w-10 h-10 shrink-0 border border-white/10" data-alt="User profile picture of Layla" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBKx92fmH2BfB3jjpVpzY07vXRSXwedpjbMm3f24Xl3m0iWPHp1Z4HiISDLVK3_vqqVmsAvTTTi_LKwsKNqxa5KvPRFZeLCuFX5D6GwXohn8vUu_HjFFMxsd_5l01T6-pEFGQ5UB81l-A2tI-8QmqRskfq1iCXHUab84fh3rHqVsURBENKLQUq8L_SpZt6u4r0ywceVIrgvErMIrTzbo11QZ5vfvlIRD2O0VnCNp_CZIh8-D8krZPlZKkv0xI6fyMHp8YnEwfe8StY");'>
+</div>
+<div class="flex h-full flex-1 flex-col items-start justify-start min-w-0">
+<div class="flex w-full flex-row items-center justify-between">
+<div class="flex items-baseline gap-2">
+<p class="text-white text-sm font-bold leading-normal">Layla.M</p>
+<span class="text-white/40 text-[10px]">•</span>
+<p class="text-[#939cc8] text-xs font-medium">1h ago</p>
+</div>
+</div>
+<div class="w-full mt-1.5">
+<p class="text-white/90 text-[15px] font-normal leading-relaxed font-arabic text-right" dir="rtl">
+                            هل يمكن توضيح النقطة الأخيرة؟ لم أفهم المقصود تماماً.
+                        </p>
+</div>
+</div>
+</div>
+<!-- Comment 4: Timestamped Comment -->
+<div class="flex w-full flex-row items-start justify-start gap-3 group">
+<div class="bg-center bg-no-repeat aspect-square bg-cover rounded-full w-10 h-10 shrink-0 border border-white/10" data-alt="User profile picture of User 4" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuAed09v1Mowj5J26EN1_ylxyKHroWQqWo3JC8HYDRpas1Vi9JrOARhscymM7KIr3glEbjRoGqSJ242RFB43UI0qqrNRSAFk0rWsmg4czAfZf_UbKFKwF4PEYhfe2iFp3WwzWeqPwUtmZnnVMKizF5Aryy4uyyd0eIszHxwyTqfiwnDtEYBAfMm6ilJZ38ObInXh7UTvWVZCVDdr643KQzRDQFHZuzNzIohOly98LRxrHT4tAQGF13Ea3WeWYgrjKFh5cbWNKQpMMhs");'>
+</div>
+<div class="flex h-full flex-1 flex-col items-start justify-start min-w-0">
+<div class="flex w-full flex-row items-center justify-between">
+<div class="flex items-baseline gap-2">
+<p class="text-white text-sm font-bold leading-normal">OmarDev</p>
+<span class="text-white/40 text-[10px]">•</span>
+<p class="text-[#939cc8] text-xs font-medium">3h ago</p>
+</div>
+</div>
+<div class="w-full mt-1.5">
+<p class="text-white/90 text-[15px] font-normal leading-relaxed font-arabic text-right" dir="rtl">
+                            جودة الصوت ممتازة جداً في هذه الحلقة! 🎧
+                        </p>
+</div>
+<div class="mt-2.5">
+<button class="group/pill flex items-center gap-1.5 pl-2 pr-3 py-1 rounded-full bg-surface-input border border-white/10 hover:border-primary/50 hover:bg-primary/10 transition-all">
+<span class="material-symbols-outlined text-white/70 text-base">play_arrow</span>
+<span class="text-white/70 text-xs font-bold font-display tracking-wide">00:15</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Floating Action Button & Expanded Menu -->
+<div class="absolute bottom-8 right-6 flex flex-col items-end gap-4 z-40 pointer-events-none">
+<!-- Menu Item 1: Add Timestamp Comment -->
+<button class="pointer-events-auto flex items-center gap-3 bg-surface-dark border border-white/10 p-2 pr-5 pl-2 rounded-full shadow-xl hover:bg-surface-input hover:border-primary/30 transition-all group animate-fade-in-up delay-75">
+<div class="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-white transition-colors">
+<span class="material-symbols-outlined text-xl">timer</span>
+</div>
+<div class="flex flex-col items-start">
+<span class="text-white font-bold text-sm">Add Timestamp</span>
+<span class="text-white/40 text-[10px] font-medium">at 10:45</span>
+</div>
+</button>
+<!-- Menu Item 2: Add Standard Comment -->
+<button class="pointer-events-auto flex items-center gap-3 bg-surface-dark border border-white/10 p-2 pr-5 pl-2 rounded-full shadow-xl hover:bg-surface-input hover:border-primary/30 transition-all group animate-fade-in-up">
+<div class="h-10 w-10 rounded-full bg-white/5 flex items-center justify-center text-white group-hover:bg-white group-hover:text-background-dark transition-colors">
+<span class="material-symbols-outlined text-xl">comment</span>
+</div>
+<span class="text-white font-bold text-sm">Add Comment</span>
+</button>
+<!-- Main FAB (Rotate to indicate open state) -->
+<button class="pointer-events-auto h-14 w-14 bg-primary text-white rounded-2xl shadow-lg shadow-primary/40 flex items-center justify-center transform rotate-45 hover:rotate-90 transition-transform duration-300">
+<span class="material-symbols-outlined text-3xl">add</span>
+</button>
+</div>
+<!-- Fade Overlay at Bottom of List -->
+<div class="absolute bottom-0 left-0 w-full h-20 bg-gradient-to-t from-background-dark to-transparent pointer-events-none z-10"></div>
+</div>
+<!-- Animation Styles -->
+<style>
+        @keyframes slide-up {
+            from { transform: translateY(100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .animate-slide-up {
+            animation: slide-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        @keyframes fade-in-up {
+            from { transform: translateY(10px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .animate-fade-in-up {
+            animation: fade-in-up 0.3s ease-out forwards;
+        }
+        .delay-75 {
+            animation-delay: 75ms;
+        }
+    </style>
+</body></html>

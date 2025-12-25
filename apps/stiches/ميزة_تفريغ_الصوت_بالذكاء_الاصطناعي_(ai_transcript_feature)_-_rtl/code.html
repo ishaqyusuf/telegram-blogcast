@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+
+<html class="dark" dir="rtl" lang="ar"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Alghurobaa - AI Transcript</title>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Theme Configuration -->
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+            extend: {
+                colors: {
+                "primary": "#1430b8",
+                "background-light": "#f6f6f8",
+                "background-dark": "#111421",
+                "surface-dark": "#1c2033",
+                "surface-light": "#ffffff",
+                },
+                fontFamily: {
+                "display": ["Plus Jakarta Sans", "Noto Sans Arabic", "sans-serif"],
+                "body": ["Noto Sans Arabic", "sans-serif"],
+                },
+                borderRadius: {"DEFAULT": "0.5rem", "lg": "1rem", "xl": "1.5rem", "full": "9999px"},
+            },
+            },
+        }
+    </script>
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@100..900&amp;family=Plus+Jakarta+Sans:wght@200..800&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .icon-filled {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        
+        /* Hide scrollbar for clean UI */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-body text-slate-900 dark:text-white overflow-hidden h-screen w-full relative">
+<!-- Background Layer (Simulating the Blog View behind the sheet) -->
+<div class="absolute inset-0 z-0 flex flex-col">
+<!-- Header -->
+<div class="flex items-center justify-between p-4 pt-12">
+<button class="p-2 rounded-full hover:bg-black/10 dark:hover:bg-white/10">
+<span class="material-symbols-outlined text-2xl">arrow_forward</span>
+</button>
+<h1 class="text-lg font-bold">تدوين صوتي</h1>
+<button class="p-2 rounded-full hover:bg-black/10 dark:hover:bg-white/10">
+<span class="material-symbols-outlined text-2xl">more_horiz</span>
+</button>
+</div>
+<!-- Main Content Area Placeholder -->
+<div class="flex-1 px-6 flex flex-col items-center gap-6 opacity-30 blur-[2px] pointer-events-none transition-all duration-500">
+<!-- Blog Image -->
+<div class="w-full aspect-square rounded-2xl overflow-hidden shadow-xl bg-gradient-to-br from-indigo-500 to-purple-600 relative">
+<div class="absolute inset-0 flex items-center justify-center text-white/20">
+<span class="material-symbols-outlined text-6xl">podcasts</span>
+</div>
+</div>
+<!-- Blog Title -->
+<div class="text-center space-y-2">
+<div class="h-6 w-3/4 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto"></div>
+<div class="h-4 w-1/2 bg-slate-300 dark:bg-slate-700 rounded-full mx-auto opacity-70"></div>
+</div>
+</div>
+</div>
+<!-- Dark Overlay Backdrop -->
+<div class="absolute inset-0 bg-background-dark/60 z-10 backdrop-blur-sm transition-opacity"></div>
+<!-- Bottom Sheet Container -->
+<div class="absolute inset-x-0 bottom-[150px] z-20 flex flex-col items-end justify-end px-2">
+<!-- The Sheet -->
+<div class="w-full bg-surface-light dark:bg-[#1a1d2d] rounded-t-3xl rounded-b-xl shadow-2xl border border-slate-200 dark:border-slate-800/50 overflow-hidden flex flex-col max-h-[70vh] animate-slide-up">
+<!-- Drag Handle Area -->
+<div class="w-full flex justify-center pt-3 pb-1 cursor-grab active:cursor-grabbing">
+<div class="w-12 h-1.5 rounded-full bg-slate-300 dark:bg-slate-600/50"></div>
+</div>
+<!-- Header -->
+<div class="px-6 py-3 flex items-center justify-between border-b border-slate-100 dark:border-slate-800/50">
+<div class="flex items-center gap-3">
+<div class="p-2 rounded-lg bg-primary/10 text-primary">
+<span class="material-symbols-outlined text-xl">graphic_eq</span>
+</div>
+<h2 class="text-lg font-bold tracking-tight">تفريغ صوتي بالذكاء الاصطناعي</h2>
+</div>
+<button class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+<span class="material-symbols-outlined">close</span>
+</button>
+</div>
+<!-- Scrollable Content -->
+<div class="overflow-y-auto no-scrollbar flex-1">
+<!-- Range Slider Section -->
+<div class="px-6 py-5 bg-gradient-to-b from-transparent to-slate-50 dark:to-slate-900/20">
+<div class="flex items-center justify-between mb-4">
+<p class="text-sm font-bold text-slate-500 dark:text-slate-400">النطاق الزمني</p>
+<div class="px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-mono font-medium text-primary dir-ltr">
+                            01:30 - 02:30
+                        </div>
+</div>
+<!-- Custom Slider Visual -->
+<div class="relative h-10 w-full flex items-center select-none" dir="ltr">
+<!-- Track Background -->
+<div class="absolute h-1.5 w-full rounded-full bg-slate-200 dark:bg-slate-700"></div>
+<!-- Active Range Track -->
+<div class="absolute h-1.5 rounded-full bg-primary" style="left: 25%; right: 25%;"></div>
+<!-- Left Handle (Start) -->
+<div class="absolute h-6 w-6 rounded-full bg-white dark:bg-surface-dark border-2 border-primary shadow-md flex items-center justify-center cursor-ew-resize z-10 hover:scale-110 transition-transform" style="left: 25%; transform: translateX(-50%);">
+<div class="h-2 w-2 rounded-full bg-primary"></div>
+<!-- Tooltip -->
+<div class="absolute -top-8 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+                                01:30
+                            </div>
+</div>
+<!-- Right Handle (End) -->
+<div class="absolute h-6 w-6 rounded-full bg-white dark:bg-surface-dark border-2 border-primary shadow-md flex items-center justify-center cursor-ew-resize z-10 hover:scale-110 transition-transform" style="right: 25%; transform: translateX(50%);">
+<div class="h-2 w-2 rounded-full bg-primary"></div>
+<!-- Tooltip -->
+<div class="absolute -top-8 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+                                02:30
+                            </div>
+</div>
+</div>
+<div class="flex justify-between text-xs text-slate-400 font-mono mt-1" dir="ltr">
+<span>00:00</span>
+<span>04:15</span>
+</div>
+</div>
+<!-- Transcript Text Body -->
+<div class="px-6 pb-6 text-base leading-loose text-slate-700 dark:text-slate-200 font-medium text-justify">
+<p class="mb-4">
+<span class="text-primary font-bold">٠١:٣٠</span> — أهلاً بكم في حلقة جديدة من الغرباء، اليوم سنتحدث عن أهمية التدوين الصوتي في عصر السرعة وكيف يمكننا استغلال هذه الوسيلة للتعبير عن أفكارنا بحرية. التدوين الصوتي ليس مجرد تسجيل للكلام، بل هو توثيق للمشاعر واللحظات التي قد تفوتنا في زحام الحياة اليومية.
+                    </p>
+<p class="mb-4 text-slate-500 dark:text-slate-400 transition-colors hover:text-slate-800 dark:hover:text-slate-200">
+<span class="text-primary/70 font-bold">٠١:٤٥</span> — في الجزء الثاني من حلقتنا، سنستضيف أحد المبدعين في هذا المجال ليشاركنا تجربته الشخصية، والصعوبات التي واجهها في البداية، وكيف تغلب عليها بالإصرار والشغف. تابعونا لنتعرف سوياً على أسرار هذا العالم المثير.
+                    </p>
+<p class="mb-4 text-slate-500 dark:text-slate-400 opacity-60">
+<span class="text-primary/50 font-bold">٠٢:١٥</span> — وقبل أن نبدأ، لا تنسوا الاشتراك في القناة وتفعيل جرس التنبيهات ليصلكم كل جديد. دعمكم هو ما يدفعنا للاستمرار وتقديم الأفضل دائماً.
+                    </p>
+</div>
+</div>
+<!-- Footer Actions -->
+<div class="p-4 border-t border-slate-100 dark:border-slate-800/50 bg-slate-50 dark:bg-[#151725]">
+<button class="w-full flex items-center justify-center gap-2 bg-surface-light dark:bg-[#242a47] hover:bg-slate-100 dark:hover:bg-[#2e3658] text-slate-900 dark:text-white py-3 rounded-xl border border-slate-200 dark:border-transparent transition-all shadow-sm active:scale-95">
+<span class="material-symbols-outlined text-sm">content_copy</span>
+<span class="font-bold text-sm">نسخ النص المحدد</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Fixed Bottom Section (Mini Player + Nav) -->
+<div class="fixed bottom-0 inset-x-0 z-50 flex flex-col">
+<!-- Mini Player -->
+<div class="mx-3 mb-2 rounded-xl bg-surface-light dark:bg-[#252836] shadow-lg border border-slate-100 dark:border-slate-800/50 p-2 flex items-center gap-3 backdrop-blur-md bg-opacity-95 dark:bg-opacity-95">
+<!-- Thumbnail -->
+<div class="h-10 w-10 shrink-0 rounded-lg bg-indigo-500 overflow-hidden relative">
+<div class="absolute inset-0 bg-gradient-to-tr from-black/40 to-transparent"></div>
+<!-- Using a generic abstract gradient description for the image -->
+<img alt="Album Art" class="h-full w-full object-cover" data-alt="Abstract colorful gradient with blue and purple hues" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB3MecnhjrhboH2QYXdpfv0eqIFpnqTAD1N3wggBtPQHLV53ii1_buzskpgI2uGv_OGarwYEAvknxLVlQhJK545JHQ8z6vKq_ESp3qEvM0dUrKP_te9Zdy397SD64kHLI9D2NZ7eJjz7ykzBl0juBoY9Wm1-gyLpFL6l8yqd4I6o9i78ypyciJC8PupOEqGowmldlFv7LAApPv_GI3iGGmoxpn0rtu--zEG2Vu2gI8MBi4DMrOVwTAY3g5BahJcBld4Opp0Et3IzLQ"/>
+</div>
+<!-- Text Info -->
+<div class="flex-1 min-w-0 flex flex-col justify-center">
+<h4 class="text-sm font-bold truncate text-slate-900 dark:text-white">عنوان الحلقة: الغرباء</h4>
+<p class="text-xs text-slate-500 dark:text-slate-400 truncate">أحمد محمد • ٢٠ دقيقة</p>
+</div>
+<!-- Controls -->
+<div class="flex items-center gap-2" dir="ltr">
+<button class="text-slate-800 dark:text-white hover:text-primary transition-colors">
+<span class="material-symbols-outlined icon-filled">play_arrow</span>
+</button>
+<button class="text-slate-400 hover:text-slate-800 dark:hover:text-white transition-colors">
+<span class="material-symbols-outlined text-xl">forward_10</span>
+</button>
+</div>
+</div>
+<!-- Navigation Bar -->
+<div class="bg-surface-light dark:bg-background-dark border-t border-slate-200 dark:border-slate-800 pb-safe pt-2 px-2">
+<nav class="flex items-center justify-around w-full">
+<!-- Home -->
+<a class="flex flex-col items-center gap-1 p-2 text-slate-400 hover:text-primary transition-colors group" href="#">
+<span class="material-symbols-outlined text-2xl group-hover:scale-110 transition-transform">home</span>
+<span class="text-[10px] font-medium">الرئيسية</span>
+</a>
+<!-- Search -->
+<a class="flex flex-col items-center gap-1 p-2 text-slate-400 hover:text-primary transition-colors group" href="#">
+<span class="material-symbols-outlined text-2xl group-hover:scale-110 transition-transform">search</span>
+<span class="text-[10px] font-medium">بحث</span>
+</a>
+<!-- FAB (New Blog) -->
+<div class="relative -top-6">
+<button class="h-14 w-14 rounded-full bg-primary shadow-lg shadow-primary/40 flex items-center justify-center text-white hover:bg-primary/90 hover:scale-105 transition-all active:scale-95 border-4 border-background-light dark:border-background-dark">
+<span class="material-symbols-outlined text-3xl">add</span>
+</button>
+</div>
+<!-- History -->
+<a class="flex flex-col items-center gap-1 p-2 text-slate-400 hover:text-primary transition-colors group" href="#">
+<span class="material-symbols-outlined text-2xl group-hover:scale-110 transition-transform">history</span>
+<span class="text-[10px] font-medium">السجل</span>
+</a>
+<!-- Profile -->
+<a class="flex flex-col items-center gap-1 p-2 text-slate-400 hover:text-primary transition-colors group" href="#">
+<div class="h-6 w-6 rounded-full bg-slate-200 overflow-hidden border border-transparent group-hover:border-primary transition-colors">
+<img alt="Profile" class="h-full w-full object-cover" data-alt="Portrait of a user with a neutral expression" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBRYk_UopJg_7SmKp9_Hx9lWVEEPFLR7IpNc7AoocFr4zsqAb9a-XPDiJuqQ4WPxGgB0pH2bwJEpW1snzA9AMFkuJVkbGkNdv2dD_qRgST4-0N5P4Meg2cYhduFxzephixvWtaHqUYtsXgRu4QGrpnfLFLpGsEvNa0xXEVHWSDA9c8oTz9nVu9NGakj_RRz63iPedcrUnDvTB7Cu03l34PCgC4aeQgQShf9_Mflf9uDiyLp918jCJMCuNAm_f7SQWSakX-csyJv4VM"/>
+</div>
+<span class="text-[10px] font-medium">حسابي</span>
+</a>
+</nav>
+<!-- Safe Area Spacer for iOS Home Indicator -->
+<div class="h-5"></div>
+</div>
+</div>
+</body></html>

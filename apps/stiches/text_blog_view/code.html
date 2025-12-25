@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Alghurobaa - Text Blog View</title>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Noto+Naskh+Arabic:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Theme Configuration -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "primary": "#1430b8",
+              "background-light": "#f6f6f8",
+              "background-dark": "#111421",
+              "surface-dark": "#1C1F2E",
+              "surface-light": "#FFFFFF",
+            },
+            fontFamily: {
+              "display": ["Inter", "sans-serif"],
+              "arabic": ["Noto Naskh Arabic", "serif"],
+            },
+            borderRadius: {"DEFAULT": "0.5rem", "lg": "1rem", "xl": "1.5rem", "2xl": "2rem", "full": "9999px"},
+            boxShadow: {
+                "soft": "0 4px 20px -2px rgba(0, 0, 0, 0.1)",
+                "glow": "0 0 15px rgba(20, 48, 184, 0.3)",
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined.fill-1 {
+            font-variation-settings: 'FILL' 1;
+        }
+        /* Hide scrollbar for cleaner look on mobile web */
+        body::-webkit-scrollbar {
+            display: none;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark min-h-screen text-slate-900 dark:text-white font-display antialiased pb-48 selection:bg-primary selection:text-white">
+<!-- Sticky Top Navigation Bar -->
+<nav class="sticky top-0 z-40 bg-background-light/90 dark:bg-background-dark/90 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 px-4 h-14 flex items-center justify-between transition-colors duration-300">
+<button class="w-10 h-10 -ml-2 flex items-center justify-center rounded-full hover:bg-black/5 dark:hover:bg-white/10 active:scale-95 transition-all text-slate-600 dark:text-gray-200">
+<span class="material-symbols-outlined text-[24px]">arrow_back</span>
+</button>
+<h2 class="text-sm font-bold tracking-tight text-slate-800 dark:text-white uppercase opacity-90">
+            Alghurobaa Daily
+        </h2>
+<div class="flex items-center gap-1 -mr-2">
+<button class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-black/5 dark:hover:bg-white/10 active:scale-95 transition-all text-slate-600 dark:text-gray-200">
+<span class="material-symbols-outlined text-[22px]">share</span>
+</button>
+<button class="w-10 h-10 flex items-center justify-center rounded-full hover:bg-black/5 dark:hover:bg-white/10 active:scale-95 transition-all text-slate-600 dark:text-gray-200">
+<span class="material-symbols-outlined text-[24px]">bookmark_border</span>
+</button>
+</div>
+</nav>
+<!-- Main Scrollable Content -->
+<main class="w-full max-w-3xl mx-auto px-4 pt-4 flex flex-col gap-6">
+<!-- Hero Image Section -->
+<div class="relative w-full aspect-[16/9] rounded-2xl overflow-hidden shadow-soft group">
+<div class="absolute inset-0 bg-gray-800 animate-pulse"></div> <!-- Loading Skeleton Fallback -->
+<div class="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-105" data-alt="Abstract desert landscape with golden sand dunes at sunset symbolizing solitude" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuAXHu65OfNiDbfDo-GLyamnsobd-zEGjK8x16L5HQwyrPXT4iP1VgFyg7r6DcObQSjROzD4dP5rTEwN0K6lKrCT4BfAMB2tjyCJZ3EpMkny2RNrSTn7iUzsXvC0ObX6HD2oy79tz02vxAwMPIQJSXUBRZGdvizh9VsTxJpNwyV8KMnjDkiEke-3_SPLLflwDXU3p8D6gw2BPTYGIV3_OoEWR9wYXCerFlT_abjr1929v6zhasa_d_ybuXjilIiMu_3UK6hYgNCuzDo');">
+</div>
+<!-- Gradient Overlay for better contrast if text were on image (aesthetic touch) -->
+<div class="absolute inset-0 bg-gradient-to-t from-background-dark/40 to-transparent"></div>
+</div>
+<!-- Header Content -->
+<div class="flex flex-col gap-3">
+<!-- Metadata (Left Aligned English) -->
+<div class="flex items-center gap-3 text-xs md:text-sm font-medium text-slate-500 dark:text-gray-400">
+<span class="bg-primary/10 text-primary px-2 py-0.5 rounded-md">Blog</span>
+<span>Oct 24, 2023</span>
+<span class="w-1 h-1 rounded-full bg-gray-400"></span>
+<span>5 min read</span>
+</div>
+<!-- Arabic Headline (Right Aligned RTL) -->
+<h1 class="text-3xl md:text-4xl font-arabic font-bold text-right leading-[1.3] text-slate-900 dark:text-white tracking-wide" dir="rtl">
+                تأملات في الغربة والهوية: رحلة البحث عن الذات في عالم متغير
+            </h1>
+</div>
+<!-- Separator -->
+<div class="h-px w-full bg-gray-200 dark:bg-gray-800"></div>
+<!-- Blog Body Content (Arabic RTL) -->
+<article class="flex flex-col gap-6 text-lg md:text-xl font-arabic font-normal leading-[1.8] text-right text-slate-700 dark:text-gray-200 selection:bg-primary/30" dir="rtl">
+<p>
+                يعتبر مفهوم الغربة من أكثر المفاهيم تعقيداً في النفس البشرية. إنه ليس مجرد ابتعاد جغرافي عن الوطن، بل هو حالة شعورية عميقة تتداخل فيها الذكريات مع الواقع الجديد. في هذه التدوينة، نحاول استكشاف أبعاد الهوية وكيف تتشكل من جديد في ظل المتغيرات المستمرة التي نعيشها يومياً بعيداً عن الجذور.
+            </p>
+<!-- Pull Quote Style -->
+<div class="bg-surface-light dark:bg-surface-dark border-r-4 border-primary rounded-l-xl p-6 my-2 shadow-sm">
+<p class="text-xl md:text-2xl font-bold text-primary italic leading-relaxed">
+                    "الغربة ليست مكاناً نعيش فيه، بل هي حالة تعيش فينا، تعيد صياغة أحلامنا وتصوراتنا عن الانتماء."
+                </p>
+</div>
+<p>
+                حين نبتعد عن جذورنا، نجد أنفسنا أمام مرآة تعكس صوراً متعددة لذواتنا. هل نحن من كنا عليه هناك؟ أم نحن نتاج هذا المكان الجديد؟ الإجابة تكمن في المسافة بين السؤالين، حيث تولد هوية ثالثة تجمع بين أصالة الماضي ومرونة الحاضر. هذا المزيج الفريد هو ما يميز تجربة المغترب ويمنحه نظرة ثاقبة للحياة لا يمتلكها غيره.
+            </p>
+<p>
+                التحدي الأكبر يكمن في التصالح مع هذا الاغتراب، وتحويله من عبء نفسي إلى طاقة إبداعية خلاقة. إن الكتابة، والفن، وحتى الاستماع إلى الأصوات المألوفة، كلها وسائل تعيد ترميم الروح وتمنحنا القدرة على الاستمرار في هذا العالم المتسارع.
+            </p>
+</article>
+<!-- Tags Section -->
+<div class="flex flex-wrap gap-2 justify-end pt-4 pb-2" dir="rtl">
+<span class="px-4 py-1.5 rounded-full bg-slate-100 dark:bg-surface-dark border border-slate-200 dark:border-gray-700 text-slate-600 dark:text-gray-300 font-arabic text-sm hover:border-primary transition-colors cursor-pointer">#فلسفة</span>
+<span class="px-4 py-1.5 rounded-full bg-slate-100 dark:bg-surface-dark border border-slate-200 dark:border-gray-700 text-slate-600 dark:text-gray-300 font-arabic text-sm hover:border-primary transition-colors cursor-pointer">#خواطر</span>
+<span class="px-4 py-1.5 rounded-full bg-slate-100 dark:bg-surface-dark border border-slate-200 dark:border-gray-700 text-slate-600 dark:text-gray-300 font-arabic text-sm hover:border-primary transition-colors cursor-pointer">#حياة</span>
+<span class="px-4 py-1.5 rounded-full bg-slate-100 dark:bg-surface-dark border border-slate-200 dark:border-gray-700 text-slate-600 dark:text-gray-300 font-arabic text-sm hover:border-primary transition-colors cursor-pointer">#اغتراب</span>
+</div>
+<!-- Comments Action -->
+<button class="w-full mt-2 bg-white dark:bg-surface-dark hover:bg-gray-50 dark:hover:bg-gray-800 border border-gray-200 dark:border-gray-700 text-slate-900 dark:text-white font-display font-semibold py-4 rounded-2xl transition-all shadow-soft active:scale-[0.99] flex items-center justify-center gap-2 group">
+<span class="material-symbols-outlined text-[20px] text-primary group-hover:scale-110 transition-transform">chat_bubble</span>
+<span>View Comments (12)</span>
+</button>
+<!-- Bottom Safe Area Spacer -->
+<div class="h-8"></div>
+</main>
+<!-- Floating UI Layer (Bottom) -->
+<div class="fixed bottom-0 left-0 right-0 z-50 flex flex-col items-center pointer-events-none">
+<!-- Mini Player Floating Card -->
+<div class="w-full max-w-md px-4 pb-3 pointer-events-auto">
+<div class="bg-slate-900/95 dark:bg-surface-dark/95 backdrop-blur-xl border border-white/10 p-3 rounded-2xl shadow-lg shadow-black/20 flex items-center gap-3">
+<!-- Album Art -->
+<div class="w-12 h-12 rounded-lg bg-gray-800 bg-cover bg-center shrink-0 shadow-inner" data-alt="Minimalist art showing a lone figure walking" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuCRts2U9C0pqwcbfZ3Xtx-5Rlqe4nJfLOrlgCWZSaGcMmroAcDRbJh320DS0uXlzyTJKN8VtlKaWG5sYmNLSPdbuOYl4L3mME4uiieR_O8CJwsfgqbKLDRrJzLx_yQM0Lm9FkkJ5fD91uzQGsxhuQUjib34a9YcKHMlSTIY12E4vkrQ2U0_jsvGA3Bvs4Pb6ZMl3Nx2fcagC8jbxFCbDgEqKAdGcGYKSOx44UkcpNctC5q30su8pVdR-sJEDmeOZOpi_pLi8LInT5A');">
+</div>
+<!-- Track Info -->
+<div class="flex flex-col min-w-0 flex-1 gap-0.5">
+<span class="text-sm font-bold text-white truncate font-display">Reflections on Alienation</span>
+<div class="flex items-center gap-2">
+<span class="text-[10px] text-primary font-medium bg-primary/20 px-1.5 rounded">BLOG</span>
+<span class="text-[11px] text-gray-400 font-mono">04:20 / 12:45</span>
+</div>
+</div>
+<!-- Controls -->
+<div class="flex items-center gap-1 shrink-0">
+<button class="w-9 h-9 flex items-center justify-center text-gray-400 hover:text-white transition-colors">
+<span class="material-symbols-outlined text-[26px] fill-1">skip_previous</span>
+</button>
+<button class="w-10 h-10 flex items-center justify-center bg-white text-primary rounded-full hover:scale-105 active:scale-95 transition-all shadow-glow">
+<span class="material-symbols-outlined text-[26px] fill-1 ml-0.5">play_arrow</span>
+</button>
+<button class="w-9 h-9 flex items-center justify-center text-gray-400 hover:text-white transition-colors">
+<span class="material-symbols-outlined text-[26px] fill-1">skip_next</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Bottom Navigation Bar -->
+<div class="w-full bg-white dark:bg-[#111422] border-t border-gray-200 dark:border-gray-800 pb-safe pt-2 px-2 h-[88px] flex items-start justify-around relative pointer-events-auto shadow-[0_-5px_20px_-5px_rgba(0,0,0,0.1)]">
+<!-- Home Tab (Active) -->
+<button class="flex flex-col items-center gap-1 p-2 w-16 group">
+<span class="material-symbols-outlined text-[26px] text-primary fill-1 group-hover:scale-110 transition-transform">home</span>
+<span class="text-[10px] font-bold text-primary">Home</span>
+</button>
+<!-- Search Tab -->
+<button class="flex flex-col items-center gap-1 p-2 w-16 group">
+<span class="material-symbols-outlined text-[26px] text-slate-400 dark:text-gray-500 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">search</span>
+<span class="text-[10px] font-medium text-slate-400 dark:text-gray-500 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">Search</span>
+</button>
+<!-- Spacer for FAB -->
+<div class="w-16"></div>
+<!-- History Tab -->
+<button class="flex flex-col items-center gap-1 p-2 w-16 group">
+<span class="material-symbols-outlined text-[26px] text-slate-400 dark:text-gray-500 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">history</span>
+<span class="text-[10px] font-medium text-slate-400 dark:text-gray-500 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">History</span>
+</button>
+<!-- Profile Tab -->
+<button class="flex flex-col items-center gap-1 p-2 w-16 group">
+<span class="material-symbols-outlined text-[26px] text-slate-400 dark:text-gray-500 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">person</span>
+<span class="text-[10px] font-medium text-slate-400 dark:text-gray-500 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">Profile</span>
+</button>
+<!-- FAB (Floating Action Button) -->
+<div class="absolute -top-7 left-1/2 -translate-x-1/2 pointer-events-auto">
+<button class="h-16 w-16 bg-primary rounded-full shadow-lg shadow-primary/30 flex items-center justify-center text-white hover:scale-105 active:scale-95 transition-all border-[6px] border-background-light dark:border-[#111422]">
+<span class="material-symbols-outlined text-[32px]">add</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Safe Area Padding for iPhone Bottom Bar -->
+<style>
+        .pb-safe {
+            padding-bottom: env(safe-area-inset-bottom, 20px);
+        }
+    </style>
+</body></html>

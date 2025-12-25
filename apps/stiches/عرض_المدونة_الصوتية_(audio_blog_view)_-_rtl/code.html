@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+
+<html class="dark" dir="rtl" lang="ar"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Audio Blog View - Alghurobaa</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@100;200;300;400;500;600;700&amp;family=Plus+Jakarta+Sans:wght@200;300;400;500;600;700;800&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Theme Config -->
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1430b8",
+                        "primary-dark": "#0d2185",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#0F111A", /* Deep dark blue-black */
+                        "surface-dark": "#1E1E2E",
+                        "accent-gray": "#939cc8",
+                    },
+                    fontFamily: {
+                        "display": ["IBM Plex Sans Arabic", "Plus Jakarta Sans", "sans-serif"],
+                        "numbers": ["Plus Jakarta Sans", "sans-serif"]
+                    },
+                    borderRadius: { "DEFAULT": "0.5rem", "lg": "1rem", "xl": "1.5rem", "2xl": "2rem", "full": "9999px" },
+                    boxShadow: {
+                        "glow": "0 0 20px rgba(20, 48, 184, 0.5)",
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        /* Hide scrollbar for clean UI */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        
+        /* Custom range input styling for the scrubber */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #ffffff;
+            margin-top: -6px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: rgba(255,255,255,0.1);
+            border-radius: 2px;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-dark text-white font-display antialiased overflow-hidden h-screen flex flex-col relative">
+<!-- Ambient Background Gradient -->
+<div class="fixed top-0 left-0 w-full h-[60vh] bg-gradient-to-b from-[#1430b8]/20 to-transparent pointer-events-none z-0"></div>
+<!-- Top App Bar -->
+<header class="relative z-10 flex items-center justify-between px-6 pt-12 pb-4">
+<!-- Back Button (RTL: Arrow pointing right is visually 'back' to previous screen hierarchy in iOS RTL often, but technically Arrow Forward. We stick to Back arrow meaning) -->
+<button class="flex items-center justify-center text-white/80 hover:text-white transition-colors p-2 rounded-full active:bg-white/10">
+<span class="material-symbols-outlined" style="font-size: 28px;">arrow_forward</span>
+</button>
+<h1 class="text-lg font-bold tracking-wide text-white">التشغيل الآن</h1>
+<button class="flex items-center justify-center text-white/80 hover:text-white transition-colors p-2 rounded-full active:bg-white/10">
+<span class="material-symbols-outlined" style="font-size: 24px;">more_vert</span>
+</button>
+</header>
+<!-- Main Scrollable Content -->
+<main class="relative z-10 flex-1 overflow-y-auto no-scrollbar pb-40 px-6">
+<!-- Album Art -->
+<div class="w-full aspect-[4/5] max-h-[420px] mx-auto mt-2 mb-8 relative group">
+<div class="absolute inset-0 bg-primary/30 blur-3xl rounded-full opacity-60 scale-90 translate-y-4"></div>
+<div class="relative w-full h-full rounded-[32px] overflow-hidden shadow-2xl bg-[#1E1E2E]">
+<img alt="Abstract blue wavy liquid art representing deep thoughts" class="w-full h-full object-cover" data-alt="Abstract dark blue artistic visualization for podcast cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuASJVwtDEorok1oxq8Q2wZ0nV0e0-zn6mMaROUj7OYxIKQpF7XExyfWSdlSC-KDCJjPWd3S6mSLL0JigLsuxxxBtxuXuYNZACh-Jkzl_q-P5AzJGIveR6ks_9b-Jjhzj2K5cm5H8QJevW32WIgOq7RbInvQMHAgnZZCvEV_cPE8tDL0HNaS1heNvrWVbaZ3ph1_4-Y0APi7YbylsAKiLWYHp98ceDyUxXOdEbyuE4ROoVtK9Ys3O3LhbMq1z9AvlKpp6qpcqVlQ8mU"/>
+<!-- Overlay Gradient for text readability if needed -->
+<div class="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent"></div>
+</div>
+</div>
+<!-- Track Info -->
+<div class="flex flex-col items-start gap-1 mb-6">
+<div class="flex items-center gap-2 mb-1 w-full">
+<h2 class="text-2xl font-bold leading-tight text-white line-clamp-2">الحلقة ٥: رحلة البحث عن المعنى</h2>
+<span class="material-symbols-outlined text-primary text-[20px] fill-1" style="font-variation-settings: 'FILL' 1;">verified</span>
+</div>
+<div class="flex items-center gap-3 text-accent-gray w-full">
+<div class="size-6 rounded-full bg-white/10 overflow-hidden shrink-0">
+<img alt="Author profile picture" class="w-full h-full object-cover" data-alt="Small avatar of the channel author" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD5GokkD8ZxgN7URv1NaxHpAhlXvuoId2vipJ_BvELWrAOBqoTEl20BxzesHgNyOPdjuKYB93l9MKul4rQaLF-XWzg_EfTRq3Yjhgb0Z8hWA13HLj0qIpwPzcyzFKLTm5687Gp8DrCOT7zFiPIOgng4PN5ToOUqEKjFpCmXDPVWOMy9OuC1ROHxDuZHfWTwc4gKAHFwTs6QhuNMZvTKvxX8PxPHd6I0AiX8xv9Bj0nuPaEC824-nLKMhVBNLo0PSaSXg6eO63AKUdw"/>
+</div>
+<p class="text-base font-medium">قناة الغرباء</p>
+<span class="text-xs opacity-50">•</span>
+<button class="text-primary text-sm font-semibold">متابعة</button>
+</div>
+</div>
+<!-- Progress Scrubber (LTR direction for time logic) -->
+<div class="mb-6" dir="ltr">
+<!-- Waveform / Progress Bar -->
+<div class="relative h-6 flex items-center group cursor-pointer">
+<!-- Track -->
+<div class="w-full h-1.5 bg-white/10 rounded-full overflow-hidden relative">
+<!-- Progress -->
+<div class="absolute top-0 left-0 h-full bg-primary w-[35%] rounded-full"></div>
+</div>
+<!-- Thumb -->
+<div class="absolute left-[35%] w-4 h-4 bg-white rounded-full shadow-lg shadow-black/50 hover:scale-125 transition-transform flex items-center justify-center">
+<div class="w-1.5 h-1.5 bg-primary rounded-full"></div>
+</div>
+<!-- Comment Markers -->
+<div class="absolute left-[15%] top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-white/40 rounded-full hover:bg-white hover:scale-150 transition-all" title="Comment at 2:10"></div>
+<div class="absolute left-[62%] top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-white/40 rounded-full hover:bg-white hover:scale-150 transition-all" title="Comment at 8:45"></div>
+</div>
+<!-- Time Labels -->
+<div class="flex justify-between text-xs font-numbers font-medium text-accent-gray mt-1">
+<span>04:20</span>
+<span>15:00</span>
+</div>
+</div>
+<!-- Controls (LTR container to keep Back on Left/Forward on Right matching timeline) -->
+<div class="flex items-center justify-between mb-10 px-2" dir="ltr">
+<!-- Shuffle -->
+<button class="text-accent-gray hover:text-white transition-colors">
+<span class="material-symbols-outlined text-2xl">shuffle</span>
+</button>
+<!-- Rewind 5s (Left) -->
+<button class="text-white hover:text-primary transition-colors active:scale-95 transform">
+<span class="material-symbols-outlined text-[32px]">replay_5</span>
+</button>
+<!-- Play/Pause (Center) -->
+<button class="size-20 bg-primary rounded-full flex items-center justify-center shadow-glow hover:scale-105 active:scale-95 transition-all text-white">
+<span class="material-symbols-outlined text-[44px] fill-1" style="font-variation-settings: 'FILL' 1;">play_arrow</span>
+</button>
+<!-- Forward 5s (Right) -->
+<button class="text-white hover:text-primary transition-colors active:scale-95 transform">
+<span class="material-symbols-outlined text-[32px]">forward_5</span>
+</button>
+<!-- Like -->
+<button class="text-accent-gray hover:text-red-500 transition-colors">
+<span class="material-symbols-outlined text-2xl">favorite</span>
+</button>
+</div>
+<!-- Context & Details -->
+<div class="space-y-4">
+<!-- Description Card -->
+<div class="bg-white/5 rounded-2xl p-5 backdrop-blur-sm border border-white/5">
+<h3 class="text-white font-bold mb-2">حول الحلقة</h3>
+<p class="text-accent-gray text-sm leading-relaxed line-clamp-3">
+                    في هذه الحلقة نناقش تأثير التكنولوجيا على علاقاتنا الاجتماعية وكيف يمكننا استعادة التواصل الحقيقي في زمن الغربة الرقمية. نستضيف الدكتور أحمد للحديث عن...
+                </p>
+<button class="text-white text-sm font-bold mt-2 hover:underline">قراءة المزيد</button>
+<!-- Tags -->
+<div class="flex flex-wrap gap-2 mt-4">
+<span class="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs text-white/80">#فلسفة</span>
+<span class="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs text-white/80">#مجتمع</span>
+<span class="px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs text-white/80">#بودكاست</span>
+</div>
+</div>
+<!-- Engagement Tabs -->
+<div class="flex border-b border-white/10 pb-1 gap-6 px-2">
+<button class="pb-3 border-b-2 border-primary text-white font-bold text-sm">التعليقات (٢٤)</button>
+<button class="pb-3 border-b-2 border-transparent text-accent-gray font-medium text-sm hover:text-white">النص المكتوب</button>
+</div>
+<!-- Comment Preview -->
+<div class="bg-white/5 rounded-2xl p-4 flex gap-3 items-start">
+<div class="size-10 rounded-full bg-purple-500/20 shrink-0 overflow-hidden">
+<img alt="User avatar" class="w-full h-full object-cover" data-alt="Avatar of a commenting user" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB64jodddWWp5Y3DYGtVHgEkpsUG2GQhpiyiIj6nLbVkXs7LMtJc6m_6DahLDtVnb8mA7I6cTAb4dJ3CwB5aG1JVzNUQ6KjPUINwrAnTMAaV9wFXKsftxCaaRQHxeV1knYpdGSTd2I_tv1ioDJCVS6OJBQIvaA1kB7n--aHo_EtqH7ZdsUW-Sccfymc7MiscqabZley-e93n-XFNMaUCtBJBmotJRhuaAFsgoCoC_gnTJmH-gfgMozGeNnrzdz-4wEnu4z_DzpdTX0"/>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start">
+<span class="text-sm font-bold text-white">سارة محمد</span>
+<span class="text-xs text-primary font-numbers bg-primary/10 px-2 py-0.5 rounded-md">02:10</span>
+</div>
+<p class="text-sm text-accent-gray mt-1">نقطة رائعة جداً، أتفق تماماً مع هذا الطرح بخصوص العزلة.</p>
+</div>
+</div>
+</div>
+</main>
+<!-- Bottom Fixed Section (Mini Player + Navbar) -->
+<div class="fixed bottom-0 left-0 right-0 z-50 flex flex-col pointer-events-none">
+<!-- Gradient fade from content -->
+<div class="h-12 bg-gradient-to-t from-background-dark to-transparent w-full"></div>
+<!-- Container for interactive elements -->
+<div class="bg-background-dark pointer-events-auto pb-safe">
+<!-- Mini Player (Floating) -->
+<div class="mx-4 -mt-6 mb-3 relative z-20">
+<div class="bg-[#1E1E2E]/90 backdrop-blur-xl border border-white/10 rounded-xl p-2 pr-3 flex items-center justify-between shadow-lg shadow-black/40">
+<div class="flex items-center gap-3 overflow-hidden">
+<div class="size-10 rounded-lg bg-gray-800 shrink-0 overflow-hidden relative">
+<img class="w-full h-full object-cover" data-alt="Mini player cover art" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBpItSXs8g4f3gn9sK0Ml4IXdrqQOJtRGsuFqIw3qRAAn5mALnRuEOw8O0C9m9gNGMWGYE4SFDJsurPGAcXPA8THMEqKdKIRkoUonkOvJJe88RjGOTLl6ZJE4Vu_gsulmN9njd1Ff4VS2eS-4Ek_L8hKvx4TWJD_8m6QCSIm-Adzoe_Oi99gXa3TaZgq4WGgMsVyciVzWSLV6wE8HxgttN8Zz_u8FczfLc6BjMWgWESNJ8zLfoa3GRideUPu75fpyUI1qvir468o5w"/>
+<!-- Playing Indicator Overlay -->
+<div class="absolute inset-0 bg-black/30 flex items-center justify-center gap-0.5">
+<div class="w-0.5 h-3 bg-primary animate-pulse"></div>
+<div class="w-0.5 h-4 bg-primary animate-pulse delay-75"></div>
+<div class="w-0.5 h-2 bg-primary animate-pulse delay-150"></div>
+</div>
+</div>
+<div class="flex flex-col min-w-0">
+<p class="text-sm font-bold text-white truncate">الحلقة ٥: رحلة البحث عن المعنى</p>
+<p class="text-xs text-accent-gray truncate">قناة الغرباء</p>
+</div>
+</div>
+<div class="flex items-center gap-1" dir="ltr">
+<button class="p-2 text-white hover:text-primary">
+<span class="material-symbols-outlined text-[28px] fill-1">play_arrow</span>
+</button>
+<button class="p-2 text-accent-gray hover:text-white">
+<span class="material-symbols-outlined text-[24px]">close</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Bottom Navigation -->
+<nav class="flex items-center justify-between px-6 pb-6 pt-2 border-t border-white/5 bg-background-dark/95 backdrop-blur">
+<!-- Home (Right in RTL) -->
+<button class="flex flex-col items-center gap-1 text-white group">
+<span class="material-symbols-outlined text-[26px] fill-1 group-hover:text-primary transition-colors" style="font-variation-settings: 'FILL' 1;">home</span>
+<span class="text-[10px] font-medium opacity-100">الرئيسية</span>
+</button>
+<!-- Search -->
+<button class="flex flex-col items-center gap-1 text-accent-gray group hover:text-white transition-colors">
+<span class="material-symbols-outlined text-[26px]">search</span>
+<span class="text-[10px] font-medium opacity-60 group-hover:opacity-100">بحث</span>
+</button>
+<!-- FAB (Center) - New Blog -->
+<button class="size-12 bg-white text-primary rounded-full flex items-center justify-center -mt-8 border-4 border-background-dark shadow-glow hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-[28px]">add</span>
+</button>
+<!-- History -->
+<button class="flex flex-col items-center gap-1 text-accent-gray group hover:text-white transition-colors">
+<span class="material-symbols-outlined text-[26px]">history</span>
+<span class="text-[10px] font-medium opacity-60 group-hover:opacity-100">السجل</span>
+</button>
+<!-- Profile (Left in RTL) -->
+<button class="flex flex-col items-center gap-1 text-accent-gray group hover:text-white transition-colors">
+<span class="material-symbols-outlined text-[26px]">person</span>
+<span class="text-[10px] font-medium opacity-60 group-hover:opacity-100">ملفي</span>
+</button>
+</nav>
+</div>
+</div>
+</body></html>

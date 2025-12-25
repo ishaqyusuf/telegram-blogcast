@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Audio Blog View - Alghurobaa</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&amp;family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1430b8",
+                        "primary-hover": "#0f238a",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#111421",
+                        "surface-dark": "#1c1c1e",
+                        "surface-light": "#ffffff",
+                    },
+                    fontFamily: {
+                        "display": ["Plus Jakarta Sans", "sans-serif"],
+                        "arabic": ["IBM Plex Sans Arabic", "sans-serif"],
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.5rem",
+                        "lg": "1rem",
+                        "xl": "1.5rem",
+                        "2xl": "2rem",
+                        "full": "9999px"
+                    },
+                    boxShadow: {
+                        'soft': '0 4px 20px -2px rgba(0, 0, 0, 0.1)',
+                        'glow': '0 0 15px rgba(20, 48, 184, 0.3)',
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        /* Custom scrollbar hiding */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        
+        /* Range slider styling for a custom look if needed, using simple divs for now */
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white font-display overflow-x-hidden antialiased selection:bg-primary selection:text-white">
+<div class="relative flex min-h-screen w-full flex-col pb-24">
+<!-- Top Navigation Bar -->
+<header class="sticky top-0 z-30 flex items-center justify-between px-4 py-3 bg-background-light/90 dark:bg-background-dark/90 backdrop-blur-md transition-colors">
+<button class="flex items-center justify-center w-10 h-10 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors text-slate-900 dark:text-white">
+<span class="material-symbols-outlined">arrow_back_ios_new</span>
+</button>
+<h1 class="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Now Playing</h1>
+<div class="flex items-center gap-2">
+<button class="flex items-center justify-center w-10 h-10 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors text-slate-900 dark:text-white">
+<span class="material-symbols-outlined">ios_share</span>
+</button>
+<button class="flex items-center justify-center w-10 h-10 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors text-slate-900 dark:text-white">
+<span class="material-symbols-outlined">more_horiz</span>
+</button>
+</div>
+</header>
+<!-- Main Content Area -->
+<main class="flex-1 w-full max-w-lg mx-auto px-6 pt-4 flex flex-col gap-6">
+<!-- Hero Audio Player Section -->
+<section class="flex flex-col gap-6">
+<!-- Album Art with soft glow -->
+<div class="relative w-full aspect-square rounded-2xl overflow-hidden shadow-2xl ring-1 ring-white/10 group">
+<div class="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent z-10"></div>
+<img alt="Abstract visualization of spirituality and reflection in dark blue tones" class="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" data-alt="Abstract calm night sky or spiritual atmosphere image" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDUq6DupIv0t0IAudFzZOas9W0fIiJOFXjX8dTHF5VNbyMx1FkQ6_4lvZn1tbz30ZGwJk34Y9EL9pMtaSWH4iPSGwjhaj3JV0sdTfzFZVvw1npvaaMCz5Y1Dyt76xGPW-u3ThhfSMWPH8F_ZrIaXQxu8R7HlFa4jiBnyS22cucufeSyc25dOXjQTe3NEsCVm69tOtg9_k-MMSL0ncOnqRsSNB91uBrkNyv5Imq4__n6RZH78QSPzmxDY8pxr4ImbB5N6BBrU6lGI6k"/>
+<!-- Floating Tag on Image -->
+<div class="absolute top-4 right-4 z-20">
+<span class="px-3 py-1 bg-black/40 backdrop-blur-md text-white text-xs font-medium rounded-full border border-white/10">
+                            Audio Blog
+                        </span>
+</div>
+</div>
+<!-- Player Controls & Scrubber -->
+<div class="flex flex-col gap-2">
+<!-- Metadata Header (English LTR) -->
+<div class="flex justify-between items-center text-xs font-semibold tracking-wide text-primary uppercase">
+<span>Religion &amp; Spirituality</span>
+<span class="flex items-center gap-1 opacity-80">
+<span class="material-symbols-outlined text-[16px]">headphones</span>
+                            1.2k
+                        </span>
+</div>
+<!-- Scrubber / Waveform -->
+<div class="group/scrubber py-2 cursor-pointer">
+<div class="relative h-10 flex items-center">
+<!-- Background Track -->
+<div class="absolute w-full h-1.5 bg-slate-200 dark:bg-white/10 rounded-full overflow-hidden">
+<!-- Progress -->
+<div class="h-full w-[35%] bg-primary rounded-full relative"></div>
+</div>
+<!-- Comment Markers (Overlay) -->
+<div class="absolute left-[20%] top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-white dark:bg-slate-300 rounded-full ring-2 ring-background-light dark:ring-background-dark z-10" title="Comment at 20%"></div>
+<div class="absolute left-[65%] top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-primary/40 rounded-full z-0"></div>
+<!-- Knob (Visible on interaction or generally) -->
+<div class="absolute left-[35%] w-4 h-4 bg-white rounded-full shadow-md border-2 border-primary cursor-grab hover:scale-110 transition-transform z-20"></div>
+<!-- Fake Waveform Visual (Optional Detail) -->
+<div class="absolute inset-0 flex items-center justify-between opacity-20 pointer-events-none gap-0.5 px-1">
+<!-- Generating some random bars for visual flair -->
+<div class="w-1 h-3 bg-slate-500 rounded-full"></div>
+<div class="w-1 h-5 bg-slate-500 rounded-full"></div>
+<div class="w-1 h-8 bg-slate-500 rounded-full"></div>
+<div class="w-1 h-4 bg-slate-500 rounded-full"></div>
+<div class="w-1 h-6 bg-slate-500 rounded-full"></div>
+<div class="w-1 h-3 bg-slate-500 rounded-full"></div>
+<div class="w-1 h-2 bg-slate-500 rounded-full"></div>
+<div class="w-1 h-5 bg-slate-500 rounded-full"></div>
+<div class="w-1 h-4 bg-slate-500 rounded-full"></div>
+<div class="w-1 h-3 bg-slate-500 rounded-full"></div>
+<div class="w-1 h-6 bg-slate-500 rounded-full"></div>
+<div class="w-1 h-4 bg-slate-500 rounded-full"></div>
+<div class="w-1 h-3 bg-slate-500 rounded-full"></div>
+</div>
+</div>
+<!-- Time Labels -->
+<div class="flex justify-between text-xs font-medium text-slate-500 dark:text-slate-400 mt-[-8px]">
+<span>04:22</span>
+<span>-10:38</span>
+</div>
+</div>
+<!-- Main Controls -->
+<div class="flex items-center justify-between mt-2">
+<!-- Secondary Action: Speed -->
+<button class="text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-primary transition-colors px-2 py-1 rounded-md bg-slate-100 dark:bg-white/5">
+                            1.0x
+                        </button>
+<!-- Playback Controls -->
+<div class="flex items-center gap-6">
+<button class="text-slate-700 dark:text-slate-200 hover:text-primary dark:hover:text-primary transition-colors p-2">
+<span class="material-symbols-outlined text-[32px]">replay_5</span>
+</button>
+<button class="w-16 h-16 bg-primary hover:bg-primary-hover text-white rounded-full flex items-center justify-center shadow-glow hover:scale-105 active:scale-95 transition-all">
+<span class="material-symbols-outlined text-[40px] ml-1">play_arrow</span>
+</button>
+<button class="text-slate-700 dark:text-slate-200 hover:text-primary dark:hover:text-primary transition-colors p-2">
+<span class="material-symbols-outlined text-[32px]">forward_5</span>
+</button>
+</div>
+<!-- Secondary Action: Volume/Output -->
+<button class="text-slate-500 dark:text-slate-400 hover:text-primary transition-colors p-2">
+<span class="material-symbols-outlined text-[20px]">volume_up</span>
+</button>
+</div>
+</div>
+</section>
+<!-- Metadata & Content Section (Hybrid RTL/LTR) -->
+<section class="flex flex-col gap-4 pb-8">
+<!-- English Author Info (LTR) -->
+<div class="flex items-center gap-3 border-b border-slate-200 dark:border-white/5 pb-4">
+<div class="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden shrink-0">
+<img alt="Author" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB5mHtfxYqafEgCgS4mkDkpRk_cqF8Lwxdmw5uNAWWCnoYYFGQg20gIB0_q8DLqNHmodSYsh9GveHGDHUbe-R01Kv1USn0gAMQDTobBrW_4YJdojWzS46WmrtDdg1x3mUOQVifgPEzm16yUmUXP0OAVEjKYVcAo9Gh7vOcg0bsOtYMrtRntGTVgH_jEMYrRJfmWNk5CaeLnlD987Q4GS-biMH2Y956IJX3QF0aSsj0GRiVTD5OJ8CHbbbpNAUTbg5l86Z5_LfWxWww"/>
+</div>
+<div class="flex flex-col">
+<span class="text-xs text-slate-500 dark:text-slate-400 font-medium">Author</span>
+<span class="text-sm font-bold text-slate-800 dark:text-slate-200">Ahmed Al-Gharib</span>
+</div>
+<button class="ml-auto px-4 py-1.5 rounded-full border border-slate-300 dark:border-white/20 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors">
+                        Follow
+                    </button>
+</div>
+<!-- Arabic Content (RTL) -->
+<div class="flex flex-col gap-3 text-right" dir="rtl">
+<!-- Title -->
+<h2 class="font-arabic text-2xl font-bold text-slate-900 dark:text-white leading-tight">
+                        تأملات في الغربة والبحث عن الذات
+                    </h2>
+<!-- Date (In Arabic locale format ideally, but simplified here) -->
+<p class="font-arabic text-xs text-slate-500 dark:text-slate-400">
+                        نُشر في ١٢ أكتوبر ٢٠٢٣
+                    </p>
+<!-- Description -->
+<div class="font-arabic text-base text-slate-600 dark:text-slate-300 leading-relaxed opacity-90">
+<p>في هذه الحلقة الصوتية، نتحدث بعمق عن مفهوم الغربة ليس فقط كابتعاد عن الوطن، بل كحالة شعورية داخلية. نستكشف كيف يمكن للإنسان أن يجد السكينة في وحدته وكيف يحول شعور الاغتراب إلى طاقة إيجابية للبناء والتأمل.</p>
+<p class="mt-2">نناقش أيضاً بعض النصوص الأدبية والدينية التي تطرقت لهذا المفهوم.</p>
+</div>
+<!-- Tags -->
+<div class="flex flex-wrap gap-2 mt-2 justify-start" dir="rtl">
+<span class="px-3 py-1 bg-slate-100 dark:bg-white/5 rounded-lg text-sm font-arabic text-primary font-medium hover:bg-primary/10 cursor-pointer transition-colors">
+                            #إسلاميات
+                        </span>
+<span class="px-3 py-1 bg-slate-100 dark:bg-white/5 rounded-lg text-sm font-arabic text-primary font-medium hover:bg-primary/10 cursor-pointer transition-colors">
+                            #خواطر_مغترب
+                        </span>
+<span class="px-3 py-1 bg-slate-100 dark:bg-white/5 rounded-lg text-sm font-arabic text-primary font-medium hover:bg-primary/10 cursor-pointer transition-colors">
+                            #تطوير_الذات
+                        </span>
+</div>
+</div>
+</section>
+<div class="h-10"></div> <!-- Spacer -->
+</main>
+<!-- Bottom Navigation Bar -->
+<nav class="fixed bottom-0 left-0 w-full bg-surface-light dark:bg-[#151725] border-t border-slate-200 dark:border-white/5 px-2 pb-safe pt-2 z-50 shadow-[0_-5px_20px_rgba(0,0,0,0.2)]">
+<div class="flex justify-between items-end w-full max-w-lg mx-auto relative">
+<!-- Nav Item: Home -->
+<button class="flex flex-col items-center gap-1 p-2 w-16 text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[26px]">home</span>
+<span class="text-[10px] font-medium">Home</span>
+</button>
+<!-- Nav Item: Search -->
+<button class="flex flex-col items-center gap-1 p-2 w-16 text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[26px]">search</span>
+<span class="text-[10px] font-medium">Search</span>
+</button>
+<!-- Nav Item: FAB (New Blog) -->
+<div class="relative -top-6">
+<button class="w-14 h-14 rounded-full bg-primary text-white flex items-center justify-center shadow-lg shadow-primary/40 hover:scale-105 transition-transform ring-4 ring-background-light dark:ring-background-dark">
+<span class="material-symbols-outlined text-[28px]">add</span>
+</button>
+</div>
+<!-- Nav Item: History -->
+<button class="flex flex-col items-center gap-1 p-2 w-16 text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[26px]">history</span>
+<span class="text-[10px] font-medium">History</span>
+</button>
+<!-- Nav Item: Profile -->
+<button class="flex flex-col items-center gap-1 p-2 w-16 text-slate-400 hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[26px]">person</span>
+<span class="text-[10px] font-medium">Profile</span>
+</button>
+</div>
+<!-- Safe Area Spacer for iOS Home Indicator -->
+<div class="h-5 w-full"></div>
+</nav>
+<!-- Persistent Mini Player Placeholder (Conceptually hidden on this view because it's the main view, but markup included for completeness if user navigates back) -->
+<!-- 
+        <div class="fixed bottom-[90px] left-4 right-4 bg-surface-dark/95 backdrop-blur-md p-3 rounded-xl border border-white/10 flex items-center justify-between shadow-xl transform translate-y-full transition-transform z-40">
+           ...Mini Player Code...
+        </div>
+        -->
+</div>
+<script>
+        // Simple script to toggle play icon for effect (no real functionality)
+        const playBtn = document.querySelector('button .material-symbols-outlined.text-[40px]').parentElement;
+        playBtn.addEventListener('click', () => {
+            const icon = playBtn.querySelector('span');
+            icon.textContent = icon.textContent === 'play_arrow' ? 'pause' : 'play_arrow';
+        });
+    </script>
+</body></html>

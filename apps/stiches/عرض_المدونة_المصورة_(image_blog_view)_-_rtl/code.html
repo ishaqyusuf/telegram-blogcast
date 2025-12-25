@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+
+<html class="dark" dir="rtl" lang="ar"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Alghurobaa - Image Blog View</title>
+<!-- Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&amp;family=Noto+Sans+Arabic:wght@300;400;500;600;700;800&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Theme Configuration -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "primary": "#1430b8",
+              "background-light": "#f6f6f8",
+              "background-dark": "#111421",
+              "surface-dark": "#1c2033",
+            },
+            fontFamily: {
+              "display": ["Plus Jakarta Sans", "Noto Sans Arabic", "sans-serif"],
+              "body": ["Noto Sans Arabic", "sans-serif"],
+            },
+            borderRadius: {"DEFAULT": "0.5rem", "lg": "1rem", "xl": "1.5rem", "2xl": "2rem", "full": "9999px"},
+            boxShadow: {
+                'glow': '0 0 20px -5px rgba(20, 48, 184, 0.5)',
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        /* Hide scrollbar for clean mobile UI */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        
+        /* Custom Utilities */
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined.filled {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white font-body overflow-x-hidden antialiased selection:bg-primary selection:text-white">
+<div class="relative flex h-full min-h-screen w-full flex-col pb-36">
+<!-- Immersive Header Section -->
+<!-- Image expands to edges, rounded bottom corners as per request -->
+<div class="relative w-full h-[540px] shrink-0 rounded-b-[2rem] overflow-hidden shadow-2xl shadow-black/50 z-10 bg-surface-dark group">
+<!-- Hero Image -->
+<div class="absolute inset-0 bg-cover bg-center transition-transform duration-700 ease-out group-hover:scale-105" data-alt="Abstract geometric islamic architecture details with light and shadow" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuDVhB3UOhGRuV7bZxjEykzPwc1HkZQBfgJMpbRL5tlE6Op28dPehtCO-QSr_7TKANNLmrGtoO2bVV7ifrWeDKqsKfpHjyrEUK8-j-7RUJ9IFjJR4A0rRNeAhhI3nW59AjLbsThTXNxYIL8kyJRsokxtDoBsOm7ukWlXxFO7qU9vaxMElYmozz9tjzGIzRR4t-Ko_wdqI2AT0PiZI0jja1QL3jc0rP9O65PYUg9yvJFMN6_bq7o1ypKw3f0MoXDqN9521Nv8OqS11OU");'>
+</div>
+<!-- Gradient Overlay: Transparent to Dark Background color to seamless blend -->
+<div class="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent via-60% to-background-dark"></div>
+<!-- Top Interaction Layer -->
+<div class="absolute top-0 left-0 right-0 p-4 pt-14 flex flex-col items-center z-20">
+<!-- Swipe Handle -->
+<div class="w-12 h-1.5 bg-white/40 rounded-full mb-6 backdrop-blur-md shadow-sm"></div>
+<!-- Header Navigation -->
+<div class="flex w-full justify-between items-center px-2">
+<!-- Back Button (Right side in RTL pointing Right) -->
+<button class="group/btn relative w-12 h-12 rounded-full bg-black/20 backdrop-blur-md flex items-center justify-center text-white border border-white/10 hover:bg-white/10 transition-all active:scale-95">
+<span class="material-symbols-outlined">arrow_forward</span>
+</button>
+<!-- More Menu -->
+<button class="w-12 h-12 rounded-full bg-black/20 backdrop-blur-md flex items-center justify-center text-white border border-white/10 hover:bg-white/10 transition-all active:scale-95">
+<span class="material-symbols-outlined">more_horiz</span>
+</button>
+</div>
+</div>
+<!-- Hero Content (Bottom of Image) -->
+<div class="absolute bottom-0 w-full p-6 pb-8 z-20 flex flex-col gap-4">
+<!-- Meta Pills -->
+<div class="flex items-center gap-2 animate-fade-in-up">
+<span class="bg-primary text-white text-[11px] font-bold px-3 py-1.5 rounded-full shadow-lg shadow-primary/40 tracking-wide">مميز</span>
+<span class="text-white/90 text-[11px] font-semibold bg-black/40 px-3 py-1.5 rounded-full backdrop-blur-md border border-white/5 flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]">schedule</span>
+                        ٥ دقائق قراءة
+                    </span>
+</div>
+<!-- Headline -->
+<h1 class="text-3xl md:text-4xl font-extrabold text-white leading-[1.3] tracking-tight drop-shadow-sm">
+                    تأملات في العمارة الإسلامية: السكون والحركة في الفراغ
+                 </h1>
+<!-- Channel Info Row -->
+<div class="flex items-center gap-3 mt-1 p-2 rounded-2xl bg-white/5 backdrop-blur-sm border border-white/5 w-fit pr-2 pl-4">
+<div class="relative">
+<div class="w-10 h-10 rounded-full bg-surface-dark bg-cover border-2 border-white/10 shadow-md" data-alt="Portrait of the podcast host wearing glasses" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuC0xkkTZHW1Me3GHECXOD6fWZqC8I9ErwqGBkAEqfB2MRw8d3eiV0LQnir4GtPCn3FcJE8qZrsnEkM8iTvkpla6LjEOA-rWrYix5FRaUk04LGE74hCFnI9F6UDUrIr3vSNNTaSCJSKmMuPU7SleUSu_EaWCx2qUargHB6zYkTnB6Pb39jT4KFVvQhZWOGptLUeShoNZUmd9YhTLl9Mu1tmciDI0W2BEHcBCdLdhcG5etFVpaU_a4-i6t9fa6JnbjiO-1tePvsTDqjE");'></div>
+<div class="absolute -bottom-0.5 -left-0.5 w-4 h-4 bg-green-500 rounded-full border-2 border-[#111421]"></div>
+</div>
+<div class="flex flex-col">
+<div class="flex items-center gap-1">
+<span class="text-white font-bold text-sm">الغرباء بودكاست</span>
+<span class="material-symbols-outlined text-blue-400 text-[14px] filled">verified</span>
+</div>
+<span class="text-white/60 text-[11px]">منذ ساعتين • ٢٠ ألف متابع</span>
+</div>
+<button class="mr-3 bg-white text-black hover:bg-white/90 text-xs font-bold px-4 py-1.5 rounded-full transition-colors">
+                        متابعة
+                    </button>
+</div>
+</div>
+</div>
+<!-- Main Content Body -->
+<div class="px-6 py-8 flex flex-col gap-8">
+<!-- Social Actions Bar -->
+<div class="flex items-center justify-between">
+<div class="flex gap-6">
+<button class="group flex items-center gap-2 text-white/60 hover:text-red-500 transition-colors">
+<span class="material-symbols-outlined group-hover:filled group-hover:scale-110 transition-transform">favorite</span>
+<span class="text-sm font-semibold font-display">١.٢ ألف</span>
+</button>
+<button class="group flex items-center gap-2 text-white/60 hover:text-primary transition-colors">
+<span class="material-symbols-outlined group-hover:filled group-hover:scale-110 transition-transform">chat_bubble</span>
+<span class="text-sm font-semibold font-display">٤٣</span>
+</button>
+</div>
+<div class="flex gap-4">
+<button class="text-white/60 hover:text-white transition-colors p-2 hover:bg-white/5 rounded-full">
+<span class="material-symbols-outlined">bookmark</span>
+</button>
+<button class="text-white/60 hover:text-white transition-colors p-2 hover:bg-white/5 rounded-full">
+<span class="material-symbols-outlined">ios_share</span>
+</button>
+</div>
+</div>
+<!-- Divider -->
+<div class="h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
+<!-- Blog Text Content -->
+<article class="prose prose-lg prose-invert max-w-none">
+<p class="text-gray-300 leading-[2] text-[17px] font-light">
+                    يتميز الفن الإسلامي بالزخارف الهندسية التي تعكس <span class="text-primary font-medium">اللانهاية والوحدة</span>، حيث تتداخل الأشكال لتخلق نمطاً بصرياً مبهراً يعبر عن التناغم الكوني. في هذا المقال نستعرض تاريخ هذه الفنون وتطورها عبر العصور، وكيف أثرت على التصميم المعماري الحديث في مختلف البلدان.
+                </p>
+<div class="my-6 rounded-xl overflow-hidden border border-white/10">
+<div class="w-full h-48 bg-cover bg-center" data-alt="Detail shot of intricate mosaic tile patterns on a wall" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuB37B1YLMQxe9AmlKHn7k5HXQXtz1tGeSgARjoGy3gqYxcQ4UDiXQgAboFyXUZSC9-vhGL57wPXlKDf25nAmvBA-3M_wf3uXucvHqLhyDKjIEdoTWQM4K-dl_DJXRiot-mYWO90GKQrzemIxf077rh8odabSaS-Tp953Xrm8Px51J1YbJ7L-cYqgCBrosYFjg-IB2QhO-VZwxpyQ9QQwgU3X3PvqOjSfL7BqIqf1s2VpABJ0nHr4fxzN8GCF7y8AoXUfrIBJ5ZwtH0");'></div>
+<div class="bg-surface-dark p-3 text-xs text-gray-400 text-center">تفاصيل الزليج المغربي الأصيل</div>
+</div>
+<p class="text-gray-300 leading-[2] text-[17px] font-light">
+                    إن العلاقة بين الفراغ والمادة في العمارة الإسلامية ليست مجرد علاقة هندسية، بل هي علاقة روحية عميقة. الجدران ليست حواجز، بل هي أسطح لاستقبال النور وعكس آيات الجمال الإلهي في كل زاوية وركن.
+                </p>
+</article>
+<!-- Tags -->
+<div class="flex flex-wrap gap-2.5 pt-4">
+<a class="px-4 py-2 rounded-full bg-surface-dark text-gray-300 hover:text-primary hover:border-primary/50 text-xs font-medium border border-white/5 transition-all" href="#">#فن_إسلامي</a>
+<a class="px-4 py-2 rounded-full bg-surface-dark text-gray-300 hover:text-primary hover:border-primary/50 text-xs font-medium border border-white/5 transition-all" href="#">#تصميم_معماري</a>
+<a class="px-4 py-2 rounded-full bg-surface-dark text-gray-300 hover:text-primary hover:border-primary/50 text-xs font-medium border border-white/5 transition-all" href="#">#تاريخ</a>
+<a class="px-4 py-2 rounded-full bg-surface-dark text-gray-300 hover:text-primary hover:border-primary/50 text-xs font-medium border border-white/5 transition-all" href="#">#حضارة</a>
+</div>
+<!-- End of Content Spacer -->
+<div class="h-8 text-center mt-4">
+<span class="text-white/20 text-2xl">❖</span>
+</div>
+</div>
+</div>
+<!-- Fixed Bottom UI Layer -->
+<div class="fixed bottom-0 left-0 right-0 z-50 flex flex-col items-center w-full pointer-events-none">
+<!-- Floating Mini Player -->
+<div class="pointer-events-auto w-[92%] max-w-md bg-[#1c2033]/90 backdrop-blur-xl rounded-2xl p-2 pr-3 shadow-2xl shadow-black/60 mb-3 flex items-center justify-between border border-white/10 ring-1 ring-white/5">
+<div class="flex items-center gap-3 overflow-hidden flex-1">
+<!-- Album Art with Equalizer Animation Hint -->
+<div class="relative w-11 h-11 rounded-xl overflow-hidden flex-shrink-0 group cursor-pointer">
+<div class="absolute inset-0 bg-cover bg-center" data-alt="Abstract colorful gradient album art" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBVL3grg0v1LgEdZsW-zCgK658YN5VFr4dhh_XX8VDnP1B6Uv7exKLMl5MDn0epXJnCfWPECDYi6pZmkLmMS9fFbLsW_kA84UA8pqaOcTMKZpakv6fEBo5VznU_Tl39tXi-l-rTZ2A3K0dkJkcavrlN-Nesry22YJWI_okcxRkD4psFKjkw5hPOVe9F4PFXMYu5z2cErnMxScrQ_BDYU80Eb08fpoXAEnk-4gT-K8XNahBlZDHkARXZA03cN_LtUqwQLJwOJPy1vrI");'></div>
+<div class="absolute inset-0 bg-black/30 flex items-center justify-center">
+<div class="flex gap-0.5 items-end h-3">
+<div class="w-0.5 bg-white h-full animate-pulse"></div>
+<div class="w-0.5 bg-white h-2/3 animate-pulse delay-75"></div>
+<div class="w-0.5 bg-white h-full animate-pulse delay-150"></div>
+</div>
+</div>
+</div>
+<!-- Track Info -->
+<div class="flex flex-col justify-center overflow-hidden">
+<span class="text-white text-[13px] font-bold truncate leading-tight">الحلقة ٣: السكون</span>
+<span class="text-primary/80 text-[11px] font-medium truncate mt-0.5">الغرباء بودكاست • متبقي ٠٣:١٢</span>
+</div>
+</div>
+<!-- Controls -->
+<div class="flex items-center gap-1 flex-shrink-0 pl-1">
+<button class="w-9 h-9 flex items-center justify-center text-gray-400 hover:text-white transition-colors rounded-full hover:bg-white/5">
+<span class="material-symbols-outlined text-[26px]">skip_next</span> <!-- Mirrored logic for RTL, next is left visually? sticking to standard icons -->
+</button>
+<button class="w-10 h-10 rounded-full bg-white text-primary flex items-center justify-center shadow-lg shadow-white/10 hover:scale-105 transition-transform">
+<span class="material-symbols-outlined filled text-[24px]">pause</span>
+</button>
+</div>
+</div>
+<!-- Bottom Navigation Bar (RTL Order) -->
+<div class="pointer-events-auto w-full bg-[#111422] border-t border-white/5 pb-8 pt-3 px-2 flex justify-between items-end relative shadow-[0_-10px_40px_rgba(0,0,0,0.4)]">
+<!-- Navigation Items Container -->
+<!-- Flex Direction is RTL, so first item is Rightmost -->
+<!-- 1. Home (Right) -->
+<button class="flex flex-1 flex-col items-center gap-1.5 text-primary group">
+<div class="relative p-1">
+<span class="material-symbols-outlined filled text-[26px] transition-transform group-active:scale-90">home</span>
+<span class="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full border-2 border-[#111422]"></span>
+</div>
+<span class="text-[10px] font-bold tracking-wide">الرئيسية</span>
+</button>
+<!-- 2. Search -->
+<button class="flex flex-1 flex-col items-center gap-1.5 text-gray-500 hover:text-white transition-colors group">
+<span class="material-symbols-outlined text-[26px] group-active:scale-90 transition-transform">search</span>
+<span class="text-[10px] font-medium tracking-wide">بحث</span>
+</button>
+<!-- 3. New Blog (FAB - Center) -->
+<div class="flex-1 flex justify-center relative -top-7 z-10">
+<button class="w-14 h-14 rounded-2xl bg-primary text-white shadow-glow shadow-primary/40 flex items-center justify-center transform hover:scale-105 transition-all border-[4px] border-[#111422] group">
+<span class="material-symbols-outlined text-[30px] group-hover:rotate-90 transition-transform duration-300">add</span>
+</button>
+</div>
+<!-- 4. History -->
+<button class="flex flex-1 flex-col items-center gap-1.5 text-gray-500 hover:text-white transition-colors group">
+<span class="material-symbols-outlined text-[26px] group-active:scale-90 transition-transform">history</span>
+<span class="text-[10px] font-medium tracking-wide">سجلي</span>
+</button>
+<!-- 5. Profile (Left) -->
+<button class="flex flex-1 flex-col items-center gap-1.5 text-gray-500 hover:text-white transition-colors group">
+<span class="material-symbols-outlined text-[26px] group-active:scale-90 transition-transform">person</span>
+<span class="text-[10px] font-medium tracking-wide">حسابي</span>
+</button>
+</div>
+</div>
+</body></html>

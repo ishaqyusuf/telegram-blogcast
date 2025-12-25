@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+
+<html class="dark" dir="rtl" lang="ar"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Alghurobaa - History</title>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Google Fonts: Plus Jakarta Sans & Noto Sans Arabic -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;700;800&amp;family=Noto+Sans+Arabic:wght@400;500;700;800&amp;display=swap" rel="stylesheet"/>
+<!-- Material Symbols -->
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        /* Hide scrollbar for clean UI */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#1430b8",
+                        "background-light": "#f6f6f8",
+                        "background-dark": "#111421", // Deep charcoal/black
+                        "surface-dark": "#1e2338", // Slightly lighter for cards
+                        "secondary-text": "#939cc8",
+                    },
+                    fontFamily: {
+                        "display": ["Plus Jakarta Sans", "Noto Sans Arabic", "sans-serif"],
+                        "body": ["Noto Sans Arabic", "sans-serif"],
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.5rem", 
+                        "lg": "1rem", 
+                        "xl": "1.5rem", 
+                        "2xl": "2rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-white font-display antialiased selection:bg-primary selection:text-white pb-32">
+<!-- Top App Bar -->
+<div class="sticky top-0 z-40 bg-background-light/95 dark:bg-background-dark/95 backdrop-blur-md transition-colors duration-200">
+<div class="flex items-center px-4 py-3 justify-between">
+<h2 class="text-xl font-bold leading-tight tracking-[-0.015em]">السجل</h2>
+<button class="flex items-center justify-end active:opacity-70 transition-opacity">
+<p class="text-secondary-text text-sm font-bold leading-normal tracking-[0.015em]">مسح الكل</p>
+</button>
+</div>
+<!-- Divider if needed, using opacity for subtlety -->
+<div class="h-px w-full bg-slate-200 dark:bg-slate-800 opacity-50"></div>
+</div>
+<!-- Main Content -->
+<div class="flex flex-col w-full">
+<!-- Section: Listening History -->
+<div class="mt-4">
+<h3 class="text-slate-900 dark:text-white text-lg font-bold leading-tight px-4 pb-3">سجل الاستماع</h3>
+<!-- List Item 1 -->
+<div class="group relative flex items-center gap-4 px-4 py-3 active:bg-surface-dark/40 transition-colors cursor-pointer">
+<!-- Thumbnail -->
+<div class="relative shrink-0">
+<div class="bg-center bg-no-repeat bg-cover rounded-lg size-16 shadow-md" data-alt="Abstract gradient artwork for podcast cover" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuCti_St-w0s13awCa0Ylfnuk75zu0vRbKy-MpasKqeJCjO56IE5wOItw3uZIwFuvWjk4mzgm-Lk5TDStznkcZvCo84UJf2JWuD5Od3rBGME8LQnlzL0DFWidGPJEU81Q12cvDCoP5B_B4uGolRxxA7bU1MylzgeptAIKp4feR8RImXZ1O_qdYD-M670qEY9NFz0SNdcQ7Gq3ccFN5RtHiJ2zNvh0_5syrhtg25TrATqCAKT4Yy49I_lRESLCvOYfGb-ZbcrswWQh2I");'>
+</div>
+<!-- Play Overlay (Only visible on hover/active or strictly design choice) -->
+<div class="absolute inset-0 flex items-center justify-center bg-black/30 rounded-lg">
+<span class="material-symbols-outlined text-white text-2xl">play_circle</span>
+</div>
+</div>
+<!-- Content -->
+<div class="flex flex-col justify-center flex-1 min-w-0">
+<p class="text-slate-900 dark:text-white text-base font-bold leading-normal line-clamp-1">تأملات في الفجر</p>
+<p class="text-secondary-text text-sm font-medium leading-normal line-clamp-1">قناة الشيخ أحمد • قبل ساعتين</p>
+<!-- Progress Bar (Inline) -->
+<div class="mt-2 flex items-center gap-3 w-full">
+<div class="h-1 flex-1 rounded-full bg-slate-200 dark:bg-[#343c65] overflow-hidden">
+<div class="h-full bg-primary rounded-full" style="width: 45%;"></div>
+</div>
+<p class="text-secondary-text text-xs font-medium shrink-0">12:30</p>
+</div>
+</div>
+</div>
+<!-- List Item 2 -->
+<div class="group relative flex items-center gap-4 px-4 py-3 active:bg-surface-dark/40 transition-colors cursor-pointer">
+<div class="relative shrink-0">
+<div class="bg-center bg-no-repeat bg-cover rounded-lg size-16 shadow-md" data-alt="Dark abstract geometric shapes for podcast cover" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuCPm1RJDtcNmbqsxZEcVlKvnM5MXrspdrr6FuycneAWiq_wbcxAIi4KzMhiKyvlTOVoQ-caLLKCdaH6lb206WQO4aboA9d45lqp-Q_WZbwR-XGvEqNcYgY_KQIGBs8JjA0rPfbvCKVRRrxMthl-33CoLhC3v7siZ23pk9y30zyr7KbmMHzZ92mlxdbsXOW_DsHu3GJ-1yJw2IDGZkvj6Cz0cmtcC2cO2UCB4Duw76vXPCRd_8sHNKEKooHnCB1pN0dPGOirZP7z60M");'>
+</div>
+<div class="absolute inset-0 flex items-center justify-center bg-black/30 rounded-lg">
+<span class="material-symbols-outlined text-white text-2xl">play_circle</span>
+</div>
+</div>
+<div class="flex flex-col justify-center flex-1 min-w-0">
+<p class="text-slate-900 dark:text-white text-base font-bold leading-normal line-clamp-1">بودكاست الغرباء #4</p>
+<p class="text-secondary-text text-sm font-medium leading-normal line-clamp-1">الغرباء • أمس</p>
+<div class="mt-2 flex items-center gap-3 w-full">
+<div class="h-1 flex-1 rounded-full bg-slate-200 dark:bg-[#343c65] overflow-hidden">
+<div class="h-full bg-primary rounded-full" style="width: 90%;"></div>
+</div>
+<p class="text-secondary-text text-xs font-medium shrink-0">45:00</p>
+</div>
+</div>
+</div>
+<!-- List Item 3 -->
+<div class="group relative flex items-center gap-4 px-4 py-3 active:bg-surface-dark/40 transition-colors cursor-pointer">
+<div class="relative shrink-0">
+<div class="bg-center bg-no-repeat bg-cover rounded-lg size-16 shadow-md" data-alt="Calm nature landscape with arabic calligraphy hint" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuCJmt4xN99lkQ4SWaqbOtYqZG6J1cLP6u2gvMUkZagM4eUlgZArdgkLE7VYE_2yq8mGjflyDFUSs1w6EjFmsLlnZ4G3xPDwrg-ju-OM85K_NYRhgD6Syrs0DETCgYtYnswQd5mJSPoOVnrYu5770dxnc0-1hn1f3Gdt1ZG8Op2_py6TRIRe1DxisIf98_1HUsh12VxEjQH8f-rt4EdUbX_x2jxUiVB4nM9oi9PpRtXcOE5qAGvU8NRZt-2zxMND-GFL8B4DAp0vsQc");'>
+</div>
+<div class="absolute inset-0 flex items-center justify-center bg-black/30 rounded-lg">
+<span class="material-symbols-outlined text-white text-2xl">play_circle</span>
+</div>
+</div>
+<div class="flex flex-col justify-center flex-1 min-w-0">
+<p class="text-slate-900 dark:text-white text-base font-bold leading-normal line-clamp-1">سورة الكهف - تلاوة خاشعة</p>
+<p class="text-secondary-text text-sm font-medium leading-normal line-clamp-1">القرآن الكريم • الجمعة الماضية</p>
+<div class="mt-2 flex items-center gap-3 w-full">
+<div class="h-1 flex-1 rounded-full bg-slate-200 dark:bg-[#343c65] overflow-hidden">
+<div class="h-full bg-primary rounded-full" style="width: 15%;"></div>
+</div>
+<p class="text-secondary-text text-xs font-medium shrink-0">05:20</p>
+</div>
+</div>
+</div>
+</div>
+<!-- Spacer -->
+<div class="h-2"></div>
+<!-- Section: Recently Viewed -->
+<div class="mt-2">
+<h3 class="text-slate-900 dark:text-white text-lg font-bold leading-tight px-4 pb-3 pt-4">تم عرضه مؤخراً</h3>
+<!-- Viewed Item 1 (Image Blog) -->
+<div class="group flex items-center gap-4 px-4 py-3 active:bg-surface-dark/40 transition-colors cursor-pointer">
+<div class="bg-center bg-no-repeat bg-cover rounded-lg size-16 shadow-md shrink-0" data-alt="Crowd of people at Mecca Kaaba" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuBFppu8MKO2mgjHqLNxWlsvTngrSq_UGAsppg6ATgK7PHWYfzthNtpWIySmpP0N3cua00F5Idyt8S8siULdDCWBMQbyYLxu_52pTg-TtiZ50kma9Dgp7A9FYRF9WFgC0lfDcyT-nfGDMLWy5CRIUN-IvpeBdLY9SbVq34JDHB1NWk9ukGoLtKKnNuUwuSr9N6YLRXCE5k-ozo4QQiBIoy92TlfEanrfXDbu75h51sI0lJQdKtSvY8bCAR3TdF2jPrpJA5BICVDpufc");'>
+</div>
+<div class="flex flex-col justify-center flex-1 min-w-0 gap-1">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[16px]">image</span>
+<p class="text-slate-900 dark:text-white text-base font-bold leading-normal line-clamp-1">رحلة إلى مكة</p>
+</div>
+<p class="text-secondary-text text-sm font-medium leading-normal line-clamp-1">مدونة صور • قبل 5 دقائق</p>
+</div>
+<button class="shrink-0 p-2 text-secondary-text">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+<!-- Viewed Item 2 (Text Blog) -->
+<div class="group flex items-center gap-4 px-4 py-3 active:bg-surface-dark/40 transition-colors cursor-pointer">
+<div class="bg-center bg-no-repeat bg-cover rounded-lg size-16 shadow-md shrink-0 flex items-center justify-center bg-surface-dark border border-slate-700">
+<span class="material-symbols-outlined text-slate-400 text-3xl">article</span>
+</div>
+<div class="flex flex-col justify-center flex-1 min-w-0 gap-1">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[16px]">article</span>
+<p class="text-slate-900 dark:text-white text-base font-bold leading-normal line-clamp-1">أفكار صباحية</p>
+</div>
+<p class="text-secondary-text text-sm font-medium leading-normal line-clamp-1">خواطر • قبل يوم واحد</p>
+</div>
+<button class="shrink-0 p-2 text-secondary-text">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+<!-- Viewed Item 3 -->
+<div class="group flex items-center gap-4 px-4 py-3 active:bg-surface-dark/40 transition-colors cursor-pointer">
+<div class="bg-center bg-no-repeat bg-cover rounded-lg size-16 shadow-md shrink-0" data-alt="Serene mosque interior architecture" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuAcJdibvwzGnKDKKYBqQLrh-F-_0cP0d0IRdq_dY3cWBfUA4LSAZjFTYMixAtExLBLaOOBFbnFI3gylNY0RsCvKnK91B-1AIjPQyDXcxgvsFcjI6PHLKxUGHqBJfPeLETTr-zhfOx6YAdhEn3j215Bw-s-i3WZRUxDvHSNQIAAMaxdVWCTb1edwOW13bQgYNijjOLVEQUu_xZ17a5AxoQhuzIaw33fsQEWobQXZdRyPgJOnTIhL3__7k1i8Zmz-zZH-OkrRI6_R8Eo");'>
+</div>
+<div class="flex flex-col justify-center flex-1 min-w-0 gap-1">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-primary text-[16px]">image</span>
+<p class="text-slate-900 dark:text-white text-base font-bold leading-normal line-clamp-1">جماليات العمارة الإسلامية</p>
+</div>
+<p class="text-secondary-text text-sm font-medium leading-normal line-clamp-1">ثقافة وفن • الأسبوع الماضي</p>
+</div>
+<button class="shrink-0 p-2 text-secondary-text">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Fixed Bottom Elements Wrapper -->
+<div class="fixed bottom-0 w-full z-50">
+<!-- Mini Player Floating Card -->
+<div class="px-2 mb-2">
+<div class="bg-surface-dark/95 backdrop-blur-xl border border-white/5 rounded-lg p-2 shadow-xl shadow-black/40 flex items-center gap-3">
+<!-- Mini Art -->
+<div class="size-10 rounded bg-center bg-cover shrink-0" data-alt="Current playing track artwork" style='background-image: url("https://lh3.googleusercontent.com/aida-public/AB6AXuDlk_1SwFY5tfDRibyG7CgLcR53BXp0E2QORnkYlQS76YkcNByYG-psKgbOFI3mkXOibFvhJX7J_AXYzIqMmStae3C9E1cmLcjjjy4INZvN2FQWOAOmWJephO_lUKI6_NK-3J7aOPWFKXzuTlfwmwfSm8CpNX83KkJiGbWSpNpniwilTDEI_9SaXBO-z7Ag6NepBFJe6bT9-GoFnjKGyfk6DNMc2OXVClz6CA5Eo7OPM0Fu15karj3sJQZ_9eVjO6C9zmrTunoJ500");'>
+</div>
+<!-- Info -->
+<div class="flex flex-col justify-center flex-1 min-w-0">
+<p class="text-white text-sm font-bold truncate">سورة الرحمن - تلاوة هادئة</p>
+<p class="text-secondary-text text-xs truncate">القارئ إسلام صبحي</p>
+</div>
+<!-- Controls -->
+<div class="flex items-center gap-3 pr-2">
+<button class="text-white hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-3xl">play_arrow</span>
+</button>
+<button class="text-secondary-text hover:text-white transition-colors">
+<span class="material-symbols-outlined text-2xl">favorite</span>
+</button>
+</div>
+<!-- Mini Progress Line at bottom of card -->
+<div class="absolute bottom-0 left-2 right-2 h-[2px] bg-white/10 rounded-full overflow-hidden">
+<div class="h-full bg-primary w-[30%]"></div>
+</div>
+</div>
+</div>
+<!-- Bottom Navigation Bar -->
+<!-- RTL Order: Home(R), Search, FAB, History, Profile(L) -->
+<div class="w-full bg-background-light dark:bg-[#111422] border-t border-slate-200 dark:border-white/5 pb-6 pt-3 px-2">
+<div class="flex items-center justify-around w-full">
+<!-- Home -->
+<button class="flex flex-col items-center gap-1 group w-14">
+<span class="material-symbols-outlined text-slate-400 group-hover:text-primary transition-colors text-[26px]">home</span>
+<span class="text-[10px] font-medium text-slate-400 group-hover:text-primary transition-colors">الرئيسية</span>
+</button>
+<!-- Search -->
+<button class="flex flex-col items-center gap-1 group w-14">
+<span class="material-symbols-outlined text-slate-400 group-hover:text-primary transition-colors text-[26px]">search</span>
+<span class="text-[10px] font-medium text-slate-400 group-hover:text-primary transition-colors">البحث</span>
+</button>
+<!-- FAB (Create) -->
+<button class="flex items-center justify-center size-12 bg-primary rounded-full shadow-lg shadow-primary/30 active:scale-95 transition-transform -mt-6 border-4 border-background-light dark:border-[#111422]">
+<span class="material-symbols-outlined text-white text-[28px]">add</span>
+</button>
+<!-- History (Active) -->
+<button class="flex flex-col items-center gap-1 group w-14">
+<span class="material-symbols-outlined text-primary fill-current text-[26px]" style="font-variation-settings: 'FILL' 1;">history</span>
+<span class="text-[10px] font-bold text-primary">السجل</span>
+</button>
+<!-- Profile -->
+<button class="flex flex-col items-center gap-1 group w-14">
+<span class="material-symbols-outlined text-slate-400 group-hover:text-primary transition-colors text-[26px]">person</span>
+<span class="text-[10px] font-medium text-slate-400 group-hover:text-primary transition-colors">حسابي</span>
+</button>
+</div>
+</div>
+</div>
+</body></html>
