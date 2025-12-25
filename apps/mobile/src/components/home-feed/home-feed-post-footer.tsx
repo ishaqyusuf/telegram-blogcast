@@ -1,5 +1,5 @@
 import { View, Text, TouchableOpacity } from "react-native";
-import { Heart, Bookmark, Share2 } from "lucide-react-native";
+import { Icon } from "../ui/icon";
 
 type HomeFeedPostFooterProps = {
   tags?: string[];
@@ -23,20 +23,24 @@ export function HomeFeedPostFooter({
       </View>
       <View className="flex-row items-center gap-4">
         <TouchableOpacity className="flex-row items-center gap-1">
-          <Heart size={20} className="text-muted-foreground" />
+          <Icon
+            name="Heart"
+            size={20}
+            className="text-muted-foreground size-20"
+          />
           <Text className="text-xs font-medium text-muted-foreground">
             {likes}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity>
-          <Bookmark
-            size={20}
-            className="text-muted-foreground"
+          <Icon
+            name="Bookmark"
+            className="text-muted-foreground size-20"
             fill={isBookmarked ? "currentColor" : "transparent"}
           />
         </TouchableOpacity>
         <TouchableOpacity>
-          <Share2 size={20} className="text-muted-foreground" />
+          <Icon name="Share2" className="text-muted-foreground size-20" />
         </TouchableOpacity>
       </View>
     </View>

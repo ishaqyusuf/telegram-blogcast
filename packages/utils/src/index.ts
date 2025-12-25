@@ -159,7 +159,9 @@ export function percentageValue(value: any, percent: any) {
 }
 export function percent(score: any, total: any, def = 0) {
   if (!score || !total) return def;
-  return Math.round((Number(score) / Number(total)) * 100);
+  const res = Math.round((Number(score) / Number(total)) * 100);
+
+  return res;
 }
 export function generateRandomNumber(length = 15) {
   const charset = "0123456789";

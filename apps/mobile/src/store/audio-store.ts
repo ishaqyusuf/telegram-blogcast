@@ -11,7 +11,7 @@ import { getTelegramFileUrl } from "@/lib/get-telegram-file";
 const Paths = {
   document: FileSystem.Paths.document,
 };
-
+let positionInterval: NodeJS.Timeout | null = null;
 interface AudioState {
   sound: Audio.Sound | null;
   isPlaying: boolean;
@@ -37,6 +37,8 @@ interface AudioState {
   unloadAudio: () => Promise<void>;
   updatePosition: (position: number) => void;
   restoreAudio: () => Promise<void>;
+  startPositionTracking: () => void;
+  stopPositionTracking: () => void;
 }
 
 export const useAudioStore = create<AudioState>()(
@@ -167,12 +169,13 @@ export const useAudioStore = create<AudioState>()(
         }
       },
       play: async () => {
-        const { sound } = get();
+        const { sound, startPositionTracking } = get();
         if (!sound) return;
 
         try {
           await sound.playAsync();
           set({ isPlaying: true, error: null });
+          startPositionTracking();
         } catch (err) {
           set({
             error: err instanceof Error ? err.message : "Failed to play audio",
@@ -181,12 +184,13 @@ export const useAudioStore = create<AudioState>()(
       },
 
       pause: async () => {
-        const { sound } = get();
+        const { sound, stopPositionTracking } = get();
         if (!sound) return;
 
         try {
           await sound.pauseAsync();
           set({ isPlaying: false, error: null });
+          stopPositionTracking();
         } catch (err) {
           set({
             error: err instanceof Error ? err.message : "Failed to pause audio",
@@ -195,13 +199,14 @@ export const useAudioStore = create<AudioState>()(
       },
 
       stop: async () => {
-        const { sound } = get();
+        const { sound, stopPositionTracking } = get();
         if (!sound) return;
 
         try {
           await sound.stopAsync();
           await sound.setPositionAsync(0);
           set({ isPlaying: false, position: 0, error: null });
+          stopPositionTracking();
         } catch (err) {
           set({
             error: err instanceof Error ? err.message : "Failed to stop audio",
@@ -251,10 +256,11 @@ export const useAudioStore = create<AudioState>()(
       },
 
       unloadAudio: async () => {
-        const { sound } = get();
+        const { sound, stopPositionTracking } = get();
         if (!sound) return;
 
         try {
+          stopPositionTracking();
           await sound.unloadAsync();
           set({
             sound: null,
@@ -341,6 +347,37 @@ export const useAudioStore = create<AudioState>()(
               err instanceof Error ? err.message : "Failed to restore audio",
             isLoading: false,
           });
+        }
+      },
+      startPositionTracking: () => {
+        // Clear existing interval
+        if (positionInterval) {
+          clearInterval(positionInterval);
+        }
+
+        // Update position every 100ms
+        positionInterval = setInterval(async () => {
+          const { sound, isPlaying } = get();
+          if (sound && isPlaying) {
+            try {
+              const status = await sound.getStatusAsync();
+              if (status.isLoaded) {
+                set({
+                  position: status.positionMillis,
+                  duration: status.durationMillis || get().duration,
+                });
+              }
+            } catch (err) {
+              console.error("Failed to get position:", err);
+            }
+          }
+        }, 100);
+      },
+
+      stopPositionTracking: () => {
+        if (positionInterval) {
+          clearInterval(positionInterval);
+          positionInterval = null;
         }
       },
     }),

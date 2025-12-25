@@ -2,10 +2,17 @@ import { View, Text, TouchableOpacity, Image } from "react-native";
 
 import { useAudioStore } from "@/store/audio-store";
 import { Icon } from "../ui/icon";
+import { percent } from "@acme/utils";
+import { cn } from "@/lib/utils";
+import { useMemo } from "react";
 
 export function HomeFeedMiniPlayer() {
   // const { title, artist, artwork, progress } = DUMMY_NOW_PLAYING;
-  const { blog, isPlaying, togglePlayPause } = useAudioStore();
+  const { blog, isPlaying, position, duration, togglePlayPause } =
+    useAudioStore();
+  const percentage = useMemo(() => {
+    return percent(position, duration);
+  }, [position, duration]);
   if (!blog) return null;
   return (
     <View className="absolute bg-background bottom-24 left-4 right-4 z-40">
@@ -24,10 +31,14 @@ export function HomeFeedMiniPlayer() {
           <Text className="text-muted-foreground text-[10px]" numberOfLines={1}>
             {blog?.audio?.authorName}
           </Text>
-          <View className="w-full bg-muted rounded-full h-1 mt-1.5">
+          <View className="w-full bg-muted rounded-full h-1 mt-1.5 relative">
             <View
-              className="bg-primary h-1 rounded-full"
-              style={{ width: `${20 * 100}%` }}
+              className={cn(
+                "bg-primary z-10 h-1 rounded-full absolute",
+                `w-[calc(${percentage}%)]`
+              )}
+              // style={{ width: `calc(${100}%)` }}
+              // style={{ width: "10%" }}
             />
           </View>
         </View>
