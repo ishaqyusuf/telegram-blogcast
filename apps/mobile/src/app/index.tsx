@@ -1,9 +1,7 @@
-import { Platform, SafeAreaView, StatusBar, View } from "react-native";
+import { Platform, StatusBar, View } from "react-native";
 import { HomeFeedHeader } from "@/components/home-feed/home-feed-header";
 import { HomeFeedFilterChips } from "@/components/home-feed/home-feed-filter-chips";
 import { HomeFeedPostCard } from "@/components/home-feed/home-feed-post-card";
-import { DUMMY_FEED_DATA } from "@/components/home-feed/__mocks__/data";
-import { HomeFeedFAB } from "@/components/home-feed/home-feed-fab";
 import { HomeFeedMiniPlayer } from "@/components/home-feed/home-feed-mini-player";
 import { HomeFeedBottomNav } from "@/components/home-feed/home-feed-bottom-nav";
 import { LegendList } from "@legendapp/list";
@@ -12,6 +10,7 @@ import { _trpc } from "@/components/static-trpc";
 import { useRef } from "react";
 import { RefreshControl } from "react-native-gesture-handler";
 import { ListEmptyComponent } from "@/components/list-empty-component";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function Home() {
   const {
@@ -25,10 +24,11 @@ export default function Home() {
   });
   const listRef = useRef(null);
   return (
-    <View
+    <SafeAreaView
       style={{
         flex: 1,
-        paddingTop: Platform.OS == "android" ? StatusBar.currentHeight : 0,
+        // paddingTop: StatusBar.currentHeight,
+        // paddingTop: Platform.OS == "android" ? StatusBar.currentHeight : 0,
       }}
       className=""
     >
@@ -60,9 +60,9 @@ export default function Home() {
         columnWrapperStyle={{ gap: 8 }}
         ListEmptyComponent={ListEmptyComponent}
       />
-      <HomeFeedFAB />
+      {/* <HomeFeedFAB /> */}
       <HomeFeedMiniPlayer />
       <HomeFeedBottomNav />
-    </View>
+    </SafeAreaView>
   );
 }

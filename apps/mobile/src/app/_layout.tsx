@@ -19,6 +19,10 @@ const InitialLayout = () => {
         <StatusBar style="auto" />
         <Stack>
           <Stack.Screen name="home" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="blog-view/[blogId]"
+            options={{ headerShown: false }}
+          />
           <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="+not-found" />
         </Stack>

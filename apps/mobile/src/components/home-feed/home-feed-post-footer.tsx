@@ -22,24 +22,24 @@ export function HomeFeedPostFooter({
         ))}
       </View>
       <View className="flex-row items-center gap-4">
-        <TouchableOpacity className="flex-row items-center gap-1">
+        <TouchableOpacity className="flex-row p-1.5 items-center gap-1">
           <Icon
             name="Heart"
             size={20}
             className="text-muted-foreground size-20"
           />
-          <Text className="text-xs font-medium text-muted-foreground">
+          <Text className="text-sm font-medium text-muted-foreground">
             {likes}
           </Text>
         </TouchableOpacity>
-        <TouchableOpacity>
+        <TouchableOpacity className="p-1.5">
           <Icon
             name="Bookmark"
             className="text-muted-foreground size-20"
             fill={isBookmarked ? "currentColor" : "transparent"}
           />
         </TouchableOpacity>
-        <TouchableOpacity>
+        <TouchableOpacity className="p-1.5">
           <Icon name="Share2" className="text-muted-foreground size-20" />
         </TouchableOpacity>
       </View>

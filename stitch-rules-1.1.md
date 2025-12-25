@@ -177,14 +177,8 @@ Clearly list all files using **prefixed names**
 
 ### 2️⃣ Component Files
 
-Each UI section must live in its own file:
+Each UI section must live in components folder, properly prefixed.
 
-* Header
-* Tabs / Filters
-* Feed cards
-* Media / mini-player
-* Floating actions
-* Bottom navigation
 
 ### 3️⃣ Screen File
 
@@ -214,6 +208,56 @@ Assume the **shadcn theme already exists**.
 
 ---
 
+
+
+## Icon Wrapper Usage Rules (Lucide PascalCase)
+
+- Use the project’s Icon wrapper (`<Icon name="..." className="..." />`) for all icons.
+- `name` must be the **exact Lucide icon name in PascalCase**, e.g. `AudioLines`, `BellDot`.
+- The wrapper supports `className`, so Tailwind/shadcn semantic tokens work correctly.
+- Inline color is **only allowed for rare, exceptional cases** (e.g., dynamic status indicators).
+
+✅ Correct Usage:
+<Icon name="AudioLines" className="text-primary size-8" />
+<Icon name="BellDot" className="text-destructive size-6" />
+
+❌ Forbidden:
+<BellDotIcon size={24} color="red" />
+<BellDotIcon className="text-primary" />
+<Icon name="bell-dot" className="text-primary" />  // wrong casing
+
+Rules:
+
+1. Always use **shadcn semantic tokens** in `className`.
+2. Inline color is only for **dynamic or special cases**, never for layout/theme surfaces.
+3. Icon sizing should follow design system classes (`size-6`, `size-8`, etc.).
+4. Do NOT use raw hex colors or arbitrary Tailwind colors for layout/theme.
+
+### User Identity Placeholder Rules (STRICT)
+
+- Whenever a user name is required in the UI, ALWAYS use:
+  Name: "Admin"
+
+- Do NOT invent or vary user names.
+- Do NOT use random initials or avatars.
+
+### Avatar / User Icon Rules
+
+- Use the user’s **initial as an icon** instead of an image avatar.
+- Since the name is always "Admin", the avatar initial MUST be:
+  "A"
+
+✅ Correct Usage:
+- User name label: Admin
+- Avatar: Circular icon with letter "A"
+
+❌ Forbidden:
+- Random names (e.g. John, Ahmed, User)
+- Profile images or photos
+- Multiple initials
+- Dynamic name placeholders
+
+
 ## ✅ FINAL QUALITY CHECK (MANDATORY)
 
 Before output, verify:
@@ -226,43 +270,4 @@ Before output, verify:
 * File names are collision-safe
 * Code is production-merge ready
 
----
-
-Begin conversion now using the provided Stitch design/code.
-
-
-### Lucide React Icon Usage Rules (STRICT)
-
-- Use lucide-react icons exclusively for all UI icons.
-- Icons MUST NOT receive Tailwind classes for color (className="text-...").
-- Since Lucide icons do not support Tailwind theming, apply inline color values using the color prop.
-
-✅ Correct Usage:
-<BellDotIcon
-  size={24}
-  color="red"
-/>
-
-❌ Forbidden:
-<BellDotIcon className="text-primary" />
-<BellDotIcon className="text-muted-foreground" />
-
-Color Selection Rules for Icons:
-
-1. Prefer semantic meaning, not theme surfaces.
-   Icons often represent status or action, not layout surfaces.
-
-2. Use inline colors ONLY when necessary, such as:
-   - Notification dots
-   - Status indicators (live, unread, error)
-   - Media or alert states
-
-3. Do NOT use:
-   - Raw layout colors
-   - Background or surface colors
-   - Arbitrary Tailwind classes
-
-Decision Rule:
-
-If the icon color represents status or emphasis, inline color is allowed.
-If the icon color affects theme, layout, or readability, redesign to rely on semantic shadcn tokens instead.
+ 

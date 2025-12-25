@@ -4,9 +4,10 @@ import {
   TouchableOpacity,
   ImageBackground,
   I18nManager,
+  Pressable,
 } from "react-native";
 import { Play } from "lucide-react-native";
-
+import { Link, useRouter } from "expo-router";
 import { HomeFeedPostAuthorHeader } from "./home-feed-post-author-header";
 import { HomeFeedPostFooter } from "./home-feed-post-footer";
 import { HomeFeedAudioPlayer } from "./home-feed-audio-player";
@@ -84,20 +85,28 @@ function TextPost({ post }: { post: ItemProps }) {
 }
 
 export function HomeFeedPostCard({ post }: { post: ItemProps }) {
+  const router = useRouter();
   return (
-    <View className="bg-background rounded-2xl p-4 shadow-sm border border-foreground">
-      <HomeFeedPostAuthorHeader
-        // author={post.author}
-        createdAt={formatDate(post.date, "MMM D, YYYY")}
-      />
-      {post.type === "audio" && <AudioPost post={post} />}
-      {post.type === "video" && <VideoPost post={post} />}
-      {post.type === "text" && <TextPost post={post} />}
-      <HomeFeedPostFooter
-        tags={post.tags}
-        likes={post.likes}
-        isBookmarked={post.isBookmarked}
-      />
-    </View>
+    <Pressable
+      onPress={(e) => {
+        // console.log(">>>>>>");
+        router.push(`/blog-view/${post.id}`);
+      }}
+    >
+      <View className="bg-background rounded-2xl p-4 shadow-sm border border-foreground">
+        <HomeFeedPostAuthorHeader
+          // author={post.author}
+          createdAt={formatDate(post.date, "MMM D, YYYY")}
+        />
+        {post.type === "audio" && <AudioPost post={post} />}
+        {post.type === "video" && <VideoPost post={post} />}
+        {post.type === "text" && <TextPost post={post} />}
+        <HomeFeedPostFooter
+          tags={post.tags}
+          likes={post.likes}
+          isBookmarked={post.isBookmarked}
+        />
+      </View>
+    </Pressable>
   );
 }

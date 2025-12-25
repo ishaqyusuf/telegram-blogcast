@@ -1,5 +1,4 @@
 import { TouchableOpacity } from "react-native";
-import { Mic } from "lucide-react-native";
 import { Icon } from "../ui/icon";
 
 export function HomeFeedFAB() {
