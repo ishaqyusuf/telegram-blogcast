@@ -5,9 +5,9 @@ import { LegendList } from "@legendapp/list";
 
 function CommentItem({ item }: { item: (typeof DUMMY_COMMENTS)[0] }) {
   return (
-    <View className="flex-row  items-start gap-3">
+    <View className="flex-row items-start gap-3">
       <Image
-        source={{ uri: item.author.avatar }}
+        source={{ uri: null }}
         className="w-10 h-10 rounded-full bg-muted border border-border"
       />
       <View className="flex-1 flex-col items-start">
@@ -40,7 +40,7 @@ function CommentItem({ item }: { item: (typeof DUMMY_COMMENTS)[0] }) {
         <View className="w-full mt-1.5">
           <Text
             className="text-foreground text-[15px] leading-relaxed text-right"
-            style={{ writingDirection: I18nManager.isRTL ? "rtl" : "ltr" }}
+            // style={{ writingDirection: I18nManager.isRTL ? "rtl" : "ltr" }}
           >
             {item.content}
           </Text>

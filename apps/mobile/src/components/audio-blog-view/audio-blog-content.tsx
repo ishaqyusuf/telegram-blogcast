@@ -35,7 +35,7 @@ export function AudioBlogContent() {
 
       {/* Arabic Content */}
       <View
-        style={{ writingDirection: I18nManager.isRTL ? "rtl" : "ltr" }}
+        // style={{ writingDirection: I18nManager.isRTL ? "rtl" : "ltr" }}
         className="flex flex-col gap-3"
       >
         <Text className="font-arabic text-2xl font-bold text-foreground leading-tight text-right">
