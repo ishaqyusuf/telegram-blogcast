@@ -12,7 +12,7 @@ import { HomeFeedPostAuthorHeader } from "./home-feed-post-author-header";
 import { HomeFeedPostFooter } from "./home-feed-post-footer";
 import { HomeFeedAudioPlayer } from "./home-feed-audio-player";
 import { RouterOutputs } from "@api/trpc/routers/_app";
-import { formatDate } from "@gnd/utils/dayjs";
+import { formatDate } from "@acme/utils/dayjs";
 import { minuteToString } from "@/lib/utils";
 import { useCallback } from "react";
 import { useAudioStore } from "@/store/audio-store";

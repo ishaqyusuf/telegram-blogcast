@@ -3,7 +3,7 @@ import type { LucideIcon, LucideProps } from "lucide-react-native";
 // import { cssInterop } from "react-native-css-interop";
 import { icons } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
-import { camel } from "@gnd/utils";
+import { camel } from "@acme/utils";
 import { THEME } from "@/lib/theme";
 type IconProps = LucideProps & {
   as?: LucideIcon;

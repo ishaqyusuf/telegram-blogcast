@@ -9,6 +9,7 @@ import { ThemeProvider } from "@react-navigation/native";
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import FlashMessage from "react-native-flash-message";
 import { StaticTrpc } from "@/components/static-trpc";
+import { View } from "react-native";
 
 // import { authClient } from "@/lib/auth-client";
 const InitialLayout = () => {
@@ -17,7 +18,7 @@ const InitialLayout = () => {
       <TRPCReactProvider>
         <StaticTrpc />
         <StatusBar style="auto" />
-        <Stack>
+        <Stack initialRouteName="index">
           <Stack.Screen name="home" options={{ headerShown: false }} />
           <Stack.Screen
             name="blog-view/[blogId]"
@@ -35,18 +36,20 @@ const InitialLayout = () => {
 export const RootLayout = () => {
   const theme = useThemeConfig();
   return (
-    <GestureHandlerRootView
-      className={theme.dark ? `dark dark-theme` : "light light-theme"}
-      style={{ flex: 1 }}
-    >
-      {/* <Text>Theme: {theme.dark ? "Dark" : "Light"}</Text> */}
-      <ThemeProvider value={theme}>
-        <BottomSheetModalProvider>
-          <FlashMessage position="top" />
-          <InitialLayout />
-        </BottomSheetModalProvider>
-      </ThemeProvider>
-    </GestureHandlerRootView>
+    <View className={theme.dark ? `dark flex-1` : "light flex-1"}>
+      <GestureHandlerRootView
+        className={theme.dark ? `dark dark-theme` : "light light-theme"}
+        style={{ flex: 1 }}
+      >
+        {/* <Text>Theme: {theme.dark ? "Dark" : "Light"}</Text> */}
+        <ThemeProvider value={theme}>
+          <BottomSheetModalProvider>
+            <FlashMessage position="top" />
+            <InitialLayout />
+          </BottomSheetModalProvider>
+        </ThemeProvider>
+      </GestureHandlerRootView>
+    </View>
   );
 };
 
