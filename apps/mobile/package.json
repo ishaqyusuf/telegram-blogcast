@@ -51,7 +51,7 @@
     "expo-image": "~3.0.10",
     "expo-linear-gradient": "~15.0.7",
     "expo-linking": "~8.0.9",
-    "expo-router": "~6.0.21",
+    "expo-router": "~6.0.16",
     "expo-secure-store": "~15.0.7",
     "expo-splash-screen": "~31.0.11",
     "expo-status-bar": "~3.0.8",
@@ -82,7 +82,6 @@
     "react-native-worklets": "0.5.1",
     "tailwind-merge": "^3.3.1",
     "tailwindcss-animate": "^1.0.7",
-    "uniwind": "^1.2.2",
     "zod": "^4.1.12",
     "zustand": "^5.0.8"
   },

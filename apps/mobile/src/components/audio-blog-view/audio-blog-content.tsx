@@ -57,9 +57,9 @@ export function AudioBlogContent() {
         {/* Tags and Comments Button */}
         <View className="flex-row flex-wrap gap-2 mt-4 items-center justify-between">
           <View className="flex-row flex-wrap gap-2 items-center">
-            {tags.map((tag) => (
+            {tags.map((tag, ti) => (
               <TouchableOpacity
-                key={tag}
+                key={ti}
                 className="px-3 py-1 bg-muted rounded-lg"
               >
                 <Text className="text-sm font-arabic text-primary font-medium">
