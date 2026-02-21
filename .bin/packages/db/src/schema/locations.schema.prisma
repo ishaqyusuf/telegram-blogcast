@@ -1,0 +1,51 @@
+model Location {
+    id        Int       @unique @default(autoincrement())
+    createdAt DateTime? @default(now()) @db.Timestamp(0)
+    updatedAt DateTime? @updatedAt
+    deletedAt DateTime?
+
+    name    String?
+    address String?
+    lat     Float?
+    lon     Float?
+
+    blogLocations  BlogLocation[]
+    mediaLocations MediaLocation[]
+    albumLocations AlbumLocation[]
+}
+
+model AlbumLocation {
+    id        Int       @unique @default(autoincrement())
+    createdAt DateTime? @default(now()) @db.Timestamp(0)
+    updatedAt DateTime? @updatedAt
+    deletedAt DateTime?
+
+    albums Album[]
+
+    Location   Location? @relation(fields: [locationId], references: [id])
+    locationId Int?
+}
+
+model MediaLocation {
+    id        Int       @unique @default(autoincrement())
+    createdAt DateTime? @default(now()) @db.Timestamp(0)
+    updatedAt DateTime? @updatedAt
+    deletedAt DateTime?
+
+    medias Media[]
+
+    Location   Location? @relation(fields: [locationId], references: [id])
+    locationId Int?
+}
+
+model BlogLocation {
+    id        Int       @unique @default(autoincrement())
+    createdAt DateTime? @default(now()) @db.Timestamp(0)
+    updatedAt DateTime? @updatedAt
+    deletedAt DateTime?
+
+    blogs Blog[]
+
+    Location   Location? @relation(fields: [locationId], references: [id])
+    locationId Int?
+}

@@ -1,0 +1,13 @@
+{
+  "extends": "@acme/tsconfig/react-library.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "strict": false,
+    "noImplicitAny": false
+  },
+  "include": ["src", "../../apps/www/src/components/create-sales-btn.tsx"],
+  "exclude": ["node_modules"]
+}

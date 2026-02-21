@@ -1,79 +1,82 @@
+// middleware.ts  (project root)
+//
+// Two responsibilities:
+//   1. Auth guard  — redirect unauthenticated users to /login
+//   2. API proxy   — forward /proxy/* requests to an external upstream
+//                    (useful if you want to shield env vars from the client)
+
 import { NextRequest, NextResponse } from "next/server";
-import { getLinkModules, validateLinks } from "./components/sidebar/links";
+import { getSessionFromRequest } from "@/lib/auth";
+
+// ── Route config ──────────────────────────────────────────────────────────────
+
+// Paths that never require authentication
+const PUBLIC_PATHS = ["/login", "/api/auth/send-code", "/api/auth/verify-code"];
+
+// Paths proxied to an upstream service
+const PROXY_UPSTREAM = process.env.PROXY_UPSTREAM_URL ?? ""; // e.g. https://api.example.com
+
+// ── Middleware ────────────────────────────────────────────────────────────────
+
+export async function proxy(req: NextRequest) {
+    const { pathname } = req.nextUrl;
+
+    // ── 1. Proxy ──────────────────────────────────────────────────────────────
+    if (pathname.startsWith("/proxy/") && PROXY_UPSTREAM) {
+        const session = await getSessionFromRequest(req);
+        if (!session?.authenticated) {
+            return NextResponse.json(
+                { error: "Unauthorized" },
+                { status: 401 },
+            );
+        }
+
+        const upstreamPath = pathname.replace(/^\/proxy/, "");
+        const upstreamUrl = `${PROXY_UPSTREAM}${upstreamPath}${req.nextUrl.search}`;
+
+        const proxyHeaders = new Headers(req.headers);
+        // proxyHeaders.set("x-forwarded-for", req.ip ?? "");
+        // Forward auth secret so upstream can verify requests come from this proxy
+        proxyHeaders.set("x-proxy-secret", process.env.PROXY_SECRET ?? "");
+
+        return NextResponse.rewrite(upstreamUrl, {
+            request: { headers: proxyHeaders },
+        });
+    }
+
+    // ── 2. Auth guard ─────────────────────────────────────────────────────────
+    const isPublic = PUBLIC_PATHS.some(
+        (p) => pathname === p || pathname.startsWith(p + "/"),
+    );
+
+    if (!isPublic) {
+        const session = await getSessionFromRequest(req);
+        if (!session?.authenticated) {
+            const loginUrl = new URL("/login", req.url);
+            loginUrl.searchParams.set("from", pathname);
+            return NextResponse.redirect(loginUrl);
+        }
+    }
+
+    // Redirect already-authenticated users away from /login
+    if (pathname === "/login") {
+        const session = await getSessionFromRequest(req);
+        if (session?.authenticated) {
+            return NextResponse.redirect(new URL("/dashboard", req.url));
+        }
+    }
+
+    return NextResponse.next();
+}
 
 export const config = {
     matcher: [
         /*
-         * Match all paths except for:
-         * 1. /api routes
-         * 2. /_next (Next.js internals)
-         * 3. /_static (inside /public)
-         * 4. all root files inside /public (e.g. /favicon.ico)
+         * Match all paths EXCEPT:
+         *   - _next/static, _next/image (Next.js internals)
+         *   - favicon.ico
          */
-        "/((?!api/|_next/|_static/|__nextjs|_vercel|[\\w-]+\\.\\w+).*)",
+        "/((?!_next/static|_next/image|favicon.ico).*)",
     ],
 };
-
-// export default async function middlewarex(req: NextRequest) {
-//     return NextResponse.next();
-// }
-export default async function proxy(req: NextRequest) {
-    // return NextResponse.next();
-    const newUrl = req.nextUrl;
-    // req.cookies.get
-    // Get hostname of request (e.g. demo.vercel.pub, demo.localhost:3000)
-    let hostname = req.headers.get("host");
-    const encodedSearchParams = `${newUrl?.pathname?.substring(1)}${
-        newUrl.search
-    }`;
-    const searchParams = req.nextUrl.searchParams.toString();
-    const path = `${newUrl.pathname}${
-        searchParams.length > 0 ? `?${searchParams}` : ""
-    }`;
-    const pathName = req.nextUrl.pathname;
-    const loginUrl = new URL("/login", req.url);
-    if (encodedSearchParams) {
-        loginUrl.searchParams.append("return_to", encodedSearchParams);
-    }
-    if (pathName === "/") {
-        const auth = await getAuth(req);
-        if (auth) {
-            const link = getDefaultLink(auth);
-            const url = new URL(link, req.url);
-            return NextResponse.redirect(url);
-        }
-        return NextResponse.redirect(loginUrl);
-    }
-    return NextResponse.next();
-}
-
-async function getAuth(req) {
-    try {
-        const userUrl = `${req.nextUrl.origin}/api/auth-session`;
-        const usr = await fetch(userUrl, {
-            method: "POST",
-            headers: req.headers,
-        });
-        if (usr.ok) {
-            const data = await usr.json();
-            return {
-                role: data?.role,
-                can: data?.can,
-                userId: data?.userId,
-            };
-        }
-    } catch (error) {}
-    return null;
-}
-
-function getDefaultLink(auth) {
-    const validLinks = getLinkModules(
-        validateLinks({
-            role: auth.role,
-            can: auth.can,
-            userId: auth?.userId,
-        })
-    );
-    return validLinks.defaultLink;
-}
 
