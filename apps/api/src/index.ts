@@ -10,7 +10,6 @@ const app = new OpenAPIHono<Context>(); //.basePath("/api");
 
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { db } from "@acme/db";
-console.log("ORIGINS", process.env.ALLOWED_API_ORIGINS);
 app.use(secureHeaders());
 if (process.env.NODE_ENV === "development")
   app.use(

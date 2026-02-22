@@ -5,6 +5,7 @@ import { getClient } from "@telegram/telegram-client";
 import { messageFetcher, type FetchedMessage } from "@telegram/message-fetcher";
 import { Api } from "telegram";
 import { saveBatch, type IncomingMessage } from "./blog";
+import { consoleLog } from "@acme/utils";
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
 export const syncChannelsSchema = z.object({}).optional();
@@ -163,6 +164,7 @@ export async function getChannels(ctx: TRPCContext) {
 
 export const startFetchSchema = z.object({
   channelId: z.number(),
+  maxTotalFetch: z.number().positive().optional(), // 🧩 added
 });
 export type StartFetchSchema = z.infer<typeof startFetchSchema>;
 /**
@@ -209,12 +211,13 @@ export async function startFetch(ctx: TRPCContext, input: StartFetchSchema) {
       (err) => console.error("[startFetch] saveBatch failed:", err),
     );
   });
-
+  
   messageFetcher.start({
     channelId: channel.id,
     channelUsername: channel.username,
     lastMessageId,
     resolveFiles: true,
+    maxTotalFetch: input.maxTotalFetch, // 🧩 added
   });
 
   return { ok: true, lastMessageId, channelId: channel.id };

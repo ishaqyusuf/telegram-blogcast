@@ -153,6 +153,17 @@ export default function LoginPage() {
         }
     }
 
+    // 🧩 Restore on mount
+    useEffect(() => {
+        const saved = localStorage.getItem("tg_login_phone");
+        if (saved) setPhone(saved);
+    }, []);
+
+    // 🧩 Persist on change
+    function handlePhoneChange(e: React.ChangeEvent<HTMLInputElement>) {
+        setPhone(e.target.value);
+        localStorage.setItem("tg_login_phone", e.target.value);
+    }
     // ── Step 2: verify OTP ──────────────────────────────────────────────────────
     async function handleVerify(code: string) {
         setError("");
@@ -251,12 +262,13 @@ export default function LoginPage() {
                                                 $
                                             </span>
                                             <input
+                                                onChange={handlePhoneChange}
                                                 ref={phoneRef}
                                                 type="tel"
                                                 value={phone}
-                                                onChange={(e) =>
-                                                    setPhone(e.target.value)
-                                                }
+                                                // onChange={(e) =>
+                                                //     setPhone(e.target.value)
+                                                // }
                                                 placeholder="+1 555 000 0000"
                                                 disabled={isLoading}
                                                 className="flex-1 bg-transparent text-zinc-200 placeholder:text-zinc-600 focus:outline-none"

@@ -78,3 +78,5 @@ packages/jobs/src/schema.prisma
 
 android
 ios
+
+.telegram-session

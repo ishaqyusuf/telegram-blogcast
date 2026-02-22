@@ -360,6 +360,7 @@
       },
       "devDependencies": {
         "@acme/tsconfig": "workspace:*",
+        "@acme/utils": "workspace:*",
         "typescript": "^5.9.3",
       },
     },

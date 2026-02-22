@@ -8,6 +8,7 @@ export const messageMediaSchema = z.object({
   fileId: z.string(),
   mimeType: z.string(),
   title: z.string().optional(),
+  // type: z.enum(["audio", "image", "video", "document", "text"]),
   author: z.string().optional(),
   duration: z.number().optional(),
   width: z.number().optional(),

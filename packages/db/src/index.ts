@@ -30,7 +30,7 @@ type PrismaClientSingleton = ReturnType<typeof prismaClientSingleton>;
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClientSingleton | undefined;
 };
-console.log("DB");
+
 export const db =
   // globalForPrisma.prisma ??
   prismaClientSingleton();

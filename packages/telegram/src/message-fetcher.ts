@@ -9,8 +9,9 @@
 //   3. After each batch emits → caller (tRPC mutation) persists to Blog table
 
 import { EventEmitter } from "events";
-import { fetchMessages } from "./message-service";
+import { fetchMessages, fetchMessages2 } from "./message-service";
 import type { FetchedMessage } from "./message-service";
+import { consoleLog } from "@acme/utils";
 
 export type { FetchedMessage };
 
@@ -24,6 +25,7 @@ export interface FetcherState {
   totalFetched: number;
   error: string | null;
   retryCount: number;
+  maxTotalFetch?: number;
 }
 
 export type FetcherEvent =
@@ -37,6 +39,7 @@ export interface StartFetcherInput {
   /** Cursor from DB (channel.lastMessageId). Fetcher uses minId to get newer msgs. */
   lastMessageId: number | null;
   resolveFiles?: boolean;
+  maxTotalFetch?: number;
 }
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -85,7 +88,11 @@ class MessageFetcher extends EventEmitter {
 
     this.abortController = new AbortController();
     this.emitState();
-    this.loop(this.abortController.signal, input.resolveFiles ?? false);
+    this.loop(
+      this.abortController.signal,
+      input.resolveFiles ?? false,
+      input.maxTotalFetch,
+    );
   }
 
   stop(): void {
@@ -105,12 +112,13 @@ class MessageFetcher extends EventEmitter {
   private async loop(
     signal: AbortSignal,
     resolveFiles: boolean,
+    maxTotalFetch?: number,
   ): Promise<void> {
     let retryDelay = RETRY_BASE_MS;
-
+    console.log("-----------------------LOADING MESSAGES...");
     while (!signal.aborted) {
       try {
-        await this.poll(signal, resolveFiles);
+        await this.poll(signal, resolveFiles, maxTotalFetch);
 
         retryDelay = RETRY_BASE_MS;
         this.setState({ error: null, retryCount: 0, status: "running" });
@@ -146,15 +154,20 @@ class MessageFetcher extends EventEmitter {
   private async poll(
     signal: AbortSignal,
     resolveFiles: boolean,
+    maxTotalFetch?: number,
   ): Promise<void> {
     const { channelUsername, lastMessageId } = this.state;
-
+    consoleLog("POLLING", {
+      channelUsername,
+      lastMessageId,
+    });
     // Step 1 – probe when no cursor exists
     if (lastMessageId === null) {
-      const probe = await fetchMessages(channelUsername, {
+      const probe = await fetchMessages2(channelUsername, {
         limit: 1,
         resolveFiles: false,
       });
+
       if (signal.aborted || probe.messages.length === 0) return;
 
       // Seed the cursor without emitting (no new content yet to persist)
@@ -163,12 +176,17 @@ class MessageFetcher extends EventEmitter {
     }
 
     // Step 2 – fetch only messages newer than cursor
-    const { messages } = await fetchMessages(channelUsername, {
+    const { messages } = await fetchMessages2(channelUsername, {
       limit: BATCH_SIZE,
-      minId: lastMessageId,
+      minId: lastMessageId!,
       resolveFiles,
     });
-
+    consoleLog("Fetched batch of messages", {
+      channelUsername,
+      batchSize: messages.length,
+      lastMessageId: this.state.lastMessageId,
+      totalFetched: this.state.totalFetched,
+    });
     if (signal.aborted || messages.length === 0) return;
 
     // messages are sorted ascending by message-service
@@ -180,6 +198,15 @@ class MessageFetcher extends EventEmitter {
 
     // Emit batch — the tRPC subscription / SSE listener will persist to DB
     this.emit("event", { type: "messages", messages } satisfies FetcherEvent);
+    // 🧩 Added: stop automatically when limit is reached
+    consoleLog("State after poll", this.getState());
+    if (maxTotalFetch && this.state.totalFetched >= maxTotalFetch) {
+      this.stop();
+      this.emit("event", {
+        type: "state",
+        state: { ...this.getState(), status: "stopped" },
+      } satisfies FetcherEvent);
+    }
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────────────
