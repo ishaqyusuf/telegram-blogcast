@@ -2,9 +2,9 @@
 import type { TRPCContext } from "@api/trpc/init";
 import { z } from "zod";
 import { getClient } from "@telegram/telegram-client";
-
+import { messageFetcher, type FetchedMessage } from "@telegram/message-fetcher";
 import { Api } from "telegram";
-import { consoleLog } from "@acme/utils";
+import { saveBatch, type IncomingMessage } from "./blog";
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
 export const syncChannelsSchema = z.object({}).optional();
@@ -159,4 +159,72 @@ export async function getChannels(ctx: TRPCContext) {
     orderBy: [{ isFetchable: "desc" }, { title: "asc" }],
   });
   return withRTL(channels);
+}
+
+export const startFetchSchema = z.object({
+  channelId: z.number(),
+});
+export type StartFetchSchema = z.infer<typeof startFetchSchema>;
+/**
+ * Resolves the resume cursor then starts the background fetcher.
+ * Wires fetcher "messages" event → saveBatch() so each batch is persisted
+ * to Blog before the next poll tick begins.
+ */
+export async function startFetch(ctx: TRPCContext, input: StartFetchSchema) {
+  const { db } = ctx;
+
+  const channel = await db.channel.findFirstOrThrow({
+    where: { id: input.channelId, deletedAt: null, isFetchable: true },
+    select: { id: true, username: true, lastMessageId: true },
+  });
+
+  // Resolve cursor — channel.lastMessageId first, Blog.meta as fallback
+  let lastMessageId = channel.lastMessageId ?? null;
+
+  if (!lastMessageId) {
+    const latestBlog = await db.blog.findFirst({
+      where: { channelId: channel.id, deletedAt: null },
+      orderBy: { blogDate: "desc" },
+      select: { meta: true },
+    });
+    lastMessageId =
+      ((latestBlog?.meta as any)?.telegramMessageId as number) ?? null;
+  }
+
+  // Re-wire listener on every start to avoid duplicates
+  messageFetcher.removeAllListeners("event");
+  messageFetcher.on("event", async (event) => {
+    if (event.type !== "messages") return;
+
+    const mapped: IncomingMessage[] = event.messages.map(
+      (m: FetchedMessage) => ({
+        id: m.id,
+        text: m.text,
+        date: m.date,
+        media: (m as any).media ?? null,
+      }),
+    );
+
+    await saveBatch(ctx, { channelId: channel.id, messages: mapped }).catch(
+      (err) => console.error("[startFetch] saveBatch failed:", err),
+    );
+  });
+
+  messageFetcher.start({
+    channelId: channel.id,
+    channelUsername: channel.username,
+    lastMessageId,
+    resolveFiles: true,
+  });
+
+  return { ok: true, lastMessageId, channelId: channel.id };
+}
+
+export async function stopFetch() {
+  messageFetcher.stop();
+  return { ok: true };
+}
+
+export async function getFetcherState() {
+  return messageFetcher.getState();
 }

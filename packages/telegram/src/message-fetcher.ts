@@ -1,27 +1,26 @@
-// lib/messageFetcher.ts
+// packages/telegram/src/message-fetcher.ts
 //
-// Background singleton loop that continuously fetches new messages from a
-// Telegram channel and pushes them via EventEmitter.
-// Delegates all fetch logic to messageService — no GramJS calls here.
+// Singleton background loop. Moved from apps/www into packages/telegram so it
+// can be imported by apps/api (tRPC) rather than running in the Next.js process.
 //
-// Features:
-//   - Automatic retry with exponential backoff on any failure
-//   - Cursor-based polling (only fetches messages newer than last seen)
-//   - Survives Next.js HMR via global singleton
+// Flow per channel:
+//   1. Fetch without cursor → compare against DB lastMessageId to find gap
+//   2. Resume from lastMessageId and keep it updated after every batch
+//   3. After each batch emits → caller (tRPC mutation) persists to Blog table
 
 import { EventEmitter } from "events";
 import { fetchMessages } from "./message-service";
 import type { FetchedMessage } from "./message-service";
 
-// Re-export so consumers can import everything from one place
 export type { FetchedMessage };
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface FetcherState {
   status: "idle" | "running" | "retrying" | "stopped";
-  channelId: string;
-  lastMessageId: number | null; // cursor — newest id successfully processed
+  channelUsername: string;
+  channelId: number;
+  lastMessageId: number | null;
   totalFetched: number;
   error: string | null;
   retryCount: number;
@@ -32,15 +31,22 @@ export type FetcherEvent =
   | { type: "state"; state: FetcherState }
   | { type: "error"; error: string; retryIn: number };
 
+export interface StartFetcherInput {
+  channelId: number;
+  channelUsername: string;
+  /** Cursor from DB (channel.lastMessageId). Fetcher uses minId to get newer msgs. */
+  lastMessageId: number | null;
+  resolveFiles?: boolean;
+}
+
 // ── Config ────────────────────────────────────────────────────────────────────
 
 const BATCH_SIZE = 20;
-const POLL_INTERVAL_MS = 2_000;
+const POLL_INTERVAL_MS = 3_000;
 const RETRY_BASE_MS = 2_000;
 const RETRY_MAX_MS = 60_000;
-const RESOLVE_FILES = true;
 
-// ── Singleton guard (survives Next.js HMR) ────────────────────────────────────
+// ── Singleton guard ───────────────────────────────────────────────────────────
 
 declare global {
   // eslint-disable-next-line no-var
@@ -52,7 +58,8 @@ declare global {
 class MessageFetcher extends EventEmitter {
   private state: FetcherState = {
     status: "idle",
-    channelId: "",
+    channelUsername: "",
+    channelId: 0,
     lastMessageId: null,
     totalFetched: 0,
     error: null,
@@ -63,19 +70,14 @@ class MessageFetcher extends EventEmitter {
 
   // ── Public API ──────────────────────────────────────────────────────────────
 
-  /**
-   * Start (or restart) the background loop.
-   *
-   * @param channelId  Channel id or @username to poll
-   * @param startId    Resume cursor — only messages with id > startId are fetched
-   */
-  start(channelId: string, startId?: number): void {
+  start(input: StartFetcherInput): void {
     this.stop();
 
     this.state = {
       status: "running",
-      channelId,
-      lastMessageId: startId ?? null,
+      channelUsername: input.channelUsername,
+      channelId: input.channelId,
+      lastMessageId: input.lastMessageId,
       totalFetched: 0,
       error: null,
       retryCount: 0,
@@ -83,7 +85,7 @@ class MessageFetcher extends EventEmitter {
 
     this.abortController = new AbortController();
     this.emitState();
-    this.loop(this.abortController.signal);
+    this.loop(this.abortController.signal, input.resolveFiles ?? false);
   }
 
   stop(): void {
@@ -98,21 +100,20 @@ class MessageFetcher extends EventEmitter {
     return { ...this.state };
   }
 
-  // ── Internal loop ───────────────────────────────────────────────────────────
+  // ── Loop ────────────────────────────────────────────────────────────────────
 
-  private async loop(signal: AbortSignal): Promise<void> {
+  private async loop(
+    signal: AbortSignal,
+    resolveFiles: boolean,
+  ): Promise<void> {
     let retryDelay = RETRY_BASE_MS;
 
     while (!signal.aborted) {
       try {
-        await this.poll(signal);
+        await this.poll(signal, resolveFiles);
 
         retryDelay = RETRY_BASE_MS;
-        this.setState({
-          error: null,
-          retryCount: 0,
-          status: "running",
-        });
+        this.setState({ error: null, retryCount: 0, status: "running" });
         await this.sleep(POLL_INTERVAL_MS, signal);
       } catch (err: unknown) {
         if (signal.aborted) break;
@@ -137,32 +138,51 @@ class MessageFetcher extends EventEmitter {
     }
   }
 
-  /** One poll tick — delegates to messageService */
-  private async poll(signal: AbortSignal): Promise<void> {
-    const { channelId, lastMessageId } = this.state;
+  // ── Poll ─────────────────────────────────────────────────────────────────────
+  // Step 1: if no lastMessageId yet, do a probe fetch (no minId) to get the
+  //         latest messageId from Telegram, then compare with DB cursor.
+  // Step 2: fetch with minId = lastMessageId to only get newer messages.
 
-    const { messages } = await fetchMessages(channelId, {
+  private async poll(
+    signal: AbortSignal,
+    resolveFiles: boolean,
+  ): Promise<void> {
+    const { channelUsername, lastMessageId } = this.state;
+
+    // Step 1 – probe when no cursor exists
+    if (lastMessageId === null) {
+      const probe = await fetchMessages(channelUsername, {
+        limit: 1,
+        resolveFiles: false,
+      });
+      if (signal.aborted || probe.messages.length === 0) return;
+
+      // Seed the cursor without emitting (no new content yet to persist)
+      this.setState({ lastMessageId: probe.messages?.[0]?.id ?? null });
+      return;
+    }
+
+    // Step 2 – fetch only messages newer than cursor
+    const { messages } = await fetchMessages(channelUsername, {
       limit: BATCH_SIZE,
-      minId: lastMessageId ?? undefined, // only newer messages
-      resolveFiles: RESOLVE_FILES,
+      minId: lastMessageId,
+      resolveFiles,
     });
 
     if (signal.aborted || messages.length === 0) return;
 
-    // messages are sorted ascending by messageService
-    const newLastId = messages?.[messages.length - 1]?.id;
+    // messages are sorted ascending by message-service
+    const newLastId = messages[messages.length - 1]?.id ?? null;
     this.setState({
       lastMessageId: newLastId,
       totalFetched: this.state.totalFetched + messages.length,
     });
 
-    this.emit("event", {
-      type: "messages",
-      messages,
-    } satisfies FetcherEvent);
+    // Emit batch — the tRPC subscription / SSE listener will persist to DB
+    this.emit("event", { type: "messages", messages } satisfies FetcherEvent);
   }
 
-  // ── Helpers ─────────────────────────────────────────────────────────────────
+  // ── Helpers ──────────────────────────────────────────────────────────────────
 
   private setState(patch: Partial<FetcherState>): void {
     this.state = { ...this.state, ...patch };
@@ -191,7 +211,7 @@ class MessageFetcher extends EventEmitter {
   }
 }
 
-// ── Export singleton ──────────────────────────────────────────────────────────
+// ── Singleton export ──────────────────────────────────────────────────────────
 
 function getMessageFetcher(): MessageFetcher {
   if (!global.__messageFetcher) {
@@ -201,3 +221,4 @@ function getMessageFetcher(): MessageFetcher {
 }
 
 export const messageFetcher = getMessageFetcher();
+// messageFetcher.start

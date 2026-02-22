@@ -1,66 +1,84 @@
 // apps/api/src/db/queries/blog.ts
 import type { TRPCContext } from "@api/trpc/init";
 import { z } from "zod";
-import type { FetchedMessage } from "@telegram/message-service";
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
-export const createBlogsFromMessagesSchema = z.object({
-  channelId: z.number(),
-  messages: z.array(
-    z.object({
-      id: z.number(),
-      text: z.string().nullable(),
-      fileId: z.string().nullable(),
-      date: z.string(), // ISO-8601
-    }),
-  ),
+export const messageMediaSchema = z.object({
+  fileId: z.string(),
+  mimeType: z.string(),
+  title: z.string().optional(),
+  author: z.string().optional(),
+  duration: z.number().optional(),
+  width: z.number().optional(),
+  height: z.number().optional(),
+  fileSize: z.number().optional(),
 });
-export type CreateBlogsFromMessagesSchema = z.infer<
-  typeof createBlogsFromMessagesSchema
->;
+
+export const incomingMessageSchema = z.object({
+  id: z.number(),
+  text: z.string().nullable(),
+  date: z.string(),
+  media: messageMediaSchema.nullable(),
+});
+
+export const saveBatchSchema = z.object({
+  channelId: z.number(),
+  messages: z.array(incomingMessageSchema),
+});
+
+export type SaveBatchSchema = z.infer<typeof saveBatchSchema>;
+export type IncomingMessage = z.infer<typeof incomingMessageSchema>;
+export type MessageMedia = z.infer<typeof messageMediaSchema>;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function resolveBlogType(
+  media: MessageMedia | null,
+): "text" | "image" | "audio" {
+  if (!media) return "text";
+  if (media.mimeType.startsWith("audio")) return "audio";
+  if (media.mimeType.startsWith("image")) return "image";
+  return "text";
+}
 
 // ── Queries ───────────────────────────────────────────────────────────────────
 
 /**
- * Batch-create Blog records from a completed message fetch batch.
- * - Skips messages already tracked via MessageForward (idempotent).
- * - Creates a Blog per message, then a MessageForward record linking them.
- * - If message has a fileId, creates a Media + File record attached to the blog.
+ * Batch-persist messages as Blog records.
+ * - Idempotent: skips messageIds already stored in meta.telegramMessageId.
+ * - Creates File + Media for any message with media.
+ * - For audio: upserts Author by name, sets Media.title + authorId.
+ * - Updates channel.lastMessageId to the highest id in this batch.
  */
-export async function createBlogsFromMessages(
-  ctx: TRPCContext,
-  input: CreateBlogsFromMessagesSchema,
-) {
+export async function saveBatch(ctx: TRPCContext, input: SaveBatchSchema) {
   const { db } = ctx;
   const { channelId, messages } = input;
 
-  // Collect already-processed messageIds for this channel to skip duplicates
-  const existingForwards = await db.messageForward.findMany({
-    where: {
-      channelId,
-      messageId: { in: messages.map((m) => m.id) },
-      deletedAt: null,
-    },
-    select: { messageId: true },
+  if (messages.length === 0) return { created: 0 };
+
+  // ── Skip already persisted messages ──────────────────────────────────────
+  const existingBlogs = await db.blog.findMany({
+    where: { channelId, deletedAt: null },
+    select: { meta: true },
   });
-  const existingIds = new Set(existingForwards.map((f) => f.messageId));
+
+  const existingIds = new Set(
+    existingBlogs
+      .map((b) => (b.meta as any)?.telegramMessageId as number | undefined)
+      .filter(Boolean),
+  );
 
   const newMessages = messages.filter((m) => !existingIds.has(m.id));
   if (newMessages.length === 0) return { created: 0 };
 
   let created = 0;
 
-  // Process sequentially to avoid race conditions on FK constraints
   for (const msg of newMessages) {
     const blogDate = new Date(msg.date);
-    const type = msg.fileId
-      ? msg.fileId.startsWith("photo_")
-        ? "image"
-        : "audio"
-      : "text";
+    const type = resolveBlogType(msg.media);
 
-    // Create the Blog
+    // ── Blog ────────────────────────────────────────────────────────────────
     const blog = await db.blog.create({
       data: {
         content: msg.text,
@@ -74,48 +92,95 @@ export async function createBlogsFromMessages(
       },
     });
 
-    // If there is media, persist a File + Media record linked to the blog
-    if (msg.fileId) {
+    // ── File + Media ────────────────────────────────────────────────────────
+    if (msg.media) {
+      const {
+        fileId,
+        mimeType,
+        title,
+        author,
+        duration,
+        width,
+        height,
+        fileSize,
+      } = msg.media;
+
+      // Upsert Author for audio messages
+      let authorId: number | undefined;
+      if (type === "audio" && author) {
+        const authorRecord = await db.author.upsert({
+          where: { name: author },
+          create: { name: author },
+          update: {},
+        });
+        authorId = authorRecord.id;
+      }
+
       const file = await db.file.create({
         data: {
-          fileId: msg.fileId,
+          fileId,
           fileType: type,
-          mimeType: type === "audio" ? "audio/ogg" : "image/jpeg",
+          mimeType,
+          duration,
+          width,
+          height,
+          fileSize,
         },
       });
 
       await db.media.create({
         data: {
-          mimeType: type === "audio" ? "audio/ogg" : "image/jpeg",
+          mimeType,
           fileId: file.id,
           blogId: blog.id,
+          title: title ?? null,
+          authorId: authorId ?? null,
         },
       });
     }
 
-    // Track the forward so we never re-process this messageId
-    await db.messageForward.create({
-      data: {
-        messageId: msg.id,
-        channelId,
-        publishedDate: blogDate,
-        status: "captured",
-      },
-    });
-
     created++;
   }
+
+  // ── Advance cursor ────────────────────────────────────────────────────────
+  const maxId = Math.max(...messages.map((m) => m.id));
+  await db.channel.update({
+    where: { id: channelId },
+    data: { lastMessageId: maxId },
+  });
 
   return { created };
 }
 
-/** Get blog count per channel (for dashboard summary) */
-export async function getChannelBlogStats(
+/**
+ * Get the resume cursor for a channel.
+ * Checks channel.lastMessageId first, falls back to scanning Blog.meta.
+ */
+export async function getLatestMessageId(
   ctx: TRPCContext,
   input: { channelId: number },
 ) {
   const { db } = ctx;
-  return db.blog.count({
-    where: { channelId: input.channelId, deletedAt: null },
+
+  const channel = await db.channel.findFirst({
+    where: { id: input.channelId, deletedAt: null },
+    select: { lastMessageId: true },
   });
+
+  if (channel?.lastMessageId) {
+    return { lastMessageId: channel.lastMessageId };
+  }
+
+  // Fallback: derive from Blog.meta
+  const latest = await db.blog.findFirst({
+    where: { channelId: input.channelId, deletedAt: null },
+    orderBy: { blogDate: "desc" },
+    select: { meta: true },
+  });
+
+  return {
+    lastMessageId: ((latest?.meta as any)?.telegramMessageId ?? null) as
+      | number
+      | null,
+  };
 }
