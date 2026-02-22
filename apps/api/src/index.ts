@@ -27,7 +27,7 @@ if (process.env.NODE_ENV === "development")
       ],
       exposeHeaders: ["Content-Length"],
       maxAge: 86400,
-    })
+    }),
   );
 app.use("/api/trpc/*", async (c) => {
   const res = fetchRequestHandler({
@@ -45,7 +45,7 @@ app.use("/api/trpc/*", async (c) => {
         input,
         errorMessage: [error.message, error.code, error.name, error.stack],
         url,
-        headers: headers.toJSON(),
+        headers: headers?.toJSON(),
         port: process.env.PORT,
       };
       consoleLog("ERROR", msg);

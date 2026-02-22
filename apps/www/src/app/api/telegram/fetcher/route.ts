@@ -7,7 +7,7 @@
 // DELETE /api/telegram/fetcher        → stop
 
 import { NextRequest, NextResponse } from "next/server";
-import { messageFetcher } from "@/lib/message-fetcher";
+import { messageFetcher } from "@telegram/message-fetcher";
 
 export async function GET() {
     return NextResponse.json(messageFetcher.getState());

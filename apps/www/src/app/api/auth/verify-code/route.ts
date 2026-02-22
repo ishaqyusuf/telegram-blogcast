@@ -1,6 +1,6 @@
 // app/api/auth/verify-code/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { getClient } from "@/lib/telegram-client";
+import { getClient } from "@telegram/telegram-client";
 import { setSessionCookie } from "@/lib/auth";
 import { pendingCodes } from "../send-code/route";
 

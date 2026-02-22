@@ -9,8 +9,8 @@
 // Response: { fileId: string | null }
 
 import { NextResponse } from "next/server";
-import { getClient } from "@/lib/telegram-client";
-import { resolveFileId } from "@/lib/file-id-resolver";
+import { getClient } from "@telegram/telegram-client";
+import { resolveFileId } from "@telegram/file-id-resolver";
 
 export async function POST(request) {
     try {

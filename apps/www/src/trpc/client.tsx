@@ -8,8 +8,8 @@ import { useState } from "react";
 import superjson from "superjson";
 import { makeQueryClient } from "./query-client";
 import { AppRouter } from "@acme/api/trpc/routers/_app";
-import { generateRandomString } from "@/lib/utils";
-import { authUser } from "@/app-deps/(v1)/_actions/utils";
+// import { generateRandomString } from "@/lib/utils";
+// import { authUser } from "@/app-deps/(v1)/_actions/utils";
 export const { TRPCProvider, useTRPC } = createTRPCContext<AppRouter>();
 
 let browserQueryClient: QueryClient;
@@ -39,30 +39,30 @@ export function TRPCReactProvider(
         createTRPCClient<AppRouter>({
             links: [
                 httpBatchLink({
-                    // url: `${process.env.NEXT_PUBLIC_APP_URL}/api/trpc`,
-                    url:
-                        process.env.NODE_ENV === "production"
-                            ? `${process.env.NEXT_PUBLIC_APP_URL}/api/trpc`
-                            : `${process.env.NEXT_PUBLIC_API_URL}/api/trpc`,
+                    url: `${process.env.NEXT_PUBLIC_APP_URL}/api/trpc`,
+                    // url:
+                    //     process.env.NODE_ENV === "production"
+                    //         ? `${process.env.NEXT_PUBLIC_APP_URL}/api/trpc`
+                    //         : `${process.env.NEXT_PUBLIC_API_URL}/api/trpc`,
                     transformer: superjson as any,
-                    async headers() {
-                        try {
-                            const auth = await authUser();
-                            const id = auth?.id;
-                            // const s = await getServerSession(authOptions);
-                            // console.log
-                            // const id = s?.user?.id;
-                            // if (!id) {
-                            //     return {};
-                            // }
-                            return {
-                                Authorization: `Bearer ${generateRandomString(
-                                    16,
-                                )}|${id}`,
-                            };
-                        } catch (error) {}
-                        return {};
-                    },
+                    // async headers() {
+                    //     try {
+                    //         // const auth = await authUser();
+                    //         const id = auth?.id;
+                    //         // const s = await getServerSession(authOptions);
+                    //         // console.log
+                    //         // const id = s?.user?.id;
+                    //         // if (!id) {
+                    //         //     return {};
+                    //         // }
+                    //         return {
+                    //             Authorization: `Bearer ${generateRandomString(
+                    //                 16,
+                    //             )}|${id}`,
+                    //         };
+                    //     } catch (error) {}
+                    //     return {};
+                    // },
                 }),
                 loggerLink({
                     enabled: (opts) =>

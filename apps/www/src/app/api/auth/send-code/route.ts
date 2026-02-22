@@ -1,6 +1,6 @@
 // app/api/auth/send-code/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { getClient } from "@/lib/telegram-client";
+import { getClient } from "@telegram/telegram-client";
 
 // Stores phone_code_hash per phone number for the duration of the OTP flow.
 // In production, use Redis or a DB. This in-memory map works fine for a

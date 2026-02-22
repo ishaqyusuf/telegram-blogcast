@@ -7,13 +7,14 @@ model Channel {
     title    String?
     username String  @unique
 
-    favourite Boolean?
-    meta      Json?
-
-    forwards MessageForward[]
-
-    blogs    Blog[]
-    watchers MessageForwardWatcher[]
+    favourite     Boolean?
+    meta          Json?
+    lastMessageId Int?
+    allFetched    Boolean?                @default(false)
+    forwards      MessageForward[]
+    isFetchable   Boolean?                @default(false)
+    blogs         Blog[]
+    watchers      MessageForwardWatcher[]
 
     @@unique([username, deletedAt])
 }

@@ -1,7 +1,7 @@
 {
   "name": "@acme/api",
   "scripts": {
-    "dev": "NODE_ENV=development TZ=UTC PORT=4300 bun run --hot src/index.ts",
+    "dev": "NODE_ENV=development TZ=UTC PORT=3006 bun run --hot src/index.ts",
     "dev:node": "tsx src/node.ts",
     "--build": "bun-vercel ./src/bun.ts",
     "build": "./bun-vercel/build.sh ./src/bun.ts",
@@ -24,6 +24,7 @@
     "@hono/zod-validator": "^0.7.0",
     "@scalar/hono-api-reference": "^0.9.1",
     "@acme/db": "workspace:*",
+    "@acme/telegram": "workspace:*",
     "@acme/utils": "workspace:*",
     "@sindresorhus/slugify": "^2.2.1",
     "@trigger.dev/sdk": "3.3.17",
@@ -42,7 +43,7 @@
     "snakecase-keys": "^8.0.1",
     "superjson": "^2.2.2",
     "uuid": "^11.1.0",
-    "zod": "^4.1.12",
+    "zod": "catalog:",
     "zod-openapi": "^4.2.4"
   },
   "devDependencies": {

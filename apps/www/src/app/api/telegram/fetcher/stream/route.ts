@@ -9,7 +9,7 @@
 // GET /api/telegram/fetcher/stream
 
 import { NextRequest } from "next/server";
-import { messageFetcher, FetcherEvent } from "@/lib/message-fetcher";
+import { messageFetcher, FetcherEvent } from "@telegram/message-fetcher";
 
 export const dynamic = "force-dynamic"; // never cache this route
 

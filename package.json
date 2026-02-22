@@ -8,7 +8,10 @@
   "engines": {
     "node": ">=18"
   },
-  "packageManager": "bun@1.2.16",
+  "packageManager": "bun@1.3.9",
+  "catalog": {
+    "zod": "^4.3.5"
+  },
   "private": true,
   "scripts": {
     "build": "turbo build",
@@ -17,6 +20,7 @@
     "db:push": "turbo -F @acme/db push",
     "db:migrate": "turbo -F @acme/db db-migrate",
     "db:generate": "turbo -F @acme/db prisma-generate",
+    "db:push-reset": "turbo -F @acme/db push-reset",
     "dev": "turbo dev --parallel",
     "format": "biome format --write .",
     "lint": "turbo lint && manypkg check",

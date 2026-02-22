@@ -5,6 +5,7 @@
     "scripts": {
         "--dev": "TZ=UTC next dev --turbopack -p 8083",
         "clean": "git clean -xdf .next .turbo node_modules",
+        "dev": "bunx next dev -p 3005",
         "dev:prod": "bunx env-cmd -f .env.production env TZ=UTC next dev -p 3005",
         "build": "NODE_ENV=production next build --turbopack",
         "start": "next start",
@@ -24,6 +25,7 @@
         "@dnd-kit/utilities": "^3.2.2",
         "@acme/api": "workspace:*",
         "@acme/db": "workspace:*",
+        "@acme/telegram": "workspace:*",
         "@acme/ui": "workspace:*",
         "@headlessui/react": "^1.7.19",
         "@hookform/resolvers": "^5.2.2",
@@ -121,7 +123,6 @@
         "swr": "^2.3.6",
         "tailwind-merge": "^3.3.1",
         "tailwindcss-animate": "^1.0.7",
-        "telegram": "^2.26.8",
         "ts-results": "^3.3.0",
         "tus-js-client": "4.3.1",
         "typescript": "^5.9.3",

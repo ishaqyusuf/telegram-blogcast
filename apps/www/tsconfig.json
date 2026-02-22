@@ -6,7 +6,8 @@
         "baseUrl": ".",
         "paths": {
             "@/*": ["./src/*"],
-            "@api/*": ["../api/src/*"]
+            "@api/*": ["../api/src/*"],
+            "@telegram/*": ["../../packages/telegram/src/*"]
         },
         "strict": false,
         "noImplicitAny": false
@@ -18,7 +19,11 @@
         "next-env.d.ts",
         "next.config.mjs",
         "tailwind.config.ts",
-        ".next/types/**/*.ts"
+        ".next/types/**/*.ts",
+        "../../packages/telegram/src/file-id-resolver.ts",
+        "../../packages/telegram/src/message-fetcher.ts",
+        "../../packages/telegram/src/message-service.ts",
+        "../../packages/telegram/src/telegram-client.ts"
     ],
     "exclude": ["node_modules", ".next"]
 }

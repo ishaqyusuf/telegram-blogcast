@@ -17,7 +17,7 @@
 // }
 
 import { NextRequest, NextResponse } from "next/server";
-import { fetchMessages } from "@/lib/message-service";
+import { fetchMessages } from "@telegram/message-service";
 
 export async function GET(
     request: NextRequest,

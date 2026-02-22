@@ -77,6 +77,10 @@
       "cache": false,
       "interactive": true
     },
+    "push-reset": {
+      "cache": false,
+      "interactive": true
+    },
     "generate": {
       "cache": false,
       "interactive": true

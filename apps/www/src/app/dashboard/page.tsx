@@ -1,12 +1,30 @@
 "use client";
 
-// app/dashboard/page.tsx
-// Main dashboard: channel selector + live message fetcher with CMD-style output.
+// apps/www/app/dashboard/page.tsx
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { useQuery, useMutation } from "@acme/ui/tanstack";
+import { _trpc, _qc } from "@/components/static-trpc";
 import { useMessageFetcher } from "@/hooks/use-message-fetcher";
 import type { FetchedMessage, FetcherState } from "@/hooks/use-message-fetcher";
+import {
+    invalidateQueries,
+    invalidateInfiniteQueries,
+    invalidateQuery,
+} from "@/lib/invalidate-query";
+import { arabic } from "@/fonts";
+import { RouterOutputs } from "@api/trpc/routers/_app";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+type Channel = RouterOutputs["channel"]["getChannels"][number];
+
+interface LogLine {
+    kind: "system" | "info" | "success" | "error" | "msg" | "cmd";
+    text: string;
+    time: string;
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -16,20 +34,6 @@ function cn(...classes: (string | false | undefined)[]) {
 
 function ts() {
     return new Date().toTimeString().slice(0, 8);
-}
-
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-interface Channel {
-    id: string;
-    title: string;
-    username: string | null;
-}
-
-interface LogLine {
-    kind: "system" | "info" | "success" | "error" | "msg" | "cmd";
-    text: string;
-    time: string;
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -68,9 +72,8 @@ function LogEntry({ line }: { line: LogLine }) {
         msg: "MSG",
         cmd: "CMD",
     };
-
     return (
-        <div className="flex gap-3 font-mono text-xs leading-5 group">
+        <div className="flex gap-3 font-mono text-xs leading-5">
             <span className="text-zinc-600 shrink-0 select-none">
                 {line.time}
             </span>
@@ -89,33 +92,98 @@ function LogEntry({ line }: { line: LogLine }) {
     );
 }
 
-function ChannelBadge({
+function ChannelRow({
     channel,
     active,
-    onClick,
+    onSelect,
+    onToggleFetchable,
+    isTogglingId,
 }: {
     channel: Channel;
     active: boolean;
-    onClick: () => void;
+    onSelect: () => void;
+    onToggleFetchable: (id: number, value: boolean) => void;
+    isTogglingId: number | null;
 }) {
+    const isFetchable = channel.isFetchable ?? false;
+
     return (
-        <button
-            onClick={onClick}
+        <div
             className={cn(
-                "w-full text-left px-3 py-2 rounded font-mono text-xs transition-all duration-150",
-                "border",
+                "group w-full px-3 py-2 rounded border transition-all duration-150 space-y-1",
                 active
-                    ? "bg-emerald-950/50 border-emerald-700 text-emerald-300"
-                    : "bg-transparent border-transparent text-zinc-400 hover:border-zinc-700 hover:text-zinc-200",
+                    ? "bg-emerald-950/50 border-emerald-700"
+                    : "bg-transparent border-transparent hover:border-zinc-700",
             )}
         >
-            <div className="truncate font-semibold">{channel.title}</div>
-            {channel.username && (
-                <div className="text-zinc-600 truncate">
+            {/* Title row */}
+            <button onClick={onSelect} className="w-full text-left">
+                <div
+                    dir={channel.rtl ? "rtl" : "ltr"}
+                    lang={channel.rtl ? "ar" : undefined}
+                    className={cn(
+                        channel.rtl
+                            ? `${arabic.className} text-sm leading-relaxed`
+                            : "font-mono text-xs",
+                        "font-semibold truncate",
+                        active ? "text-emerald-300" : "text-zinc-300",
+                    )}
+                >
+                    {channel.title ?? channel.username}
+                </div>
+                <div className="font-mono text-[10px] text-zinc-600 truncate">
                     @{channel.username}
                 </div>
-            )}
-        </button>
+            </button>
+
+            {/* isFetchable toggle */}
+            <div className="flex items-center justify-between pt-0.5">
+                <span className="font-mono text-[10px] text-zinc-600">
+                    fetchable
+                </span>
+                <button
+                    onClick={() => onToggleFetchable(channel.id, !isFetchable)}
+                    disabled={isTogglingId === channel.id}
+                    className={cn(
+                        "relative w-8 h-4 rounded-full transition-colors duration-200",
+                        isFetchable ? "bg-emerald-700" : "bg-zinc-700",
+                        "disabled:opacity-50",
+                    )}
+                >
+                    <span
+                        className={cn(
+                            "absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform duration-200",
+                            isFetchable ? "translate-x-4" : "translate-x-0",
+                        )}
+                    />
+                </button>
+            </div>
+        </div>
+    );
+}
+
+function MessageCard({ msg }: { msg: FetchedMessage }) {
+    return (
+        <div className="shrink-0 w-48 border border-zinc-700 rounded bg-zinc-900 p-2 space-y-1">
+            <div className="flex items-center justify-between">
+                <span className="font-mono text-[9px] text-zinc-600">
+                    #{msg.id}
+                </span>
+                {msg.fileId && (
+                    <span className="font-mono text-[9px] text-sky-500">
+                        📎 media
+                    </span>
+                )}
+            </div>
+            <p className="font-mono text-[10px] text-zinc-300 line-clamp-3 leading-4">
+                {msg.text ?? (
+                    <span className="text-zinc-600 italic">media only</span>
+                )}
+            </p>
+            <p className="font-mono text-[9px] text-zinc-700">
+                {new Date(msg.date).toLocaleTimeString()}
+            </p>
+        </div>
     );
 }
 
@@ -126,96 +194,186 @@ export default function DashboardPage() {
     const { messages, state, connecting, start, stop, clearMessages } =
         useMessageFetcher();
 
-    const [channels, setChannels] = useState<Channel[]>([]);
     const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
-    const [channelsLoading, setChannelsLoading] = useState(false);
     const [log, setLog] = useState<LogLine[]>([]);
     const [sidebarOpen, setSidebarOpen] = useState(true);
     const [cmdInput, setCmdInput] = useState("");
     const [cmdHistory, setCmdHistory] = useState<string[]>([]);
     const [historyIdx, setHistoryIdx] = useState(-1);
+    const [isTogglingId, setIsTogglingId] = useState<number | null>(null);
+    // Track last persisted message count to know when a new batch landed
+    const lastPersistedCount = useRef(0);
 
     const logEndRef = useRef<HTMLDivElement>(null);
-    const cmdRef = useRef<HTMLInputElement>(null);
 
-    // ── Logging helper ──────────────────────────────────────────────────────────
+    // ── tRPC queries ────────────────────────────────────────────────────────────
+
+    const { data: channels = [], isFetching: isLoadingChannels } = useQuery(
+        _trpc.channel.getChannels.queryOptions(),
+    );
+
+    const { mutate: syncChannels, isPending: isSyncing } = useMutation(
+        _trpc.channel.syncChannels.mutationOptions({
+            onSuccess(data) {
+                addLog(
+                    "success",
+                    `synced ${data.length} channels from Telegram`,
+                );
+                invalidateQueries("channel.getChannels");
+            },
+            onError(err) {
+                addLog("error", `sync failed: ${err.message}`);
+            },
+        }),
+    );
+
+    const { mutate: toggleFetchable } = useMutation(
+        _trpc.channel.toggleFetchable.mutationOptions({
+            onMutate(vars) {
+                setIsTogglingId(vars.channelId);
+            },
+            onSuccess(_, vars) {
+                addLog(
+                    "info",
+                    `channel ${vars.channelId} fetchable → ${vars.isFetchable}`,
+                );
+                invalidateQueries("channel.getChannels");
+            },
+            onSettled() {
+                setIsTogglingId(null);
+            },
+        }),
+    );
+
+    // Called after each completed batch to persist messages as Blog records
+    const { mutate: createBlogs } = useMutation(
+        _trpc.channel.createBlogsFromMessages.mutationOptions({
+            onSuccess(data) {
+                addLog(
+                    "success",
+                    `batch persisted → ${data.created} blog(s) created`,
+                );
+            },
+            onError(err) {
+                addLog("error", `blog creation failed: ${err.message}`);
+            },
+        }),
+    );
+
+    // ── Helpers ─────────────────────────────────────────────────────────────────
+
     const addLog = useCallback((kind: LogLine["kind"], text: string) => {
         setLog((prev) => [...prev.slice(-500), { kind, text, time: ts() }]);
     }, []);
 
-    // ── Auto-scroll ─────────────────────────────────────────────────────────────
+    // Auto-scroll log
     useEffect(() => {
         logEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [log]);
 
-    // ── Boot sequence ────────────────────────────────────────────────────────────
+    // Boot log
     useEffect(() => {
-        addLog("system", "tg-proxy dashboard initialized");
-        addLog("system", "connecting to event stream…");
+        addLog("system", "tg-blogcast dashboard initialized");
+        addLog("system", "channels loaded from Prisma");
     }, [addLog]);
 
-    // ── SSE state → log ─────────────────────────────────────────────────────────
+    // SSE connection
     useEffect(() => {
         if (!connecting && state) {
             addLog("success", `stream connected · fetcher=${state.status}`);
         }
-    }, [connecting, addLog]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [connecting]); // eslint-disable-line
 
-    // ── New messages → log ───────────────────────────────────────────────────────
+    // Fetcher errors
+    useEffect(() => {
+        if (state?.error) {
+            addLog("error", `${state.error} (retry #${state.retryCount})`);
+        }
+    }, [state?.error, state?.retryCount]); // eslint-disable-line
+
+    // ── Batch persistence: fires when messages array grows ────────────────────
+    // The fetcher emits a batch of new messages each poll tick.
+    // We detect the boundary by comparing the previous count and persist the
+    // newly arrived slice as Blog records immediately after each batch lands.
+    useEffect(() => {
+        if (!activeChannel || messages.length === 0) return;
+        if (messages.length === lastPersistedCount.current) return;
+
+        const newBatch = messages.slice(lastPersistedCount.current);
+        lastPersistedCount.current = messages.length;
+
+        addLog(
+            "cmd",
+            `batch complete — persisting ${newBatch.length} message(s)`,
+        );
+
+        createBlogs({
+            channelId: activeChannel.id,
+            messages: newBatch.map((m) => ({
+                id: m.id,
+                text: m.text,
+                fileId: m.fileId,
+                date: m.date,
+            })),
+        });
+    }, [messages.length]); // eslint-disable-line
+
+    // New message log line
     useEffect(() => {
         if (messages.length === 0) return;
         const latest = messages[messages.length - 1];
         addLog(
             "msg",
-            `[${latest.id}] ${latest.text?.slice(0, 120) ?? "(media)"} ${latest.fileId ? `· file=${latest.fileId.slice(0, 20)}…` : ""}`,
+            `[${latest.id}] ${latest.text?.slice(0, 100) ?? "(media)"} ${latest.fileId ? `· file=${latest.fileId.slice(0, 18)}…` : ""}`,
         );
-    }, [messages, addLog]);
+    }, [messages.length]); // eslint-disable-line
 
-    // ── Fetcher error → log ──────────────────────────────────────────────────────
-    useEffect(() => {
-        if (state?.error) {
-            addLog("error", `${state.error} (retry #${state.retryCount})`);
-        }
-    }, [state?.error, state?.retryCount, addLog]);
+    // ── Channel actions ─────────────────────────────────────────────────────────
 
-    // ── Load channels ────────────────────────────────────────────────────────────
-    async function loadChannels() {
-        setChannelsLoading(true);
-        addLog("cmd", "GET /api/telegram/channels");
-        try {
-            const res = await fetch("/api/telegram/channels");
-            const data = await res.json();
-            setChannels(data.channels ?? []);
-            addLog("success", `loaded ${data.channels?.length ?? 0} channels`);
-        } catch (err) {
-            addLog("error", `failed to load channels: ${err}`);
-        } finally {
-            setChannelsLoading(false);
-        }
-    }
-
-    useEffect(() => {
-        loadChannels();
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-    // ── Select channel ───────────────────────────────────────────────────────────
     async function selectChannel(ch: Channel) {
         setActiveChannel(ch);
         clearMessages();
-        addLog("cmd", `start fetcher · channel=${ch.id} (${ch.title})`);
-        await start(ch.id);
-        addLog("success", `fetcher started for ${ch.title}`);
+        lastPersistedCount.current = 0;
+        addLog(
+            "cmd",
+            `selected channel: ${ch.title ?? ch.username} (id=${ch.id})`,
+        );
+
+        if (!ch.isFetchable) {
+            addLog(
+                "info",
+                "channel is not marked fetchable — toggle to enable auto-fetch",
+            );
+        }
     }
 
-    // ── Logout ───────────────────────────────────────────────────────────────────
-    async function handleLogout() {
-        addLog("cmd", "POST /api/auth/logout");
-        await stop();
-        await fetch("/api/auth/logout", { method: "POST" });
-        router.push("/login");
+    async function startFetcher() {
+        // Only start for channels with isFetchable=true
+        const fetchableChannels = channels.filter((c) => c.isFetchable);
+        if (fetchableChannels.length === 0) {
+            addLog(
+                "error",
+                "no channels marked as fetchable — enable at least one",
+            );
+            return;
+        }
+
+        const target = activeChannel ?? fetchableChannels[0];
+
+        setActiveChannel(target);
+        clearMessages();
+        lastPersistedCount.current = 0;
+
+        addLog("cmd", `start fetcher · channel=${target.username}`);
+        await start(target.username);
+        addLog(
+            "success",
+            `fetcher running for ${target.title ?? target.username}`,
+        );
     }
 
-    // ── CMD input ────────────────────────────────────────────────────────────────
+    // ── CMD handler ─────────────────────────────────────────────────────────────
+
     async function handleCmd(e: React.FormEvent) {
         e.preventDefault();
         const raw = cmdInput.trim();
@@ -230,19 +388,7 @@ export default function DashboardPage() {
 
         switch (cmd) {
             case "start":
-                if (activeChannel) {
-                    clearMessages();
-                    await start(
-                        activeChannel.id,
-                        args[0] ? parseInt(args[0]) : undefined,
-                    );
-                    addLog(
-                        "success",
-                        `fetcher started${args[0] ? ` from id=${args[0]}` : ""}`,
-                    );
-                } else {
-                    addLog("error", "no channel selected");
-                }
+                await startFetcher();
                 break;
             case "stop":
                 await stop();
@@ -251,31 +397,32 @@ export default function DashboardPage() {
             case "clear":
                 setLog([]);
                 clearMessages();
+                lastPersistedCount.current = 0;
                 break;
-            case "channels":
-                await loadChannels();
+            case "sync":
+                addLog("cmd", "syncing channels from Telegram…");
+                syncChannels();
                 break;
             case "status":
                 addLog("info", JSON.stringify(state));
                 break;
             case "logout":
-                await handleLogout();
+                await stop();
+                await fetch("/api/auth/logout", { method: "POST" });
+                router.push("/login");
                 break;
             case "help":
                 [
-                    "start [startId]  – start fetcher for selected channel",
-                    "stop             – stop the fetcher",
-                    "clear            – clear log and message buffer",
-                    "channels         – reload channel list",
-                    "status           – print fetcher state",
-                    "logout           – end session",
+                    "start           – start fetcher for fetchable channel(s)",
+                    "stop            – stop the fetcher",
+                    "clear           – clear log + message buffer",
+                    "sync            – pull missing channels from Telegram into DB",
+                    "status          – print fetcher state JSON",
+                    "logout          – end session",
                 ].forEach((l) => addLog("info", l));
                 break;
             default:
-                addLog(
-                    "error",
-                    `unknown command: ${cmd}. type 'help' for commands.`,
-                );
+                addLog("error", `unknown: ${cmd}. type 'help'.`);
         }
     }
 
@@ -292,7 +439,16 @@ export default function DashboardPage() {
         }
     }
 
-    // ── Render ────────────────────────────────────────────────────────────────────
+    // ── Logout ──────────────────────────────────────────────────────────────────
+
+    async function handleLogout() {
+        await stop();
+        await fetch("/api/auth/logout", { method: "POST" });
+        router.push("/login");
+    }
+
+    // ── Render ─────────────────────────────────────────────────────────────────
+
     return (
         <>
             <style>{`
@@ -309,19 +465,20 @@ export default function DashboardPage() {
                     <div className="flex items-center gap-3">
                         <button
                             onClick={() => setSidebarOpen((v) => !v)}
-                            className="font-mono text-xs text-zinc-500 hover:text-zinc-300 transition-colors px-1"
-                            title="Toggle sidebar"
+                            className="font-mono text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
                         >
                             {sidebarOpen ? "◀" : "▶"}
                         </button>
                         <span className="font-mono text-sm text-zinc-300 tracking-wider">
-                            tg<span className="text-emerald-400">-proxy</span>
+                            tg
+                            <span className="text-emerald-400">-blogcast</span>
                         </span>
                         {activeChannel && (
                             <>
                                 <span className="text-zinc-700">/</span>
-                                <span className="font-mono text-xs text-emerald-400 truncate max-w-[200px]">
-                                    {activeChannel.title}
+                                <span className="font-mono text-xs text-emerald-400 truncate max-w-[180px]">
+                                    {activeChannel.title ??
+                                        activeChannel.username}
                                 </span>
                             </>
                         )}
@@ -339,7 +496,7 @@ export default function DashboardPage() {
                             )}
                         </div>
 
-                        {/* SSE indicator */}
+                        {/* SSE badge */}
                         <div className="flex items-center gap-1.5 font-mono text-[10px] text-zinc-600">
                             <span
                                 className={cn(
@@ -351,6 +508,27 @@ export default function DashboardPage() {
                             />
                             SSE
                         </div>
+
+                        {/* Start / Stop */}
+                        {state?.status === "running" ||
+                        state?.status === "retrying" ? (
+                            <button
+                                onClick={() => {
+                                    stop();
+                                    addLog("cmd", "stop");
+                                }}
+                                className="font-mono text-xs px-2 py-1 rounded border border-red-800 text-red-400 hover:bg-red-950/40 transition-colors"
+                            >
+                                ■ stop
+                            </button>
+                        ) : (
+                            <button
+                                onClick={startFetcher}
+                                className="font-mono text-xs px-2 py-1 rounded border border-emerald-800 text-emerald-400 hover:bg-emerald-950/40 transition-colors"
+                            >
+                                ▶ start
+                            </button>
+                        )}
 
                         <button
                             onClick={handleLogout}
@@ -364,51 +542,68 @@ export default function DashboardPage() {
                 <div className="flex flex-1 overflow-hidden">
                     {/* ── Sidebar ── */}
                     {sidebarOpen && (
-                        <aside className="w-56 shrink-0 border-r border-zinc-800 bg-zinc-950 flex flex-col overflow-hidden">
+                        <aside className="w-60 shrink-0 border-r border-zinc-800 bg-zinc-950 flex flex-col overflow-hidden">
                             <div className="px-3 py-2 border-b border-zinc-800 flex items-center justify-between">
                                 <span className="font-mono text-[10px] text-zinc-500 tracking-widest uppercase">
                                     Channels
+                                    {isLoadingChannels && (
+                                        <span className="ml-1 text-zinc-600">
+                                            …
+                                        </span>
+                                    )}
                                 </span>
                                 <button
-                                    onClick={loadChannels}
-                                    disabled={channelsLoading}
-                                    className="font-mono text-[10px] text-zinc-600 hover:text-zinc-300 transition-colors disabled:opacity-40"
-                                    title="Reload channels"
+                                    onClick={() => syncChannels()}
+                                    disabled={isSyncing}
+                                    className="font-mono text-[10px] text-zinc-600 hover:text-emerald-400 transition-colors disabled:opacity-40"
+                                    title="Sync from Telegram"
                                 >
-                                    {channelsLoading ? "…" : "⟳"}
+                                    {isSyncing ? "syncing…" : "⟳ sync"}
                                 </button>
                             </div>
 
-                            <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
-                                {channels.length === 0 && (
-                                    <p className="font-mono text-[10px] text-zinc-600 px-2 py-3 text-center">
-                                        {channelsLoading
-                                            ? "Loading…"
-                                            : "No channels found"}
-                                    </p>
-                                )}
+                            <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                                {channels.length === 0 &&
+                                    !isLoadingChannels && (
+                                        <p className="font-mono text-[10px] text-zinc-600 px-2 py-4 text-center">
+                                            No channels — press ⟳ sync
+                                        </p>
+                                    )}
                                 {channels.map((ch) => (
-                                    <ChannelBadge
+                                    <ChannelRow
                                         key={ch.id}
-                                        channel={ch}
+                                        channel={ch as Channel}
                                         active={activeChannel?.id === ch.id}
-                                        onClick={() => selectChannel(ch)}
+                                        onSelect={() =>
+                                            selectChannel(ch as Channel)
+                                        }
+                                        onToggleFetchable={(id, val) =>
+                                            toggleFetchable({
+                                                channelId: id,
+                                                isFetchable: val,
+                                            })
+                                        }
+                                        isTogglingId={isTogglingId}
                                     />
                                 ))}
                             </div>
 
-                            {/* Sidebar footer */}
                             <div className="px-3 py-2 border-t border-zinc-800">
                                 <p className="font-mono text-[10px] text-zinc-600">
-                                    {channels.length} channels
+                                    {channels.length} channels ·{" "}
+                                    {
+                                        channels.filter((c) => c.isFetchable)
+                                            .length
+                                    }{" "}
+                                    fetchable
                                 </p>
                             </div>
                         </aside>
                     )}
 
-                    {/* ── Main terminal ── */}
+                    {/* ── Terminal main ── */}
                     <main className="flex-1 flex flex-col overflow-hidden">
-                        {/* Log output */}
+                        {/* Log */}
                         <div className="flex-1 overflow-y-auto p-4 space-y-0.5 bg-zinc-950">
                             {log.length === 0 && (
                                 <p className="font-mono text-xs text-zinc-700">
@@ -423,15 +618,15 @@ export default function DashboardPage() {
                             <div ref={logEndRef} />
                         </div>
 
-                        {/* Message cards strip (latest 5) */}
+                        {/* Latest message cards */}
                         {messages.length > 0 && (
                             <div className="shrink-0 border-t border-zinc-800 bg-zinc-900/50 p-3">
                                 <div className="flex items-center gap-2 mb-2">
                                     <span className="font-mono text-[10px] text-zinc-500 tracking-widest uppercase">
-                                        Latest messages
+                                        Latest
                                     </span>
                                     <span className="font-mono text-[10px] text-zinc-700">
-                                        ({messages.length} total)
+                                        ({messages.length} buffered)
                                     </span>
                                 </div>
                                 <div className="flex gap-2 overflow-x-auto pb-1">
@@ -458,7 +653,6 @@ export default function DashboardPage() {
                                     ❯
                                 </span>
                                 <input
-                                    ref={cmdRef}
                                     value={cmdInput}
                                     onChange={(e) =>
                                         setCmdInput(e.target.value)
@@ -475,33 +669,6 @@ export default function DashboardPage() {
                 </div>
             </div>
         </>
-    );
-}
-
-// ── Message card ──────────────────────────────────────────────────────────────
-
-function MessageCard({ msg }: { msg: FetchedMessage }) {
-    return (
-        <div className="shrink-0 w-48 border border-zinc-700 rounded bg-zinc-900 p-2 space-y-1">
-            <div className="flex items-center justify-between">
-                <span className="font-mono text-[9px] text-zinc-600">
-                    #{msg.id}
-                </span>
-                {msg.fileId && (
-                    <span className="font-mono text-[9px] text-sky-500">
-                        📎 media
-                    </span>
-                )}
-            </div>
-            <p className="font-mono text-[10px] text-zinc-300 line-clamp-3 leading-4">
-                {msg.text ?? (
-                    <span className="text-zinc-600 italic">media only</span>
-                )}
-            </p>
-            <p className="font-mono text-[9px] text-zinc-700">
-                {new Date(msg.date).toLocaleTimeString()}
-            </p>
-        </div>
     );
 }
 
