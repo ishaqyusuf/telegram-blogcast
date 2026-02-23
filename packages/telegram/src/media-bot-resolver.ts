@@ -177,21 +177,19 @@ async function _resolveFileId(
             msg.video_note
           ) && msg.date * 1000 >= forwardedAt - 2000; // within 2s of forward
 
-        consoleLog("Polled update", {
-          updateId: update.update_id,
-          offset,
-          //   message: msg,
-          forwardOrigin: msg.forward_origin,
-          forwardFromMessageId: msg.forward_from_message_id,
-          botChatId,
-          chat: msg?.chat,
-          isTarget,
-        });
         if (isTarget) {
           await botApi("deleteMessage", {
             chat_id: botChatId,
             message_id: msg.message_id,
-          }).catch(() => {});
+          }).catch(() => {
+            consoleLog(
+              "Failed to delete forwarded message, might be already deleted:",
+              {
+                chat_id: botChatId,
+                message_id: msg.message_id,
+              },
+            );
+          });
 
           // const fileId = extractFileId(msg);
           // consoleLog("Resolved fileId", { messageId, fileId });

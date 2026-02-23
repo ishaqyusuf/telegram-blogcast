@@ -15,6 +15,7 @@
 import { EventEmitter } from "events";
 import { fetchMessages } from "./message-service";
 import type { FetchedMessage } from "./message-service";
+import { consoleLog } from "@acme/utils";
 
 export type { FetchedMessage };
 
@@ -302,7 +303,7 @@ class MessageFetcher extends EventEmitter {
     phase: FetcherState["phase"],
   ): Promise<void> {
     this.setState({ totalFetched: this.state.totalFetched + messages.length });
-
+    consoleLog("State", this.getState());
     this.emit("event", {
       type: "messages",
       messages,

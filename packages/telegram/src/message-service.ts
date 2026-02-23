@@ -99,6 +99,7 @@ export async function fetchMessages(
       // offsetId: 0, // always start from latest, minId filters below
       // minId: minId ?? 0, // 🧩 Key fix 3: minId filters server-side (only newer msgs)
       limit,
+      minId: minId ?? 0, // 🧩 Key fix 3: minId filters server-side (only newer msgs)
       maxId: 0,
       addOffset: 0,
       hash: BigInt(0) as any,
@@ -115,18 +116,7 @@ export async function fetchMessages(
 
   // 🧩 Key fix 4: mirror your filter logic exactly using instanceof checks
   const __messages = response.messages as Api.Message[];
-  consoleLog("Raw messages from GetHistory", {
-    channelUsername,
-    totalFetched: __messages.length,
-    minId,
-    rawMessages: __messages.map(
-      (m) =>
-        ({
-          id: m.id,
-          text: m.text,
-        }) as any,
-    ),
-  });
+
   const filtered = __messages.filter((msg, index) => {
     if (index === response.messages.length - 1) {
       lastMessageId = msg.id;
@@ -174,7 +164,10 @@ export async function fetchMessages(
 
     return text;
   });
-
+  consoleLog(
+    "Message Ids",
+    filtered.map((a) => a.id),
+  );
   // Sort ascending (oldest first) — consistent with fetcher cursor logic
   filtered.sort((a, b) => a.id - b.id);
 
