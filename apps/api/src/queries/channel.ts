@@ -18,6 +18,13 @@ export const toggleFetchableSchema = z.object({
 });
 export type ToggleFetchableSchema = z.infer<typeof toggleFetchableSchema>;
 
+export const clearChannelRecordsSchema = z.object({
+  channelId: z.number(),
+});
+export type ClearChannelRecordsSchema = z.infer<
+  typeof clearChannelRecordsSchema
+>;
+
 // ── Queries ───────────────────────────────────────────────────────────────────
 // apps/api/src/db/queries/channel.ts
 // 🧩 Updated: replaced client.getDialogs() with Api.messages.GetDialogs invoke (matches old working pattern)
@@ -145,13 +152,98 @@ function withRTL<T extends { title: string | null }>(channels: T[]) {
   return channels.map((ch) => ({ ...ch, rtl: isRTL(ch.title) }));
 }
 
+async function withChannelStats<
+  T extends { id: number; title: string | null; username: string | null },
+>(
+  ctx: TRPCContext,
+  channels: T[],
+): Promise<
+  Array<
+    T & {
+      rtl: boolean;
+      stats: {
+        totalBlogs: number;
+        publishedBlogs: number;
+        latestBlogDate: Date | null;
+      };
+    }
+  >
+> {
+  if (channels.length === 0) return [];
+
+  const { db } = ctx;
+  const channelIds = channels.map((ch) => ch.id);
+
+  const [totalBlogs, publishedBlogs, latestBlogDate] = await Promise.all([
+    db.blog.groupBy({
+      by: ["channelId"],
+      where: {
+        deletedAt: null,
+        channelId: { in: channelIds },
+      },
+      _count: {
+        _all: true,
+      },
+    }), // as Promise<Array<{ channelId: number | null; _count: { _all: number } }>>,
+    db.blog.groupBy({
+      by: ["channelId"],
+      where: {
+        deletedAt: null,
+        published: true,
+        channelId: { in: channelIds },
+      },
+      _count: {
+        _all: true,
+      },
+    }), // as Promise<Array<{ channelId: number | null; _count: { _all: number } }>>,
+    db.blog.groupBy({
+      by: ["channelId"],
+      where: {
+        deletedAt: null,
+        channelId: { in: channelIds },
+      },
+      _max: {
+        blogDate: true,
+      },
+    }), // as Promise<
+    //   Array<{ channelId: number | null; _max: { blogDate: Date | null } }>
+    // >,
+  ]);
+
+  const totalMap = new Map<number, number>();
+  const publishedMap = new Map<number, number>();
+  const latestMap = new Map<number, Date | null>();
+
+  totalBlogs.forEach((row: any) => {
+    if (row.channelId !== null) totalMap.set(row.channelId, row._count._all);
+  });
+  publishedBlogs.forEach((row: any) => {
+    if (row.channelId !== null) {
+      publishedMap.set(row.channelId, row._count._all);
+    }
+  });
+  latestBlogDate.forEach((row: any) => {
+    if (row.channelId !== null) latestMap.set(row.channelId, row._max.blogDate);
+  });
+
+  return channels.map((ch) => ({
+    ...ch,
+    rtl: isRTL(ch.title),
+    stats: {
+      totalBlogs: totalMap.get(ch.id) ?? 0,
+      publishedBlogs: publishedMap.get(ch.id) ?? 0,
+      latestBlogDate: latestMap.get(ch.id) ?? null,
+    },
+  }));
+}
+
 export async function getFetchableChannels(ctx: TRPCContext) {
   const { db } = ctx;
   const channels = await db.channel.findMany({
     where: { deletedAt: null, isFetchable: true },
     orderBy: [{ isFetchable: "desc" }, { title: "asc" }],
   });
-  return withRTL(channels);
+  return withChannelStats(ctx, channels);
 }
 
 export async function getChannels(ctx: TRPCContext) {
@@ -160,7 +252,76 @@ export async function getChannels(ctx: TRPCContext) {
     where: { deletedAt: null },
     orderBy: [{ isFetchable: "desc" }, { title: "asc" }],
   });
-  return withRTL(channels);
+  return withChannelStats(ctx, channels);
+}
+
+export async function clearChannelRecords(
+  ctx: TRPCContext,
+  input: ClearChannelRecordsSchema,
+) {
+  const { db } = ctx;
+
+  await db.channel.findFirstOrThrow({
+    where: { id: input.channelId, deletedAt: null },
+    select: { id: true },
+  });
+
+  const fetcherState = messageFetcher.getState();
+  if (
+    (fetcherState.status === "running" || fetcherState.status === "retrying") &&
+    fetcherState.channelId === input.channelId
+  ) {
+    messageFetcher.stop();
+  }
+
+  return db.$transaction(async (tx) => {
+    const blogs = await tx.blog.findMany({
+      where: { channelId: input.channelId, deletedAt: null },
+      select: { id: true },
+    });
+
+    const blogIds = blogs.map((b) => b.id);
+    if (blogIds.length === 0) {
+      await tx.channel.update({
+        where: { id: input.channelId },
+        data: { lastMessageId: null, allFetched: false },
+      });
+      return { ok: true, channelId: input.channelId, clearedBlogs: 0 };
+    }
+
+    await tx.blogComments.deleteMany({
+      where: {
+        OR: [{ blogId: { in: blogIds } }, { commentId: { in: blogIds } }],
+      },
+    });
+    await tx.blogViews.deleteMany({
+      where: { blogId: { in: blogIds } },
+    });
+    await tx.blogTags.deleteMany({
+      where: { blogId: { in: blogIds } },
+    });
+    await tx.media.deleteMany({
+      where: { blogId: { in: blogIds } },
+    });
+    await tx.thumbnail.updateMany({
+      where: { blogId: { in: blogIds } },
+      data: { blogId: null },
+    });
+    await tx.blog.deleteMany({
+      where: { id: { in: blogIds } },
+    });
+
+    await tx.channel.update({
+      where: { id: input.channelId },
+      data: { lastMessageId: null, allFetched: false },
+    });
+
+    return {
+      ok: true,
+      channelId: input.channelId,
+      clearedBlogs: blogIds.length,
+    };
+  });
 }
 
 export const startFetchSchema = z.object({

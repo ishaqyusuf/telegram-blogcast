@@ -90,13 +90,17 @@ function ChannelRow({
     active,
     onSelect,
     onToggleFetchable,
+    onClearChannel,
     isTogglingId,
+    isClearingId,
 }: {
     channel: Channel;
     active: boolean;
     onSelect: () => void;
     onToggleFetchable: (id: number, val: boolean) => void;
+    onClearChannel: (id: number) => void;
     isTogglingId: number | null;
+    isClearingId: number | null;
 }) {
     const isFetchable = channel.isFetchable ?? false;
 
@@ -126,6 +130,10 @@ function ChannelRow({
                 <div className="font-mono text-[10px] text-zinc-600 truncate">
                     @{channel.username}
                 </div>
+                <div className="font-mono text-[10px] text-zinc-500 truncate">
+                    {channel.stats.totalBlogs} records ·{" "}
+                    {channel.stats.publishedBlogs} published
+                </div>
             </button>
 
             <div className="flex items-center justify-between pt-0.5">
@@ -149,6 +157,15 @@ function ChannelRow({
                     />
                 </button>
             </div>
+            <div className="flex items-center justify-end">
+                <button
+                    onClick={() => onClearChannel(channel.id)}
+                    disabled={isClearingId === channel.id}
+                    className="font-mono text-[10px] text-red-500 hover:text-red-400 transition-colors disabled:opacity-50"
+                >
+                    {isClearingId === channel.id ? "clearing…" : "clear records"}
+                </button>
+            </div>
         </div>
     );
 }
@@ -165,6 +182,7 @@ export default function DashboardPage() {
     const [cmdHistory, setCmdHistory] = useState<string[]>([]);
     const [historyIdx, setHistoryIdx] = useState(-1);
     const [isTogglingId, setIsTogglingId] = useState<number | null>(null);
+    const [isClearingId, setIsClearingId] = useState<number | null>(null);
     const logEndRef = useRef<HTMLDivElement>(null);
 
     // ── tRPC queries ────────────────────────────────────────────────────────────
@@ -244,6 +262,28 @@ export default function DashboardPage() {
         }),
     );
 
+    const { mutate: clearChannelRecords } = useMutation(
+        _trpc.channel.clearChannelRecords.mutationOptions({
+            onMutate(vars) {
+                setIsClearingId(vars.channelId);
+            },
+            onSuccess(data) {
+                addLog(
+                    "success",
+                    `cleared channel ${data.channelId} · removed ${data.clearedBlogs} records`,
+                );
+                invalidateQueries("channel.getChannels");
+                invalidateQueries("channel.getFetcherState");
+            },
+            onError(err) {
+                addLog("error", `clear failed: ${err.message}`);
+            },
+            onSettled() {
+                setIsClearingId(null);
+            },
+        }),
+    );
+
     // ── Log helper ──────────────────────────────────────────────────────────────
 
     const addLog = useCallback((kind: LogLine["kind"], text: string) => {
@@ -292,6 +332,16 @@ export default function DashboardPage() {
     function handleStopFetch() {
         addLog("cmd", "stopFetch");
         stopFetch();
+    }
+
+    function handleClearChannel(channelId: number) {
+        const target = channels.find((ch) => ch.id === channelId);
+        const ok = window.confirm(
+            `Clear stored records for @${target?.username ?? channelId}?`,
+        );
+        if (!ok) return;
+        addLog("cmd", `clearChannelRecords · channelId=${channelId}`);
+        clearChannelRecords({ channelId });
     }
 
     async function handleLogout() {
@@ -491,7 +541,9 @@ export default function DashboardPage() {
                                                 isFetchable: val,
                                             })
                                         }
+                                        onClearChannel={handleClearChannel}
                                         isTogglingId={isTogglingId}
+                                        isClearingId={isClearingId}
                                     />
                                 ))}
                             </div>
@@ -553,4 +605,3 @@ export default function DashboardPage() {
         </>
     );
 }
-

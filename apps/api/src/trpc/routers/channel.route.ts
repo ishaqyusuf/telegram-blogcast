@@ -6,6 +6,8 @@ import {
   syncChannels,
   toggleFetchable,
   toggleFetchableSchema,
+  clearChannelRecords,
+  clearChannelRecordsSchema,
   startFetch,
   startFetchSchema,
   stopFetch,
@@ -36,6 +38,12 @@ export const channelRoutes = createTRPCRouter({
     .input(toggleFetchableSchema)
     .mutation(async (props) => {
       return toggleFetchable(props.ctx, props.input);
+    }),
+
+  clearChannelRecords: publicProcedure
+    .input(clearChannelRecordsSchema)
+    .mutation(async (props) => {
+      return clearChannelRecords(props.ctx, props.input);
     }),
 
   // ── Fetcher control (runs in API process) ──────────────────────────────────
