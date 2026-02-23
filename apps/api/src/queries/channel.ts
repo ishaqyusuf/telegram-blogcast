@@ -6,6 +6,7 @@ import { messageFetcher, type FetchedMessage } from "@telegram/message-fetcher";
 import { Api } from "telegram";
 import { saveBatch, type IncomingMessage } from "./blog";
 import { consoleLog } from "@acme/utils";
+import { type BlogMeta } from "../type";
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
 export const syncChannelsSchema = z.object({}).optional();
@@ -177,24 +178,32 @@ export async function startFetch(ctx: TRPCContext, input: StartFetchSchema) {
 
   const channel = await db.channel.findFirstOrThrow({
     where: { id: input.channelId, deletedAt: null, isFetchable: true },
-    select: { id: true, username: true, lastMessageId: true },
+    select: {
+      id: true,
+      username: true,
+      lastMessageId: true,
+      blogs: {
+        select: {
+          meta: true,
+        },
+      },
+    },
   });
+  const channelMessageIds = channel.blogs
+    .map(
+      (b) =>
+        (b.meta as any as BlogMeta)?.telegramMessageId as number | undefined,
+    )
+    .filter((id): id is number => typeof id === "number")
+    .sort((a, b) => a - b); // asc
 
   // Resolve cursor — channel.lastMessageId first, Blog.meta as fallback
-  let lastMessageId = channel.lastMessageId ?? null;
-
-  if (!lastMessageId) {
-    const latestBlog = await db.blog.findFirst({
-      where: { channelId: channel.id, deletedAt: null },
-      orderBy: { blogDate: "desc" },
-      select: { meta: true },
-    });
-    lastMessageId =
-      ((latestBlog?.meta as any)?.telegramMessageId as number) ?? null;
-  }
+  let lastMessageId = channelMessageIds?.[0] ?? null;
 
   // Re-wire listener on every start to avoid duplicates
+  // @ts-ignore
   messageFetcher.removeAllListeners("event");
+  // @ts-ignore
   messageFetcher.on("event", async (event) => {
     if (event.type !== "messages") return;
 
@@ -207,20 +216,35 @@ export async function startFetch(ctx: TRPCContext, input: StartFetchSchema) {
       }),
     );
 
-    await saveBatch(ctx, { channelId: channel.id, messages: mapped }).catch(
-      (err) => console.error("[startFetch] saveBatch failed:", err),
-    );
+    const result = await saveBatch(ctx, {
+      channelId: channel.id,
+      messages: mapped,
+    }).catch((err) => consoleLog("[startFetch] saveBatch failed:", err));
+    if (result?.created) {
+      mapped.forEach((m) => {
+        // messageFetcher exposes addKnownIds for this purpose
+        messageFetcher.addKnownIds([m.id]);
+      });
+    }
   });
-  
+
   messageFetcher.start({
     channelId: channel.id,
     channelUsername: channel.username,
     lastMessageId,
     resolveFiles: true,
     maxTotalFetch: input.maxTotalFetch, // 🧩 added
+    channelMessageIds: channelMessageIds,
+
+    // allFetched: channel.allFetched ?? false,
   });
 
-  return { ok: true, lastMessageId, channelId: channel.id };
+  return {
+    ok: true,
+    lastMessageId,
+    channelId: channel.id,
+    knownMessageCount: channelMessageIds.length,
+  };
 }
 
 export async function stopFetch() {

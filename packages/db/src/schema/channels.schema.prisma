@@ -10,50 +10,10 @@ model Channel {
     favourite     Boolean?
     meta          Json?
     lastMessageId Int?
-    allFetched    Boolean?                @default(false)
-    forwards      MessageForward[]
-    isFetchable   Boolean?                @default(false)
-    blogs         Blog[]
-    watchers      MessageForwardWatcher[]
+    allFetched    Boolean? @default(false)
+
+    isFetchable Boolean? @default(false)
+    blogs       Blog[]
 
     @@unique([username, deletedAt])
-}
-
-model MessageForward {
-    id        Int       @unique @default(autoincrement())
-    createdAt DateTime? @default(now()) @db.Timestamp(0)
-    updatedAt DateTime? @updatedAt
-    deletedAt DateTime?
-
-    forwardedAt DateTime?
-
-    messageId     Int
-    publishedDate DateTime
-    channelId     Int
-
-    status String
-
-    channel   Channel                @relation(fields: [channelId], references: [id])
-    watcher   MessageForwardWatcher? @relation(fields: [watcherId], references: [id])
-    watcherId String?
-
-    @@unique([messageId, channelId, deletedAt])
-}
-
-model MessageForwardWatcher {
-    id            String
-    channelId     Int
-    channel       Channel          @relation(fields: [channelId], references: [id])
-    forwardCount  Int
-    capturedCount Int
-    status        String // in-progress
-    forwardedAt   DateTime?
-    forwards      MessageForward[]
-    blogs         Blog[]
-
-    createdAt DateTime? @default(now()) @db.Timestamp(0)
-    updatedAt DateTime? @updatedAt
-    deletedAt DateTime?
-
-    @@unique([id])
 }

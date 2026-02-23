@@ -1,5 +1,8 @@
 // apps/api/src/db/queries/blog.ts
+import { consoleLog } from "@acme/utils";
 import type { TRPCContext } from "@api/trpc/init";
+import type { BlogMeta } from "@api/type";
+import type { ResolvedMedia } from "@telegram/media-resolver";
 import { z } from "zod";
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
@@ -20,7 +23,7 @@ export const incomingMessageSchema = z.object({
   id: z.number(),
   text: z.string().nullable(),
   date: z.string(),
-  media: messageMediaSchema.nullable(),
+  media: z.any(),
 });
 
 export const saveBatchSchema = z.object({
@@ -60,18 +63,32 @@ export async function saveBatch(ctx: TRPCContext, input: SaveBatchSchema) {
 
   // ── Skip already persisted messages ──────────────────────────────────────
   const existingBlogs = await db.blog.findMany({
-    where: { channelId, deletedAt: null },
+    where: {
+      channelId,
+      deletedAt: null,
+      meta: {
+        equals: {
+          propName: "telegramMessageId",
+          operator: "in",
+          value: messages.map((m) => m.id),
+        },
+        // path: ["telegramMessageId"],
+
+        // in: messages.map((m) => m.id),
+      },
+    },
     select: { meta: true },
   });
 
   const existingIds = new Set(
     existingBlogs
-      .map((b) => (b.meta as any)?.telegramMessageId as number | undefined)
+      .map((b) => (b.meta as BlogMeta)?.telegramMessageId as number | undefined)
       .filter(Boolean),
   );
 
   const newMessages = messages.filter((m) => !existingIds.has(m.id));
-  if (newMessages.length === 0) return { created: 0 };
+  const skipped = messages.length - newMessages.length;
+  if (newMessages.length === 0) return { created: 0, skipped };
 
   let created = 0;
 
@@ -95,62 +112,17 @@ export async function saveBatch(ctx: TRPCContext, input: SaveBatchSchema) {
 
     // ── File + Media ────────────────────────────────────────────────────────
     if (msg.media) {
-      const {
-        fileId,
-        mimeType,
-        title,
-        author,
-        duration,
-        width,
-        height,
-        fileSize,
-      } = msg.media;
-
-      // Upsert Author for audio messages
-      let authorId: number | undefined;
-      if (type === "audio" && author) {
-        const authorRecord = await db.author.upsert({
-          where: { name: author },
-          create: { name: author },
-          update: {},
-        });
-        authorId = authorRecord.id;
-      }
-
-      const file = await db.file.create({
-        data: {
-          fileId,
-          fileType: type,
-          mimeType,
-          duration,
-          width,
-          height,
-          fileSize,
-        },
-      });
-
-      await db.media.create({
-        data: {
-          mimeType,
-          fileId: file.id,
-          blogId: blog.id,
-          title: title ?? null,
-          authorId: authorId ?? null,
-        },
+      await persistResolvedMedia(ctx, msg.media, blog.id).catch((err) => {
+        consoleLog("[saveBatch] persistResolvedMedia failed:", err);
       });
     }
 
     created++;
   }
-
-  // ── Advance cursor ────────────────────────────────────────────────────────
-  const maxId = Math.max(...messages.map((m) => m.id));
-  await db.channel.update({
-    where: { id: channelId },
-    data: { lastMessageId: maxId },
-  });
-
-  return { created };
+  consoleLog(
+    `[saveBatch] channelId=${channelId} created=${created} skipped=${skipped}`,
+  );
+  return { created, skipped };
 }
 
 /**
@@ -180,8 +152,102 @@ export async function getLatestMessageId(
   });
 
   return {
-    lastMessageId: ((latest?.meta as any)?.telegramMessageId ?? null) as
+    lastMessageId: ((latest?.meta as BlogMeta)?.telegramMessageId ?? null) as
       | number
       | null,
   };
+}
+export async function persistResolvedMedia(
+  //   db: Db,
+  ctx: TRPCContext,
+  resolved: ResolvedMedia,
+  blogId: number,
+): Promise<number> {
+  const { db } = ctx;
+  if (!resolved.file) return;
+  // ── Author ────────────────────────────────────────────────────────────────
+  let authorId: number | undefined;
+
+  if (resolved.author) {
+    const { name, nameAr } = resolved.author;
+
+    // Upsert by nameAr first (more specific), then name
+    if (nameAr) {
+      const author = await db.author.upsert({
+        where: { nameAr },
+        create: { nameAr, name: name ?? null },
+        update: { name: name ?? undefined }, // fill name if we get it later
+      });
+      authorId = author.id;
+    } else if (name) {
+      const author = await db.author.upsert({
+        where: { name },
+        create: { name },
+        update: {},
+      });
+      authorId = author.id;
+    }
+  }
+
+  // ── Primary File ──────────────────────────────────────────────────────────
+  const file = await db.file.upsert({
+    where: { fileUniqueId: resolved.file.fileUniqueId ?? resolved.file.fileId },
+    create: {
+      fileId: resolved.file.fileId,
+      fileUniqueId: resolved.file.fileUniqueId ?? resolved.file.fileId,
+      fileType: resolved.file.fileType,
+      mimeType: resolved.file.mimeType ?? null,
+      fileName: resolved.file.fileName ?? null,
+      fileSize: resolved.file.fileSize ?? null,
+      width: resolved.file.width ?? null,
+      height: resolved.file.height ?? null,
+      duration: resolved.file.duration ?? null,
+    },
+    update: {
+      // Update fileId in case it rotated (Bot API file_ids can change)
+      fileId: resolved.file.fileId,
+    },
+  });
+
+  // ── Thumbnails ────────────────────────────────────────────────────────────
+  await Promise.all(
+    resolved.thumbnails!?.map(async (thumb) => {
+      const thumbFile = await db.file.upsert({
+        where: { fileUniqueId: thumb.fileUniqueId ?? thumb.fileId },
+        create: {
+          fileId: thumb.fileId,
+          fileUniqueId: thumb.fileUniqueId ?? thumb.fileId,
+          fileType: "thumbnail",
+          width: thumb.width ?? null,
+          height: thumb.height ?? null,
+          fileSize: thumb.fileSize ?? null,
+        },
+        update: { fileId: thumb.fileId },
+      });
+
+      // Link to Thumbnail table
+      await db.thumbnail
+        .upsert({
+          where: { id: thumbFile.id }, // approximate — thumbnail has no unique fileId field
+          create: { fileId: thumbFile.id, blogId },
+          update: {},
+        })
+        .catch(() => {
+          // Thumbnail may already exist — non-critical
+        });
+    }),
+  );
+
+  // ── Media ─────────────────────────────────────────────────────────────────
+  const media = await db.media.create({
+    data: {
+      mimeType: resolved.mimeType,
+      fileId: file.id,
+      blogId,
+      title: resolved.title ?? null,
+      authorId: authorId ?? null,
+    },
+  });
+
+  return media.id;
 }

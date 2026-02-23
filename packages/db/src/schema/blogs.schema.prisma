@@ -22,12 +22,10 @@ model Blog {
     channel     Channel?       @relation(fields: [channelId], references: [id])
     channelId   Int?
     thumbnailId Int?
-    watcherId   String?
 
     interactions BlogViews[]
     blogTags     BlogTags[]
-    thumbnail    Thumbnail?             @relation(fields: [thumbnailId], references: [id])
-    watcher      MessageForwardWatcher? @relation(fields: [watcherId], references: [id])
+    thumbnail    Thumbnail?  @relation(fields: [thumbnailId], references: [id])
 
     blogLocation   BlogLocation? @relation(fields: [blogLocationId], references: [id])
     blogLocationId Int?

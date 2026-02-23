@@ -6,10 +6,10 @@
 //   - lib/messageFetcher.ts                                     (background loop)
 
 import { getClient } from "./telegram-client";
-import { resolveFileId } from "./file-id-resolver";
 import { Api } from "telegram";
 import { consoleLog } from "@acme/utils";
-
+import { resolveMediaBot } from "./media-bot-resolver";
+import { ResolvedMedia } from "./media-resolver";
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface FetchedMessage {
@@ -22,22 +22,11 @@ export interface FetchedMessage {
 
 // 🧩 Updated: FetchedMessage now carries structured media instead of flat fileId string
 
-export interface FetchedMessageMedia {
-  fileId: string;
-  mimeType: string;
-  title?: string; // audio title (from document attributes)
-  author?: string; // audio performer
-  duration?: number;
-  width?: number;
-  height?: number;
-  fileSize?: number;
-}
-
 export interface FetchedMessage {
   id: number;
   text: string | null;
   date: string; // ISO-8601
-  media: FetchedMessageMedia | null; // 🧩 was: fileId: string | null
+  media: ResolvedMedia | null; // 🧩 was: fileId: string | null
 }
 export interface FetchMessagesOptions {
   /** Max messages to return (default 20, hard cap 100) */
@@ -83,7 +72,7 @@ type BlogType = "audio" | "image" | "video" | "text" | "document";
 
 function extractMediaMeta(
   msg: Api.Message,
-): (Omit<FetchedMessageMedia, "fileId"> & { type: BlogType }) | null {
+): (Omit<ResolvedMedia, "fileId"> & { type: BlogType }) | null {
   if (!("media" in msg) || !msg.media) return null;
 
   // ── Photo ────────────────────────────────────────────────────────────────
@@ -93,8 +82,8 @@ function extractMediaMeta(
     return {
       type: "image",
       mimeType: "image/jpeg",
-      width: largest?.w,
-      height: largest?.h,
+      // width: largest?.w,
+      // height: largest?.h,
     };
   }
 
@@ -117,11 +106,11 @@ function extractMediaMeta(
     const base = {
       mimeType,
       title: audioAttr?.title ?? fileAttr?.fileName ?? undefined,
-      author: audioAttr?.performer ?? undefined,
-      duration: audioAttr?.duration ?? videoAttr?.duration ?? undefined,
-      width: videoAttr?.w ?? undefined,
-      height: videoAttr?.h ?? undefined,
-      fileSize: doc?.size ?? undefined,
+      // author: audioAttr?.performer ?? undefined,
+      // duration: audioAttr?.duration ?? videoAttr?.duration ?? undefined,
+      // width: videoAttr?.w ?? undefined,
+      // height: videoAttr?.h ?? undefined,
+      // fileSize: doc?.size ?? undefined,
     };
 
     // Mirror your old mimeType switch exactly
@@ -156,7 +145,7 @@ function extractMediaMeta(
 
   return null;
 }
-export async function fetchMessages(
+export async function _fetchMessages(
   channelId: string,
   options: FetchMessagesOptions = {},
 ): Promise<FetchMessagesResult> {
@@ -169,13 +158,7 @@ export async function fetchMessages(
 
   const limit = Math.min(rawLimit, 100);
   const client = await getClient();
-  consoleLog("fetchMessages", {
-    channelId,
-    limit,
-    startId,
-    minId,
-    resolveFiles,
-  });
+
   // Build GramJS getMessages options
   const getOptions: Record<string, unknown> = { limit };
 
@@ -194,13 +177,12 @@ export async function fetchMessages(
   const messages: FetchedMessage[] = await Promise.all(
     rawMessages.map(async (msg) => {
       const mediaMeta = extractMediaMeta(msg);
-      let media: FetchedMessageMedia | null = null;
-      let fileId: string | null = null;
+      let media: ResolvedMedia | null = null;
       if (mediaMeta && resolveFiles) {
         try {
-          const fileId = await resolveFileId(client, channelId, msg.id);
+          const botMedia = await resolveMediaBot(client, channelId, msg.id);
           // Only attach media if we got a valid Bot API file_id
-          media = fileId ? { ...mediaMeta, fileId } : null;
+          media = botMedia ? { ...mediaMeta, ...botMedia } : null;
         } catch (err) {
           consoleLog(
             `[message-service] fileId resolution failed msg=${msg.id}:`,
@@ -221,16 +203,11 @@ export async function fetchMessages(
       //     );
       //   }
       // }
-      consoleLog("Fetched message", {
-        id: msg.id,
-        text: msg.text,
-        mediaMeta,
-        resolvedFileId: media?.fileId ?? null,
-      });
+
       return {
         id: msg.id,
         text: msg.text ?? null,
-        fileId,
+        // fileId,
         date: new Date(msg.date * 1000).toISOString(),
         media,
       };
@@ -240,10 +217,10 @@ export async function fetchMessages(
   // nextStartId: for paginated HTTP use — oldest id in this batch (or null if done)
   const nextStartId = messages.length === limit ? messages?.[0]?.id! : null;
 
-  return { messages, nextStartId };
+  return { messages, nextStartId, lastMessageId: nextStartId };
 }
 
-export async function fetchMessages2(
+export async function fetchMessages(
   channelUsername: string,
   options: FetchMessagesOptions = {},
 ): Promise<FetchMessagesResult> {
@@ -355,12 +332,16 @@ export async function fetchMessages2(
   const messages: FetchedMessage[] = await Promise.all(
     filtered.map(async (msg) => {
       const mediaMeta = extractMediaMeta(msg);
-      let media: FetchedMessageMedia | null = null;
+      let media: ResolvedMedia | null = null;
 
       if (mediaMeta && resolveFiles) {
         try {
-          const fileId = await resolveFileId(client, channelUsername, msg.id);
-          media = fileId ? { ...mediaMeta, fileId } : null;
+          const botMedia = await resolveMediaBot(
+            client,
+            channelUsername,
+            msg.id,
+          );
+          media = botMedia ? { ...mediaMeta, ...botMedia } : null;
         } catch (err) {
           consoleLog(
             "[message-service]",
@@ -369,12 +350,12 @@ export async function fetchMessages2(
           );
         }
       }
-      consoleLog("Fetched message", {
-        id: msg.id,
-        text: msg.text,
-        mediaMeta,
-        resolvedFileId: media?.fileId ?? null,
-      });
+      // consoleLog("Fetched message", {
+      //   id: msg.id,
+      //   text: msg.text,
+      //   mediaMeta,
+      //   resolvedFileId: media?.fileId ?? null,
+      // });
       return {
         id: msg.id,
         text: ("message" in msg ? msg.message : null) ?? null,

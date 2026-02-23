@@ -20,7 +20,7 @@
         "next.config.mjs",
         "tailwind.config.ts",
         ".next/types/**/*.ts",
-        "../../packages/telegram/src/file-id-resolver.ts",
+        "../../packages/telegram/src/media-bot-resolver.ts",
         "../../packages/telegram/src/message-fetcher.ts",
         "../../packages/telegram/src/message-service.ts",
         "../../packages/telegram/src/telegram-client.ts"

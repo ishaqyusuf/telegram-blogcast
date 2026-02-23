@@ -6,8 +6,12 @@
 //   3. Long-polling getUpdates until the forwarded message arrives
 //   4. Extracting the Bot API file_id
 //   5. Restoring the webhook
+//
+// 🧩 Serialized via mutex — prevents concurrent getUpdates conflict error
 
+import { consoleLog } from "@acme/utils";
 import { Api, TelegramClient } from "telegram";
+import { extractResolvedMedia, ResolvedMedia } from "./media-resolver";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -57,37 +61,79 @@ async function getNextOffset(): Promise<number> {
 
 // ── File ID extractor ─────────────────────────────────────────────────────────
 
-function extractFileId(msg: any): string | null {
-  if (msg.photo) return msg.photo[msg.photo.length - 1].file_id;
-  if (msg.video) return msg.video.file_id;
-  if (msg.document) return msg.document.file_id;
-  if (msg.audio) return msg.audio.file_id;
-  if (msg.voice) return msg.voice.file_id;
-  if (msg.video_note) return msg.video_note.file_id;
-  if (msg.sticker) return msg.sticker.file_id;
-  if (msg.animation) return msg.animation.file_id;
-  return null;
-}
+// function extractFileId(msg: any): string | null {
+//   if (msg.photo) return msg.photo[msg.photo.length - 1].file_id;
+//   if (msg.video) return msg.video.file_id;
+//   if (msg.document) return msg.document.file_id;
+//   if (msg.audio) return msg.audio.file_id;
+//   if (msg.voice) return msg.voice.file_id;
+//   if (msg.video_note) return msg.video_note.file_id;
+//   if (msg.sticker) return msg.sticker.file_id;
+//   if (msg.animation) return msg.animation.file_id;
+//   return null;
+// }
 
-// ── Main resolver ─────────────────────────────────────────────────────────────
+// ── Mutex — serializes concurrent calls to avoid getUpdates conflict ──────────
+// 🧩 Each call chains onto the previous one, ensuring only one getUpdates
+//    session is active at a time regardless of Promise.all batching
 
-export async function resolveFileId(
+let resolveLock: Promise<unknown> = Promise.resolve();
+
+export function resolveMediaBot(
   mtprotoClient: TelegramClient,
   fromChatId: string | number,
   messageId: number,
-): Promise<string | null> {
+): Promise<ResolvedMedia | null> {
+  const result = resolveLock.then(() =>
+    _resolveFileId(mtprotoClient, fromChatId, messageId),
+  );
+  // Swallow on the lock chain so one failure doesn't block all subsequent calls
+  resolveLock = result.catch(() => {});
+  return result;
+}
+
+// ── Core resolver (private, runs exclusively via mutex) ───────────────────────
+let cachedBotEntity:
+  | Awaited<ReturnType<TelegramClient["getEntity"]>>[number]
+  | null = null;
+let cachedBotId: number | null = null;
+
+async function getBotEntity(client: TelegramClient) {
+  if (cachedBotEntity && cachedBotId) {
+    return { entity: cachedBotEntity, id: cachedBotId };
+  }
+  const me = await botApi<{ id: number; username: string }>("getMe");
+  cachedBotEntity = await client.getEntity(`@${me.username}`);
+  cachedBotId = me.id;
+  consoleLog("ME", { me });
+  return { entity: cachedBotEntity, id: cachedBotId };
+}
+
+async function _resolveFileId(
+  mtprotoClient: TelegramClient,
+  fromChatId: string | number,
+  messageId: number,
+): Promise<ResolvedMedia | null> {
   // Step 1 – drop webhook so getUpdates doesn't conflict
   await dropWebhook();
 
   try {
     // Step 2 – get bot's own id (forward target = bot's Saved Messages)
-    const me = await botApi<{ id: number }>("getMe");
-    const botChatId = me.id;
+    // const me = await botApi<{ id: number }>("getMe");
+    // const me = await botApi<{ id: number; username: string }>("getMe");
+    // const botChatId = me.id;
+
+    // 🧩 Resolve bot entity via MTProto so GramJS caches it in session
+    // Use username (always available on bots) — avoids PeerUser cache miss
+    // const botEntity = await mtprotoClient.getEntity(`@${me.username}`);
+    const { entity: botEntity, id: botChatId } =
+      await getBotEntity(mtprotoClient);
 
     // Step 3 – snapshot offset to ignore pre-existing pending updates
     let offset = await getNextOffset();
 
-    // Step 4 – forward via MTProto (works for private channels, no rate limit)
+    // Step 4 – forward via MTProto
+    const forwardedAt = Date.now();
     await mtprotoClient.invoke(
       new Api.messages.ForwardMessages({
         fromPeer: fromChatId,
@@ -112,22 +158,45 @@ export async function resolveFileId(
 
       for (const update of updates) {
         offset = update.update_id + 1;
-
         const msg = update.message || update.channel_post;
+
         if (!msg) continue;
 
+        // const isTarget =
+        //   msg.chat?.id === botChatId &&
+        //   msg.forward_from_message_id === messageId;
         const isTarget =
-          msg.chat?.id === botChatId &&
-          msg.forward_from_message_id === messageId;
+          //   msg.chat?.id === parseInt(process.env.TELEGRAM_OWNER_USER_ID!) &&
+          !!(
+            msg.audio ||
+            msg.photo ||
+            msg.video ||
+            msg.document ||
+            msg.voice ||
+            msg.animation ||
+            msg.video_note
+          ) && msg.date * 1000 >= forwardedAt - 2000; // within 2s of forward
 
+        consoleLog("Polled update", {
+          updateId: update.update_id,
+          offset,
+          //   message: msg,
+          forwardOrigin: msg.forward_origin,
+          forwardFromMessageId: msg.forward_from_message_id,
+          botChatId,
+          chat: msg?.chat,
+          isTarget,
+        });
         if (isTarget) {
-          // Clean up forwarded message from bot chat
           await botApi("deleteMessage", {
             chat_id: botChatId,
             message_id: msg.message_id,
           }).catch(() => {});
 
-          return extractFileId(msg);
+          // const fileId = extractFileId(msg);
+          // consoleLog("Resolved fileId", { messageId, fileId });
+          // return fileId;
+          return extractResolvedMedia(msg);
         }
       }
 
@@ -138,7 +207,7 @@ export async function resolveFileId(
       `Timed out waiting for forwarded message (msgId=${messageId})`,
     );
   } finally {
-    // Step 6 – always restore webhook whether resolution succeeded or failed
+    // Step 6 – always restore webhook
     await restoreWebhook();
   }
 }

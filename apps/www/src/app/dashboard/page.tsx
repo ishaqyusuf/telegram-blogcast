@@ -274,7 +274,7 @@ export default function DashboardPage() {
     }, [fetcherState?.error]); // eslint-disable-line
 
     // ── Actions ─────────────────────────────────────────────────────────────────
-    const [maxTotalFetch, setMaxTotalFetch] = useState<number | undefined>();
+    const [maxTotalFetch, setMaxTotalFetch] = useState<number | undefined>(5);
     function handleStartFetch() {
         const fetchable = channels.filter((c) => c.isFetchable);
         if (fetchable.length === 0) {

@@ -1,17 +1,20 @@
 // packages/telegram/src/message-fetcher.ts
+// 🧩 Rewritten: two-phase fetch logic
 //
-// Singleton background loop. Moved from apps/www into packages/telegram so it
-// can be imported by apps/api (tRPC) rather than running in the Next.js process.
+// Phase 1 — Recent sweep (runs every poll tick):
+//   Fetch latest batch (no cursor) → compare against DB channelMessageIds
+//   If NO messages exist in DB → new content found, walk backwards via offsetId
+//   until we hit known territory (some message exists in DB)
 //
-// Flow per channel:
-//   1. Fetch without cursor → compare against DB lastMessageId to find gap
-//   2. Resume from lastMessageId and keep it updated after every batch
-//   3. After each batch emits → caller (tRPC mutation) persists to Blog table
+// Phase 2 — Historical backfill (runs if channel.allFetched = false):
+//   Resume from channel.lastMessageId going backwards (older messages)
+//   When batch is empty → set allFetched = true on channel
+//
+// Each batch is emitted immediately → wired to saveBatch() in startFetch()
 
 import { EventEmitter } from "events";
-import { fetchMessages, fetchMessages2 } from "./message-service";
+import { fetchMessages } from "./message-service";
 import type { FetchedMessage } from "./message-service";
-import { consoleLog } from "@acme/utils";
 
 export type { FetchedMessage };
 
@@ -21,23 +24,30 @@ export interface FetcherState {
   status: "idle" | "running" | "retrying" | "stopped";
   channelUsername: string;
   channelId: number;
-  lastMessageId: number | null;
+  phase: "recent" | "backfill" | "idle";
+  lastMessageId: number | null; // DB cursor (oldest fetched so far)
+  allFetched: boolean;
   totalFetched: number;
   error: string | null;
   retryCount: number;
-  maxTotalFetch?: number;
 }
 
 export type FetcherEvent =
-  | { type: "messages"; messages: FetchedMessage[] }
+  | {
+      type: "messages";
+      messages: FetchedMessage[];
+      phase: FetcherState["phase"];
+    }
   | { type: "state"; state: FetcherState }
+  | { type: "allFetched" } // signal to set allFetched=true in DB
   | { type: "error"; error: string; retryIn: number };
 
 export interface StartFetcherInput {
   channelId: number;
   channelUsername: string;
-  /** Cursor from DB (channel.lastMessageId). Fetcher uses minId to get newer msgs. */
-  lastMessageId: number | null;
+  lastMessageId: number | null; // from channel.lastMessageId in DB
+  allFetched: boolean; // from channel.allFetched in DB
+  channelMessageIds: number[]; // existing telegramMessageIds for this channel
   resolveFiles?: boolean;
   maxTotalFetch?: number;
 }
@@ -63,24 +73,38 @@ class MessageFetcher extends EventEmitter {
     status: "idle",
     channelUsername: "",
     channelId: 0,
+    phase: "idle",
     lastMessageId: null,
+    allFetched: false,
     totalFetched: 0,
     error: null,
     retryCount: 0,
   };
 
   private abortController: AbortController | null = null;
+  private channelMessageIds: Set<number> = new Set();
+  private resolveFiles: boolean = false;
+  private maxTotalFetch: number | undefined;
 
   // ── Public API ──────────────────────────────────────────────────────────────
-
+  public addKnownIds(ids: number[]): void {
+    ids.forEach((id) => this.channelMessageIds.add(id));
+  }
   start(input: StartFetcherInput): void {
     this.stop();
+
+    this.channelMessageIds = new Set(input.channelMessageIds);
+    this.resolveFiles = input.resolveFiles ?? false;
+    this.maxTotalFetch = input.maxTotalFetch;
 
     this.state = {
       status: "running",
       channelUsername: input.channelUsername,
       channelId: input.channelId,
+      phase: "recent",
       lastMessageId: input.lastMessageId,
+      allFetched: false,
+      // allFetched: input.allFetched,
       totalFetched: 0,
       error: null,
       retryCount: 0,
@@ -88,18 +112,14 @@ class MessageFetcher extends EventEmitter {
 
     this.abortController = new AbortController();
     this.emitState();
-    this.loop(
-      this.abortController.signal,
-      input.resolveFiles ?? false,
-      input.maxTotalFetch,
-    );
+    this.loop(this.abortController.signal);
   }
 
   stop(): void {
     this.abortController?.abort();
     this.abortController = null;
     if (this.state.status !== "idle") {
-      this.setState({ status: "stopped" });
+      this.setState({ status: "stopped", phase: "idle" });
     }
   }
 
@@ -107,21 +127,26 @@ class MessageFetcher extends EventEmitter {
     return { ...this.state };
   }
 
-  // ── Loop ────────────────────────────────────────────────────────────────────
+  // ── Main loop ───────────────────────────────────────────────────────────────
 
-  private async loop(
-    signal: AbortSignal,
-    resolveFiles: boolean,
-    maxTotalFetch?: number,
-  ): Promise<void> {
+  private async loop(signal: AbortSignal): Promise<void> {
     let retryDelay = RETRY_BASE_MS;
-    console.log("-----------------------LOADING MESSAGES...");
+
     while (!signal.aborted) {
       try {
-        await this.poll(signal, resolveFiles, maxTotalFetch);
+        // Phase 1: always check for recent messages first
+        await this.recentSweep(signal);
+        if (signal.aborted) break;
+
+        // Phase 2: backfill if not fully fetched
+        if (!this.state.allFetched) {
+          await this.backfill(signal);
+          if (signal.aborted) break;
+        }
 
         retryDelay = RETRY_BASE_MS;
         this.setState({ error: null, retryCount: 0, status: "running" });
+
         await this.sleep(POLL_INTERVAL_MS, signal);
       } catch (err: unknown) {
         if (signal.aborted) break;
@@ -146,66 +171,116 @@ class MessageFetcher extends EventEmitter {
     }
   }
 
-  // ── Poll ─────────────────────────────────────────────────────────────────────
-  // Step 1: if no lastMessageId yet, do a probe fetch (no minId) to get the
-  //         latest messageId from Telegram, then compare with DB cursor.
-  // Step 2: fetch with minId = lastMessageId to only get newer messages.
+  // ── Phase 1: Recent sweep ────────────────────────────────────────────────────
+  // Fetch latest messages (no cursor). Walk backwards via offsetId until we hit
+  // a message already in DB. Emit each new batch as we go.
 
-  private async poll(
-    signal: AbortSignal,
-    resolveFiles: boolean,
-    maxTotalFetch?: number,
-  ): Promise<void> {
-    const { channelUsername, lastMessageId } = this.state;
-    consoleLog("POLLING", {
-      channelUsername,
-      lastMessageId,
-    });
-    // Step 1 – probe when no cursor exists
-    if (lastMessageId === null) {
-      const probe = await fetchMessages2(channelUsername, {
-        limit: 1,
-        resolveFiles: false,
+  private async recentSweep(signal: AbortSignal): Promise<void> {
+    this.setState({ phase: "recent" });
+
+    let offsetId: number | undefined = undefined; // undefined = fetch
+    while (!signal.aborted) {
+      const { messages } = await fetchMessages(this.state.channelUsername, {
+        limit: this.limit,
+        minId: offsetId, // undefined on first call = latest; then walk backwards
+        resolveFiles: this.resolveFiles,
       });
 
-      if (signal.aborted || probe.messages.length === 0) return;
+      if (signal.aborted) return;
 
-      // Seed the cursor without emitting (no new content yet to persist)
-      this.setState({ lastMessageId: probe.messages?.[0]?.id ?? null });
+      // No messages at all — channel is empty or private
+      if (messages.length === 0) return;
+
+      // Check how many of this batch already exist in DB
+      const newMessages = messages.filter(
+        (m) => !this.channelMessageIds.has(m.id),
+      );
+      const hasKnown = messages.some((m) => this.channelMessageIds.has(m.id));
+
+      // Emit only the genuinely new ones
+      if (newMessages.length > 0) {
+        await this.emitBatch(newMessages, "recent");
+        if (signal.aborted) return;
+        // Add to local set so we don't re-emit on next sweep
+        newMessages.forEach((m) => this.channelMessageIds.add(m.id));
+      }
+
+      // If we hit a known message — we've caught up to existing territory
+      if (hasKnown) return;
+
+      // All messages in this batch are new — there might be more newer ones
+      // Walk backwards: use the oldest id in this batch as next offsetId
+      const oldestInBatch = messages[0]?.id!; // sorted ascending by message-service
+      offsetId = oldestInBatch;
+
+      // Safety: if we've reached or passed the DB cursor, stop Phase 1
+      if (
+        this.state.lastMessageId !== null &&
+        oldestInBatch <= this.state.lastMessageId
+      )
+        return;
+    }
+  }
+
+  // ── Phase 2: Historical backfill ─────────────────────────────────────────────
+  // Resume from channel.lastMessageId going backwards (older messages).
+  // Runs one batch per loop iteration to interleave with recent sweeps.
+  // Sets allFetched=true when batch is empty (hit the beginning).
+  get limit() {
+    return this.maxTotalFetch
+      ? Math.min(BATCH_SIZE, this.maxTotalFetch - this.state.totalFetched)
+      : BATCH_SIZE;
+  }
+  private async backfill(signal: AbortSignal): Promise<void> {
+    this.setState({ phase: "backfill" });
+
+    const { messages } = await fetchMessages(this.state.channelUsername, {
+      limit: this.limit,
+      // offsetId here means "get messages older than this id"
+      minId: this.state.lastMessageId! ?? undefined,
+      resolveFiles: this.resolveFiles,
+    });
+
+    if (signal.aborted) return;
+
+    // Empty batch = we've reached the very first message in the channel
+    if (messages.length === 0 && this.state.lastMessageId !== null) {
+      this.setState({ allFetched: true });
+      this.emit("event", { type: "allFetched" } satisfies FetcherEvent);
       return;
     }
 
-    // Step 2 – fetch only messages newer than cursor
-    const { messages } = await fetchMessages2(channelUsername, {
-      limit: BATCH_SIZE,
-      minId: lastMessageId!,
-      resolveFiles,
-    });
-    consoleLog("Fetched batch of messages", {
-      channelUsername,
-      batchSize: messages.length,
-      lastMessageId: this.state.lastMessageId,
-      totalFetched: this.state.totalFetched,
-    });
-    if (signal.aborted || messages.length === 0) return;
+    const newMessages = messages.filter(
+      (m) => !this.channelMessageIds.has(m.id),
+    );
 
-    // messages are sorted ascending by message-service
-    const newLastId = messages[messages.length - 1]?.id ?? null;
-    this.setState({
-      lastMessageId: newLastId,
-      totalFetched: this.state.totalFetched + messages.length,
-    });
+    if (newMessages.length > 0) {
+      await this.emitBatch(newMessages, "backfill");
+      newMessages.forEach((m) => this.channelMessageIds.add(m.id));
+    }
 
-    // Emit batch — the tRPC subscription / SSE listener will persist to DB
-    this.emit("event", { type: "messages", messages } satisfies FetcherEvent);
-    // 🧩 Added: stop automatically when limit is reached
-    consoleLog("State after poll", this.getState());
-    if (maxTotalFetch && this.state.totalFetched >= maxTotalFetch) {
+    // Advance DB cursor to the oldest message in this batch
+    const oldestId = messages[0]?.id!; // sorted ascending
+    this.setState({ lastMessageId: oldestId });
+  }
+
+  // ── Emit batch + check maxTotalFetch ─────────────────────────────────────────
+
+  private async emitBatch(
+    messages: FetchedMessage[],
+    phase: FetcherState["phase"],
+  ): Promise<void> {
+    this.setState({ totalFetched: this.state.totalFetched + messages.length });
+
+    this.emit("event", {
+      type: "messages",
+      messages,
+      phase,
+    } satisfies FetcherEvent);
+
+    // Auto-stop when maxTotalFetch is reached
+    if (this.maxTotalFetch && this.state.totalFetched >= this.maxTotalFetch) {
       this.stop();
-      this.emit("event", {
-        type: "state",
-        state: { ...this.getState(), status: "stopped" },
-      } satisfies FetcherEvent);
     }
   }
 
@@ -248,4 +323,3 @@ function getMessageFetcher(): MessageFetcher {
 }
 
 export const messageFetcher = getMessageFetcher();
-// messageFetcher.start
