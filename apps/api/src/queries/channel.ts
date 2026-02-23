@@ -217,7 +217,16 @@ export async function startFetch(ctx: TRPCContext, input: StartFetchSchema) {
     );
     consoleLog("[messageFetcher] fetched batch", {
       total: mapped.length,
+      ids: mapped.map((m) => m.id),
     });
+    // mapped.map((m,mi) => {
+    //   consoleLog(`[messageFetcher] batch message ${mi}`, {
+    //     id: m.id,
+    //     text: m.text,
+    //     date: m.date,
+    //     media: m.media,
+    //   });
+    // });
     const result = await saveBatch(ctx, {
       channelId: channel.id,
       messages: mapped,

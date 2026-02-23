@@ -39,11 +39,7 @@ export interface FetchMessagesOptions {
    */
   startId?: number;
 
-  /**
-   * Continuation cursor for the background fetcher.
-   * Returns messages with id GREATER THAN minId (i.e. newer).
-   * Uses GramJS `minId` internally.
-   */
+  /** Optional lower-bound filter (messages must have id > minId). */
   minId?: number;
 
   /** When true, resolves Bot API file_ids for media messages (adds latency). */
@@ -76,6 +72,7 @@ export async function fetchMessages(
 ): Promise<FetchMessagesResult> {
   const {
     limit = 20,
+    startId,
     minId,
     resolveFiles = false,
     audio = true,
@@ -90,16 +87,15 @@ export async function fetchMessages(
   // 🧩 Key fix 1: use t.me/ prefix — matches your working fetchFromChannel
   const channel = await client.getEntity(`t.me/${channelUsername}`);
 
-  // 🧩 Key fix 2: use Api.messages.GetHistory invoke — matches your working code
-  // minId maps to offsetId (GetHistory returns messages OLDER than offsetId,
-  // but with offsetId=0 returns latest. For "newer than cursor" we use minId param)
+  // GetHistory pagination:
+  // - offsetId: fetch messages older than this id (primary paging cursor)
+  // - minId: optional lower-bound filter (messages newer than minId)
   const response = await client.invoke(
     new Api.messages.GetHistory({
       peer: channel,
-      // offsetId: 0, // always start from latest, minId filters below
-      // minId: minId ?? 0, // 🧩 Key fix 3: minId filters server-side (only newer msgs)
+      offsetId: startId ?? 0,
       limit,
-      minId: minId ?? 0, // 🧩 Key fix 3: minId filters server-side (only newer msgs)
+      minId: minId ?? 0,
       maxId: 0,
       addOffset: 0,
       hash: BigInt(0) as any,

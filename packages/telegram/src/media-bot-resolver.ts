@@ -178,14 +178,15 @@ async function _resolveFileId(
           ) && msg.date * 1000 >= forwardedAt - 2000; // within 2s of forward
 
         if (isTarget) {
+          const deleteChatId = msg.chat?.id ?? botChatId;
           await botApi("deleteMessage", {
-            chat_id: botChatId,
+            chat_id: deleteChatId,
             message_id: msg.message_id,
           }).catch(() => {
             consoleLog(
               "Failed to delete forwarded message, might be already deleted:",
               {
-                chat_id: botChatId,
+                chat_id: deleteChatId,
                 message_id: msg.message_id,
               },
             );

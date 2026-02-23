@@ -97,7 +97,7 @@ class MessageFetcher extends EventEmitter {
     this.channelMessageIds = new Set(input.channelMessageIds);
     this.resolveFiles = input.resolveFiles ?? false;
     this.maxTotalFetch = input.maxTotalFetch;
-
+    // consoleLog("Channel Message IDs", Array.from(this.channelMessageIds));
     this.state = {
       status: "running",
       channelUsername: input.channelUsername,
@@ -199,7 +199,7 @@ class MessageFetcher extends EventEmitter {
 
       const { messages } = await fetchMessages(this.state.channelUsername, {
         limit,
-        minId: offsetId, // undefined on first call = latest; then walk backwards
+        startId: offsetId, // undefined on first call = latest; then walk backwards
         resolveFiles: this.resolveFiles,
       });
 
@@ -269,7 +269,7 @@ class MessageFetcher extends EventEmitter {
     const { messages } = await fetchMessages(this.state.channelUsername, {
       limit,
       // offsetId here means "get messages older than this id"
-      minId: this.state.lastMessageId! ?? undefined,
+      startId: this.state.lastMessageId! ?? undefined,
       resolveFiles: this.resolveFiles,
     });
 
