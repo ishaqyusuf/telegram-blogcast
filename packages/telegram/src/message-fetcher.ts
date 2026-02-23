@@ -49,7 +49,7 @@ export interface StartFetcherInput {
   allFetched: boolean; // from channel.allFetched in DB
   channelMessageIds: number[]; // existing telegramMessageIds for this channel
   resolveFiles?: boolean;
-  maxTotalFetch?: number;
+  maxTotalFetch?: number | null;
 }
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -84,7 +84,7 @@ class MessageFetcher extends EventEmitter {
   private abortController: AbortController | null = null;
   private channelMessageIds: Set<number> = new Set();
   private resolveFiles: boolean = false;
-  private maxTotalFetch: number | undefined;
+  private maxTotalFetch: number | null | undefined;
 
   // ── Public API ──────────────────────────────────────────────────────────────
   public addKnownIds(ids: number[]): void {
@@ -110,6 +110,11 @@ class MessageFetcher extends EventEmitter {
       retryCount: 0,
     };
 
+    if (this.shouldStopForLimit()) {
+      this.setState({ status: "stopped", phase: "idle" });
+      return;
+    }
+
     this.abortController = new AbortController();
     this.emitState();
     this.loop(this.abortController.signal);
@@ -134,6 +139,11 @@ class MessageFetcher extends EventEmitter {
 
     while (!signal.aborted) {
       try {
+        if (this.shouldStopForLimit()) {
+          this.stop();
+          break;
+        }
+
         // Phase 1: always check for recent messages first
         await this.recentSweep(signal);
         if (signal.aborted) break;
@@ -180,8 +190,14 @@ class MessageFetcher extends EventEmitter {
 
     let offsetId: number | undefined = undefined; // undefined = fetch
     while (!signal.aborted) {
+      const limit = this.limit;
+      if (limit === null || limit === 0) {
+        this.stop();
+        return;
+      }
+
       const { messages } = await fetchMessages(this.state.channelUsername, {
-        limit: this.limit,
+        limit,
         minId: offsetId, // undefined on first call = latest; then walk backwards
         resolveFiles: this.resolveFiles,
       });
@@ -219,6 +235,10 @@ class MessageFetcher extends EventEmitter {
         oldestInBatch <= this.state.lastMessageId
       )
         return;
+      if (this.shouldStopForLimit()) {
+        this.stop();
+        return;
+      }
     }
   }
 
@@ -226,16 +246,27 @@ class MessageFetcher extends EventEmitter {
   // Resume from channel.lastMessageId going backwards (older messages).
   // Runs one batch per loop iteration to interleave with recent sweeps.
   // Sets allFetched=true when batch is empty (hit the beginning).
-  get limit() {
-    return this.maxTotalFetch
-      ? Math.min(BATCH_SIZE, this.maxTotalFetch - this.state.totalFetched)
-      : BATCH_SIZE;
+  get limit(): number | null {
+    if (this.maxTotalFetch === null) return null;
+    if (this.maxTotalFetch === undefined) return BATCH_SIZE;
+
+    const lm = Math.min(
+      BATCH_SIZE,
+      this.maxTotalFetch - this.state.totalFetched,
+    );
+    return Math.max(lm, 0);
   }
   private async backfill(signal: AbortSignal): Promise<void> {
     this.setState({ phase: "backfill" });
 
+    const limit = this.limit;
+    if (limit === null || limit === 0) {
+      this.stop();
+      return;
+    }
+
     const { messages } = await fetchMessages(this.state.channelUsername, {
-      limit: this.limit,
+      limit,
       // offsetId here means "get messages older than this id"
       minId: this.state.lastMessageId! ?? undefined,
       resolveFiles: this.resolveFiles,
@@ -279,7 +310,11 @@ class MessageFetcher extends EventEmitter {
     } satisfies FetcherEvent);
 
     // Auto-stop when maxTotalFetch is reached
-    if (this.maxTotalFetch && this.state.totalFetched >= this.maxTotalFetch) {
+    if (
+      this.maxTotalFetch !== undefined &&
+      this.maxTotalFetch !== null &&
+      this.state.totalFetched >= this.maxTotalFetch
+    ) {
       this.stop();
     }
   }
@@ -310,6 +345,11 @@ class MessageFetcher extends EventEmitter {
         { once: true },
       );
     });
+  }
+
+  private shouldStopForLimit(): boolean {
+    const limit = this.limit;
+    return limit === null || limit === 0;
   }
 }
 

@@ -215,7 +215,9 @@ export async function startFetch(ctx: TRPCContext, input: StartFetchSchema) {
         media: (m as any).media ?? null,
       }),
     );
-
+    consoleLog("[messageFetcher] fetched batch", {
+      total: mapped.length,
+    });
     const result = await saveBatch(ctx, {
       channelId: channel.id,
       messages: mapped,
@@ -235,6 +237,7 @@ export async function startFetch(ctx: TRPCContext, input: StartFetchSchema) {
     resolveFiles: true,
     maxTotalFetch: input.maxTotalFetch, // 🧩 added
     channelMessageIds: channelMessageIds,
+    allFetched: false,
 
     // allFetched: channel.allFetched ?? false,
   });

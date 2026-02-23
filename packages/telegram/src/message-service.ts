@@ -70,156 +70,6 @@ export interface FetchMessagesResult {
 // ── Core function ─────────────────────────────────────────────────────────────
 type BlogType = "audio" | "image" | "video" | "text" | "document";
 
-function extractMediaMeta(
-  msg: Api.Message,
-): (Omit<ResolvedMedia, "fileId"> & { type: BlogType }) | null {
-  if (!("media" in msg) || !msg.media) return null;
-
-  // ── Photo ────────────────────────────────────────────────────────────────
-  if (msg.media instanceof Api.MessageMediaPhoto) {
-    const photo = msg.media.photo as any;
-    const largest = photo?.sizes?.at(-1);
-    return {
-      type: "image",
-      mimeType: "image/jpeg",
-      // width: largest?.w,
-      // height: largest?.h,
-    };
-  }
-
-  // ── Document (audio, video, pdf, etc.) ───────────────────────────────────
-  if (msg.media instanceof Api.MessageMediaDocument) {
-    const doc = msg.media.document as any;
-    const mimeType: string = doc?.mimeType ?? "application/octet-stream";
-    const attrs = (doc?.attributes ?? []) as any[];
-
-    const audioAttr = attrs.find(
-      (a) => a instanceof Api.DocumentAttributeAudio,
-    );
-    const videoAttr = attrs.find(
-      (a) => a instanceof Api.DocumentAttributeVideo,
-    );
-    const fileAttr = attrs.find(
-      (a) => a instanceof Api.DocumentAttributeFilename,
-    );
-
-    const base = {
-      mimeType,
-      title: audioAttr?.title ?? fileAttr?.fileName ?? undefined,
-      // author: audioAttr?.performer ?? undefined,
-      // duration: audioAttr?.duration ?? videoAttr?.duration ?? undefined,
-      // width: videoAttr?.w ?? undefined,
-      // height: videoAttr?.h ?? undefined,
-      // fileSize: doc?.size ?? undefined,
-    };
-
-    // Mirror your old mimeType switch exactly
-    const [mediaType] = mimeType.split("/");
-    switch (mimeType) {
-      case "application/pdf":
-        return { ...base, type: "document" };
-      case "video/mp4":
-        return { ...base, type: "video" };
-      case "audio/mpeg":
-      case "audio/MP3":
-      case "audio/mp3":
-      case "audio/mp4":
-      case "audio/m4a":
-      case "audio/aac":
-      case "audio/ogg":
-      case "audio/amr":
-        return { ...base, type: "audio" };
-      default:
-        switch (mediaType) {
-          case "audio":
-            return { ...base, type: "audio" };
-          case "image":
-            return { ...base, type: "image" };
-          case "video":
-            return { ...base, type: "video" };
-          default:
-            return null; // unknown — skip
-        }
-    }
-  }
-
-  return null;
-}
-export async function _fetchMessages(
-  channelId: string,
-  options: FetchMessagesOptions = {},
-): Promise<FetchMessagesResult> {
-  const {
-    limit: rawLimit = 20,
-    startId,
-    minId,
-    resolveFiles = false,
-  } = options;
-
-  const limit = Math.min(rawLimit, 100);
-  const client = await getClient();
-
-  // Build GramJS getMessages options
-  const getOptions: Record<string, unknown> = { limit };
-
-  if (minId !== undefined) {
-    // Fetcher mode: only messages newer than this id
-    getOptions.minId = minId;
-  } else if (startId !== undefined) {
-    // Pagination mode: messages older than this id
-    getOptions.offsetId = startId;
-  }
-
-  const rawMessages = await client.getMessages(channelId, getOptions);
-
-  rawMessages.sort((a, b) => a.id - b.id);
-
-  const messages: FetchedMessage[] = await Promise.all(
-    rawMessages.map(async (msg) => {
-      const mediaMeta = extractMediaMeta(msg);
-      let media: ResolvedMedia | null = null;
-      if (mediaMeta && resolveFiles) {
-        try {
-          const botMedia = await resolveMediaBot(client, channelId, msg.id);
-          // Only attach media if we got a valid Bot API file_id
-          media = botMedia ? { ...mediaMeta, ...botMedia } : null;
-        } catch (err) {
-          consoleLog(
-            `[message-service] fileId resolution failed msg=${msg.id}:`,
-            err,
-          );
-        }
-      } else if (mediaMeta && !resolveFiles) {
-        // resolveFiles=false (e.g. probe fetch) — skip resolution, no media attached
-        media = null;
-      }
-      // if (resolveFiles && msg.media) {
-      //   try {
-      //     fileId = await resolveFileId(client, channelId, msg.id);
-      //   } catch (err) {
-      //     consoleLog(
-      //       `[messageService] fileId resolution failed for msg ${msg.id}:`,
-      //       err,
-      //     );
-      //   }
-      // }
-
-      return {
-        id: msg.id,
-        text: msg.text ?? null,
-        // fileId,
-        date: new Date(msg.date * 1000).toISOString(),
-        media,
-      };
-    }),
-  );
-
-  // nextStartId: for paginated HTTP use — oldest id in this batch (or null if done)
-  const nextStartId = messages.length === limit ? messages?.[0]?.id! : null;
-
-  return { messages, nextStartId, lastMessageId: nextStartId };
-}
-
 export async function fetchMessages(
   channelUsername: string,
   options: FetchMessagesOptions = {},
@@ -368,4 +218,79 @@ export async function fetchMessages(
   const nextStartId = messages.length === limit ? messages?.[0]?.id! : null;
 
   return { messages, nextStartId, lastMessageId };
+}
+function extractMediaMeta(
+  msg: Api.Message,
+): (Omit<ResolvedMedia, "fileId"> & { type: BlogType }) | null {
+  if (!("media" in msg) || !msg.media) return null;
+
+  // ── Photo ────────────────────────────────────────────────────────────────
+  if (msg.media instanceof Api.MessageMediaPhoto) {
+    const photo = msg.media.photo as any;
+    const largest = photo?.sizes?.at(-1);
+    return {
+      type: "image",
+      mimeType: "image/jpeg",
+      // width: largest?.w,
+      // height: largest?.h,
+    };
+  }
+
+  // ── Document (audio, video, pdf, etc.) ───────────────────────────────────
+  if (msg.media instanceof Api.MessageMediaDocument) {
+    const doc = msg.media.document as any;
+    const mimeType: string = doc?.mimeType ?? "application/octet-stream";
+    const attrs = (doc?.attributes ?? []) as any[];
+
+    const audioAttr = attrs.find(
+      (a) => a instanceof Api.DocumentAttributeAudio,
+    );
+    const videoAttr = attrs.find(
+      (a) => a instanceof Api.DocumentAttributeVideo,
+    );
+    const fileAttr = attrs.find(
+      (a) => a instanceof Api.DocumentAttributeFilename,
+    );
+
+    const base = {
+      mimeType,
+      title: audioAttr?.title ?? fileAttr?.fileName ?? undefined,
+      // author: audioAttr?.performer ?? undefined,
+      // duration: audioAttr?.duration ?? videoAttr?.duration ?? undefined,
+      // width: videoAttr?.w ?? undefined,
+      // height: videoAttr?.h ?? undefined,
+      // fileSize: doc?.size ?? undefined,
+    };
+
+    // Mirror your old mimeType switch exactly
+    const [mediaType] = mimeType.split("/");
+    switch (mimeType) {
+      case "application/pdf":
+        return { ...base, type: "document" };
+      case "video/mp4":
+        return { ...base, type: "video" };
+      case "audio/mpeg":
+      case "audio/MP3":
+      case "audio/mp3":
+      case "audio/mp4":
+      case "audio/m4a":
+      case "audio/aac":
+      case "audio/ogg":
+      case "audio/amr":
+        return { ...base, type: "audio" };
+      default:
+        switch (mediaType) {
+          case "audio":
+            return { ...base, type: "audio" };
+          case "image":
+            return { ...base, type: "image" };
+          case "video":
+            return { ...base, type: "video" };
+          default:
+            return null; // unknown — skip
+        }
+    }
+  }
+
+  return null;
 }
