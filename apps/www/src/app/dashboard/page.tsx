@@ -5,6 +5,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useQuery, useMutation } from "@acme/ui/tanstack";
 import { _trpc } from "@/components/static-trpc";
 import { invalidateQueries } from "@/lib/invalidate-query";
@@ -439,6 +440,12 @@ export default function DashboardPage() {
                             tg
                             <span className="text-emerald-400">-blogcast</span>
                         </span>
+                        <Link
+                            href="/blog"
+                            className="font-mono text-[11px] text-zinc-500 hover:text-emerald-400 transition-colors"
+                        >
+                            /blog
+                        </Link>
                         {activeChannel && (
                             <>
                                 <span className="text-zinc-700">/</span>

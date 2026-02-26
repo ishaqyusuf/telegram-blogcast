@@ -1,5 +1,4 @@
 import { NextRequest } from "next/server";
-import z from "zod";
 
 type TelegramGetFileResponse = {
     ok: boolean;
@@ -35,11 +34,11 @@ async function getTelegramFilePath(fileId: string) {
 // })
 export async function GET(
     request: NextRequest,
-    { params }: { params: { fileId: string } },
+    { params }: { params: Promise<{ fileId: string }> },
 ) {
-    console.log("Received request for Telegram file:", params);
     try {
         const { fileId } = await params;
+        console.log("Received request for Telegram file:", fileId);
         const { botToken, filePath } = await getTelegramFilePath(fileId);
         const range = request.headers.get("range");
 
@@ -79,4 +78,3 @@ export async function GET(
         return new Response(message, { status: 500 });
     }
 }
-

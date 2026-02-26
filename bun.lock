@@ -160,6 +160,7 @@
         "@acme/db": "workspace:*",
         "@acme/telegram": "workspace:*",
         "@acme/ui": "workspace:*",
+        "@acme/utils": "workspace:*",
         "@actions/core": "^1.11.1",
         "@actions/github": "^6.0.1",
         "@cloudinary/react": "^1.14.3",
