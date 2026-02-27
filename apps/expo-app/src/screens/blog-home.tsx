@@ -13,11 +13,14 @@ import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
 
 export default function BlogHomeScreen() {
-  const { data, hasNextPage, isFetching, fetchNextPage } = useInfiniteLoader({
+  const {
+    data: posts,
+    hasNextPage,
+    isFetching,
+    fetchNextPage,
+  } = useInfiniteLoader({
     route: _trpc?.podcasts.posts,
   });
-
-  const posts = useMemo(() => data ?? [], [data]);
 
   return (
     <View className="flex-1 bg-background">

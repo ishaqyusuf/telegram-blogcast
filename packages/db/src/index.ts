@@ -7,7 +7,7 @@
 
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient, Prisma } from "@prisma/client";
-import { Pool } from "pg";
+// import { Pool } from "pg";
 
 export * from "@prisma/client";
 
@@ -30,9 +30,9 @@ const prismaClientSingleton = () => {
           ]
         : ["error"],
     adapter: new PrismaPg(
-      new Pool({
-        connectionString,
-      }),
+      { connectionString },
+      // new Pool({
+      // }),
     ),
   };
 

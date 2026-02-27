@@ -27,7 +27,7 @@ export const getBaseUrl = () => {
     );
   }
 
-  return `http://${localhost}:4300`;
+  return `http://${localhost}:3005`;
 };
 export const getWebUrl = () => {
   const debuggerHost = Constants.expoConfig?.hostUri;
@@ -40,5 +40,5 @@ export const getWebUrl = () => {
     );
   }
 
-  return `http://${localhost}:3000`;
+  return `http://${localhost}:3005`;
 };

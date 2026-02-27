@@ -1,7 +1,7 @@
 {
   "name": "@acme/api",
   "scripts": {
-    "dev": "NODE_ENV=development TZ=UTC PORT=3006 bun run --hot src/index.ts",
+    "--dev": "NODE_ENV=development TZ=UTC PORT=3006 bun run --hot src/index.ts",
     "dev:node": "tsx src/node.ts",
     "--build": "bun-vercel ./src/bun.ts",
     "build": "./bun-vercel/build.sh ./src/bun.ts",

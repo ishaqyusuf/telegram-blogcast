@@ -32,8 +32,7 @@ if (existsSync(envPath)) {
 
 export default defineConfig({
   schema: "./src/schema",
-  engine: "client",
-
+  // engine: "client",
   datasource: {
     url:
       process.env.POSTGRES_URL ??
