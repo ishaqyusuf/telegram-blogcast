@@ -2,8 +2,13 @@
 import { createTRPCRouter, publicProcedure } from "../init";
 import { z } from "zod";
 import { transcribeRange, transcribeRangeSchema } from "../../queries/blog";
+import { posts, postsSchema } from "../../queries/posts";
 
 export const blogRoutes = createTRPCRouter({
+  posts: publicProcedure.input(postsSchema).query(async (props) => {
+    return posts(props.ctx, props.input);
+  }),
+
   getBlog: publicProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ ctx, input }) => {

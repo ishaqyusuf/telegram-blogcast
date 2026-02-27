@@ -1,4 +1,3 @@
-import { useMemo } from "react";
 import { View } from "react-native";
 import { LegendList } from "@legendapp/list";
 
@@ -19,7 +18,7 @@ export default function BlogHomeScreen() {
     isFetching,
     fetchNextPage,
   } = useInfiniteLoader({
-    route: _trpc?.podcasts.posts,
+    route: _trpc?.blog.posts,
   });
 
   return (

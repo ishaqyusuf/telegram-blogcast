@@ -35,7 +35,7 @@ function getQueryClient() {
 export function TRPCReactProvider(
   props: Readonly<{
     children: React.ReactNode;
-  }>
+  }>,
 ) {
   const queryClient = getQueryClient();
 
@@ -50,14 +50,14 @@ export function TRPCReactProvider(
             //   :
             `${getBaseUrl()}/api/trpc`,
           transformer: superjson as any,
-          async headers() {
-            const headers = new Map<string, string>();
-            const token = getToken();
+          // async headers() {
+          //   const headers = new Map<string, string>();
+          //   const token = getToken();
 
-            if (token) headers.set("Authorization", `Bearer ${token}`);
+          //   if (token) headers.set("Authorization", `Bearer ${token}`);
 
-            return headers;
-          },
+          //   return headers;
+          // },
         }),
         loggerLink({
           enabled: (opts) =>
@@ -65,7 +65,7 @@ export function TRPCReactProvider(
             (opts.direction === "down" && opts.result instanceof Error),
         }),
       ],
-    })
+    }),
   );
 
   return (

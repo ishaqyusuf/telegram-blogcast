@@ -8,7 +8,7 @@ import { Icon } from "@/components/ui/icon";
 
 const isRTL = I18nManager.isRTL;
 
-export type BlogItem = RouterOutputs["podcasts"]["posts"]["data"][number];
+export type BlogItem = RouterOutputs["blog"]["posts"]["data"][number];
 
 function getInitials(value?: string | null) {
   if (!value) return "AG";
