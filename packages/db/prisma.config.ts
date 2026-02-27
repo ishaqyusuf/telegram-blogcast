@@ -34,11 +34,7 @@ export default defineConfig({
   schema: "./src/schema",
   // engine: "client",
   datasource: {
-    url:
-      process.env.POSTGRES_URL ??
-      // env("POSTGRES_URL") ??
-      // "postgresql://postgres.jspwchfyzziogrdhwbhu:Lg8CSfOfCrtpIJGf@aws-0-eu-central-1.pooler.supabase.com:5432/postgres" ??
-      "",
+    url: process.env.POSTGRES_URL ?? "",
     ...(process.env.DIRECT_URL
       ? {
           directUrl: process.env.DIRECT_URL,
