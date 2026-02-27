@@ -1,25 +1,47 @@
-import { AudioBlogBottomNav } from "@/components/audio-blog-view/audio-blog-bottom-nav";
-import { AudioBlogContent } from "@/components/audio-blog-view/audio-blog-content";
-import { AudioBlogHeader } from "@/components/audio-blog-view/audio-blog-header";
-import { AudioBlogPlayer } from "@/components/audio-blog-view/audio-blog-player";
-import { CommentsSheet } from "@/components/comments-sheet";
-import { ScrollView, View } from "react-native";
+import { DesignSwitch } from "@/components/design-switch";
+import { _trpc } from "@/components/static-trpc";
+import BlogViewAudio from "@/screens.example/blog-view-audio";
+import BlogViewText from "@/screens.example/blog-view-text";
+import { useQuery } from "@tanstack/react-query";
+import { useLocalSearchParams } from "expo-router";
+import { ActivityIndicator, Text, View } from "react-native";
 
-export default function BlogView() {
-  return (
-    <View className="flex-1 bg-background">
-      <AudioBlogHeader />
-      <ScrollView
-        className="flex-1"
-        contentContainerStyle={{ paddingBottom: 100 }}
-      >
-        <View className="px-6 pt-4 flex flex-col gap-6">
-          <AudioBlogPlayer />
-          <AudioBlogContent />
-        </View>
-      </ScrollView>
-      <AudioBlogBottomNav />
-      <CommentsSheet />
-    </View>
+export default function BlogViewPage() {
+  const { blogId } = useLocalSearchParams<{ blogId?: string }>();
+  const id = Number(blogId);
+  const canQuery = Number.isFinite(id) && id > 0;
+
+  const { data, isPending } = useQuery(
+    _trpc.blog.getBlog.queryOptions(
+      { id: id || 0 },
+      {
+        enabled: canQuery,
+      },
+    ),
   );
+
+  if (!canQuery) {
+    return (
+      <View className="flex-1 items-center justify-center bg-background px-6">
+        <Text className="text-base font-semibold text-foreground">
+          Invalid blog id
+        </Text>
+      </View>
+    );
+  }
+
+  if (isPending) {
+    return (
+      <View className="flex-1 items-center justify-center gap-3 bg-background">
+        <ActivityIndicator />
+        <Text className="text-sm text-muted-foreground">Loading design...</Text>
+      </View>
+    );
+  }
+
+  if (data?.type === "text") {
+    return <DesignSwitch screen screens={[<BlogViewText key={0} />]} />;
+  }
+
+  return <DesignSwitch screen screens={[<BlogViewAudio key={0} />]} />;
 }

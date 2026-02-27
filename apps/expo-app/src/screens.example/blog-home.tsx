@@ -20,7 +20,7 @@ const Header = ({ onSearchPress }: { onSearchPress: () => void }) => (
     </View>
     <Pressable
       onPress={onSearchPress}
-      className="p-2 rounded-full active:bg-muted"
+      className="p-2 rounded-full"
     >
       <Icon name="Search" className="  text-muted-foreground" />
     </Pressable>
@@ -34,21 +34,21 @@ const FilterChips = () => (
       showsHorizontalScrollIndicator={false}
       contentContainerClassName="px-4 gap-3"
     >
-      <Pressable className="h-9 px-5 rounded-full bg-accent items-center justify-center shadow-sm active:opacity-90">
+      <Pressable className="h-9 px-5 rounded-full bg-accent items-center justify-center shadow-sm">
         <Text className="text-sm font-medium text-accent-foreground">All</Text>
       </Pressable>
 
-      <Pressable className="h-9 px-5 rounded-full bg-card border border-border items-center justify-center active:bg-muted">
+      <Pressable className="h-9 px-5 rounded-full bg-card border border-border items-center justify-center">
         <Text className="text-sm font-medium text-muted-foreground">Audio</Text>
       </Pressable>
 
-      <Pressable className="h-9 px-5 rounded-full bg-card border border-border items-center justify-center active:bg-muted">
+      <Pressable className="h-9 px-5 rounded-full bg-card border border-border items-center justify-center">
         <Text className="text-sm font-medium text-muted-foreground">
           Articles
         </Text>
       </Pressable>
 
-      <Pressable className="h-9 px-5 rounded-full bg-card border border-border items-center justify-center active:bg-muted">
+      <Pressable className="h-9 px-5 rounded-full bg-card border border-border items-center justify-center">
         <Text className="text-sm font-medium text-muted-foreground">
           Visuals
         </Text>
@@ -106,7 +106,7 @@ const CardActions = ({ tags }: { tags: string[] }) => (
 const AudioCard = () => (
   <BlogCardShell
     blogId={"audio"}
-    className="bg-card rounded-2xl p-5 mb-4 active:scale-[0.99]"
+    className="bg-card rounded-2xl p-5 mb-4"
   >
     <CardHeader letter="M" title="Mindfulness" time="2h ago" />
 
@@ -124,7 +124,7 @@ const AudioCard = () => (
     </View>
 
     <View className="flex-row items-center gap-3 p-3 rounded-xl bg-muted/30 mb-4 border border-border">
-      <Pressable className="size-10 rounded-full bg-accent items-center justify-center shadow-md active:opacity-80">
+      <Pressable className="size-10 rounded-full bg-accent items-center justify-center shadow-md">
         <Icon name="Play" className="  text-accent-foreground ml-0.5" />
       </Pressable>
 
@@ -150,7 +150,7 @@ const AudioCard = () => (
 const ArticleCard = () => (
   <BlogCardShell
     blogId={"text"}
-    className="bg-card rounded-2xl p-5 mb-4 active:scale-[0.99]"
+    className="bg-card rounded-2xl p-5 mb-4"
   >
     <CardHeader letter="F" title="Future of Work" time="5h ago" />
 
@@ -195,7 +195,7 @@ const ArticleCard = () => (
 const VisualCard = () => (
   <BlogCardShell
     blogId={"image"}
-    className="bg-card rounded-2xl overflow-hidden mb-4 active:scale-[0.99]"
+    className="bg-card rounded-2xl overflow-hidden mb-4"
   >
     <View className="w-full h-48 bg-muted relative">
       <Image

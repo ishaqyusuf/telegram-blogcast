@@ -21,16 +21,16 @@ export function CardFooter({ post }: { post: BlogItem }) {
       </View>
 
       <View className="flex-row items-center gap-4">
-        <Pressable className="flex-row items-center gap-1 active:opacity-70">
+        <Pressable className="flex-row items-center gap-1">
           <Icon name="Heart" className="text-muted-foreground" />
           <Text className="text-xs font-medium text-muted-foreground">
             {post.likes ?? 0}
           </Text>
         </Pressable>
-        <Pressable className="active:opacity-70">
+        <Pressable>
           <Icon name="Bookmark" className="text-muted-foreground" />
         </Pressable>
-        <Pressable className="active:opacity-70">
+        <Pressable>
           <Icon name="Share2" className="text-muted-foreground" />
         </Pressable>
       </View>

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { transcribeRange, transcribeRangeSchema } from "../../queries/blog";
 import { posts, postsSchema } from "../../queries/posts";
 import { consoleLog } from "@acme/utils";
+import { TRPCError } from "@trpc/server";
 
 export const blogRoutes = createTRPCRouter({
   posts: publicProcedure.input(postsSchema).query(async (props) => {
@@ -47,6 +48,73 @@ export const blogRoutes = createTRPCRouter({
       return ctx.db.blog.update({
         where: { id: input.id },
         data: { deletedAt: new Date() },
+      });
+    }),
+
+  createBlog: publicProcedure
+    .input(
+      z.object({
+        title: z.string().trim().max(180).optional(),
+        content: z.string().trim().max(20000).optional(),
+        tags: z.array(z.string().trim().min(1).max(40)).max(10).optional(),
+        type: z.enum(["text", "audio", "image", "video"]).default("text"),
+        published: z.boolean().default(false),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const title = input.title?.trim() ?? "";
+      const body = input.content?.trim() ?? "";
+      const normalizedContent = [title, body].filter(Boolean).join("\n\n").trim();
+
+      if (!normalizedContent) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Title or content is required.",
+        });
+      }
+
+      const now = new Date();
+      const uniqueTags = Array.from(
+        new Set(
+          (input.tags ?? [])
+            .map((tag) => tag.trim())
+            .filter(Boolean)
+            .map((tag) => (tag.startsWith("#") ? tag.slice(1) : tag)),
+        ),
+      ).slice(0, 10);
+
+      return ctx.db.$transaction(async (db) => {
+        const blog = await db.blog.create({
+          data: {
+            type: input.type,
+            content: normalizedContent,
+            blogDate: now,
+            published: input.published,
+            publishedAt: input.published ? now : null,
+            status: input.published ? "published" : "draft",
+            meta: {
+              title: title || null,
+              tags: uniqueTags,
+            },
+          },
+        });
+
+        for (const tagTitle of uniqueTags) {
+          const tag = await db.tags.upsert({
+            where: { title: tagTitle },
+            create: { title: tagTitle },
+            update: {},
+          });
+
+          await db.blogTags.create({
+            data: {
+              blogId: blog.id,
+              tagId: tag.id,
+            },
+          });
+        }
+
+        return blog;
       });
     }),
 

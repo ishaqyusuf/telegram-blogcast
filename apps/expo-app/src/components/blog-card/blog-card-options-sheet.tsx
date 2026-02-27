@@ -22,7 +22,7 @@ function ActionRow({
   return (
     <Pressable
       onPress={onPress}
-      className="flex-row items-center justify-between px-4 py-3 active:bg-muted"
+      className="flex-row items-center justify-between px-4 py-3"
     >
       <View className="flex-row items-center gap-3">
         <Icon

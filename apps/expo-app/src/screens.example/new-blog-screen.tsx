@@ -15,13 +15,13 @@ import {
 
 const Header = () => (
   <View className="flex-row items-center justify-between px-4 py-3 bg-background/80 border-b border-border sticky top-0 z-50">
-    <Pressable className="py-2 active:opacity-60">
+    <Pressable className="py-2">
       <Text className="text-sm font-medium text-muted-foreground">Cancel</Text>
     </Pressable>
     <Text className="text-base font-bold text-foreground tracking-tight">
       New Story
     </Text>
-    <Pressable className="flex-row items-center gap-1.5 py-2 active:opacity-60">
+    <Pressable className="flex-row items-center gap-1.5 py-2">
       <Icon name="FolderOpen" className="size-sm text-accent" />
       <Text className="text-sm font-semibold text-accent">Drafts</Text>
     </Pressable>
@@ -33,7 +33,7 @@ const MediaUpload = () => (
     <Text className="text-xs font-bold uppercase tracking-widest text-muted-foreground px-1">
       Media
     </Text>
-    <Pressable className="group border-2 border-dashed border-border rounded-2xl p-8 items-center justify-center gap-4 bg-card active:border-accent active:bg-accent/5">
+    <Pressable className="group border-2 border-dashed border-border rounded-2xl p-8 items-center justify-center gap-4 bg-card">
       <View className="flex-row items-center gap-6">
         <View className="w-12 h-12 rounded-full bg-muted items-center justify-center">
           <Icon name="Image" className="size-lg text-muted-foreground" />
@@ -156,12 +156,12 @@ const PostDetails = () => (
 const Footer = () => (
   <View className="absolute bottom-0 left-0 w-full bg-background/95 border-t border-border px-4 pt-4 pb-8 z-50">
     <View className="flex-row items-center gap-4">
-      <Pressable className="flex-1 h-12 rounded-2xl border border-border items-center justify-center active:bg-muted">
+      <Pressable className="flex-1 h-12 rounded-2xl border border-border items-center justify-center">
         <Text className="text-sm font-bold text-muted-foreground">
           Save as Draft
         </Text>
       </Pressable>
-      <Pressable className="flex-[1.5] h-12 rounded-2xl bg-foreground items-center justify-center flex-row gap-2 shadow-sm active:opacity-90">
+      <Pressable className="flex-[1.5] h-12 rounded-2xl bg-foreground items-center justify-center flex-row gap-2 shadow-sm">
         <Text className="text-sm font-bold text-background">Publish Story</Text>
         <Icon name="Send" className="size-md text-background" />
       </Pressable>

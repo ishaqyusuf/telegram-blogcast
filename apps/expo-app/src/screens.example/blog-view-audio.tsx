@@ -9,17 +9,17 @@ import { View, Text, ScrollView, Pressable, Image } from "react-native";
 
 const Header = () => (
   <View className="flex-row items-center justify-between px-4 py-3 bg-background/90 sticky top-0 z-50">
-    <Pressable className="size-10 items-center justify-center rounded-full active:bg-muted">
+    <Pressable className="size-10 items-center justify-center rounded-full">
       <Icon name="ArrowLeft" className="text-foreground" />
     </Pressable>
     <Text className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
       Now Playing
     </Text>
     <View className="flex-row items-center gap-2">
-      <Pressable className="size-10 items-center justify-center rounded-full active:bg-muted">
+      <Pressable className="size-10 items-center justify-center rounded-full">
         <Icon name="Share" className="text-foreground" />
       </Pressable>
-      <Pressable className="size-10 items-center justify-center rounded-full active:bg-muted">
+      <Pressable className="size-10 items-center justify-center rounded-full">
         <Icon name="MoreHorizontal" className="text-foreground" />
       </Pressable>
     </View>
@@ -45,7 +45,7 @@ const MainVisual = () => (
     </View>
 
     <View className="absolute top-4 left-4 z-20">
-      <Pressable className="flex-row items-center gap-1.5 px-3 py-1 bg-accent rounded-full shadow-sm active:opacity-90">
+      <Pressable className="flex-row items-center gap-1.5 px-3 py-1 bg-accent rounded-full shadow-sm">
         <Icon name="Edit3" className="size-4 text-accent-foreground" />
         <Text className="text-xs font-bold text-accent-foreground">
           Edit Blog
@@ -108,23 +108,23 @@ const PlayerControls = () => (
 
     {/* Buttons */}
     <View className="flex-row items-center justify-between">
-      <Pressable className="px-2 py-1 rounded-md bg-muted active:opacity-70">
+      <Pressable className="px-2 py-1 rounded-md bg-muted">
         <Text className="text-xs font-bold text-muted-foreground">1.0x</Text>
       </Pressable>
 
       <View className="flex-row items-center gap-6">
-        <Pressable className="p-2 active:opacity-50">
+        <Pressable className="p-2">
           <Icon name="RotateCcw" className="size-20 text-foreground" />
         </Pressable>
-        <Pressable className="size-16 bg-accent rounded-full items-center justify-center shadow-lg active:scale-95 active:opacity-90">
+        <Pressable className="size-16 bg-accent rounded-full items-center justify-center shadow-lg">
           <Icon name="Play" className="size-24 text-accent-foreground ml-1" />
         </Pressable>
-        <Pressable className="p-2 active:opacity-50">
+        <Pressable className="p-2">
           <Icon name="RotateCw" className="size-20 text-foreground" />
         </Pressable>
       </View>
 
-      <Pressable className="p-2 active:opacity-50">
+      <Pressable className="p-2">
         <Icon name="Volume2" className="size-5 text-muted-foreground" />
       </Pressable>
     </View>
@@ -147,7 +147,7 @@ const AuthorInfo = () => (
           Ahmed Al-Gharib
         </Text>
       </View>
-      <Pressable className="ml-auto px-4 py-1.5 rounded-full border border-border active:bg-muted">
+      <Pressable className="ml-auto px-4 py-1.5 rounded-full border border-border">
         <Text className="text-xs font-bold text-muted-foreground">Follow</Text>
       </Pressable>
     </View>
@@ -170,7 +170,7 @@ const AuthorInfo = () => (
         {["#تطوير_الذات", "#خواطر_مغترب", "#إسلاميات"].map((tag) => (
           <Pressable
             key={tag}
-            className="px-3 py-1 bg-muted rounded-lg active:opacity-70"
+            className="px-3 py-1 bg-muted rounded-lg"
           >
             <Text className="text-sm font-medium text-accent">{tag}</Text>
           </Pressable>
@@ -230,7 +230,7 @@ const CommentItem = ({
 
       {timestamp && (
         <Pressable
-          className={`flex-row items-center gap-1.5 px-2.5 py-1.5 rounded-lg shadow-sm active:scale-95 ${
+          className={`flex-row items-center gap-1.5 px-2.5 py-1.5 rounded-lg shadow-sm ${
             variant === "highlight" ? "bg-accent" : "bg-muted"
           }`}
         >
@@ -260,13 +260,13 @@ const CommentItem = ({
         variant === "highlight" ? "border-accent/20" : "border-border"
       }`}
     >
-      <Pressable className="flex-row items-center gap-1.5 active:opacity-60">
+      <Pressable className="flex-row items-center gap-1.5">
         <Icon name="Edit2" className="size-4 text-muted-foreground" />
         <Text className="text-xs font-semibold text-muted-foreground">
           Edit
         </Text>
       </Pressable>
-      <Pressable className="flex-row items-center gap-1.5 active:opacity-60">
+      <Pressable className="flex-row items-center gap-1.5">
         <Icon name="Trash2" className="size-4 text-muted-foreground" />
         <Text className="text-xs font-semibold text-muted-foreground">
           Delete
@@ -328,14 +328,14 @@ const CommentsSection = () => {
 const BottomNav = () => (
   <View className="absolute bottom-0 left-0 w-full bg-background border-t border-border px-2 pb-6 pt-2 z-50 shadow-sm">
     <View className="flex-row justify-between items-end w-full max-w-lg mx-auto relative">
-      <Pressable className="flex-col items-center gap-1 p-2 w-16 active:opacity-70">
+      <Pressable className="flex-col items-center gap-1 p-2 w-16">
         <Icon name="Home" className="size-20 text-muted-foreground" />
         <Text className="text-[10px] font-medium text-muted-foreground">
           Home
         </Text>
       </Pressable>
 
-      <Pressable className="flex-col items-center gap-1 p-2 w-16 active:opacity-70">
+      <Pressable className="flex-col items-center gap-1 p-2 w-16">
         <Icon name="Search" className="size-20 text-muted-foreground" />
         <Text className="text-[10px] font-medium text-muted-foreground">
           Search
@@ -343,19 +343,19 @@ const BottomNav = () => (
       </Pressable>
 
       <View className="relative -top-6">
-        <Pressable className="size-20 rounded-full bg-accent items-center justify-center shadow-lg active:scale-95 active:opacity-90 border-4 border-background">
+        <Pressable className="size-20 rounded-full bg-accent items-center justify-center shadow-lg border-4 border-background">
           <Icon name="Plus" className="size-24 text-accent-foreground" />
         </Pressable>
       </View>
 
-      <Pressable className="flex-col items-center gap-1 p-2 w-16 active:opacity-70">
+      <Pressable className="flex-col items-center gap-1 p-2 w-16">
         <Icon name="History" className="size-20 text-muted-foreground" />
         <Text className="text-[10px] font-medium text-muted-foreground">
           History
         </Text>
       </Pressable>
 
-      <Pressable className="flex-col items-center gap-1 p-2 w-16 active:opacity-70">
+      <Pressable className="flex-col items-center gap-1 p-2 w-16">
         <Icon name="User" className="size-20 text-muted-foreground" />
         <Text className="text-[10px] font-medium text-muted-foreground">
           Profile

@@ -90,7 +90,7 @@ const InitialLayout = () => {
           />
           <Stack.Screen name="blog-search" options={{ headerShown: false }} />
           <Stack.Screen
-            name="blog-view/[blogId]"
+            name="blog-view/[blogId]/index"
             options={{ headerShown: false }}
           />
           <Stack.Screen

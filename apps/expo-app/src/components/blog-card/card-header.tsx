@@ -41,7 +41,7 @@ export function CardHeader({
           </Text>
         </View>
         <Pressable
-          className="rounded-full p-1 active:bg-muted"
+          className="rounded-full p-1"
           onPress={(e) => {
             e.stopPropagation();
             onOpenOptions?.();

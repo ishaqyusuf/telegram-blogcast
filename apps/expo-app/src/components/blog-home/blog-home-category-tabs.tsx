@@ -32,9 +32,7 @@ export function BlogHomeCategoryTabs({ selected, onSelect }: Props) {
               key={cat}
               onPress={() => onSelect(cat)}
               className={`px-4 h-9 rounded-full items-center justify-center border ${
-                isActive
-                  ? "bg-accent border-accent"
-                  : "bg-card border-border active:bg-muted"
+                isActive ? "bg-accent border-accent" : "bg-card border-border"
               }`}
             >
               <Text

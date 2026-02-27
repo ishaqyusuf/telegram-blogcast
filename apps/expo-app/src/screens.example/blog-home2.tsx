@@ -24,7 +24,7 @@ const Header = () => (
       </Text>
     </View>
     <View className="flex-row items-center gap-3">
-      <Pressable className="relative p-2 rounded-full active:bg-muted">
+      <Pressable className="relative p-2 rounded-full">
         <Icon name="Bell" className="  text-muted-foreground" />
         <View className="absolute top-2 right-2 size-2 bg-destructive rounded-full border-2 border-background" />
       </Pressable>
@@ -49,9 +49,7 @@ const CategoryTabs = () => (
           <Pressable
             key={cat}
             className={`px-4 h-9 rounded-full items-center justify-center border ${
-              isActive
-                ? "bg-accent border-accent"
-                : "bg-card border-border active:bg-muted"
+              isActive ? "bg-accent border-accent" : "bg-card border-border"
             }`}
           >
             <Text
@@ -97,7 +95,7 @@ const CardHeader = ({
         <Text className="text-xs text-muted-foreground">{time}</Text>
       </View>
     </View>
-    <Pressable className="p-1 rounded-full active:bg-muted">
+    <Pressable className="p-1 rounded-full">
       <Icon name="MoreHorizontal" className=" text-muted-foreground" />
     </Pressable>
   </View>
@@ -129,16 +127,16 @@ const CardFooter = ({
       )}
     </View>
     <View className="flex-row items-center gap-4">
-      <Pressable className="flex-row items-center gap-1 active:opacity-70">
+      <Pressable className="flex-row items-center gap-1">
         <Icon name="Heart" className=" text-muted-foreground" />
         <Text className="text-xs font-medium text-muted-foreground">
           {likes}
         </Text>
       </Pressable>
-      <Pressable className="active:opacity-70">
+      <Pressable>
         <Icon name="Bookmark" className=" text-muted-foreground" />
       </Pressable>
-      <Pressable className="active:opacity-70">
+      <Pressable>
         <Icon name="Share2" className=" text-muted-foreground" />
       </Pressable>
     </View>
@@ -171,7 +169,7 @@ const AudioCard = () => (
     </View>
 
     <View className="bg-background rounded-xl p-3 mb-1 border border-border flex-row items-center gap-3">
-      <Pressable className="size-10 rounded-full bg-accent items-center justify-center shadow-md active:opacity-90">
+      <Pressable className="size-10 rounded-full bg-accent items-center justify-center shadow-md">
         <Icon name="Play" className=" text-accent-foreground ml-0.5" />
       </Pressable>
 
@@ -226,7 +224,7 @@ const VideoCard = () => (
         resizeMode="cover"
       />
       <View className="absolute inset-0 items-center justify-center">
-        <Pressable className="size-12 rounded-full bg-accent/90 items-center justify-center shadow-lg active:scale-95">
+        <Pressable className="size-12 rounded-full bg-accent/90 items-center justify-center shadow-lg">
           <Icon name="Play" className=" text-accent-foreground ml-1" />
         </Pressable>
       </View>
@@ -255,11 +253,11 @@ const TextCard = () => (
 
     <View className="flex-row items-center justify-end mt-3 pt-3 border-t border-border">
       <View className="flex-row items-center gap-4">
-        <Pressable className="flex-row items-center gap-1 active:opacity-70">
+        <Pressable className="flex-row items-center gap-1">
           <Icon name="Heart" className=" text-muted-foreground" />
           <Text className="text-xs font-medium text-muted-foreground">42</Text>
         </Pressable>
-        <Pressable className="active:opacity-70">
+        <Pressable>
           <Icon name="Share2" className=" text-muted-foreground" />
         </Pressable>
       </View>
@@ -287,10 +285,10 @@ const MiniPlayer = () => (
       </View>
     </View>
     <View className="flex-row items-center gap-3">
-      <Pressable className="active:opacity-70">
+      <Pressable>
         <Icon name="Play" className=" text-foreground" />
       </Pressable>
-      <Pressable className="active:opacity-70">
+      <Pressable>
         <Icon name="X" className=" text-muted-foreground" />
       </Pressable>
     </View>
@@ -298,7 +296,7 @@ const MiniPlayer = () => (
 );
 
 const FAB = () => (
-  <Pressable className="absolute bottom-32 right-4 size-14 bg-accent rounded-full shadow-lg items-center justify-center active:scale-95 active:opacity-90 z-40">
+  <Pressable className="absolute bottom-32 right-4 size-14 bg-accent rounded-full shadow-lg items-center justify-center z-40">
     <Icon name="Mic" className=" text-accent-foreground" />
   </Pressable>
 );

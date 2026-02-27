@@ -72,7 +72,7 @@ export default function AccessUnavailableScreen() {
             onPress={(e) => {
               auth.onLogout();
             }}
-            className="group relative flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary px-6 text-sm font-semibold text-primary-foreground transition-all hover:bg-primary/90 active:scale-[0.98] focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2 focus:ring-offset-background flex-row"
+            className="group relative flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary px-6 text-sm font-semibold text-primary-foreground transition-all hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2 focus:ring-offset-background flex-row"
           >
             <Icon name="LogOut" className="size-6" />
             {/* <LogOut

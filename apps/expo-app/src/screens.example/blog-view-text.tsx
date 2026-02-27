@@ -7,17 +7,17 @@ import { View, Text, ScrollView, Pressable, Image } from "react-native";
 
 const Header = () => (
   <View className="flex-row items-center justify-between px-4 py-3 bg-background/95 border-b border-border sticky top-0 z-50 backdrop-blur-md">
-    <Pressable className="w-10 h-10 items-center justify-center rounded-full active:bg-muted">
+    <Pressable className="w-10 h-10 items-center justify-center rounded-full">
       <Icon name="ArrowLeft" className="size-base text-muted-foreground" />
     </Pressable>
     <Text className="text-sm font-bold uppercase tracking-tight text-foreground opacity-90">
       Alghurobaa Daily
     </Text>
     <View className="flex-row items-center gap-1 -mr-2">
-      <Pressable className="w-10 h-10 items-center justify-center rounded-full active:bg-muted">
+      <Pressable className="w-10 h-10 items-center justify-center rounded-full">
         <Icon name="Share2" className="size-md text-muted-foreground" />
       </Pressable>
-      <Pressable className="w-10 h-10 items-center justify-center rounded-full active:bg-muted">
+      <Pressable className="w-10 h-10 items-center justify-center rounded-full">
         <Icon name="Bookmark" className="size-base text-muted-foreground" />
       </Pressable>
     </View>
@@ -97,7 +97,7 @@ const Tags = () => (
     {["#اغتراب", "#حياة", "#خواطر", "#فلسفة"].map((tag) => (
       <Pressable
         key={tag}
-        className="px-4 py-1.5 rounded-full bg-muted/50 border border-border active:border-accent"
+        className="px-4 py-1.5 rounded-full bg-muted/50 border border-border"
       >
         <Text className="text-sm font-medium text-muted-foreground">{tag}</Text>
       </Pressable>
@@ -106,7 +106,7 @@ const Tags = () => (
 );
 
 const CommentButton = () => (
-  <Pressable className="w-full bg-card border border-border py-4 rounded-2xl flex-row items-center justify-center gap-2 active:bg-muted mb-8 shadow-sm">
+  <Pressable className="w-full bg-card border border-border py-4 rounded-2xl flex-row items-center justify-center gap-2 mb-8 shadow-sm">
     <Icon name="MessageSquare" className="size-md text-accent" />
     <Text className="text-base font-semibold text-foreground">
       View Comments (12)
@@ -140,13 +140,13 @@ const FloatingPlayer = () => (
       </View>
 
       <View className="flex-row items-center gap-1">
-        <Pressable className="w-9 h-9 items-center justify-center active:opacity-60">
+        <Pressable className="w-9 h-9 items-center justify-center">
           <Icon name="SkipBack" className=" text-muted-foreground" />
         </Pressable>
-        <Pressable className="w-10 h-10 items-center justify-center bg-foreground rounded-full shadow-sm active:scale-95">
+        <Pressable className="w-10 h-10 items-center justify-center bg-foreground rounded-full shadow-sm">
           <Icon name="Play" className="text-background ml-0.5" />
         </Pressable>
-        <Pressable className="w-9 h-9 items-center justify-center active:opacity-60">
+        <Pressable className="w-9 h-9 items-center justify-center">
           <Icon name="SkipForward" className=" text-muted-foreground" />
         </Pressable>
       </View>
@@ -172,7 +172,7 @@ const BottomNav = () => (
       {/* FAB Spacer & Button */}
       <View className="w-16" />
       <View className="absolute -top-7 left-1/2 -ml-8">
-        <Pressable className="w-16 h-16 bg-accent rounded-full shadow-lg items-center justify-center border-[6px] border-background active:scale-95">
+        <Pressable className="w-16 h-16 bg-accent rounded-full shadow-lg items-center justify-center border-[6px] border-background">
           <Icon name="Plus" className="size-lg text-accent-foreground" />
         </Pressable>
       </View>

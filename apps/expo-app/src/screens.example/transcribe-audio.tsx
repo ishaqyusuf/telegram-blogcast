@@ -116,7 +116,7 @@ const TranscriptSheet = () => (
         <View className="flex-row items-center gap-3">
           <TimeInput label="Start" time="12:45" icon="Clock" />
 
-          <Pressable className="size-14 rounded-full bg-primary items-center justify-center shadow-lg shadow-primary/30 z-10 active:scale-95 active:opacity-90">
+          <Pressable className="size-14 rounded-full bg-primary items-center justify-center shadow-lg shadow-primary/30 z-10">
             <Icon
               name="Play"
               className="size-lg text-primary-foreground ml-1"
@@ -128,7 +128,7 @@ const TranscriptSheet = () => (
 
         <RangeSlider />
 
-        <Pressable className="w-full h-14 bg-primary rounded-xl flex-row items-center justify-center gap-2 shadow-lg shadow-primary/20 active:opacity-90 active:scale-[0.99]">
+        <Pressable className="w-full h-14 bg-primary rounded-xl flex-row items-center justify-center gap-2 shadow-lg shadow-primary/20">
           <Icon name="Captions" className="size-md text-primary-foreground" />
           <Text className="text-base font-bold text-primary-foreground">
             Start Generating Transcript
@@ -145,13 +145,13 @@ const TranscriptSheet = () => (
             Generated Text
           </Text>
           <View className="flex-row gap-2">
-            <Pressable className="flex-row items-center gap-1.5 px-3 py-1.5 bg-muted rounded-full active:opacity-80">
+            <Pressable className="flex-row items-center gap-1.5 px-3 py-1.5 bg-muted rounded-full">
               <Icon name="Copy" className="size-sm text-muted-foreground" />
               <Text className="text-xs font-medium text-muted-foreground">
                 Copy
               </Text>
             </Pressable>
-            <Pressable className="flex-row items-center gap-1.5 px-3 py-1.5 bg-muted rounded-full active:opacity-80">
+            <Pressable className="flex-row items-center gap-1.5 px-3 py-1.5 bg-muted rounded-full">
               <Icon name="Share2" className="size-sm text-muted-foreground" />
               <Text className="text-xs font-medium text-muted-foreground">
                 Share

@@ -13,14 +13,14 @@ const RecentSearchItem = ({ text }: { text: string }) => (
       <Icon name="Clock" className="size-[18px] text-muted-foreground" />
       <Text className="text-foreground font-medium">{text}</Text>
     </View>
-    <Pressable className="p-1 active:opacity-50">
+    <Pressable className="p-1">
       <Icon name="X" className="size-4 text-muted-foreground" />
     </Pressable>
   </View>
 );
 
 const Tag = ({ text }: { text: string }) => (
-  <Pressable className="bg-card border border-border px-4 py-2 rounded-full active:bg-muted">
+  <Pressable className="bg-card border border-border px-4 py-2 rounded-full">
     <Text className="text-sm text-foreground">{text}</Text>
   </Pressable>
 );
@@ -35,7 +35,7 @@ export default function BlogSearch({ onBackPress }: BlogSearchProps) {
         <View className="flex-row items-center px-4 py-3 gap-3 border-b border-border">
           <Pressable
             onPress={onBackPress}
-            className="p-2 -ml-2 rounded-full active:bg-muted"
+            className="p-2 -ml-2 rounded-full"
           >
             <Icon name="ArrowLeft" className="size-16 text-foreground" />
           </Pressable>

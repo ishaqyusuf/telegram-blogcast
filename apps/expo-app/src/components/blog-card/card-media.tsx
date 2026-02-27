@@ -71,7 +71,7 @@ function CardAudio({ post }: { post: BlogItem }) {
 
   return (
     <View className="mb-1 flex-row items-center gap-3 rounded-xl border border-border bg-background p-3">
-      <Pressable className="size-10 items-center justify-center rounded-full bg-accent active:opacity-90">
+      <Pressable className="size-10 items-center justify-center rounded-full bg-accent">
         <Icon name="Play" className="ml-0.5 text-accent-foreground" />
       </Pressable>
       <View className="flex-1 gap-1.5">
@@ -104,7 +104,7 @@ function CardImage({ post }: { post: BlogItem }) {
         router.push({
           pathname: "/blog-image-view",
           params: {
-            uri: imageUrl,
+            uri: encodeURIComponent(imageUrl),
             title: post.caption || post.audio?.title || "Post image",
           },
         });
