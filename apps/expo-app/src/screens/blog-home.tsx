@@ -1,5 +1,4 @@
-import { useMemo } from "react";
-import { Text, View } from "react-native";
+import { View } from "react-native";
 import { LegendList } from "@legendapp/list";
 
 import { BlogCard } from "@/components/blog-card";
@@ -11,7 +10,6 @@ import { HomeBottomNav } from "@/components/home-bottom-footer";
 import { useInfiniteLoader } from "@/components/infinite-loader";
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
-import { Button } from "@/components/ui/button";
 
 export default function BlogHomeScreen() {
   const {
@@ -19,18 +17,14 @@ export default function BlogHomeScreen() {
     hasNextPage,
     isFetching,
     fetchNextPage,
-    refetch,
   } = useInfiniteLoader({
-    route: _trpc?.podcasts.posts,
+    route: _trpc?.blog.posts,
   });
 
   return (
     <View className="flex-1 bg-background">
       <SafeArea>
         <BlogHomeHeader />
-        <Button onPress={() => refetch()} className="mb-4">
-          <Text>Text</Text>
-        </Button>
         <View className="flex-1 relative">
           <LegendList
             data={posts}

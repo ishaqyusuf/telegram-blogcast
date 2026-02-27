@@ -1,9 +1,6 @@
 import { useInView } from "react-intersection-observer";
 import { useDeferredValue, useEffect, useMemo } from "react";
-import {
-  useInfiniteQuery,
-  useSuspenseInfiniteQuery,
-} from "@tanstack/react-query";
+import { useSuspenseInfiniteQuery } from "@tanstack/react-query";
 import { consoleLog } from "@acme/utils";
 interface Props<T> {
   filter?;
@@ -39,7 +36,7 @@ export function useInfiniteLoader<
     isRefetching,
     isPending,
     error,
-  } = useInfiniteQuery(infiniteQueryOptions);
+  } = useSuspenseInfiniteQuery(infiniteQueryOptions);
   consoleLog("Infinite loader data:", {
     data,
     hasNextPage,
