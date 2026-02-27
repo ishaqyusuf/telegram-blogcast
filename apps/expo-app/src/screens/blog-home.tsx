@@ -1,12 +1,14 @@
-import { useEffect, useMemo } from "react";
-import { Text, View } from "react-native";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Alert, Text, View } from "react-native";
 import { LegendList } from "@legendapp/list";
+import { useMutation } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 import { BlogCard } from "@/components/blog-card";
 import { BlogHomeAlbums } from "@/components/blog-home/blog-home-albums";
 import { BlogHomeAnalytics } from "@/components/blog-home/blog-home-analytics";
 import { BlogHomeBooks } from "@/components/blog-home/blog-home-books";
+import type { BlogItem } from "@/components/blog-card";
 import {
   BlogCategory,
   BlogHomeCategoryTabs,
@@ -22,6 +24,7 @@ import { HomeBottomNav } from "@/components/home-bottom-footer";
 import { useInfiniteLoader } from "@/components/infinite-loader";
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
+import { invalidateQueries } from "@/lib/trpc";
 
 export default function BlogHomeScreen() {
   const router = useRouter();
@@ -84,8 +87,37 @@ export default function BlogHomeScreen() {
     },
     route: _trpc?.blog.posts,
   });
+  const [hiddenPostIds, setHiddenPostIds] = useState<Set<number>>(new Set());
+  const deleteBlogMutation = useMutation(
+    _trpc.blog.deleteBlog.mutationOptions({
+      onSettled: () => {
+        invalidateQueries("infinite", ["blog.posts"]);
+      },
+    }),
+  );
+  const visiblePosts = useMemo(
+    () => posts.filter((post) => !hiddenPostIds.has(post.id)),
+    [posts, hiddenPostIds],
+  );
+  const handleDeletePost = useCallback(
+    async (post: BlogItem) => {
+      setHiddenPostIds((prev) => new Set(prev).add(post.id));
+      try {
+        await deleteBlogMutation.mutateAsync({ id: post.id });
+      } catch {
+        setHiddenPostIds((prev) => {
+          const next = new Set(prev);
+          next.delete(post.id);
+          return next;
+        });
+        Alert.alert("Delete failed", "Could not delete this post. Try again.");
+      }
+    },
+    [deleteBlogMutation],
+  );
 
   useEffect(() => {
+    setHiddenPostIds(new Set());
     refetch();
   }, [category, refetch]);
 
@@ -95,10 +127,10 @@ export default function BlogHomeScreen() {
         <BlogHomeHeader />
         <View className="flex-1 relative">
           <LegendList
-            data={posts}
+            data={visiblePosts}
             renderItem={({ item }) => (
               <View className="px-4">
-                <BlogCard post={item} />
+                <BlogCard post={item} onDelete={handleDeletePost} />
               </View>
             )}
             keyExtractor={(item) => String(item.id)}

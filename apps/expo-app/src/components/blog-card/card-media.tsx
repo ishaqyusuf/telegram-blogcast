@@ -1,4 +1,5 @@
 import { MAX_LINE, normalizeExternalUrl, splitTextLinesWithLinks } from "@acme/blog";
+import { useRouter } from "expo-router";
 import { Image, I18nManager, Linking, Pressable, Text, View } from "react-native";
 
 import { minuteToString } from "@/lib/utils";
@@ -91,13 +92,26 @@ function CardAudio({ post }: { post: BlogItem }) {
 }
 
 function CardImage({ post }: { post: BlogItem }) {
+  const router = useRouter();
   const imageUrl = getPrimaryImageUrl(post);
   if (!imageUrl) return null;
 
   return (
-    <View className="mb-3 overflow-hidden rounded-xl border border-border bg-black">
+    <Pressable
+      className="mb-3 overflow-hidden rounded-xl border border-border bg-black"
+      onPress={(e) => {
+        e.stopPropagation();
+        router.push({
+          pathname: "/blog-image-view",
+          params: {
+            uri: imageUrl,
+            title: post.caption || post.audio?.title || "Post image",
+          },
+        });
+      }}
+    >
       <Image source={{ uri: imageUrl }} className="h-44 w-full" resizeMode="cover" />
-    </View>
+    </Pressable>
   );
 }
 

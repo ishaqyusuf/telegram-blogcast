@@ -8,9 +8,11 @@ import { getCardTitle, getInitials, getPostDateLabel } from "./utils";
 export function CardHeader({
   post,
   variant,
+  onOpenOptions,
 }: {
   post: BlogItem;
   variant: BlogCardVariant;
+  onOpenOptions?: () => void;
 }) {
   const title = getCardTitle(post);
 
@@ -38,7 +40,13 @@ export function CardHeader({
             {variant}
           </Text>
         </View>
-        <Pressable className="rounded-full p-1 active:bg-muted">
+        <Pressable
+          className="rounded-full p-1 active:bg-muted"
+          onPress={(e) => {
+            e.stopPropagation();
+            onOpenOptions?.();
+          }}
+        >
           <Icon name="MoreHorizontal" className="text-muted-foreground" />
         </Pressable>
       </View>

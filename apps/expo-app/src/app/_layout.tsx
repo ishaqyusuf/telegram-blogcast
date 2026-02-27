@@ -98,15 +98,45 @@ const InitialLayout = () => {
             options={{ headerShown: false, presentation: "modal" }}
           />
           <Stack.Screen name="channels" options={{ headerShown: false }} />
-          <Stack.Screen name="channels/[channelId]" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="channels/[channelId]"
+            options={{ headerShown: false }}
+          />
           <Stack.Screen name="play-history" options={{ headerShown: false }} />
           <Stack.Screen name="search" options={{ headerShown: false }} />
           <Stack.Screen name="albums" options={{ headerShown: false }} />
-          <Stack.Screen name="albums/[albumId]" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="albums/[albumId]"
+            options={{ headerShown: false }}
+          />
           <Stack.Screen name="book-fetch" options={{ headerShown: false }} />
           <Stack.Screen name="books" options={{ headerShown: false }} />
-          <Stack.Screen name="books/[bookId]" options={{ headerShown: false }} />
-          <Stack.Screen name="books/[bookId]/reader/[pageId]" options={{ headerShown: false }} />
+          <Stack.Screen
+            name="books/[bookId]"
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="books/[bookId]/reader/[pageId]"
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="blog-options/[blogId]/index"
+            options={{
+              headerShown: false,
+              presentation: "formSheet",
+              sheetGrabberVisible: true,
+              sheetAllowedDetents: [0.4, 0.7],
+              contentStyle: { backgroundColor: "transparent" },
+            }}
+          />
+          <Stack.Screen
+            name="blog-image-view"
+            options={{
+              headerShown: false,
+              presentation: "fullScreenModal",
+              animation: "fade",
+            }}
+          />
           <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="+not-found" />
         </Stack>

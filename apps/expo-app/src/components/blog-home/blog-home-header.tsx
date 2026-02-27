@@ -1,5 +1,6 @@
 import { useRouter } from "expo-router";
 import { Pressable, Text, View } from "react-native";
+import { Path, Rect, Svg } from "react-native-svg";
 
 import { Icon } from "@/components/ui/icon";
 
@@ -15,15 +16,17 @@ export function BlogHomeHeader() {
   const router = useRouter();
 
   return (
-    <View className="px-4 pt-3 pb-4 bg-background">
+    <View className="bg-background px-4 pb-4 pt-3">
       <View className="flex-row items-center justify-between">
-        <View className="gap-0.5">
-          <Text className="text-2xl font-bold text-foreground tracking-tight">
-            {greeting}
-          </Text>
-          <View className="flex-row items-center gap-1.5">
-            <Icon name="AudioWaveform" size={14} className="text-primary" />
-            <Text className="text-sm text-muted-foreground font-medium">
+        <View className="flex-row items-center gap-3">
+          <View className="items-center justify-center rounded-lg bg-accent p-1.5">
+            <Logo className="text-accent-foreground" />
+          </View>
+          <View className="gap-0.5">
+            <Text className="text-2xl font-bold tracking-tight text-foreground">
+              {greeting}
+            </Text>
+            <Text className="text-sm font-medium text-muted-foreground">
               Alghurobaa
             </Text>
           </View>
@@ -47,5 +50,54 @@ export function BlogHomeHeader() {
         </View>
       </View>
     </View>
+  );
+}
+
+function Logo({ className }: { className?: string }) {
+  return (
+    <Svg
+      className={className}
+      width={20}
+      height={20}
+      viewBox="0 0 24 24"
+      fill="none"
+      accessibilityRole="image"
+      accessibilityLabel="Alghurobaa logo"
+    >
+      <Path
+        d="M12 3.5L14.75 6.25H9.25L12 3.5Z"
+        fill="currentColor"
+        opacity={0.95}
+      />
+      <Rect
+        x={10.15}
+        y={6.7}
+        width={3.7}
+        height={10.3}
+        rx={1.4}
+        fill="currentColor"
+      />
+      <Path
+        d="M7.8 8.2C6.4 9.2 5.55 10.8 5.55 12.65C5.55 14.5 6.4 16.05 7.8 17.05"
+        stroke="currentColor"
+        strokeWidth={1.9}
+        strokeLinecap="round"
+      />
+      <Path
+        d="M16.2 8.2C17.6 9.2 18.45 10.8 18.45 12.65C18.45 14.5 17.6 16.05 16.2 17.05"
+        stroke="currentColor"
+        strokeWidth={1.9}
+        strokeLinecap="round"
+      />
+      <Rect
+        x={8.3}
+        y={17.55}
+        width={7.4}
+        height={2.25}
+        rx={1.1}
+        fill="currentColor"
+        opacity={0.9}
+      />
+    </Svg>
   );
 }
