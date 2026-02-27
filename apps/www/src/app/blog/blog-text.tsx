@@ -1,15 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
-
-function isArabicLine(text: string) {
-    return /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/.test(text);
-}
+import { MAX_LINE, isArabicLine, splitTextLinesWithLinks } from "@acme/blog";
 
 export function BlogText({ content }: { content: string }) {
     const [expanded, setExpanded] = useState(false);
-    const lines = useMemo(() => content.split("\n"), [content]);
-    const shouldTruncate = content.length > 280 || lines.length > 6;
+    const lines = useMemo(() => splitTextLinesWithLinks(content), [content]);
+    const shouldTruncate = content.length > 280 || lines.length > MAX_LINE;
+    const truncatedStyle = !expanded && shouldTruncate
+        ? { maxHeight: `${MAX_LINE * 2.1}rem` }
+        : undefined;
 
     return (
         <div>
@@ -17,13 +17,15 @@ export function BlogText({ content }: { content: string }) {
                 className={[
                     "space-y-1 text-[15px] leading-7 text-zinc-200",
                     !expanded && shouldTruncate
-                        ? "relative max-h-[12.5rem] overflow-hidden"
+                        ? "relative overflow-hidden"
                         : "",
                 ].join(" ")}
+                style={truncatedStyle}
             >
-                {lines.map((line, idx) => {
-                    const rtl = isArabicLine(line);
-                    if (!line.trim()) {
+                {lines.map((lineSegments, idx) => {
+                    const rawLine = lineSegments.map((part) => part.text).join("");
+                    const rtl = isArabicLine(rawLine);
+                    if (!rawLine.trim()) {
                         return <div key={`line-${idx}`} className="h-3" />;
                     }
                     return (
@@ -32,7 +34,27 @@ export function BlogText({ content }: { content: string }) {
                             dir={rtl ? "rtl" : "ltr"}
                             className={rtl ? "text-right" : "text-left"}
                         >
-                            {line}
+                            {lineSegments.map((segment, segmentIdx) => {
+                                if (segment.type === "link" && segment.href) {
+                                    return (
+                                        <a
+                                            key={`seg-${idx}-${segmentIdx}`}
+                                            href={segment.href}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="underline text-emerald-300 hover:text-emerald-200"
+                                        >
+                                            {segment.text}
+                                        </a>
+                                    );
+                                }
+
+                                return (
+                                    <span key={`seg-${idx}-${segmentIdx}`}>
+                                        {segment.text}
+                                    </span>
+                                );
+                            })}
                         </p>
                     );
                 })}
@@ -53,4 +75,3 @@ export function BlogText({ content }: { content: string }) {
         </div>
     );
 }
-

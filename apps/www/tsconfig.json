@@ -7,6 +7,7 @@
         "paths": {
             "@/*": ["./src/*"],
             "@api/*": ["../api/src/*"],
+            "@acme/blog": ["../../packages/blog/src/index.ts"],
             "@telegram/*": ["../../packages/telegram/src/*"]
         },
         "strict": false,
@@ -27,4 +28,3 @@
     ],
     "exclude": ["node_modules", ".next"]
 }
-

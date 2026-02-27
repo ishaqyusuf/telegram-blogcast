@@ -13,6 +13,7 @@
     "paths": {
       "@/*": ["./src/*"],
       "@api/*": ["../api/src/*"],
+      "@acme/blog": ["../../packages/blog/src/index.ts"],
       "@root/*": ["./*"],
       "@store/*": ["./src/store/*"],
       "@utils/*": ["./src/utils/*"],

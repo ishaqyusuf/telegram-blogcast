@@ -12,6 +12,13 @@ posts: publicProcedure
 */
 export const postsSchema = z.object({
   channelId: z.number().optional(),
+  q: z.string().optional(),
+  cursor: z.union([z.string(), z.number()]).optional(),
+  size: z.number().optional(),
+  sort: z.string().optional(),
+  category: z
+    .enum(["all", "audio", "text", "picture", "video", "likes", "saved"])
+    .optional(),
 });
 export type PostsSchema = z.infer<typeof postsSchema>;
 
@@ -20,7 +27,7 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
   const { response, searchMeta, where } = await composeQueryData(
     query,
     wherePosts(query),
-    db.blog
+    db.blog,
   );
   const data = await db.blog.findMany({
     where,
@@ -86,8 +93,8 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
           : ((Array.isArray(fn)
               ? []
               : typeof fn === "object"
-              ? {}
-              : null) as T);
+                ? {}
+                : null) as T);
       const audio = isType("audio", blogAudio());
       return {
         type,
@@ -101,7 +108,7 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
           "image",
           blog.medias.map(({ file, fileId, title }) => ({
             fileId,
-          }))
+          })),
         ),
         doc: blogPdf(type, blog),
         tags: blog.blogTags?.map((bt) => bt.tags?.title).filter(Boolean) ?? [],
@@ -113,13 +120,56 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
         _count: { comments: blog._count?.blogs ?? 0 },
         // images: blog.medias,
       };
-    })
+    }),
   );
 }
 function wherePosts(query: PostsSchema) {
-  return {
+  const category = query?.category;
+  const where = {
+    deletedAt: null,
     ...(query.channelId ? { channelId: query.channelId } : {}),
-  };
+  } as any;
+
+  if (!category || category === "all") {
+    return where;
+  }
+
+  if (category === "picture") {
+    where.type = "image";
+    return where;
+  }
+
+  if (category === "audio" || category === "text" || category === "video") {
+    where.type = category;
+    return where;
+  }
+
+  if (category === "likes") {
+    where.interactions = {
+      some: {
+        deletedAt: null,
+        type: "like",
+      },
+    };
+    return where;
+  }
+
+  if (category === "saved") {
+    where.blogTags = {
+      some: {
+        deletedAt: null,
+        tags: {
+          is: {
+            deletedAt: null,
+            title: "saved",
+          },
+        },
+      },
+    };
+    return where;
+  }
+
+  return where;
 }
 function blogContent(type: BlogType, content) {
   if (type == "text") return content;
