@@ -4,15 +4,22 @@
 
 // Solution for prisma edge: @link https://github.com/prisma/prisma/issues/22050#issuecomment-1821208388
 // import { PrismaClient } from "@prisma/client/edge";
-// import { withAccelerate } from "@prisma/extension-accelerate";
 
+import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient, Prisma } from "@prisma/client";
-// import { withAccelerate } from "@prisma/extension-accelerate";
+import { Pool } from "pg";
 
 export * from "@prisma/client";
 
 // Learn more about instantiating PrismaClient in Next.js here: https://www.prisma.io/docs/data-platform/accelerate/getting-started
 const prismaClientSingleton = () => {
+  const connectionString = process.env.POSTGRES_URL;
+  if (!connectionString) {
+    throw new Error(
+      "Missing POSTGRES_URL. Set a direct Postgres connection string for Prisma adapter-pg.",
+    );
+  }
+
   const clientOptions: Prisma.PrismaClientOptions = {
     log:
       process.env.NODE_ENV === "development"
@@ -22,19 +29,14 @@ const prismaClientSingleton = () => {
             "warn",
           ]
         : ["error"],
+    adapter: new PrismaPg(
+      new Pool({
+        connectionString,
+      }),
+    ),
   };
 
-  // const accelerateUrl = process.env.POSTGRES_URL;
-  // if (accelerateUrl) {
-  //   (
-  //     clientOptions as Prisma.PrismaClientOptions & {
-  //       accelerateUrl?: string;
-  //     }
-  //   ).accelerateUrl = accelerateUrl;
-  // }
-
   return new PrismaClient(clientOptions);
-  // .$extends(withAccelerate());
 };
 
 type PrismaClientSingleton = ReturnType<typeof prismaClientSingleton>;
