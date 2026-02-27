@@ -56,6 +56,7 @@ export function useInfiniteLoader<
     ...tableData,
     queryData: data,
     hasNextPage,
+    fetchNextPage,
     isFetching,
     refetch,
     isRefetching,

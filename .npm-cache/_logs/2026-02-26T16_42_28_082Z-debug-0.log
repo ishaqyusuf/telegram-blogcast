@@ -1,0 +1,52 @@
+0 verbose cli /opt/homebrew/Cellar/node/25.4.0/bin/node /opt/homebrew/bin/npm
+1 info using npm@11.7.0
+2 info using node@v25.4.0
+3 silly config load:file:/opt/homebrew/lib/node_modules/npm/npmrc
+4 info config found workspace root at /Users/M1PRO/Documents/code/al-ghurobaa
+5 silly config load:file:/Users/M1PRO/Documents/code/al-ghurobaa/.npmrc
+6 silly config load:file:/Users/M1PRO/.npmrc
+7 silly config load:file:/opt/homebrew/etc/npmrc
+8 verbose title npm install prisma@^7.0.0 @prisma/client@^7.0.0
+9 verbose argv "install" "prisma@^7.0.0" "@prisma/client@^7.0.0" "--no-package-lock"
+10 verbose logfile logs-max:10 dir:/Users/M1PRO/Documents/code/al-ghurobaa/.npm-cache/_logs/2026-02-26T16_42_28_082Z-
+11 verbose logfile /Users/M1PRO/Documents/code/al-ghurobaa/.npm-cache/_logs/2026-02-26T16_42_28_082Z-debug-0.log
+12 silly logfile done cleaning log files
+13 http fetch GET https://registry.npmjs.org/npm attempt 1 failed with ENOTFOUND
+14 silly packumentCache heap:4496293888 maxSize:1124073472 maxEntrySize:562036736
+15 silly idealTree buildDeps
+16 http fetch GET https://registry.npmjs.org/npm attempt 2 failed with ENOTFOUND
+17 silly placeDep ROOT @acme/api@ OK for:  want: file:/Users/M1PRO/Documents/code/al-ghurobaa/apps/api
+18 silly placeDep ROOT @acme/auth@1.0.0 OK for:  want: file:/Users/M1PRO/Documents/code/al-ghurobaa/packages/auth
+19 silly placeDep ROOT @acme/db@1.0.0 OK for:  want: file:/Users/M1PRO/Documents/code/al-ghurobaa/packages/db
+20 silly placeDep ROOT @acme/expo-app@1.0.0 OK for:  want: file:/Users/M1PRO/Documents/code/al-ghurobaa/apps/expo-app
+21 silly placeDep ROOT @acme/jobs@0.0.1 OK for:  want: file:/Users/M1PRO/Documents/code/al-ghurobaa/packages/jobs
+22 silly placeDep ROOT @acme/telegram@1.0.0 OK for:  want: file:/Users/M1PRO/Documents/code/al-ghurobaa/packages/telegram
+23 silly placeDep ROOT @acme/trigger@1.0.0 OK for:  want: file:/Users/M1PRO/Documents/code/al-ghurobaa/packages/trigger
+24 silly placeDep ROOT @acme/tsconfig@1.0.0 OK for:  want: file:/Users/M1PRO/Documents/code/al-ghurobaa/packages/tsconfig
+25 silly placeDep ROOT @acme/ui@1.0.0 OK for:  want: file:/Users/M1PRO/Documents/code/al-ghurobaa/packages/ui
+26 silly placeDep ROOT @acme/utils@1.0.0 OK for:  want: file:/Users/M1PRO/Documents/code/al-ghurobaa/packages/utils
+27 silly placeDep ROOT @acme/www@0.1.0 OK for:  want: file:/Users/M1PRO/Documents/code/al-ghurobaa/apps/www
+28 verbose stack Error: Unsupported URL Type "workspace:": workspace:*
+28 verbose stack     at unsupportedURLType (/opt/homebrew/lib/node_modules/npm/node_modules/npm-package-arg/lib/npa.js:367:15)
+28 verbose stack     at fromURL (/opt/homebrew/lib/node_modules/npm/node_modules/npm-package-arg/lib/npa.js:426:13)
+28 verbose stack     at npa.resolve (/opt/homebrew/lib/node_modules/npm/node_modules/npm-package-arg/lib/npa.js:108:12)
+28 verbose stack     at #nodeFromEdge (/opt/homebrew/lib/node_modules/npm/node_modules/@npmcli/arborist/lib/arborist/build-ideal-tree.js:1053:22)
+28 verbose stack     at #buildDepStep (/opt/homebrew/lib/node_modules/npm/node_modules/@npmcli/arborist/lib/arborist/build-ideal-tree.js:918:35)
+28 verbose stack     at #buildDepStep (/opt/homebrew/lib/node_modules/npm/node_modules/@npmcli/arborist/lib/arborist/build-ideal-tree.js:1040:30)
+28 verbose stack     at async Arborist.buildIdealTree (/opt/homebrew/lib/node_modules/npm/node_modules/@npmcli/arborist/lib/arborist/build-ideal-tree.js:170:7)
+28 verbose stack     at async Promise.all (index 1)
+28 verbose stack     at async Arborist.reify (/opt/homebrew/lib/node_modules/npm/node_modules/@npmcli/arborist/lib/arborist/reify.js:110:5)
+28 verbose stack     at async Install.exec (/opt/homebrew/lib/node_modules/npm/lib/commands/install.js:150:5)
+29 error code EUNSUPPORTEDPROTOCOL
+30 error Unsupported URL Type "workspace:": workspace:*
+31 silly unfinished npm timer reify 1772124148455
+32 silly unfinished npm timer reify:loadTrees 1772124148455
+33 silly unfinished npm timer idealTree:buildDeps 1772124167632
+34 silly unfinished npm timer idealTree:apps/api 1772124167753
+35 verbose cwd /Users/M1PRO/Documents/code/al-ghurobaa/packages/db
+36 verbose os Darwin 25.2.0
+37 verbose node v25.4.0
+38 verbose npm  v11.7.0
+39 verbose exit 1
+40 verbose code 1
+41 error A complete log of this run can be found in: /Users/M1PRO/Documents/code/al-ghurobaa/.npm-cache/_logs/2026-02-26T16_42_28_082Z-debug-0.log

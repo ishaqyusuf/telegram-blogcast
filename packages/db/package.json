@@ -9,9 +9,6 @@
       "default": "./src/index.ts"
     }
   },
-  "prisma": {
-    "schema": "./src/schema"
-  },
   "scripts": {
     "build": "prisma db push && prisma generate && tsc",
     "--dev": "rm -rf dist .turbo tsc",
@@ -30,7 +27,7 @@
     "with-env": "dotenv -e ../../.env --"
   },
   "dependencies": {
-    "@prisma/client": "^6.17.0",
+    "@prisma/client": "^7.0.0",
     "@prisma/extension-accelerate": "^2.0.1",
     "@t3-oss/env-core": "^0.11.1",
     "date-fns": "^4.1.0",
@@ -39,6 +36,7 @@
   },
   "devDependencies": {
     "typescript": "^5.9.2",
-    "prisma": "^6.17.0"
+    "prisma": "^7.0.0",
+    "@acme/tsconfig": "workspace:*"
   }
 }

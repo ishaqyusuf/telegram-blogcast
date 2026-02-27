@@ -7,13 +7,13 @@
 // import { withAccelerate } from "@prisma/extension-accelerate";
 
 import { PrismaClient, Prisma } from "@prisma/client";
-import { withAccelerate } from "@prisma/extension-accelerate";
+// import { withAccelerate } from "@prisma/extension-accelerate";
 
 export * from "@prisma/client";
 
 // Learn more about instantiating PrismaClient in Next.js here: https://www.prisma.io/docs/data-platform/accelerate/getting-started
 const prismaClientSingleton = () => {
-  return new PrismaClient({
+  const clientOptions: Prisma.PrismaClientOptions = {
     log:
       process.env.NODE_ENV === "development"
         ? [
@@ -22,7 +22,19 @@ const prismaClientSingleton = () => {
             "warn",
           ]
         : ["error"],
-  }).$extends(withAccelerate());
+  };
+
+  // const accelerateUrl = process.env.POSTGRES_URL;
+  // if (accelerateUrl) {
+  //   (
+  //     clientOptions as Prisma.PrismaClientOptions & {
+  //       accelerateUrl?: string;
+  //     }
+  //   ).accelerateUrl = accelerateUrl;
+  // }
+
+  return new PrismaClient(clientOptions);
+  // .$extends(withAccelerate());
 };
 
 type PrismaClientSingleton = ReturnType<typeof prismaClientSingleton>;
