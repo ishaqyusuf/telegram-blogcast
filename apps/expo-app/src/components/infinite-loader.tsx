@@ -1,12 +1,16 @@
 import { useInView } from "react-intersection-observer";
 import { useDeferredValue, useEffect, useMemo } from "react";
-import { useSuspenseInfiniteQuery } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useSuspenseInfiniteQuery,
+} from "@tanstack/react-query";
+import { consoleLog } from "@acme/utils";
 interface Props<T> {
   filter?;
   route: T;
 }
 export function useInfiniteLoader<
-  T extends { infiniteQueryOptions: any; "~types": { output: any } }
+  T extends { infiniteQueryOptions: any; "~types": { output: any } },
 >({ filter, route }: Props<T>) {
   // const trpc = useTRPC();
   const { ref, inView } = useInView();
@@ -22,7 +26,8 @@ export function useInfiniteLoader<
       getNextPageParam: ({ meta }) => {
         return meta?.cursor;
       },
-    }
+      enabled: false,
+    },
   );
   const {
     data,
@@ -30,8 +35,18 @@ export function useInfiniteLoader<
     hasNextPage,
     isFetching,
     refetch,
+
     isRefetching,
-  } = useSuspenseInfiniteQuery(infiniteQueryOptions);
+    isPending,
+    error,
+  } = useInfiniteQuery(infiniteQueryOptions);
+  consoleLog("Infinite loader data:", {
+    data,
+    hasNextPage,
+    isFetching,
+    isPending,
+    error,
+  });
   const tableData = useMemo(() => {
     const list =
       data?.pages.flatMap((page) => {

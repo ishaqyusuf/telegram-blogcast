@@ -3,6 +3,7 @@ import { db, type Database } from "@acme/db";
 import { initTRPC } from "@trpc/server";
 import superjson from "superjson";
 import { withAuthPermission } from "./middleware/auth-permission";
+import { consoleLog } from "@acme/utils";
 
 export type TRPCContext = {
   //   session: Session | null;
@@ -15,10 +16,10 @@ export type TRPCContext = {
 };
 export const createTRPCContext = async (
   _: unknown,
-  c: Context
+  c: Context,
 ): Promise<TRPCContext> => {
   const header = c.req.header();
-  // consoleLog("HEADERS>>>", header);
+  consoleLog("HEADERS>>>", header);
   // const auth = header["authorization"] ?? "";
   // const accessToken = auth?.split(" ")[1];
   // const [tok, userId] = auth?.split("|");

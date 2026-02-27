@@ -3,9 +3,11 @@ import { createTRPCRouter, publicProcedure } from "../init";
 import { z } from "zod";
 import { transcribeRange, transcribeRangeSchema } from "../../queries/blog";
 import { posts, postsSchema } from "../../queries/posts";
+import { consoleLog } from "@acme/utils";
 
 export const blogRoutes = createTRPCRouter({
   posts: publicProcedure.input(postsSchema).query(async (props) => {
+    consoleLog("Fetching posts with input:", props.input);
     return posts(props.ctx, props.input);
   }),
 

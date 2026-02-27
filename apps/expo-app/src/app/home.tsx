@@ -1,4 +1,6 @@
 import BlogHome from "@/screens/blog-home";
+import { Suspense } from "react";
+import { Text, View } from "react-native";
 // import BlogHomeLegacy from "@/screens.example/blog-home";
 // import BlogHome2 from "@/screens.example/blog-home2";
 

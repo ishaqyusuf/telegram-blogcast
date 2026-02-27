@@ -34,7 +34,13 @@ export default async function RootLayout({
                 <div className="print:hidden">
                     <Toaster />
                     <MiddayToast />
-                    <Suspense>
+                    <Suspense
+                        fallback={
+                            <div className="flex items-center justify-center h-screen">
+                                Loading...
+                            </div>
+                        }
+                    >
                         <Providers>
                             <StaticTrpc />
                             {children}
