@@ -1,8 +1,14 @@
 import { useState } from "react";
+import { useRouter } from "expo-router";
 import { View, Text, TouchableOpacity, Animated } from "react-native";
 import { Plus, Timer, MessageSquare } from "lucide-react-native";
+import { useAudioStore } from "@/store/audio-store";
+import { useCommentsSheet } from "@/hooks/use-comments-sheet";
 
 export function CommentsFab() {
+  const router = useRouter();
+  const store = useAudioStore();
+  const { onClose } = useCommentsSheet();
   const [isOpen, setIsOpen] = useState(false);
   const [animation] = useState(new Animated.Value(0));
 
@@ -14,6 +20,13 @@ export function CommentsFab() {
       useNativeDriver: true,
     }).start();
     setIsOpen(!isOpen);
+  };
+
+  const openCommentForm = () => {
+    const blogId = store.blog?.id;
+    if (!blogId) return;
+    onClose();
+    router.push(`/blog-form?type=audio-comment&audioBlogId=${blogId}`);
   };
 
   const fabStyle = {
@@ -54,7 +67,10 @@ export function CommentsFab() {
   return (
     <View className="absolute bottom-28 right-2 flex flex-col items-end gap-4 z-40">
       <Animated.View style={item2Style}>
-        <TouchableOpacity className="flex-row items-center gap-3 bg-card border border-border p-2 pr-5 pl-2 rounded-full shadow-xl">
+        <TouchableOpacity
+          onPress={openCommentForm}
+          className="flex-row items-center gap-3 bg-card border border-border p-2 pr-5 pl-2 rounded-full shadow-xl"
+        >
           <View className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center text-primary">
             <Timer size={20} className="text-primary" />
           </View>
@@ -69,7 +85,10 @@ export function CommentsFab() {
         </TouchableOpacity>
       </Animated.View>
       <Animated.View style={item1Style}>
-        <TouchableOpacity className="flex-row items-center gap-3 bg-card border border-border p-2 pr-5 pl-2 rounded-full shadow-xl">
+        <TouchableOpacity
+          onPress={openCommentForm}
+          className="flex-row items-center gap-3 bg-card border border-border p-2 pr-5 pl-2 rounded-full shadow-xl"
+        >
           <View className="h-10 w-10 rounded-full bg-muted flex items-center justify-center text-foreground">
             <MessageSquare size={20} className="text-foreground" />
           </View>

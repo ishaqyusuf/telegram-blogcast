@@ -24,7 +24,47 @@ import { HomeBottomNav } from "@/components/home-bottom-footer";
 import { useInfiniteLoader } from "@/components/infinite-loader";
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
+import { Skeleton } from "@/components/ui/skeleton";
 import { invalidateQueries } from "@/lib/trpc";
+
+export function BlogHomeSkeleton() {
+  return (
+    <View className="flex-1 bg-background">
+      <SafeArea>
+        <BlogHomeHeader />
+        <View className="flex-1 relative">
+          <View className="px-4">
+            <BlogHomeCategoryTabs selected="All" onSelect={() => undefined} />
+          </View>
+          <View className="h-4" />
+          <View className="flex-1 gap-4 px-4">
+            {[0, 1, 2].map((key) => (
+              <View
+                key={key}
+                className="rounded-2xl border border-border bg-card p-4"
+              >
+                <View className="mb-3 flex-row items-center gap-3">
+                  <Skeleton className="h-10 w-10 rounded-full" />
+                  <View className="flex-1 gap-2">
+                    <Skeleton className="h-4 w-2/5 rounded-md" />
+                    <Skeleton className="h-3 w-1/4 rounded-md" />
+                  </View>
+                </View>
+                <Skeleton className="h-5 w-3/4 rounded-md" />
+                <Skeleton className="mt-3 h-4 w-full rounded-md" />
+                <Skeleton className="mt-2 h-4 w-4/5 rounded-md" />
+                <Skeleton className="mt-4 h-48 w-full rounded-xl" />
+              </View>
+            ))}
+          </View>
+          <BlogHomeFab />
+          <BlogHomeMiniPlayer />
+        </View>
+      </SafeArea>
+      <HomeBottomNav />
+    </View>
+  );
+}
 
 export default function BlogHomeScreen() {
   const router = useRouter();

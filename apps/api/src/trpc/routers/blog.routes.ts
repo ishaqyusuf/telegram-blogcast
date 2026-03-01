@@ -165,7 +165,13 @@ export const blogRoutes = createTRPCRouter({
   // A comment is itself a Blog record of type "text" linked via BlogComments
 
   addComment: publicProcedure
-    .input(z.object({ blogId: z.number(), content: z.string().min(1) }))
+    .input(
+      z.object({
+        blogId: z.number(),
+        content: z.string().min(1),
+        timestampSeconds: z.number().int().min(0).optional(),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       const { db } = ctx;
 
@@ -176,6 +182,10 @@ export const blogRoutes = createTRPCRouter({
           type: "text",
           published: true,
           status: "published",
+          meta:
+            typeof input.timestampSeconds === "number"
+              ? { audioTimestampSeconds: input.timestampSeconds }
+              : undefined,
         },
       });
 

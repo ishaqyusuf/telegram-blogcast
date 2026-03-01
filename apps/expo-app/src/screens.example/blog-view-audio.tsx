@@ -291,7 +291,9 @@ const CommentsSection = () => {
             </Text>
           </View>
         </View>
-        <PressableLink href={`/blog-view-2/${blogId}/transcribe-audio`}>
+        <PressableLink
+          href={`/blog-form?type=audio-comment&audioBlogId=${blogId}`}
+        >
           <Text className="text-xs font-medium text-muted-foreground">
             Add Comment
           </Text>

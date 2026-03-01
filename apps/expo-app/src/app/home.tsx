@@ -1,6 +1,5 @@
-import BlogHome from "@/screens/blog-home";
+import BlogHome, { BlogHomeSkeleton } from "@/screens/blog-home";
 import { Suspense } from "react";
-import { Text, View } from "react-native";
 // import BlogHomeLegacy from "@/screens.example/blog-home";
 // import BlogHome2 from "@/screens.example/blog-home2";
 
@@ -13,5 +12,9 @@ export default function Home() {
   //     screens={[<BlogHomeLegacy key={0} />, <BlogHome2 key={1} />]}
   //   />
   // );
-  return <BlogHome />;
+  return (
+    <Suspense fallback={<BlogHomeSkeleton />}>
+      <BlogHome />
+    </Suspense>
+  );
 }

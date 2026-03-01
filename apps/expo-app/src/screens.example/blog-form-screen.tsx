@@ -173,7 +173,7 @@ const Footer = () => (
     </View>
   </View>
 );
-export default function BlogFormScreen() {
+export default function BlogFormScreenExample() {
   return (
     <View className="flex-1 bg-background">
       <SafeArea>
