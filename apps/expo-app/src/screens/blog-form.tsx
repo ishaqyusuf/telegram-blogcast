@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   Alert,
+  Keyboard,
+  KeyboardEvent,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -64,9 +66,13 @@ export default function BlogFormScreen() {
     initialTimestampFromParams >= 0;
 
   const [isPreviewPlaying, setIsPreviewPlaying] = useState(false);
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const previewSoundRef = useRef<Audio.Sound | null>(null);
   const mainWasPlayingRef = useRef(false);
   const contentInputRef = useRef<TextInput | null>(null);
+  const scrollRef = useRef<ScrollView | null>(null);
+  const tagInputFocusedRef = useRef(false);
 
   const currentAudioSec = Math.max(
     0,
@@ -192,6 +198,32 @@ export default function BlogFormScreen() {
     }
   }, [includeTimestamp, isPreviewPlaying]);
 
+  useEffect(() => {
+    const showEvent =
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent =
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+
+    const onShow = Keyboard.addListener(showEvent, (event: KeyboardEvent) => {
+      setIsKeyboardVisible(true);
+      setKeyboardHeight(event.endCoordinates?.height || 0);
+      if (tagInputFocusedRef.current) {
+        requestAnimationFrame(() => {
+          scrollRef.current?.scrollToEnd({ animated: true });
+        });
+      }
+    });
+    const onHide = Keyboard.addListener(hideEvent, () => {
+      setIsKeyboardVisible(false);
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      onShow.remove();
+      onHide.remove();
+    };
+  }, []);
+
   const attachmentOptions = [
     { key: "image", label: "Image", icon: "Image" },
     { key: "audio", label: "Audio", icon: "Mic" },
@@ -236,6 +268,12 @@ export default function BlogFormScreen() {
     }
   };
 
+  const scrollToTagInput = () => {
+    requestAnimationFrame(() => {
+      scrollRef.current?.scrollToEnd({ animated: true });
+    });
+  };
+
   return (
     <View className="flex-1 bg-background">
       <SafeArea>
@@ -260,14 +298,20 @@ export default function BlogFormScreen() {
 
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
           className="flex-1"
         >
           <ScrollView
+            ref={scrollRef}
             className="flex-1 px-5 py-6"
-            contentContainerClassName={
-              isCommentMode ? "gap-6 pb-36" : "gap-10 pb-40"
-            }
+            contentContainerClassName={isCommentMode ? "gap-6" : "gap-10"}
+            contentContainerStyle={{
+              paddingBottom:
+                (isCommentMode ? 144 : 160) +
+                (isKeyboardVisible ? keyboardHeight + 24 : 0),
+            }}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
           >
             {isAudioComment ? (
               <View className="flex-col gap-3 rounded-2xl border border-border bg-card p-6">
@@ -492,6 +536,13 @@ export default function BlogFormScreen() {
                       value={formData?.tagInput || ""}
                       onChangeText={(value) => form.setValue("tagInput", value)}
                       onSubmitEditing={addTag}
+                      onFocus={() => {
+                        tagInputFocusedRef.current = true;
+                        scrollToTagInput();
+                      }}
+                      onBlur={() => {
+                        tagInputFocusedRef.current = false;
+                      }}
                       placeholder="Add a tag..."
                       placeholderTextColor="rgba(128,128,128,0.65)"
                       className="min-w-25 flex-1 p-1 text-sm text-foreground"
@@ -511,47 +562,49 @@ export default function BlogFormScreen() {
         </KeyboardAvoidingView>
       </SafeArea>
 
-      <View className="absolute bottom-0 left-0 w-full border-t border-border bg-background/95 px-4 pb-8 pt-4">
-        {isCommentMode ? (
-          <Pressable
-            disabled={isSubmitting}
-            onPress={() => onSubmit(true)}
-            className="h-12 flex-row items-center justify-center gap-2 rounded-2xl bg-foreground shadow-sm"
-          >
-            <Text className="text-sm font-bold text-background">
-              {isSubmitting ? "Saving..." : "Post Comment"}
-            </Text>
-            {!isSubmitting ? (
-              <Icon name="Send" className="size-sm text-background" />
-            ) : null}
-          </Pressable>
-        ) : (
-          <View className="flex-row items-center gap-3">
-            <Pressable
-              disabled={isSubmitting}
-              onPress={() => onSubmit(false)}
-              className="h-12 flex-1 items-center justify-center rounded-2xl border border-border"
-            >
-              <Text className="text-sm font-bold text-muted-foreground">
-                Save Draft
-              </Text>
-            </Pressable>
-
+      {!isKeyboardVisible ? (
+        <View className="absolute bottom-0 left-0 w-full border-t border-border bg-background/95 px-4 pb-8 pt-4">
+          {isCommentMode ? (
             <Pressable
               disabled={isSubmitting}
               onPress={() => onSubmit(true)}
-              className="h-12 flex-[1.4] flex-row items-center justify-center gap-2 rounded-2xl bg-foreground shadow-sm"
+              className="h-12 flex-row items-center justify-center gap-2 rounded-2xl bg-foreground shadow-sm"
             >
               <Text className="text-sm font-bold text-background">
-                {isSubmitting ? "Saving..." : "Publish"}
+                {isSubmitting ? "Saving..." : "Post Comment"}
               </Text>
               {!isSubmitting ? (
                 <Icon name="Send" className="size-sm text-background" />
               ) : null}
             </Pressable>
-          </View>
-        )}
-      </View>
+          ) : (
+            <View className="flex-row items-center gap-3">
+              <Pressable
+                disabled={isSubmitting}
+                onPress={() => onSubmit(false)}
+                className="h-12 flex-1 items-center justify-center rounded-2xl border border-border"
+              >
+                <Text className="text-sm font-bold text-muted-foreground">
+                  Save Draft
+                </Text>
+              </Pressable>
+
+              <Pressable
+                disabled={isSubmitting}
+                onPress={() => onSubmit(true)}
+                className="h-12 flex-[1.4] flex-row items-center justify-center gap-2 rounded-2xl bg-foreground shadow-sm"
+              >
+                <Text className="text-sm font-bold text-background">
+                  {isSubmitting ? "Saving..." : "Publish"}
+                </Text>
+                {!isSubmitting ? (
+                  <Icon name="Send" className="size-sm text-background" />
+                ) : null}
+              </Pressable>
+            </View>
+          )}
+        </View>
+      ) : null}
     </View>
   );
 }
