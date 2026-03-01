@@ -106,8 +106,8 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
         video: blogVideo(type, blog),
         img: isType(
           "image",
-          blog.medias.map(({ file, fileId, title }) => ({
-            fileId,
+          blog.medias.map(({ file }) => ({
+            fileId: file?.fileId,
           })),
         ),
         doc: blogPdf(type, blog),

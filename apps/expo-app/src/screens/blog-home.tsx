@@ -119,6 +119,7 @@ export default function BlogHomeScreen() {
     data: posts,
     hasNextPage,
     isFetching,
+    isRefetching,
     fetchNextPage,
     refetch,
   } = useInfiniteLoader({
@@ -128,6 +129,7 @@ export default function BlogHomeScreen() {
     route: _trpc?.blog.posts,
   });
   const [hiddenPostIds, setHiddenPostIds] = useState<Set<number>>(new Set());
+  const [isPullRefreshing, setIsPullRefreshing] = useState(false);
   const deleteBlogMutation = useMutation(
     _trpc.blog.deleteBlog.mutationOptions({
       onSettled: () => {
@@ -160,6 +162,16 @@ export default function BlogHomeScreen() {
     setHiddenPostIds(new Set());
     refetch();
   }, [category, refetch]);
+
+  const onRefresh = useCallback(async () => {
+    setIsPullRefreshing(true);
+    setHiddenPostIds(new Set());
+    try {
+      await refetch();
+    } finally {
+      setIsPullRefreshing(false);
+    }
+  }, [refetch]);
 
   return (
     <View className="flex-1 bg-background">
@@ -195,6 +207,8 @@ export default function BlogHomeScreen() {
             }
             ListFooterComponent={<View className="h-40 px-4" />}
             ItemSeparatorComponent={() => <View className="h-4" />}
+            refreshing={isPullRefreshing || isRefetching}
+            onRefresh={onRefresh}
             onEndReached={() => {
               if (hasNextPage && !isFetching) {
                 fetchNextPage();
