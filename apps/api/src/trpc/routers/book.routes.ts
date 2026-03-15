@@ -37,6 +37,29 @@ Rules:
 - If a field is not found on the page, set it to null.
 - Return ONLY the JSON object, no markdown, no explanation.`;
 
+const SHAMELA_BOOK_META_PROMPT = `You are a metadata extractor for the Shamela Islamic library website (shamela.ws).
+
+Given an HTML page of a book's index or first page from Shamela, extract the book metadata and return it as a JSON object with this exact shape:
+
+{
+  "nameAr": <string — the full Arabic title of the book>,
+  "nameEn": <string | null — the English title if present, otherwise null>,
+  "authorName": <string | null — the author's name in Arabic>,
+  "authorNameEn": <string | null — the author's name in English if present>,
+  "authorUrl": <string | null — the URL to the author's page on Shamela>,
+  "category": <string | null — the book's category/classification (e.g. فقه، حديث، تفسير)>,
+  "categoryUrl": <string | null — the URL to the category page>,
+  "shelfName": <string | null — the series or collection name if the book belongs to one>,
+  "coverColor": <string | null — a hex color that fits the book's theme (pick a rich dark color like #4c1d95, #7c2d12, #14532d, #1e3a5f)>,
+  "description": <string | null — a short description or introduction about the book if found on the page>
+}
+
+Rules:
+- Extract from whatever is visible on the page: page title, breadcrumbs, metadata sections, etc.
+- For authorUrl and categoryUrl: reconstruct the full absolute URL using https://shamela.ws as base if only a relative path is given.
+- If a field is not found, set it to null.
+- Return ONLY the JSON object, no markdown, no explanation.`;
+
 function extractHashTags(text: string): string[] {
   const matches = text.match(/#([\p{L}\p{N}_][^\s#]*)/gu) ?? [];
   return [...new Set(matches.map((m) => m.slice(1).trim()))];
@@ -610,5 +633,176 @@ export const bookRoutes = createTRPCRouter({
         where: { id: input.id },
         data: { deletedAt: new Date() },
       });
+    }),
+
+  // ── Sync book from Shamela URL ───────────────────────────────────────────────
+
+  syncBookFromShamela: publicProcedure
+    .input(z.object({ shamelaUrl: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      const { db } = ctx;
+
+      // Normalise URL — strip trailing slash, page numbers, query string
+      const url = new URL(input.shamelaUrl.trim());
+      const bookUrl = `${url.origin}${url.pathname}`.replace(/\/+$/, "");
+
+      // Extract shamelaId from path  e.g. /book/12345  or /book/12345/67
+      const match = bookUrl.match(/\/book\/(\d+)/);
+      if (!match) throw new Error("Invalid Shamela URL — expected a /book/... path");
+      const shamelaId = Number(match[1]);
+
+      // Use the canonical book index URL (no page number)
+      const bookIndexUrl = `${url.origin}/book/${shamelaId}`;
+
+      // ── Check if book already exists ──────────────────────────────────────
+      const existing = await db.book.findFirst({
+        where: { shamelaId, deletedAt: null },
+        include: {
+          blog: { select: { id: true } },
+          authors: true,
+          shelf: true,
+        },
+      });
+
+      // ── Fetch HTML ────────────────────────────────────────────────────────
+      const htmlRes = await fetch(bookIndexUrl);
+      if (!htmlRes.ok) throw new Error(`Failed to fetch Shamela page: ${htmlRes.status}`);
+      const html = await htmlRes.text();
+
+      // ── Call Claude for book metadata ─────────────────────────────────────
+      const apiKey = process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) throw new Error("ANTHROPIC_API_KEY not configured");
+
+      const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 1024,
+          messages: [
+            {
+              role: "user",
+              content: `${SHAMELA_BOOK_META_PROMPT}\n\n<SHAMELA_BOOK_URL>${bookIndexUrl}</SHAMELA_BOOK_URL>\n\n<PAGE_HTML>${html.slice(0, 40000)}</PAGE_HTML>`,
+            },
+          ],
+        }),
+      });
+
+      if (!claudeRes.ok) throw new Error(`Claude API error: ${claudeRes.status}`);
+      const claudeData = await claudeRes.json();
+      const rawText = claudeData.content?.[0]?.text ?? "";
+
+      let meta: {
+        nameAr: string;
+        nameEn?: string | null;
+        authorName?: string | null;
+        authorNameEn?: string | null;
+        authorUrl?: string | null;
+        category?: string | null;
+        categoryUrl?: string | null;
+        shelfName?: string | null;
+        coverColor?: string | null;
+        description?: string | null;
+      };
+      try {
+        meta = JSON.parse(rawText);
+      } catch {
+        throw new Error(`Failed to parse Claude response: ${rawText.slice(0, 200)}`);
+      }
+
+      // ── Upsert shelf ──────────────────────────────────────────────────────
+      let shelfId: number | undefined;
+      if (meta.shelfName) {
+        const shelf = await db.bookShelf.upsert({
+          where: { name: meta.shelfName } as any,
+          create: { name: meta.shelfName, nameAr: meta.shelfName },
+          update: {},
+        });
+        shelfId = shelf.id;
+      }
+
+      // ── Upsert author ─────────────────────────────────────────────────────
+      let authorId: number | undefined;
+      if (meta.authorName) {
+        const author = await db.bookAuthor.upsert({
+          where: { name: meta.authorName },
+          create: {
+            name: meta.authorName,
+            nameAr: meta.authorName,
+            url: meta.authorUrl ?? undefined,
+          },
+          update: { url: meta.authorUrl ?? undefined },
+        });
+        authorId = author.id;
+      }
+
+      if (existing) {
+        // ── UPDATE existing book ───────────────────────────────────────────
+        await db.blog.update({
+          where: { id: existing.blog.id },
+          data: {
+            content: meta.description ?? existing.blog.id.toString(),
+          },
+        });
+
+        const updated = await db.book.update({
+          where: { id: existing.id },
+          data: {
+            nameAr: meta.nameAr,
+            nameEn: meta.nameEn ?? undefined,
+            category: meta.category ?? undefined,
+            categoryUrl: meta.categoryUrl ?? undefined,
+            coverColor: meta.coverColor ?? undefined,
+            shelfId: shelfId ?? undefined,
+            shamelaUrl: bookIndexUrl,
+            ...(authorId
+              ? { authors: { set: [{ id: authorId }] } }
+              : {}),
+          },
+          include: { authors: true, shelf: true },
+        });
+
+        if (meta.description) {
+          await attachTags(db, existing.blog.id, meta.description);
+        }
+
+        return { book: updated, created: false };
+      } else {
+        // ── CREATE new book ────────────────────────────────────────────────
+        const blog = await db.blog.create({
+          data: {
+            type: "book",
+            content: meta.description ?? meta.nameAr,
+            published: true,
+            status: "published",
+          },
+        });
+
+        const book = await db.book.create({
+          data: {
+            blogId: blog.id,
+            nameAr: meta.nameAr,
+            nameEn: meta.nameEn ?? undefined,
+            shamelaId,
+            shamelaUrl: bookIndexUrl,
+            category: meta.category ?? undefined,
+            categoryUrl: meta.categoryUrl ?? undefined,
+            coverColor: meta.coverColor ?? undefined,
+            shelfId,
+            ...(authorId ? { authors: { connect: { id: authorId } } } : {}),
+          },
+          include: { authors: true, shelf: true },
+        });
+
+        if (meta.description) {
+          await attachTags(db, blog.id, meta.description);
+        }
+
+        return { book, created: true };
+      }
     }),
 });

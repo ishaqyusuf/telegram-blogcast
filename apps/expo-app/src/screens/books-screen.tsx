@@ -48,6 +48,19 @@ export default function BooksScreen() {
           <Text style={{ fontSize: 18, fontWeight: "700", color: "#fff", flex: 1 }}>
             المكتبة
           </Text>
+          <Pressable
+            onPress={() => router.push("/book-fetch" as any)}
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 18,
+              backgroundColor: "#1DB954",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Icon name="Plus" size={20} className="text-background" />
+          </Pressable>
         </View>
 
         {/* Shelf filter pills */}

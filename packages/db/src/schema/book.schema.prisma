@@ -3,7 +3,7 @@ model BookShelf {
   createdAt DateTime? @default(now()) @db.Timestamp(0)
   updatedAt DateTime? @updatedAt
   deletedAt DateTime?
-  name      String
+  name      String    @unique
   nameAr    String?
   books     Book[]
 }
