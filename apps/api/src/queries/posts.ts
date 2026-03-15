@@ -38,6 +38,9 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
           file: true,
         },
       },
+      _count: {
+        select: { blogs: true },
+      },
     },
   });
   return await response(
@@ -103,6 +106,7 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
         coverImageUrl: null,
         artwork: null,
         title: audio?.title || blogCaption(type, blog.content),
+        _count: { comments: blog._count?.blogs ?? 0 },
         // images: blog.medias,
       };
     })

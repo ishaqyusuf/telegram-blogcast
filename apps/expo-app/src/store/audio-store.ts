@@ -169,10 +169,14 @@ export const useAudioStore = create<AudioState>()(
         }
       },
       play: async () => {
-        const { sound, startPositionTracking } = get();
+        const { sound, position, startPositionTracking } = get();
         if (!sound) return;
 
         try {
+          // Seek back 3 seconds on resume (podcast-style)
+          const resumePos = Math.max(0, position - 3000);
+          await sound.setPositionAsync(resumePos);
+          set({ position: resumePos });
           await sound.playAsync();
           set({ isPlaying: true, error: null });
           startPositionTracking();

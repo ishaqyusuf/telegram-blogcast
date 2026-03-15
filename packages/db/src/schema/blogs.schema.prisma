@@ -23,9 +23,11 @@ model Blog {
     channelId   Int?
     thumbnailId Int?
 
-    interactions BlogViews[]
-    blogTags     BlogTags[]
-    thumbnail    Thumbnail?  @relation(fields: [thumbnailId], references: [id])
+    interactions    BlogViews[]
+    blogTags        BlogTags[]
+    thumbnail       Thumbnail?      @relation(fields: [thumbnailId], references: [id])
+    reactions       Reaction[]
+    recentlyViewed  RecentlyViewed[]
 
     blogLocation   BlogLocation? @relation(fields: [blogLocationId], references: [id])
     blogLocationId Int?

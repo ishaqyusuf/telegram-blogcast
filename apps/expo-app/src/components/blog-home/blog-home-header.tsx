@@ -1,3 +1,4 @@
+import { useRouter } from "expo-router";
 import { Pressable, Text, View } from "react-native";
 
 import { Icon } from "@/components/ui/icon";
@@ -11,6 +12,7 @@ function getGreeting() {
 
 export function BlogHomeHeader() {
   const greeting = getGreeting();
+  const router = useRouter();
 
   return (
     <View className="px-4 pt-3 pb-4 bg-background">
@@ -27,6 +29,12 @@ export function BlogHomeHeader() {
           </View>
         </View>
         <View className="flex-row items-center gap-2">
+          <Pressable
+            onPress={() => router.push("/search" as any)}
+            className="p-2 rounded-full active:bg-muted"
+          >
+            <Icon name="Search" className="text-muted-foreground" />
+          </Pressable>
           <Pressable className="relative p-2 rounded-full active:bg-muted">
             <Icon name="Bell" className="text-muted-foreground" />
             <View className="absolute top-2 right-2 size-2 bg-destructive rounded-full border-2 border-background" />

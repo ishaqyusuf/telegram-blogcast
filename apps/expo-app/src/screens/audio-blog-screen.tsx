@@ -1,6 +1,6 @@
 import { useQuery } from "@acme/ui/tanstack";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   I18nManager,
   Pressable,
@@ -17,6 +17,7 @@ import { Icon } from "@/components/ui/icon";
 import { useCommentsSheet } from "@/hooks/use-comments-sheet";
 import { usePlayHistorySync } from "@/hooks/use-play-history-sync";
 import { useAudioStore } from "@/store/audio-store";
+import { useRecentlyViewedStore } from "@/store/recently-viewed-store";
 import { minuteToString } from "@/lib/utils";
 
 const isRTL = I18nManager.isRTL;
@@ -207,6 +208,19 @@ export default function AudioBlogScreen() {
 
   // Auto-save play position to history
   usePlayHistorySync(mediaId);
+
+  // Mark viewed on open
+  const markViewed = useRecentlyViewedStore((s) => s.markViewed);
+  useEffect(() => {
+    if (blog) {
+      markViewed({
+        id: blog.id,
+        title: blog.caption || (blog.medias as any)?.[0]?.title || "Untitled",
+        type: blog.type ?? "audio",
+        date: blog.date ?? null,
+      });
+    }
+  }, [blog?.id]);
 
   return (
     <View className="flex-1 bg-background">

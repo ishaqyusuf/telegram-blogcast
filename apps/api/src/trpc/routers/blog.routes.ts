@@ -231,4 +231,163 @@ export const blogRoutes = createTRPCRouter({
         },
       });
     }),
+
+  // ── Analytics ────────────────────────────────────────────────────────────
+
+  getAnalytics: publicProcedure.query(async ({ ctx }) => {
+    const { db } = ctx;
+    const [totalPosts, audioPosts, textPosts, totalViews, totalReactions] =
+      await Promise.all([
+        db.blog.count({ where: { deletedAt: null } }),
+        db.blog.count({ where: { type: "audio", deletedAt: null } }),
+        db.blog.count({ where: { type: "text", deletedAt: null } }),
+        db.blogViews.count({ where: { type: "view" } }),
+        db.reaction.count(),
+      ]);
+    return { totalPosts, audioPosts, textPosts, totalViews, totalReactions };
+  }),
+
+  // ── Reactions ────────────────────────────────────────────────────────────
+
+  getReactions: publicProcedure
+    .input(z.object({ blogId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      const rows = await ctx.db.reaction.groupBy({
+        by: ["emoji"],
+        where: { blogId: input.blogId },
+        _count: { emoji: true },
+      });
+      // Also check which ones current user (id=1) reacted to
+      const mine = await ctx.db.reaction.findMany({
+        where: { blogId: input.blogId, userId: 1 },
+        select: { emoji: true },
+      });
+      const myEmojis = new Set(mine.map((r) => r.emoji));
+      return rows.map((r) => ({
+        emoji: r.emoji,
+        count: r._count.emoji,
+        reacted: myEmojis.has(r.emoji),
+      }));
+    }),
+
+  addReaction: publicProcedure
+    .input(z.object({ blogId: z.number(), emoji: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const { db } = ctx;
+      // Ensure default user exists
+      await db.user.upsert({
+        where: { id: 1 },
+        create: { id: 1, name: "Default User" },
+        update: {},
+      });
+      // Toggle: if exists delete, else create
+      const existing = await db.reaction.findFirst({
+        where: { blogId: input.blogId, userId: 1, emoji: input.emoji },
+      });
+      if (existing) {
+        await db.reaction.delete({ where: { id: existing.id } });
+        return { action: "removed" };
+      }
+      await db.reaction.create({
+        data: { blogId: input.blogId, userId: 1, emoji: input.emoji },
+      });
+      return { action: "added" };
+    }),
+
+  // ── Recently Viewed ───────────────────────────────────────────────────────
+
+  markViewed: publicProcedure
+    .input(z.object({ blogId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const { db } = ctx;
+      await db.user.upsert({
+        where: { id: 1 },
+        create: { id: 1, name: "Default User" },
+        update: {},
+      });
+      // Upsert: one record per blog per user, update viewedAt
+      const existing = await db.recentlyViewed.findFirst({
+        where: { blogId: input.blogId, userId: 1 },
+      });
+      if (existing) {
+        return db.recentlyViewed.update({
+          where: { id: existing.id },
+          data: { viewedAt: new Date() },
+        });
+      }
+      return db.recentlyViewed.create({
+        data: { blogId: input.blogId, userId: 1 },
+      });
+    }),
+
+  getRecentlyViewed: publicProcedure
+    .input(z.object({ limit: z.number().min(1).max(30).default(10) }))
+    .query(async ({ ctx, input }) => {
+      return ctx.db.recentlyViewed.findMany({
+        where: { userId: 1 },
+        orderBy: { viewedAt: "desc" },
+        take: input.limit,
+        include: {
+          blog: {
+            select: {
+              id: true,
+              content: true,
+              type: true,
+              blogDate: true,
+              medias: { include: { file: true }, take: 1 },
+            },
+          },
+        },
+      });
+    }),
+
+  // ── Search ───────────────────────────────────────────────────────────────
+
+  search: publicProcedure
+    .input(z.object({ q: z.string().min(1), limit: z.number().default(20) }))
+    .query(async ({ ctx, input }) => {
+      const { db } = ctx;
+      return db.blog.findMany({
+        where: {
+          deletedAt: null,
+          OR: [
+            { content: { contains: input.q, mode: "insensitive" } },
+            {
+              blogTags: {
+                some: {
+                  tags: { title: { contains: input.q, mode: "insensitive" } },
+                },
+              },
+            },
+          ],
+        },
+        take: input.limit,
+        orderBy: { blogDate: "desc" },
+        select: {
+          id: true,
+          content: true,
+          type: true,
+          blogDate: true,
+          medias: { include: { file: true }, take: 1 },
+          blogTags: { include: { tags: true } },
+        },
+      });
+    }),
+
+  saveSearch: publicProcedure
+    .input(z.object({ term: z.string().min(1) }))
+    .mutation(async ({ ctx, input }) => {
+      return ctx.db.search.create({ data: { searchTerm: input.term } });
+    }),
+
+  getRecentSearches: publicProcedure
+    .input(z.object({ limit: z.number().default(10) }))
+    .query(async ({ ctx, input }) => {
+      return ctx.db.search.findMany({
+        orderBy: { createdAt: "desc" },
+        take: input.limit,
+        distinct: ["searchTerm"],
+        select: { id: true, searchTerm: true, createdAt: true },
+      });
+    }),
 });

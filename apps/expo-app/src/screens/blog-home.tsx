@@ -2,12 +2,15 @@ import { Text, View } from "react-native";
 import { LegendList } from "@legendapp/list";
 
 import { BlogCard } from "@/components/blog-card";
+import { BlogHomeAlbums } from "@/components/blog-home/blog-home-albums";
+import { BlogHomeAnalytics } from "@/components/blog-home/blog-home-analytics";
 import { BlogHomeCategoryTabs } from "@/components/blog-home/blog-home-category-tabs";
 import { BlogHomeChannels } from "@/components/blog-home/blog-home-channels";
 import { BlogHomeFeatured } from "@/components/blog-home/blog-home-featured";
-import { BlogHomeRecentlyPlayed } from "@/components/blog-home/blog-home-recently-played";
 import { BlogHomeHeader } from "@/components/blog-home/blog-home-header";
 import { BlogHomeMiniPlayer } from "@/components/blog-home/blog-home-mini-player";
+import { BlogHomeRecentlyPlayed } from "@/components/blog-home/blog-home-recently-played";
+import { BlogHomeRecentlyViewed } from "@/components/blog-home/blog-home-recently-viewed";
 import { HomeBottomNav } from "@/components/home-bottom-footer";
 import { useInfiniteLoader } from "@/components/infinite-loader";
 import { SafeArea } from "@/components/safe-area";
@@ -38,9 +41,12 @@ export default function BlogHomeScreen() {
             keyExtractor={(item) => String(item.id)}
             ListHeaderComponent={
               <>
+                <BlogHomeAnalytics />
                 <BlogHomeFeatured />
                 <BlogHomeChannels />
+                <BlogHomeRecentlyViewed />
                 <BlogHomeRecentlyPlayed />
+                <BlogHomeAlbums />
                 <BlogHomeCategoryTabs />
                 <Text className="px-4 pt-4 pb-2 text-base font-bold text-foreground">
                   Latest Posts
