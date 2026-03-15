@@ -53,12 +53,17 @@ export function BlogHomeChannels() {
           <Pressable
             key={ch.id}
             onPress={() => router.push(`/channels/${ch.id}` as any)}
-            className="items-center gap-2 active:opacity-80"
-            style={{ width: 72 }}
+            className="items-center gap-2 active:opacity-80 w-[72px]"
           >
             <View
-              className="size-16 rounded-xl items-center justify-center"
-              style={{ backgroundColor: CHANNEL_COLORS[idx % CHANNEL_COLORS.length] }}
+              style={{
+                width: 64,
+                height: 64,
+                borderRadius: 12,
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: CHANNEL_COLORS[idx % CHANNEL_COLORS.length],
+              }}
             >
               <Text className="text-lg font-bold text-white">
                 {getInitials(ch.title ?? ch.username)}

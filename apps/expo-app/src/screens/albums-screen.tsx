@@ -59,8 +59,13 @@ export default function AlbumsScreen() {
                 className="flex-1 active:opacity-80"
               >
                 <View
-                  className="w-full aspect-square rounded-2xl items-center justify-center mb-2"
                   style={{
+                    width: "100%",
+                    aspectRatio: 1,
+                    borderRadius: 16,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    marginBottom: 8,
                     backgroundColor: ALBUM_COLORS[index % ALBUM_COLORS.length],
                   }}
                 >

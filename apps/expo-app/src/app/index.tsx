@@ -32,7 +32,6 @@ export default function Home() {
         // paddingTop: StatusBar.currentHeight,
         // paddingTop: Platform.OS == "android" ? StatusBar.currentHeight : 0,
       }}
-      className=""
     >
       {/* <StatusBar style="dark" /> */}
       <HomeFeedHeader />

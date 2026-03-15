@@ -85,7 +85,7 @@ export function BlogCard({ post }: { post: BlogItem }) {
           </View>
 
           {/* Info */}
-          <View className="flex-1 gap-0.5" style={{ direction: isRTL ? "rtl" : "ltr" }}>
+          <View className="flex-1 gap-0.5">
             <Text
               className="text-sm font-bold text-foreground text-right"
               numberOfLines={1}
@@ -154,14 +154,12 @@ export function BlogCard({ post }: { post: BlogItem }) {
           <Text
             className="text-base font-bold text-foreground mb-1 text-right"
             numberOfLines={2}
-            style={{ direction: isRTL ? "rtl" : "ltr" }}
           >
             {post.caption}
           </Text>
           <Text
             className="text-sm text-muted-foreground text-right"
             numberOfLines={2}
-            style={{ direction: isRTL ? "rtl" : "ltr" }}
           >
             {post.content}
           </Text>
@@ -198,7 +196,6 @@ export function BlogCard({ post }: { post: BlogItem }) {
       <Text
         className="text-foreground text-base leading-relaxed text-right"
         numberOfLines={5}
-        style={{ direction: isRTL ? "rtl" : "ltr" }}
       >
         {post.content}
       </Text>

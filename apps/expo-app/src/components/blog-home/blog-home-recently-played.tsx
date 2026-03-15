@@ -55,8 +55,7 @@ export function BlogHomeRecentlyPlayed() {
                 item.Media?.blog?.id &&
                 router.push(`/blog-view-2/${item.Media.blog.id}` as any)
               }
-              className="active:opacity-80"
-              style={{ width: 130 }}
+              className="w-[130px] active:opacity-80"
             >
               {/* Thumbnail */}
               <View className="w-full h-24 rounded-xl bg-muted items-center justify-center mb-2 relative overflow-hidden">
@@ -64,8 +63,7 @@ export function BlogHomeRecentlyPlayed() {
                 {/* Progress bar at bottom */}
                 <View className="absolute bottom-0 left-0 right-0 h-1 bg-muted">
                   <View
-                    className="h-full bg-primary"
-                    style={{ width: `${progressPct}%` }}
+                    style={{ height: "100%", backgroundColor: "#1DB954", width: `${progressPct}%` }}
                   />
                 </View>
               </View>

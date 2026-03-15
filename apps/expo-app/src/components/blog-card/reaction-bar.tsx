@@ -41,8 +41,7 @@ export function ReactionBar({ blogId }: { blogId: number }) {
             <Text style={{ fontSize: 13 }}>{emoji}</Text>
             {count > 0 && (
               <Text
-                className="text-[11px] font-semibold"
-                style={{ color: active ? "#1DB954" : "#b3b3b3" }}
+                className={`text-[11px] font-semibold ${active ? "text-primary" : "text-muted-foreground"}`}
               >
                 {count}
               </Text>

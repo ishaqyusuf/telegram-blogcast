@@ -24,16 +24,18 @@ export function BlogHomeFeatured() {
         {FEATURED_ITEMS.map((item) => (
           <Pressable
             key={item.label}
-            className="active:opacity-80"
-            style={{ width: "48%" }}
+            className="w-[48%] active:opacity-80"
           >
-            <View
-              className="flex-row items-center rounded-lg overflow-hidden bg-card"
-              style={{ height: 56 }}
-            >
+            <View className="flex-row items-center rounded-lg overflow-hidden bg-card h-14">
               <View
-                style={{ width: 56, height: 56, backgroundColor: item.color }}
-                className="items-center justify-center shrink-0"
+                style={{
+                  width: 56,
+                  height: 56,
+                  backgroundColor: item.color,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
               >
                 <Text className="text-sm font-bold text-white">
                   {getInitials(item.label)}

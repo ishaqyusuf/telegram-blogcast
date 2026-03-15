@@ -50,19 +50,27 @@ function PlayerSection({ blogId }: { blogId: number }) {
           {/* Track */}
           <View className="absolute w-full h-1.5 bg-muted rounded-full overflow-hidden">
             <View
-              className="h-full bg-primary rounded-full"
-              style={{ width: `${progress * 100}%` }}
+              style={{ height: "100%", backgroundColor: "#1DB954", borderRadius: 9999, width: `${progress * 100}%` }}
             />
           </View>
           {/* Thumb */}
           <View
-            className="absolute w-4 h-4 bg-background rounded-full border-2 border-primary z-20 shadow-sm"
-            style={{ left: `${Math.min(progress * 100, 95)}%` }}
+            style={{
+              position: "absolute",
+              width: 16,
+              height: 16,
+              backgroundColor: "#121212",
+              borderRadius: 9999,
+              borderWidth: 2,
+              borderColor: "#1DB954",
+              zIndex: 20,
+              left: `${Math.min(progress * 100, 95)}%`,
+            }}
           />
           {/* Waveform decoration */}
           <View className="absolute inset-0 flex-row items-center justify-between opacity-20 px-1 pointer-events-none">
             {[3, 5, 8, 4, 6, 3, 2, 5, 4, 3, 6, 4, 3, 5, 7].map((h, i) => (
-              <View key={i} className="w-1 bg-foreground rounded-full" style={{ height: h * 3 }} />
+              <View key={i} style={{ width: 4, backgroundColor: "#fff", borderRadius: 9999, height: h * 3 }} />
             ))}
           </View>
         </View>
@@ -150,8 +158,7 @@ function InfoTab({
       {/* Title & description */}
       <View className="gap-2">
         <Text
-          className="text-xl font-bold text-foreground text-right"
-          style={{ writingDirection: "rtl" }}
+          style={{ fontSize: 20, fontWeight: "700", color: "#fff", textAlign: "right", writingDirection: "rtl" }}
         >
           {blog.content ?? "Untitled"}
         </Text>

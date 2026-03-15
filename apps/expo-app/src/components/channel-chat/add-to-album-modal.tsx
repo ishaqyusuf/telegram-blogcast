@@ -80,19 +80,17 @@ export function AddToAlbumModal({ mediaIds, authorId, onClose }: Props) {
         <View className="flex-1 flex-row items-center bg-muted rounded-xl px-3 h-10 gap-2">
           <Icon name="Plus" size={16} className="text-muted-foreground" />
           <TextInput
-            className="flex-1 text-sm text-foreground"
             placeholder="New album name…"
             placeholderTextColor="#b3b3b3"
             value={newAlbumName}
             onChangeText={setNewAlbumName}
-            style={{ paddingVertical: 0 }}
+            style={{ flex: 1, fontSize: 14, color: "#ffffff", paddingVertical: 0 }}
           />
         </View>
         <Pressable
           onPress={handleCreate}
           disabled={!newAlbumName.trim() || isBusy}
-          className="px-4 h-10 rounded-xl bg-primary items-center justify-center active:opacity-80"
-          style={{ opacity: !newAlbumName.trim() || isBusy ? 0.5 : 1 }}
+          className={`px-4 h-10 rounded-xl bg-primary items-center justify-center active:opacity-80 ${!newAlbumName.trim() || isBusy ? "opacity-50" : "opacity-100"}`}
         >
           {isBusy ? (
             <ActivityIndicator size="small" color="#fff" />
@@ -126,8 +124,13 @@ export function AddToAlbumModal({ mediaIds, authorId, onClose }: Props) {
               className="flex-row items-center gap-3 py-3 border-b border-border active:opacity-70"
             >
               <View
-                className="size-10 rounded-lg items-center justify-center shrink-0"
                 style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 8,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
                   backgroundColor: ALBUM_COLORS[index % ALBUM_COLORS.length],
                 }}
               >

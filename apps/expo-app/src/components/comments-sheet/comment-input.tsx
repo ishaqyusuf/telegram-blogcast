@@ -69,8 +69,7 @@ export function CommentInput({ blogId, onCommentAdded }: CommentInputProps) {
               placeholderTextColor="#535353"
               multiline
               maxLength={500}
-              className="flex-1 text-sm text-foreground"
-              style={{ maxHeight: 100 }}
+              style={{ flex: 1, fontSize: 14, color: "#ffffff", maxHeight: 100 }}
             />
 
             {/* Timestamp icon — inserts current audio position */}

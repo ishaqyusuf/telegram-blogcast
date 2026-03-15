@@ -84,8 +84,7 @@ export default function PlayHistoryScreen() {
                     {/* Progress bar */}
                     <View className="h-1 w-full bg-muted rounded-full overflow-hidden">
                       <View
-                        className="h-full bg-primary rounded-full"
-                        style={{ width: `${progressPct}%` }}
+                        style={{ height: "100%", backgroundColor: "#1DB954", borderRadius: 9999, width: `${progressPct}%` }}
                       />
                     </View>
 

@@ -58,8 +58,15 @@ export default function AlbumDetailScreen() {
             {/* Hero */}
             <View className="items-center px-4 py-6">
               <View
-                className="size-36 rounded-3xl items-center justify-center mb-4"
-                style={{ backgroundColor: bgColor }}
+                style={{
+                  width: 144,
+                  height: 144,
+                  borderRadius: 24,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  marginBottom: 16,
+                  backgroundColor: bgColor,
+                }}
               >
                 <Text className="text-5xl font-bold text-white">
                   {getInitials(album.name)}

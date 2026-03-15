@@ -25,7 +25,7 @@ function AudioPost({ post }: { post: ItemProps }) {
 
   return (
     <>
-      <View className="mb-4" style={{ direction: isRTL ? "rtl" : "ltr" }}>
+      <View className="mb-4">
         <Text className="text-xl font-bold text-slate-900 dark:text-white mb-2 leading-tight text-right">
           {post.caption || post?.audio?.title}
         </Text>
@@ -44,7 +44,7 @@ function AudioPost({ post }: { post: ItemProps }) {
 function VideoPost({ post }: { post: ItemProps }) {
   return (
     <>
-      <View className="mb-4" style={{ direction: isRTL ? "rtl" : "ltr" }}>
+      <View className="mb-4">
         <Text className="text-xl font-bold text-slate-900 dark:text-white mb-2 leading-tight text-right">
           {post.caption}
         </Text>
@@ -75,8 +75,7 @@ function TextPost({ post }: { post: ItemProps }) {
   return (
     <View
       className="mb-2 pt-3 border-t border-slate-100 dark:border-slate-800"
-      style={{ direction: isRTL ? "rtl" : "ltr" }}
-    >
+         >
       <Text className="text-foreground text-lg leading-relaxed text-right">
         {post.content}
       </Text>

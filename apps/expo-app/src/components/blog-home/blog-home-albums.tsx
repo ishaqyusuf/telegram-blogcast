@@ -38,12 +38,18 @@ export function BlogHomeAlbums() {
           <Pressable
             key={album.id}
             onPress={() => router.push(`/albums/${album.id}` as any)}
-            className="active:opacity-80"
-            style={{ width: 100 }}
+            className="w-[100px] active:opacity-80"
           >
             <View
-              className="w-full h-24 rounded-xl items-center justify-center mb-2"
-              style={{ backgroundColor: ALBUM_COLORS[idx % ALBUM_COLORS.length] }}
+              style={{
+                width: "100%",
+                height: 96,
+                borderRadius: 12,
+                alignItems: "center",
+                justifyContent: "center",
+                marginBottom: 8,
+                backgroundColor: ALBUM_COLORS[idx % ALBUM_COLORS.length],
+              }}
             >
               <Text className="text-2xl font-bold text-white">
                 {getInitials(album.name)}

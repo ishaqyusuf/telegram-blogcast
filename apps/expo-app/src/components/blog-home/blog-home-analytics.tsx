@@ -20,10 +20,16 @@ export function BlogHomeAnalytics() {
         {STATS.map((stat) => (
           <View
             key={stat.key}
-            className="flex-1 rounded-xl p-3 gap-1 items-center"
-            style={{ backgroundColor: stat.color + "33" }}
+            style={{
+              flex: 1,
+              borderRadius: 12,
+              padding: 12,
+              gap: 4,
+              alignItems: "center",
+              backgroundColor: stat.color + "33",
+            }}
           >
-            <Icon name={stat.icon} size={18} className="text-foreground" style={{ color: stat.color + "cc" } as any} />
+            <Icon name={stat.icon} size={18} style={{ color: stat.color + "cc" } as any} />
             <Text className="text-base font-bold text-foreground">
               {data?.[stat.key] ?? "—"}
             </Text>

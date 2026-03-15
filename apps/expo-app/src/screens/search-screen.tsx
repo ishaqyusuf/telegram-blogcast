@@ -67,7 +67,6 @@ export default function SearchScreen() {
             <Icon name="Search" size={16} className="text-muted-foreground" />
             <TextInput
               ref={inputRef}
-              className="flex-1 text-sm text-foreground"
               placeholder="Search posts, tags…"
               placeholderTextColor="#b3b3b3"
               value={query}
@@ -75,7 +74,7 @@ export default function SearchScreen() {
               onSubmitEditing={() => handleSubmit(query)}
               autoFocus
               returnKeyType="search"
-              style={{ paddingVertical: 0 }}
+              style={{ flex: 1, fontSize: 14, color: "#ffffff", paddingVertical: 0 }}
             />
             {query.length > 0 && (
               <Pressable

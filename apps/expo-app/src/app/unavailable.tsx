@@ -24,11 +24,7 @@ export default function AccessUnavailableScreen() {
             {/* We use the image from the design as a background for authenticity, 
               but overlay the icon for sharpness if the image fails or for semantics */}
             <View
-              className="absolute inset-0 rounded-full bg-cover bg-center opacity-80 mix-blend-overlay"
-              style={{
-                backgroundImage:
-                  'url("https://lh3.googleusercontent.com/aida-public/AB6AXuBpKx2u2H_f67V2f79liXtBD7IgPxacpzkNKNLwpID6dYvFN3QLYORqhhFVcEglDBXlx-XUL3GACUR0Ba_WZJqUneTmYWQO6tg-axemXPilI6nWWt7xy8WezYa7yV-Cie5cNPdA4BkYOvZws006Fjzl0hQfjiuSU2g7lFubIaK2cDsLGdL2fkSsZovvOPGEb7g7-irTj9uxchXBvz2m-F_djlg8lre1nMsOp1nZMU7bPQrl3yAn8vuGGVR9Lbjcyioz_MnWcTFAW-Q")',
-              }}
+              className="absolute inset-0 rounded-full opacity-80"
             />
             <Icon
               name="Lock"

@@ -18,23 +18,29 @@ function PlayerScrubber() {
         <View className="absolute w-full h-1.5 bg-muted rounded-full overflow-hidden">
           {/* Progress */}
           <View
-            className="h-full bg-primary rounded-full"
-            style={{ width: `${progress * 100}%` }}
+            style={{ height: "100%", backgroundColor: "#1DB954", borderRadius: 9999, width: `${progress * 100}%` }}
           />
         </View>
         {/* Comment Markers */}
         <View
-          className="absolute top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-foreground rounded-full ring-2 ring-background z-10"
-          style={{ left: "20%" }}
+          className="absolute top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-foreground rounded-full ring-2 ring-background z-10 left-[20%]"
         />
         <View
-          className="absolute top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-primary/40 rounded-full z-0"
-          style={{ left: "65%" }}
+          className="absolute top-1/2 -translate-y-1/2 w-1.5 h-1.5 bg-primary/40 rounded-full z-0 left-[65%]"
         />
         {/* Knob */}
         <View
-          className="absolute w-4 h-4 bg-white rounded-full shadow-md border-2 border-primary z-20"
-          style={{ left: `${progress * 100}%` }}
+          style={{
+            position: "absolute",
+            width: 16,
+            height: 16,
+            backgroundColor: "#fff",
+            borderRadius: 9999,
+            borderWidth: 2,
+            borderColor: "#1DB954",
+            zIndex: 20,
+            left: `${progress * 100}%`,
+          }}
         />
       </View>
       {/* Time Labels */}

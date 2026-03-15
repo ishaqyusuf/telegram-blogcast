@@ -42,12 +42,16 @@ function DateDivider({ date }: { date: string | null | undefined }) {
 function TextBubble({ post, selected }: { post: BlogItem; selected?: boolean }) {
   return (
     <View
-      className="rounded-2xl rounded-br-sm px-4 py-3"
-      style={{ backgroundColor: selected ? "rgba(29,185,84,0.18)" : "#1e1e1e" }}
+      style={{
+        borderRadius: 16,
+        borderBottomRightRadius: 4,
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        backgroundColor: selected ? "rgba(29,185,84,0.18)" : "#1e1e1e",
+      }}
     >
       <Text
-        className="text-sm text-foreground leading-relaxed text-right"
-        style={{ writingDirection: "rtl" }}
+        style={{ fontSize: 14, color: "#ffffff", lineHeight: 21, textAlign: "right", writingDirection: "rtl" }}
       >
         {post.content}
       </Text>
@@ -73,8 +77,12 @@ function AudioBubble({ post, selected }: { post: BlogItem; selected?: boolean })
   const router = useRouter();
   return (
     <View
-      className="rounded-2xl rounded-br-sm p-3"
-      style={{ backgroundColor: selected ? "rgba(29,185,84,0.18)" : "#1e1e1e" }}
+      style={{
+        borderRadius: 16,
+        borderBottomRightRadius: 4,
+        padding: 12,
+        backgroundColor: selected ? "rgba(29,185,84,0.18)" : "#1e1e1e",
+      }}
     >
       <Text
         className="text-sm font-bold text-foreground text-right mb-2"
@@ -93,8 +101,7 @@ function AudioBubble({ post, selected }: { post: BlogItem; selected?: boolean })
           {[4, 8, 5, 12, 6, 10, 3, 9, 7, 11, 4, 8, 6, 10, 5].map((h, i) => (
             <View
               key={i}
-              className="flex-1 rounded-full bg-muted"
-              style={{ height: h * 2 }}
+              style={{ flex: 1, borderRadius: 9999, backgroundColor: "#282828", height: h * 2 }}
             />
           ))}
         </View>
@@ -122,8 +129,12 @@ function AudioBubble({ post, selected }: { post: BlogItem; selected?: boolean })
 function ImageBubble({ post, selected }: { post: BlogItem; selected?: boolean }) {
   return (
     <View
-      className="rounded-2xl rounded-br-sm overflow-hidden"
-      style={{ backgroundColor: selected ? "rgba(29,185,84,0.18)" : undefined }}
+      style={{
+        borderRadius: 16,
+        borderBottomRightRadius: 4,
+        overflow: "hidden",
+        backgroundColor: selected ? "rgba(29,185,84,0.18)" : undefined,
+      }}
     >
       <View className="h-40 bg-muted items-center justify-center">
         <Icon name="Image" size={32} className="text-muted-foreground" />
@@ -262,8 +273,13 @@ function BubbleRow({
           {isSelectMode && (
             <View className="absolute -left-6 top-2 z-10">
               <View
-                className="size-5 rounded-full border-2 items-center justify-center"
                 style={{
+                  width: 20,
+                  height: 20,
+                  borderRadius: 9999,
+                  borderWidth: 2,
+                  alignItems: "center",
+                  justifyContent: "center",
                   borderColor: selected ? "#1DB954" : "#888",
                   backgroundColor: selected ? "#1DB954" : "transparent",
                 }}
@@ -461,8 +477,7 @@ export default function ChannelChatScreen() {
           ListFooterComponent={<View className="h-4" />}
           ListEmptyComponent={
             <View
-              className="flex-1 items-center justify-center py-20"
-              style={{ transform: [{ scaleY: -1 }] }}
+              style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 80, transform: [{ scaleY: -1 }] }}
             >
               <Icon
                 name="MessageCircle"

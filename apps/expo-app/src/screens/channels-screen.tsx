@@ -64,8 +64,13 @@ export default function ChannelsScreen() {
               >
                 {/* Avatar */}
                 <View
-                  className="size-12 rounded-lg items-center justify-center shrink-0"
                   style={{
+                    width: 48,
+                    height: 48,
+                    borderRadius: 8,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
                     backgroundColor: CHANNEL_COLORS[index % CHANNEL_COLORS.length],
                   }}
                 >

@@ -26,22 +26,30 @@ export function CommentsAudioContext() {
         <View className="absolute w-full h-1.5 bg-primary/20 rounded-full overflow-hidden">
           {/* Progress Fill */}
           <View
-            className="h-full bg-primary"
-            style={{ width: `${progress * 100}%` }}
+            style={{ height: "100%", backgroundColor: "#1DB954", width: `${progress * 100}%` }}
           />
         </View>
         {/* Comment Markers (Ticks) */}
         <View
-          className="absolute h-2.5 w-0.5 bg-muted-foreground rounded-full top-1/2 -translate-y-1/2"
-          style={{ left: "15%" }}
+          className="absolute h-2.5 w-0.5 bg-muted-foreground rounded-full top-1/2 -translate-y-1/2 left-[15%]"
         />
         <View
-          className="absolute h-4 w-4 bg-foreground border-2 border-primary rounded-full shadow-lg z-10 top-1/2 -translate-y-1/2"
-          style={{ left: `${progress * 100}%` }}
+          style={{
+            position: "absolute",
+            height: 16,
+            width: 16,
+            backgroundColor: "#fff",
+            borderWidth: 2,
+            borderColor: "#1DB954",
+            borderRadius: 9999,
+            zIndex: 10,
+            top: "50%",
+            marginTop: -8,
+            left: `${progress * 100}%`,
+          }}
         />
         <View
-          className="absolute h-2.5 w-0.5 bg-muted-foreground rounded-full top-1/2 -translate-y-1/2"
-          style={{ left: "70%" }}
+          className="absolute h-2.5 w-0.5 bg-muted-foreground rounded-full top-1/2 -translate-y-1/2 left-[70%]"
         />
       </View>
     </View>

@@ -117,10 +117,15 @@ export function AudioTranscript({ mediaId, telegramFileId }: AudioTranscriptProp
             </View>
             {/* Text */}
             <Text
-              className={`flex-1 text-sm leading-relaxed text-right ${
-                isActive ? "text-foreground font-medium" : "text-muted-foreground"
-              }`}
-              style={{ writingDirection: "rtl" }}
+              style={{
+                flex: 1,
+                fontSize: 14,
+                lineHeight: 22,
+                textAlign: "right",
+                writingDirection: "rtl",
+                color: isActive ? "#ffffff" : "#b3b3b3",
+                fontWeight: isActive ? "500" : "400",
+              }}
             >
               {seg.text}
             </Text>
