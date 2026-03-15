@@ -60,6 +60,32 @@ Rules:
 - If a field is not found, set it to null.
 - Return ONLY the JSON object, no markdown, no explanation.`;
 
+const SHAMELA_TOC_EXTRACT_PROMPT = `You are a table-of-contents extractor for the Shamela Islamic library website (shamela.ws).
+
+Given the HTML of a book's index page from Shamela, extract the full table of contents and return it as a JSON object with this exact shape:
+
+{
+  "volumes": [
+    { "number": <number — volume number, 1-based>, "title": <string | null — volume title in Arabic> }
+  ],
+  "chapters": [
+    {
+      "shamelaPageNo": <number — the numeric page ID at the end of the chapter URL, e.g. for /book/123/4567 it is 4567>,
+      "shamelaUrl": <string — the full absolute URL of the chapter, e.g. https://shamela.ws/book/123/4567>,
+      "chapterTitle": <string | null — the chapter title in Arabic>,
+      "topicTitle": <string | null — sub-topic title if present>,
+      "volumeNumber": <number — which volume this chapter belongs to, 1 if single-volume>
+    }
+  ]
+}
+
+Rules:
+- Extract EVERY chapter link in the table of contents, even if there are hundreds.
+- For the shamelaUrl: if only a relative path like /book/123/4567 is given, prepend https://shamela.ws.
+- If the book has no volumes, set volumes to [] and use volumeNumber: 1 for all chapters.
+- If there are no chapters found, return { "volumes": [], "chapters": [] }.
+- Return ONLY the JSON object, no markdown, no explanation.`;
+
 function extractHashTags(text: string): string[] {
   const matches = text.match(/#([\p{L}\p{N}_][^\s#]*)/gu) ?? [];
   return [...new Set(matches.map((m) => m.slice(1).trim()))];
@@ -84,6 +110,83 @@ async function attachTags(
       await db.blogTags.create({ data: { blogId, tagId: tag.id } });
     }
   }
+}
+
+async function syncToc(
+  db: any,
+  bookId: number,
+  html: string,
+  bookUrl: string,
+  apiKey: string
+): Promise<number> {
+  // ── Call Claude for ToC ────────────────────────────────────────────────────
+  const tocRes = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-6",
+      max_tokens: 8192,
+      messages: [
+        {
+          role: "user",
+          content: `${SHAMELA_TOC_EXTRACT_PROMPT}\n\n<SHAMELA_BOOK_URL>${bookUrl}</SHAMELA_BOOK_URL>\n\n<PAGE_HTML>${html.slice(0, 60000)}</PAGE_HTML>`,
+        },
+      ],
+    }),
+  });
+
+  if (!tocRes.ok) return 0;
+
+  const tocData = await tocRes.json();
+  const tocRaw = tocData.content?.[0]?.text ?? "";
+  let toc: {
+    volumes: { number: number; title: string | null }[];
+    chapters: {
+      shamelaPageNo: number;
+      shamelaUrl: string;
+      chapterTitle: string | null;
+      topicTitle: string | null;
+      volumeNumber: number;
+    }[];
+  };
+  try {
+    toc = JSON.parse(tocRaw);
+  } catch {
+    return 0;
+  }
+
+  if (!toc.chapters || toc.chapters.length === 0) return 0;
+
+  // ── Upsert volumes ─────────────────────────────────────────────────────────
+  const volumeIdMap = new Map<number, number>();
+  for (const vol of toc.volumes ?? []) {
+    const volume = await db.bookVolume.upsert({
+      where: { bookId_number: { bookId, number: vol.number } },
+      create: { bookId, number: vol.number, title: vol.title ?? undefined },
+      update: { title: vol.title ?? undefined },
+    });
+    volumeIdMap.set(vol.number, volume.id);
+  }
+
+  // ── Bulk-insert chapter stubs (skip existing) ──────────────────────────────
+  const result = await db.bookPage.createMany({
+    skipDuplicates: true,
+    data: toc.chapters.map((ch) => ({
+      bookId,
+      shamelaPageNo: ch.shamelaPageNo,
+      shamelaUrl: ch.shamelaUrl,
+      chapterTitle: ch.chapterTitle ?? null,
+      topicTitle: ch.topicTitle ?? null,
+      volumeId: volumeIdMap.get(ch.volumeNumber) ?? null,
+      status: "pending",
+    })),
+  });
+
+  return result.count;
 }
 
 export const bookRoutes = createTRPCRouter({
@@ -184,6 +287,7 @@ export const bookRoutes = createTRPCRouter({
             select: {
               id: true,
               shamelaPageNo: true,
+              shamelaUrl: true,
               printedPageNo: true,
               chapterTitle: true,
               topicTitle: true,
@@ -770,7 +874,8 @@ export const bookRoutes = createTRPCRouter({
           await attachTags(db, existing.blog.id, meta.description);
         }
 
-        return { book: updated, created: false };
+        const chaptersImported = await syncToc(db, existing.id, html, bookIndexUrl, apiKey);
+        return { book: updated, created: false, chaptersImported };
       } else {
         // ── CREATE new book ────────────────────────────────────────────────
         const blog = await db.blog.create({
@@ -802,7 +907,8 @@ export const bookRoutes = createTRPCRouter({
           await attachTags(db, blog.id, meta.description);
         }
 
-        return { book, created: true };
+        const chaptersImported = await syncToc(db, book.id, html, bookIndexUrl, apiKey);
+        return { book, created: true, chaptersImported };
       }
     }),
 });

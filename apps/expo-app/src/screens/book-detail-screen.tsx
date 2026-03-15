@@ -30,6 +30,7 @@ export default function BookDetailScreen() {
   const qc = useQueryClient();
   const [fetchUrl, setFetchUrl] = useState("");
   const [showFetchInput, setShowFetchInput] = useState(false);
+  const [fetchingPageId, setFetchingPageId] = useState<number | null>(null);
 
   const { data: book, isLoading } = useQuery(
     _trpc.book.getBook.queryOptions({ id: Number(bookId) })
@@ -43,6 +44,20 @@ export default function BookDetailScreen() {
         setShowFetchInput(false);
       },
       onError: (e) => Alert.alert("خطأ", e.message),
+    })
+  );
+
+  const { mutate: fetchChapterPage } = useMutation(
+    _trpc.book.fetchPage.mutationOptions({
+      onSuccess: (page) => {
+        qc.invalidateQueries({ queryKey: _trpc.book.getBook.queryKey({ id: Number(bookId) }) });
+        setFetchingPageId(null);
+        router.push(`/books/${bookId}/reader/${page.id}` as any);
+      },
+      onError: (e) => {
+        setFetchingPageId(null);
+        Alert.alert("خطأ", e.message);
+      },
     })
   );
 
@@ -68,6 +83,9 @@ export default function BookDetailScreen() {
   const lastFetchedPage = [...(book.pages ?? [])]
     .filter((p) => p.status === "fetched")
     .sort((a, b) => b.shamelaPageNo - a.shamelaPageNo)[0];
+
+  const fetchedCount = book.pages.filter((p) => p.status === "fetched").length;
+  const totalCount = book.pages.length;
 
   return (
     <View style={{ flex: 1, backgroundColor: "#121212" }}>
@@ -294,44 +312,86 @@ export default function BookDetailScreen() {
             </View>
           )}
 
-          {/* Pages list */}
-          {book.pages.length > 0 && (
+          {/* Chapter / Pages list */}
+          {totalCount > 0 && (
             <View style={{ paddingHorizontal: 16 }}>
-              <Text style={{ fontSize: 15, fontWeight: "700", color: "#fff", marginBottom: 8, textAlign: "right", writingDirection: "rtl" }}>
-                الصفحات ({book.pages.length})
-              </Text>
+              {/* Header with counts */}
+              <View
+                style={{
+                  flexDirection: "row-reverse",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginBottom: 10,
+                }}
+              >
+                <Text style={{ fontSize: 15, fontWeight: "700", color: "#fff", writingDirection: "rtl" }}>
+                  الفهرس ({totalCount})
+                </Text>
+                {fetchedCount > 0 && (
+                  <Text style={{ fontSize: 12, color: "#b3b3b3" }}>
+                    {fetchedCount} مجلوب · {totalCount - fetchedCount} متبقي
+                  </Text>
+                )}
+              </View>
+
               <View style={{ gap: 4 }}>
-                {book.pages.map((page) => (
-                  <Pressable
-                    key={page.id}
-                    onPress={() => router.push(`/books/${bookId}/reader/${page.id}` as any)}
-                    style={{
-                      flexDirection: "row-reverse",
-                      alignItems: "center",
-                      backgroundColor: "#282828",
-                      borderRadius: 8,
-                      padding: 10,
-                      gap: 8,
-                    }}
-                  >
-                    {/* Status dot */}
-                    <View
-                      style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: 4,
-                        backgroundColor: STATUS_COLORS[page.status] ?? "#6b7280",
-                        flexShrink: 0,
+                {book.pages.map((page) => {
+                  const isLoadingThis = fetchingPageId === page.id;
+                  return (
+                    <Pressable
+                      key={page.id}
+                      onPress={() => {
+                        if (page.status === "fetched") {
+                          router.push(`/books/${bookId}/reader/${page.id}` as any);
+                        } else if (page.shamelaUrl && !fetchingPageId) {
+                          setFetchingPageId(page.id);
+                          fetchChapterPage({ bookId: Number(bookId), shamelaUrl: page.shamelaUrl });
+                        }
                       }}
-                    />
-                    <Text style={{ fontSize: 13, color: "#b3b3b3", flex: 1, textAlign: "right", writingDirection: "rtl" }} numberOfLines={1}>
-                      {page.chapterTitle ?? page.topicTitle ?? "صفحة"}
-                    </Text>
-                    <Text style={{ fontSize: 12, color: "#6b7280", flexShrink: 0 }}>
-                      {page.printedPageNo != null ? `ص ${page.printedPageNo}` : `#${page.shamelaPageNo}`}
-                    </Text>
-                  </Pressable>
-                ))}
+                      style={{
+                        flexDirection: "row-reverse",
+                        alignItems: "center",
+                        backgroundColor: isLoadingThis ? "rgba(29,185,84,0.08)" : "#282828",
+                        borderRadius: 8,
+                        padding: 10,
+                        gap: 8,
+                        borderWidth: isLoadingThis ? 1 : 0,
+                        borderColor: isLoadingThis ? "rgba(29,185,84,0.3)" : "transparent",
+                      }}
+                    >
+                      {/* Status indicator */}
+                      {isLoadingThis ? (
+                        <ActivityIndicator size="small" color="#1DB954" style={{ flexShrink: 0 }} />
+                      ) : (
+                        <View
+                          style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: 4,
+                            backgroundColor: STATUS_COLORS[page.status] ?? "#6b7280",
+                            flexShrink: 0,
+                          }}
+                        />
+                      )}
+
+                      <Text
+                        style={{ fontSize: 13, color: "#b3b3b3", flex: 1, textAlign: "right", writingDirection: "rtl" }}
+                        numberOfLines={1}
+                      >
+                        {page.chapterTitle ?? page.topicTitle ?? "صفحة"}
+                      </Text>
+
+                      {/* Page number or fetch hint */}
+                      {page.status === "fetched" ? (
+                        <Text style={{ fontSize: 12, color: "#6b7280", flexShrink: 0 }}>
+                          {page.printedPageNo != null ? `ص ${page.printedPageNo}` : `#${page.shamelaPageNo}`}
+                        </Text>
+                      ) : (
+                        <Icon name="Download" size={14} className="text-muted-foreground" />
+                      )}
+                    </Pressable>
+                  );
+                })}
               </View>
             </View>
           )}

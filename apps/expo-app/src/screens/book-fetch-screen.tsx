@@ -31,6 +31,7 @@ type SyncResult = {
     shelf: { id: number; name: string; nameAr?: string | null } | null;
   };
   created: boolean;
+  chaptersImported: number;
 };
 
 type Step = "idle" | "fetching" | "done" | "error";
@@ -316,15 +317,31 @@ export default function BookFetchScreen() {
                     size={16}
                     className={result.created ? "text-primary" : "text-blue-400"}
                   />
-                  <Text
-                    style={{
-                      fontSize: 13,
-                      fontWeight: "700",
-                      color: result.created ? "#1DB954" : "#60a5fa",
-                    }}
-                  >
-                    {result.created ? "تمت إضافة الكتاب بنجاح" : "تم تحديث بيانات الكتاب"}
-                  </Text>
+                  <View style={{ flexDirection: "row-reverse", alignItems: "center", gap: 6 }}>
+                    <Text
+                      style={{
+                        fontSize: 13,
+                        fontWeight: "700",
+                        color: result.created ? "#1DB954" : "#60a5fa",
+                      }}
+                    >
+                      {result.created ? "تمت إضافة الكتاب بنجاح" : "تم تحديث بيانات الكتاب"}
+                    </Text>
+                    {result.chaptersImported > 0 && (
+                      <View
+                        style={{
+                          backgroundColor: "rgba(255,255,255,0.1)",
+                          borderRadius: 10,
+                          paddingHorizontal: 7,
+                          paddingVertical: 2,
+                        }}
+                      >
+                        <Text style={{ fontSize: 11, color: "#e8e8e8", fontWeight: "600" }}>
+                          {result.chaptersImported} فصل
+                        </Text>
+                      </View>
+                    )}
+                  </View>
                 </View>
 
                 {/* Book info */}
