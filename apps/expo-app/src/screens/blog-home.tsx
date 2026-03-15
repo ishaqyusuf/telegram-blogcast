@@ -3,6 +3,7 @@ import { LegendList } from "@legendapp/list";
 
 import { BlogCard } from "@/components/blog-card";
 import { BlogHomeAlbums } from "@/components/blog-home/blog-home-albums";
+import { BlogHomeBooks } from "@/components/blog-home/blog-home-books";
 import { BlogHomeAnalytics } from "@/components/blog-home/blog-home-analytics";
 import { BlogHomeCategoryTabs } from "@/components/blog-home/blog-home-category-tabs";
 import { BlogHomeChannels } from "@/components/blog-home/blog-home-channels";
@@ -47,6 +48,7 @@ export default function BlogHomeScreen() {
                 <BlogHomeRecentlyViewed />
                 <BlogHomeRecentlyPlayed />
                 <BlogHomeAlbums />
+                <BlogHomeBooks />
                 <BlogHomeCategoryTabs />
                 <Text className="px-4 pt-4 pb-2 text-base font-bold text-foreground">
                   Latest Posts

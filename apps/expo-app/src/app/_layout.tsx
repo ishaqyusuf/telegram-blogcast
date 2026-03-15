@@ -103,6 +103,9 @@ const InitialLayout = () => {
           <Stack.Screen name="search" options={{ headerShown: false }} />
           <Stack.Screen name="albums" options={{ headerShown: false }} />
           <Stack.Screen name="albums/[albumId]" options={{ headerShown: false }} />
+          <Stack.Screen name="books" options={{ headerShown: false }} />
+          <Stack.Screen name="books/[bookId]" options={{ headerShown: false }} />
+          <Stack.Screen name="books/[bookId]/reader/[pageId]" options={{ headerShown: false }} />
           <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="+not-found" />
         </Stack>
