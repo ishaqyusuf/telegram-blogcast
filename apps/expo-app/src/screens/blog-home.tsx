@@ -1,9 +1,9 @@
-import { View } from "react-native";
+import { Text, View } from "react-native";
 import { LegendList } from "@legendapp/list";
 
 import { BlogCard } from "@/components/blog-card";
 import { BlogHomeCategoryTabs } from "@/components/blog-home/blog-home-category-tabs";
-import { BlogHomeFab } from "@/components/blog-home/blog-home-fab";
+import { BlogHomeFeatured } from "@/components/blog-home/blog-home-featured";
 import { BlogHomeHeader } from "@/components/blog-home/blog-home-header";
 import { BlogHomeMiniPlayer } from "@/components/blog-home/blog-home-mini-player";
 import { HomeBottomNav } from "@/components/home-bottom-footer";
@@ -36,12 +36,15 @@ export default function BlogHomeScreen() {
             keyExtractor={(item) => String(item.id)}
             ListHeaderComponent={
               <>
+                <BlogHomeFeatured />
                 <BlogHomeCategoryTabs />
-                <View className="h-4" />
+                <Text className="px-4 pt-4 pb-2 text-base font-bold text-foreground">
+                  Latest Posts
+                </Text>
               </>
             }
-            ListFooterComponent={<View className="h-40 px-4" />}
-            ItemSeparatorComponent={() => <View className="h-4" />}
+            ListFooterComponent={<View className="h-36 px-4" />}
+            ItemSeparatorComponent={() => <View className="h-3" />}
             onEndReached={() => {
               if (hasNextPage && !isFetching) {
                 fetchNextPage();
@@ -49,7 +52,6 @@ export default function BlogHomeScreen() {
             }}
             onEndReachedThreshold={0.4}
           />
-          <BlogHomeFab />
           <BlogHomeMiniPlayer />
         </View>
       </SafeArea>

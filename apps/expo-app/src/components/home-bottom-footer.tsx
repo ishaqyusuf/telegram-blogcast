@@ -1,46 +1,52 @@
+import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
+
 import { Icon } from "./ui/icon";
 import { _router } from "./static-router";
 
-export const HomeBottomNav = () => (
-  <View className="absolute bottom-0 w-full bg-background/95 border-t border-border pb-6 pt-2">
-    <View className="flex-row justify-around items-center h-16">
-      <Pressable className="items-center gap-1 w-16">
-        <Icon name="Home" className=" text-accent" />
-        <Text className="text-[10px] font-medium text-accent">Home</Text>
-      </Pressable>
+const NAV_ITEMS = [
+  { key: "home", label: "Home", icon: "Home" as const },
+  { key: "search", label: "Search", icon: "Search" as const },
+  { key: "library", label: "Library", icon: "Library" as const },
+  { key: "create", label: "Create", icon: "PenLine" as const, route: "/blog-form" },
+  { key: "profile", label: "Profile", icon: "User" as const },
+] as const;
 
-      <Pressable className="items-center gap-1 w-16">
-        <Icon name="Compass" className=" text-muted-foreground" />
-        <Text className="text-[10px] font-medium text-muted-foreground">
-          Explore
-        </Text>
-      </Pressable>
+export const HomeBottomNav = () => {
+  const [active, setActive] = useState<string>("home");
 
-      <View className="relative -top-6">
-        <Pressable
-          onPress={(e) => {
-            _router.push("/blog-form");
-          }}
-          className="size-14 rounded-full bg-accent items-center justify-center shadow-lg active:opacity-90"
-        >
-          <Icon name="PenLine" className=" text-accent-foreground" />
-        </Pressable>
+  return (
+    <View className="absolute bottom-0 w-full bg-card border-t border-border pb-6 pt-1">
+      <View className="flex-row justify-around items-center h-14">
+        {NAV_ITEMS.map((item) => {
+          const isActive = active === item.key;
+          return (
+            <Pressable
+              key={item.key}
+              className="items-center gap-1 w-16 active:opacity-70"
+              onPress={() => {
+                setActive(item.key);
+                if (item.route) _router.push(item.route);
+              }}
+            >
+              <Icon
+                name={item.icon}
+                size={22}
+                className={isActive ? "text-foreground" : "text-muted-foreground"}
+              />
+              <Text
+                className={`text-[10px] ${
+                  isActive
+                    ? "text-foreground font-bold"
+                    : "text-muted-foreground font-medium"
+                }`}
+              >
+                {item.label}
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
-
-      <Pressable className="items-center gap-1 w-16">
-        <Icon name="Bookmark" className=" text-muted-foreground" />
-        <Text className="text-[10px] font-medium text-muted-foreground">
-          Saved
-        </Text>
-      </Pressable>
-
-      <Pressable className="items-center gap-1 w-16">
-        <Icon name="User" className=" text-muted-foreground" />
-        <Text className="text-[10px] font-medium text-muted-foreground">
-          Profile
-        </Text>
-      </Pressable>
     </View>
-  </View>
-);
+  );
+};

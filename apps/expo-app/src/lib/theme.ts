@@ -46,17 +46,18 @@ export const THEME = {
   },
 
   dark: {
-    background: "rgb(2, 6, 23)",
-    foreground: "rgb(248, 250, 252)",
+    // Spotify-inspired dark palette
+    background: "rgb(18, 18, 18)",
+    foreground: "rgb(255, 255, 255)",
 
-    card: "rgb(22, 28, 36)",
-    cardForeground: "rgb(241, 245, 249)",
+    card: "rgb(24, 24, 24)",
+    cardForeground: "rgb(255, 255, 255)",
 
-    popover: "rgb(24, 30, 38)",
-    popoverForeground: "rgb(241, 245, 249)",
+    popover: "rgb(32, 32, 32)",
+    popoverForeground: "rgb(255, 255, 255)",
 
-    primary: "rgb(249, 206, 31)",
-    primaryForeground: "rgb(57, 27, 5)",
+    primary: "rgb(29, 185, 84)",
+    primaryForeground: "rgb(0, 0, 0)",
 
     success: "rgb(34, 197, 94)",
     successForeground: "rgb(236, 253, 245)",
@@ -64,25 +65,25 @@ export const THEME = {
     warn: "rgb(245, 158, 11)",
     warnForeground: "rgb(255, 251, 235)",
 
-    secondary: "rgb(34, 40, 48)",
-    secondaryForeground: "rgb(226, 232, 240)",
+    secondary: "rgb(40, 40, 40)",
+    secondaryForeground: "rgb(179, 179, 179)",
 
-    muted: "rgb(40, 46, 54)",
-    mutedForeground: "rgb(148, 163, 184)",
+    muted: "rgb(40, 40, 40)",
+    mutedForeground: "rgb(179, 179, 179)",
 
-    accent: "rgb(45, 52, 61)",
-    accentForeground: "rgb(241, 245, 249)",
+    accent: "rgb(29, 185, 84)",
+    accentForeground: "rgb(0, 0, 0)",
 
     destructive: "rgb(178, 38, 38)",
     destructiveForeground: "rgb(250, 250, 250)",
 
-    border: "rgb(45, 51, 59)",
-    input: "rgb(51, 57, 65)",
-    ring: "rgb(96, 165, 250)",
+    border: "rgb(40, 40, 40)",
+    input: "rgb(48, 48, 48)",
+    ring: "rgb(29, 185, 84)",
 
     radius: "0.65rem",
 
-    chart1: "rgb(96, 165, 250)",
+    chart1: "rgb(29, 185, 84)",
     chart2: "rgb(52, 211, 153)",
     chart3: "rgb(251, 191, 36)",
     chart4: "rgb(192, 132, 252)",

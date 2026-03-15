@@ -4,26 +4,39 @@ import { Icon } from "@/components/ui/icon";
 
 export function BlogHomeMiniPlayer() {
   return (
-    <View className="absolute bottom-20 left-4 right-4 bg-card/95 border border-border rounded-xl p-2 pr-4 flex-row items-center gap-3 shadow-lg">
-      <View className="size-10 rounded-lg bg-muted" />
-      <View className="flex-1">
-        <Text className="text-xs font-bold text-foreground" numberOfLines={1}>
-          Episode 4: The Journey Begins
-        </Text>
-        <Text className="text-[10px] text-muted-foreground" numberOfLines={1}>
-          Daily Reflections
-        </Text>
-        <View className="w-full h-1 bg-muted rounded-full mt-1.5 overflow-hidden">
-          <View className="h-full bg-accent w-[30%]" />
-        </View>
+    <View className="absolute bottom-0 left-0 right-0 bg-card border-t border-border">
+      {/* Spotify-style thin progress bar at top */}
+      <View className="w-full h-0.5 bg-muted">
+        <View className="h-full bg-primary w-[30%]" />
       </View>
-      <View className="flex-row items-center gap-3">
-        <Pressable className="active:opacity-70">
-          <Icon name="Play" className="text-foreground" />
-        </Pressable>
-        <Pressable className="active:opacity-70">
-          <Icon name="X" className="text-muted-foreground" />
-        </Pressable>
+
+      {/* Player content */}
+      <View className="flex-row items-center px-3 h-16 gap-3">
+        {/* Album art */}
+        <View className="size-11 rounded-md bg-muted shrink-0" />
+
+        {/* Track info */}
+        <View className="flex-1 gap-0.5">
+          <Text className="text-sm font-bold text-foreground" numberOfLines={1}>
+            Episode 4: The Journey Begins
+          </Text>
+          <Text className="text-xs text-muted-foreground" numberOfLines={1}>
+            Daily Reflections
+          </Text>
+        </View>
+
+        {/* Controls */}
+        <View className="flex-row items-center gap-4">
+          <Pressable className="active:opacity-70">
+            <Icon name="Heart" size={20} className="text-muted-foreground" />
+          </Pressable>
+          <Pressable className="active:opacity-70">
+            <Icon name="Play" size={24} className="text-foreground" />
+          </Pressable>
+          <Pressable className="active:opacity-70">
+            <Icon name="SkipForward" size={20} className="text-muted-foreground" />
+          </Pressable>
+        </View>
       </View>
     </View>
   );
