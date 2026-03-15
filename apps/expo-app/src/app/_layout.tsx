@@ -97,6 +97,9 @@ const InitialLayout = () => {
             name="blog-form"
             options={{ headerShown: false, presentation: "modal" }}
           />
+          <Stack.Screen name="channels" options={{ headerShown: false }} />
+          <Stack.Screen name="channels/[channelId]" options={{ headerShown: false }} />
+          <Stack.Screen name="play-history" options={{ headerShown: false }} />
           <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="+not-found" />
         </Stack>

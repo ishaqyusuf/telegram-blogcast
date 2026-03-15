@@ -123,4 +123,112 @@ export const blogRoutes = createTRPCRouter({
     .mutation(async (props) => {
       return transcribeRange(props.ctx, props.input);
     }),
+
+  // ── Transcript ──────────────────────────────────────────────────────────────
+
+  getTranscript: publicProcedure
+    .input(z.object({ mediaId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      return ctx.db.transcript.findUnique({
+        where: { mediaId: input.mediaId },
+        include: {
+          segments: { orderBy: { startSec: "asc" } },
+        },
+      });
+    }),
+
+  saveTranscript: publicProcedure
+    .input(
+      z.object({
+        mediaId: z.number(),
+        segments: z.array(
+          z.object({
+            startSec: z.number(),
+            endSec: z.number(),
+            text: z.string(),
+          })
+        ),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { db } = ctx;
+      // Upsert transcript record
+      const transcript = await db.transcript.upsert({
+        where: { mediaId: input.mediaId },
+        create: { mediaId: input.mediaId, status: "done" },
+        update: { status: "done", updatedAt: new Date() },
+      });
+      // Replace all segments
+      await db.transcriptSegment.deleteMany({
+        where: { transcriptId: transcript.id },
+      });
+      await db.transcriptSegment.createMany({
+        data: input.segments.map((s) => ({
+          transcriptId: transcript.id,
+          startSec: s.startSec,
+          endSec: s.endSec,
+          text: s.text,
+        })),
+      });
+      return transcript;
+    }),
+
+  // ── Play History ─────────────────────────────────────────────────────────
+
+  getRecentlyPlayed: publicProcedure
+    .input(z.object({ limit: z.number().min(1).max(50).default(20) }))
+    .query(async ({ ctx, input }) => {
+      const { db } = ctx;
+      return db.recentlyPlayed.findMany({
+        where: { userId: 1 },
+        orderBy: { playedAt: "desc" },
+        take: input.limit,
+        include: {
+          Media: {
+            include: {
+              file: true,
+              blog: {
+                select: { id: true, content: true, type: true, blogDate: true },
+              },
+            },
+          },
+        },
+      });
+    }),
+
+  savePlayHistory: publicProcedure
+    .input(
+      z.object({
+        mediaId: z.number(),
+        // progress in milliseconds
+        progressMs: z.number().min(0),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { db } = ctx;
+      // Ensure default user exists
+      await db.user.upsert({
+        where: { id: 1 },
+        create: { id: 1, name: "Default User" },
+        update: {},
+      });
+      // Upsert: one record per media per user
+      const existing = await db.recentlyPlayed.findFirst({
+        where: { mediaId: input.mediaId, userId: 1 },
+      });
+      if (existing) {
+        return db.recentlyPlayed.update({
+          where: { id: existing.id },
+          data: { progress: input.progressMs, playedAt: new Date() },
+        });
+      }
+      return db.recentlyPlayed.create({
+        data: {
+          mediaId: input.mediaId,
+          userId: 1,
+          progress: input.progressMs,
+          playedAt: new Date(),
+        },
+      });
+    }),
 });

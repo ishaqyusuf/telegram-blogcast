@@ -7,8 +7,8 @@ import { _router } from "./static-router";
 const NAV_ITEMS = [
   { key: "home", label: "Home", icon: "Home" as const },
   { key: "search", label: "Search", icon: "Search" as const },
-  { key: "library", label: "Library", icon: "Library" as const },
-  { key: "create", label: "Create", icon: "PenLine" as const, route: "/blog-form" },
+  { key: "channels", label: "Channels", icon: "Radio" as const, route: "/channels" },
+  { key: "history", label: "History", icon: "History" as const, route: "/play-history" },
   { key: "profile", label: "Profile", icon: "User" as const },
 ] as const;
 

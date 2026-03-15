@@ -11,7 +11,7 @@ posts: publicProcedure
       }),
 */
 export const postsSchema = z.object({
-  //   q: z.string(),
+  channelId: z.number().optional(),
 });
 export type PostsSchema = z.infer<typeof postsSchema>;
 
@@ -108,8 +108,10 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
     })
   );
 }
-function wherePosts(query) {
-  return {};
+function wherePosts(query: PostsSchema) {
+  return {
+    ...(query.channelId ? { channelId: query.channelId } : {}),
+  };
 }
 function blogContent(type: BlogType, content) {
   if (type == "text") return content;

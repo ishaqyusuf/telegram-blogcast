@@ -3,7 +3,9 @@ import { LegendList } from "@legendapp/list";
 
 import { BlogCard } from "@/components/blog-card";
 import { BlogHomeCategoryTabs } from "@/components/blog-home/blog-home-category-tabs";
+import { BlogHomeChannels } from "@/components/blog-home/blog-home-channels";
 import { BlogHomeFeatured } from "@/components/blog-home/blog-home-featured";
+import { BlogHomeRecentlyPlayed } from "@/components/blog-home/blog-home-recently-played";
 import { BlogHomeHeader } from "@/components/blog-home/blog-home-header";
 import { BlogHomeMiniPlayer } from "@/components/blog-home/blog-home-mini-player";
 import { HomeBottomNav } from "@/components/home-bottom-footer";
@@ -37,6 +39,8 @@ export default function BlogHomeScreen() {
             ListHeaderComponent={
               <>
                 <BlogHomeFeatured />
+                <BlogHomeChannels />
+                <BlogHomeRecentlyPlayed />
                 <BlogHomeCategoryTabs />
                 <Text className="px-4 pt-4 pb-2 text-base font-bold text-foreground">
                   Latest Posts
