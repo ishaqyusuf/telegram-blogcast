@@ -22,6 +22,8 @@ export const blogRoutes = createTRPCRouter({
             include: {
               file: true,
               author: true,
+              album: { select: { id: true, name: true } },
+              albumAudioIndex: { select: { index: true } },
             },
           },
           blogTags: {
