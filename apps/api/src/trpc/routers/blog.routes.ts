@@ -374,6 +374,93 @@ export const blogRoutes = createTRPCRouter({
       });
     }),
 
+  // ── Create / Update text blogs ────────────────────────────────────────────
+
+  createBlog: publicProcedure
+    .input(
+      z.object({
+        content: z.string().min(1),
+        status: z.enum(["draft", "published"]).default("published"),
+        channelId: z.number().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { db } = ctx;
+      const now = new Date();
+      const blog = await db.blog.create({
+        data: {
+          content: input.content,
+          type: "text",
+          published: input.status === "published",
+          publishedAt: input.status === "published" ? now : null,
+          blogDate: now,
+          status: input.status,
+          ...(input.channelId ? { channelId: input.channelId } : {}),
+        },
+      });
+      // Auto-tag from #hashtags embedded in content
+      const hashTags = [...(input.content.match(/#([\p{L}\p{N}_]+)/gu) ?? [])].map((t) =>
+        t.slice(1)
+      );
+      for (const title of [...new Set(hashTags)]) {
+        const tag = await db.tags.upsert({
+          where: { title },
+          create: { title },
+          update: {},
+        });
+        const exists = await db.blogTags.findFirst({
+          where: { blogId: blog.id, tagId: tag.id },
+        });
+        if (!exists) {
+          await db.blogTags.create({ data: { blogId: blog.id, tagId: tag.id } });
+        }
+      }
+      return blog;
+    }),
+
+  updateBlog: publicProcedure
+    .input(
+      z.object({
+        id: z.number(),
+        content: z.string().min(1),
+        status: z.enum(["draft", "published"]).optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { db } = ctx;
+      const blog = await db.blog.update({
+        where: { id: input.id },
+        data: {
+          content: input.content,
+          ...(input.status
+            ? {
+                status: input.status,
+                published: input.status === "published",
+                publishedAt: input.status === "published" ? new Date() : undefined,
+              }
+            : {}),
+        },
+      });
+      // Sync auto-tags from content hashtags
+      const hashTags = [...(input.content.match(/#([\p{L}\p{N}_]+)/gu) ?? [])].map((t) =>
+        t.slice(1)
+      );
+      for (const title of [...new Set(hashTags)]) {
+        const tag = await db.tags.upsert({
+          where: { title },
+          create: { title },
+          update: {},
+        });
+        const exists = await db.blogTags.findFirst({
+          where: { blogId: blog.id, tagId: tag.id },
+        });
+        if (!exists) {
+          await db.blogTags.create({ data: { blogId: blog.id, tagId: tag.id } });
+        }
+      }
+      return blog;
+    }),
+
   saveSearch: publicProcedure
     .input(z.object({ term: z.string().min(1) }))
     .mutation(async ({ ctx, input }) => {

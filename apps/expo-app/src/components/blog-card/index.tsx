@@ -7,6 +7,24 @@ import { minuteToString } from "@/lib/utils";
 import { Icon } from "@/components/ui/icon";
 import { ReactionBar } from "@/components/blog-card/reaction-bar";
 import { useRecentlyViewedStore } from "@/store/recently-viewed-store";
+import { parseBlogContent, SEGMENT_COLORS, type ContentSegment } from "@/lib/parse-blog-content";
+
+function CardPreviewText({ text, numberOfLines = 5 }: { text: string; numberOfLines?: number }) {
+  const segments = parseBlogContent(text);
+  return (
+    <Text className="text-foreground text-base leading-relaxed text-right" numberOfLines={numberOfLines}>
+      {segments.map((seg: ContentSegment, i: number) =>
+        seg.type === "text" ? (
+          seg.value
+        ) : (
+          <Text key={i} style={{ color: SEGMENT_COLORS[seg.type] }}>
+            {seg.value}
+          </Text>
+        )
+      )}
+    </Text>
+  );
+}
 
 const isRTL = I18nManager.isRTL;
 
@@ -172,7 +190,7 @@ export function BlogCard({ post }: { post: BlogItem }) {
   // ── Text post ──────────────────────────────────────────────────────────────
   return (
     <Pressable
-      onPress={() => handlePress(`/blog-view/${post.id}`)}
+      onPress={() => handlePress(`/blog-view-text/${post.id}`)}
       className="bg-card rounded-xl p-4 active:opacity-90"
     >
       {/* Header row */}
@@ -192,13 +210,8 @@ export function BlogCard({ post }: { post: BlogItem }) {
         </Pressable>
       </View>
 
-      {/* Text content */}
-      <Text
-        className="text-foreground text-base leading-relaxed text-right"
-        numberOfLines={5}
-      >
-        {post.content}
-      </Text>
+      {/* Text content — colored hashtags, links, timestamps */}
+      <CardPreviewText text={post.content ?? ""} />
 
       <CardFooter post={post} />
     </Pressable>
