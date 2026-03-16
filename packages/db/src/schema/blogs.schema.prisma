@@ -14,7 +14,8 @@ model Blog {
     deletedAt DateTime?
 
     // audio     BlogAudio?     @relation(fields: [audioId], references: [id])
-    type   String  @default("text")
+    type            String  @default("text")
+    arrangementMode String  @default("default")
     medias Media[]
 
     comments    BlogComments[] @relation(name: "comment")
@@ -23,12 +24,15 @@ model Blog {
     channelId   Int?
     thumbnailId Int?
 
-    interactions BlogViews[]
-    blogTags     BlogTags[]
-    thumbnail    Thumbnail?  @relation(fields: [thumbnailId], references: [id])
+    interactions    BlogViews[]
+    blogTags        BlogTags[]
+    thumbnail       Thumbnail?      @relation(fields: [thumbnailId], references: [id])
+    reactions       Reaction[]
+    recentlyViewed  RecentlyViewed[]
 
     blogLocation   BlogLocation? @relation(fields: [blogLocationId], references: [id])
     blogLocationId Int?
+    book           Book?
 }
 
 model BlogComments {
@@ -38,6 +42,7 @@ model BlogComments {
     deletedAt DateTime?
     blogId    Int
     commentId Int
+    order     Int @default(0)
     blog      Blog      @relation(name: "blog", fields: [blogId], references: [id])
     comment   Blog      @relation(name: "comment", fields: [commentId], references: [id])
 

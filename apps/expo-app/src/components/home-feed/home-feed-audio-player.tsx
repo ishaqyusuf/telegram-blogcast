@@ -39,10 +39,12 @@ export function HomeFeedAudioPlayer({
             {waveform.map((h, i) => (
               <View
                 key={i}
-                className={`w-1 rounded-full ${
-                  i < 4 ? "bg-primary" : "bg-border"
-                }`}
-                style={{ height: h * 2 + 4 }}
+                style={{
+                  width: 4,
+                  borderRadius: 9999,
+                  backgroundColor: i < 4 ? "#1DB954" : "#535353",
+                  height: h * 2 + 4,
+                }}
               />
             ))}
             <View className="flex-1 flex-row items-center gap-px h-6">

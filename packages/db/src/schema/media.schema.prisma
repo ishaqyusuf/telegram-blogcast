@@ -16,6 +16,7 @@ model Media {
     playHistories   RecentlyPlayed[]
     PlaylistEpisode PlaylistEpisode[]
     album           Album?            @relation(fields: [albumId], references: [id])
+    transcript      Transcript?
 
     @@index([fileId])
 }

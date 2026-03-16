@@ -4,8 +4,9 @@ model Album {
     updatedAt DateTime? @updatedAt
     deletedAt DateTime?
 
-    name      String
-    albumType String?
+    name        String
+    albumType   String?
+    description String?
 
     albumAuthorId   Int?
     author          Author?           @relation(fields: [albumAuthorId], references: [id])

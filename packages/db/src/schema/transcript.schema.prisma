@@ -1,0 +1,21 @@
+model Transcript {
+  id        Int                 @unique @default(autoincrement())
+  createdAt DateTime?           @default(now()) @db.Timestamp(0)
+  updatedAt DateTime?           @updatedAt
+  mediaId   Int                 @unique
+  media     Media               @relation(fields: [mediaId], references: [id])
+  // pending | processing | done | failed
+  status    String              @default("pending")
+  segments  TranscriptSegment[]
+}
+
+model TranscriptSegment {
+  id           Int        @unique @default(autoincrement())
+  transcriptId Int
+  transcript   Transcript @relation(fields: [transcriptId], references: [id])
+  startSec     Float
+  endSec       Float
+  text         String
+
+  @@index([transcriptId])
+}

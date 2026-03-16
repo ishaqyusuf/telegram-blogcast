@@ -1,5 +1,6 @@
 // apps/api/src/routers/channel.route.ts
 import { createTRPCRouter, publicProcedure } from "../init";
+import { z } from "zod";
 import {
   getChannels,
   getFetchableChannels,
@@ -24,6 +25,18 @@ export const channelRoutes = createTRPCRouter({
   getChannels: publicProcedure.query(async (props) => {
     return getChannels(props.ctx);
   }),
+
+  getChannel: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ ctx, input }) => {
+      const channel = await ctx.db.channel.findFirstOrThrow({
+        where: { id: input.id, deletedAt: null },
+      });
+      const totalBlogs = await ctx.db.blog.count({
+        where: { channelId: input.id, deletedAt: null },
+      });
+      return { ...channel, stats: { totalBlogs } };
+    }),
 
   getFetchableChannels: publicProcedure.query(async (props) => {
     return getFetchableChannels(props.ctx);

@@ -97,6 +97,16 @@ const InitialLayout = () => {
             name="blog-form"
             options={{ headerShown: false, presentation: "modal" }}
           />
+          <Stack.Screen name="channels" options={{ headerShown: false }} />
+          <Stack.Screen name="channels/[channelId]" options={{ headerShown: false }} />
+          <Stack.Screen name="play-history" options={{ headerShown: false }} />
+          <Stack.Screen name="search" options={{ headerShown: false }} />
+          <Stack.Screen name="albums" options={{ headerShown: false }} />
+          <Stack.Screen name="albums/[albumId]" options={{ headerShown: false }} />
+          <Stack.Screen name="book-fetch" options={{ headerShown: false }} />
+          <Stack.Screen name="books" options={{ headerShown: false }} />
+          <Stack.Screen name="books/[bookId]" options={{ headerShown: false }} />
+          <Stack.Screen name="books/[bookId]/reader/[pageId]" options={{ headerShown: false }} />
           <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="+not-found" />
         </Stack>

@@ -1,0 +1,147 @@
+model BookShelf {
+  id        Int       @unique @default(autoincrement())
+  createdAt DateTime? @default(now()) @db.Timestamp(0)
+  updatedAt DateTime? @updatedAt
+  deletedAt DateTime?
+  name      String    @unique
+  nameAr    String?
+  books     Book[]
+}
+
+model BookAuthor {
+  id        Int       @unique @default(autoincrement())
+  createdAt DateTime? @default(now()) @db.Timestamp(0)
+  updatedAt DateTime? @updatedAt
+  name      String    @unique
+  nameAr    String?
+  url       String?
+  books     Book[]
+
+  @@index([name])
+}
+
+model Book {
+  id          Int          @unique @default(autoincrement())
+  createdAt   DateTime?    @default(now()) @db.Timestamp(0)
+  updatedAt   DateTime?    @updatedAt
+  deletedAt   DateTime?
+  blogId      Int          @unique
+  blog        Blog         @relation(fields: [blogId], references: [id])
+  nameAr      String?
+  nameEn      String?
+  coverUrl    String?
+  coverColor  String?
+  shamelaId   Int?
+  shamelaUrl  String?
+  category    String?
+  categoryUrl String?
+  shelfId     Int?
+  shelf       BookShelf?   @relation(fields: [shelfId], references: [id])
+  volumes     BookVolume[]
+  pages       BookPage[]
+  authors     BookAuthor[]
+
+  @@index([blogId])
+  @@index([shelfId])
+}
+
+model BookVolume {
+  id        Int        @unique @default(autoincrement())
+  createdAt DateTime?  @default(now()) @db.Timestamp(0)
+  updatedAt DateTime?  @updatedAt
+  deletedAt DateTime?
+  bookId    Int
+  book      Book       @relation(fields: [bookId], references: [id])
+  number    Int
+  title     String?
+  pages     BookPage[]
+
+  @@unique([bookId, number])
+  @@index([bookId])
+}
+
+model BookPage {
+  id            Int                  @unique @default(autoincrement())
+  createdAt     DateTime?            @default(now()) @db.Timestamp(0)
+  updatedAt     DateTime?            @updatedAt
+  deletedAt     DateTime?
+  bookId        Int
+  book          Book                 @relation(fields: [bookId], references: [id])
+  volumeId      Int?
+  volume        BookVolume?          @relation(fields: [volumeId], references: [id])
+  shamelaPageNo Int
+  shamelaUrl    String
+  printedPageNo Int?
+  chapterTitle  String?
+  chapterUrl    String?
+  topicTitle    String?
+  topicUrl      String?
+  rawJson       Json?
+  status        String               @default("pending")
+  paragraphs    BookPageParagraph[]
+  footnotes     BookPageFootnote[]
+  highlights    BookPageHighlight[]
+  comments      BookPageComment[]
+
+  @@unique([bookId, shamelaPageNo])
+  @@index([bookId])
+  @@index([volumeId])
+}
+
+model BookPageParagraph {
+  id          Int                 @unique @default(autoincrement())
+  pageId      Int
+  page        BookPage            @relation(fields: [pageId], references: [id])
+  pid         Int
+  text        String
+  footnoteIds String?
+  highlights  BookPageHighlight[]
+
+  @@index([pageId])
+}
+
+model BookPageFootnote {
+  id               Int      @unique @default(autoincrement())
+  pageId           Int
+  page             BookPage @relation(fields: [pageId], references: [id])
+  marker           String
+  type             String?
+  content          String
+  linkedParagraphs String?
+  items            Json?
+
+  @@index([pageId])
+}
+
+model BookPageHighlight {
+  id          Int                @unique @default(autoincrement())
+  createdAt   DateTime?          @default(now()) @db.Timestamp(0)
+  updatedAt   DateTime?          @updatedAt
+  pageId      Int
+  page        BookPage           @relation(fields: [pageId], references: [id])
+  paragraphId Int?
+  paragraph   BookPageParagraph? @relation(fields: [paragraphId], references: [id])
+  userId      Int
+  startOffset Int
+  endOffset   Int
+  color       String             @default("#FFD700")
+  note        String?
+
+  @@index([pageId])
+  @@index([userId])
+}
+
+model BookPageComment {
+  id          Int       @unique @default(autoincrement())
+  createdAt   DateTime? @default(now()) @db.Timestamp(0)
+  updatedAt   DateTime? @updatedAt
+  deletedAt   DateTime?
+  pageId      Int
+  page        BookPage  @relation(fields: [pageId], references: [id])
+  userId      Int
+  content     String
+  paragraphId Int?
+
+  @@index([pageId])
+  @@index([userId])
+}
