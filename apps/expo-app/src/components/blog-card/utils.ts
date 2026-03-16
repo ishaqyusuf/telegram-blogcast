@@ -1,6 +1,6 @@
 import { formatDate } from "@acme/utils/dayjs";
 
-import { getBaseUrl } from "@/lib/base-url";
+import { getWebUrl } from "@/lib/base-url";
 
 import type { BlogCardVariant, BlogItem } from "./types";
 
@@ -25,10 +25,16 @@ export function getPostDateLabel(post: BlogItem) {
 export function buildTelegramFileProxy(fileId?: string | number | null) {
   if (!fileId) return null;
   try {
-    return `${getBaseUrl()}/api/telegram/file/${encodeURIComponent(fileId)}`;
+    return `${getWebUrl()}/api/telegram/file/${encodeURIComponent(fileId)}`;
   } catch {
     return null;
   }
+}
+
+export function getBlogHref(post: Pick<BlogItem, "id" | "type">) {
+  if (post.type === "text") return `/blog-view-text/${post.id}`;
+  if (post.type === "audio") return `/blog-view-2/${post.id}`;
+  return `/blog-view/${post.id}`;
 }
 
 export function getPrimaryImageUrl(post: BlogItem) {

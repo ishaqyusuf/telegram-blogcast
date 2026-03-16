@@ -25,6 +25,13 @@ type SyncResult = {
 };
 
 type Step = "idle" | "fetching" | "done" | "error";
+type AiProvider = "anthropic" | "openai" | "gemini";
+
+const AI_PROVIDERS: { value: AiProvider; label: string }[] = [
+  { value: "anthropic", label: "Claude" },
+  { value: "openai", label: "GPT-4o" },
+  { value: "gemini", label: "Gemini" },
+];
 
 export default function BookFetchScreen() {
   const router = useRouter();
@@ -33,6 +40,7 @@ export default function BookFetchScreen() {
 
   const [url, setUrl] = useState("");
   const [step, setStep] = useState<Step>("idle");
+  const [aiProvider, setAiProvider] = useState<AiProvider>("anthropic");
   const [result, setResult] = useState<SyncResult | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -65,7 +73,7 @@ export default function BookFetchScreen() {
   const handleFetch = () => {
     const trimmed = url.trim();
     if (!trimmed) return;
-    syncBook({ shamelaUrl: trimmed });
+    syncBook({ shamelaUrl: trimmed, aiProvider });
   };
 
   const reset = () => {
@@ -135,6 +143,45 @@ export default function BookFetchScreen() {
               <Text style={{ fontSize: 12, color: "#666", textAlign: "left" }}>
                 مثال: https://shamela.ws/book/12345
               </Text>
+            </View>
+
+            {/* AI Provider selector */}
+            <View
+              style={{
+                backgroundColor: "#282828",
+                borderRadius: 12,
+                padding: 12,
+                gap: 8,
+              }}
+            >
+              <Text style={{ fontSize: 13, fontWeight: "600", color: "#b3b3b3", textAlign: "right", writingDirection: "rtl" }}>
+                نموذج الذكاء الاصطناعي
+              </Text>
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                {AI_PROVIDERS.map((p) => (
+                  <Pressable
+                    key={p.value}
+                    onPress={() => step !== "fetching" && setAiProvider(p.value)}
+                    style={{
+                      flex: 1,
+                      paddingVertical: 9,
+                      borderRadius: 8,
+                      alignItems: "center",
+                      backgroundColor: aiProvider === p.value ? "#1DB954" : "#333",
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 13,
+                        fontWeight: "700",
+                        color: aiProvider === p.value ? "#000" : "#b3b3b3",
+                      }}
+                    >
+                      {p.label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
             </View>
 
             {/* URL input */}

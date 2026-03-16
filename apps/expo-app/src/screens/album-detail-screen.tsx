@@ -7,6 +7,7 @@ import { Alert, Modal, ScrollView, Text, TextInput, View } from "react-native";
 import { _trpc } from "@/components/static-trpc";
 import { SafeArea } from "@/components/safe-area";
 import { Icon } from "@/components/ui/icon";
+import { useColors } from "@/hooks/use-color";
 import { minuteToString } from "@/lib/utils";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -41,6 +42,7 @@ function EditAlbumModal({
   onSave: (name: string, description: string) => void;
   isSaving: boolean;
 }) {
+  const colors = useColors();
   const [name, setName] = useState(album.name);
   const [description, setDescription] = useState(album.description ?? "");
 
@@ -53,7 +55,7 @@ function EditAlbumModal({
         <Pressable
           onPress={() => {}} // block tap-through
           style={{
-            backgroundColor: "#1e1e1e",
+            backgroundColor: colors.card,
             borderTopLeftRadius: 20,
             borderTopRightRadius: 20,
             padding: 24,
@@ -61,56 +63,56 @@ function EditAlbumModal({
           }}
         >
           {/* Handle bar */}
-          <View style={{ width: 40, height: 4, backgroundColor: "#3a3a3a", borderRadius: 2, alignSelf: "center", marginBottom: 4 }} />
+          <View style={{ width: 40, height: 4, backgroundColor: colors.input, borderRadius: 2, alignSelf: "center", marginBottom: 4 }} />
 
-          <Text style={{ fontSize: 16, fontWeight: "700", color: "#fff", textAlign: "right" }}>
+          <Text style={{ fontSize: 16, fontWeight: "700", color: colors.foreground, textAlign: "right" }}>
             تعديل الألبوم
           </Text>
 
           {/* Name */}
           <View style={{ gap: 6 }}>
-            <Text style={{ fontSize: 12, color: "#6b7280", textAlign: "right" }}>اسم الألبوم</Text>
+            <Text style={{ fontSize: 12, color: colors.mutedForeground, textAlign: "right" }}>اسم الألبوم</Text>
             <TextInput
               value={name}
               onChangeText={setName}
               placeholder="أدخل الاسم..."
-              placeholderTextColor="#4a4a4a"
+              placeholderTextColor={colors.input}
               style={{
-                backgroundColor: "#282828",
+                backgroundColor: colors.muted,
                 borderRadius: 10,
                 paddingHorizontal: 14,
                 paddingVertical: 10,
                 fontSize: 15,
-                color: "#e8e8e8",
+                color: colors.foreground,
                 textAlign: "right",
                 borderWidth: 1,
-                borderColor: "#3a3a3a",
+                borderColor: colors.input,
               }}
             />
           </View>
 
           {/* Description */}
           <View style={{ gap: 6 }}>
-            <Text style={{ fontSize: 12, color: "#6b7280", textAlign: "right" }}>الوصف</Text>
+            <Text style={{ fontSize: 12, color: colors.mutedForeground, textAlign: "right" }}>الوصف</Text>
             <TextInput
               value={description}
               onChangeText={setDescription}
               placeholder="أضف وصفاً للألبوم..."
-              placeholderTextColor="#4a4a4a"
+              placeholderTextColor={colors.input}
               multiline
               numberOfLines={4}
               style={{
-                backgroundColor: "#282828",
+                backgroundColor: colors.muted,
                 borderRadius: 10,
                 paddingHorizontal: 14,
                 paddingVertical: 10,
                 fontSize: 14,
-                color: "#e8e8e8",
+                color: colors.foreground,
                 textAlign: "right",
                 writingDirection: "rtl",
                 minHeight: 90,
                 borderWidth: 1,
-                borderColor: "#3a3a3a",
+                borderColor: colors.input,
                 textAlignVertical: "top",
               }}
             />
@@ -124,11 +126,11 @@ function EditAlbumModal({
                 flex: 1,
                 paddingVertical: 12,
                 borderRadius: 10,
-                backgroundColor: "#282828",
+                backgroundColor: colors.muted,
                 alignItems: "center",
               }}
             >
-              <Text style={{ color: "#b3b3b3", fontWeight: "600" }}>إلغاء</Text>
+              <Text style={{ color: colors.mutedForeground, fontWeight: "600" }}>إلغاء</Text>
             </Pressable>
             <Pressable
               onPress={() => onSave(name.trim(), description.trim())}
@@ -137,12 +139,12 @@ function EditAlbumModal({
                 flex: 2,
                 paddingVertical: 12,
                 borderRadius: 10,
-                backgroundColor: "#1DB954",
+                backgroundColor: colors.primary,
                 alignItems: "center",
                 opacity: isSaving || !name.trim() ? 0.6 : 1,
               }}
             >
-              <Text style={{ color: "#000", fontWeight: "700" }}>
+              <Text style={{ color: colors.primaryForeground, fontWeight: "700" }}>
                 {isSaving ? "جاري الحفظ..." : "حفظ"}
               </Text>
             </Pressable>
@@ -164,6 +166,7 @@ function TrackRow({
   displayIndex: number;
   onPress: () => void;
 }) {
+  const colors = useColors();
   const duration = media.file?.duration ?? media.duration;
   return (
     <Pressable
@@ -174,14 +177,14 @@ function TrackRow({
         gap: 12,
         paddingVertical: 12,
         borderBottomWidth: 1,
-        borderBottomColor: "#1e1e1e",
+        borderBottomColor: colors.border,
       }}
     >
       <Text
         style={{
           fontSize: 13,
           fontWeight: "700",
-          color: "#6b7280",
+          color: colors.mutedForeground,
           width: 24,
           textAlign: "center",
         }}
@@ -190,13 +193,13 @@ function TrackRow({
       </Text>
       <View style={{ flex: 1, gap: 2 }}>
         <Text
-          style={{ fontSize: 14, fontWeight: "600", color: "#e8e8e8", textAlign: "right" }}
+          style={{ fontSize: 14, fontWeight: "600", color: colors.foreground, textAlign: "right" }}
           numberOfLines={1}
         >
           {media.title || media.file?.name || "Untitled"}
         </Text>
         {duration != null && (
-          <Text style={{ fontSize: 12, color: "#6b7280", textAlign: "right" }}>
+          <Text style={{ fontSize: 12, color: colors.mutedForeground, textAlign: "right" }}>
             {minuteToString(duration)}
           </Text>
         )}
@@ -229,6 +232,7 @@ function ReorderRow({
   onMoveUp: () => void;
   onMoveDown: () => void;
 }) {
+  const colors = useColors();
   const duration = media.file?.duration ?? media.duration;
   return (
     <View
@@ -238,8 +242,8 @@ function ReorderRow({
         gap: 10,
         paddingVertical: 10,
         borderBottomWidth: 1,
-        borderBottomColor: "#1e1e1e",
-        backgroundColor: "#121212",
+        borderBottomColor: colors.border,
+        backgroundColor: colors.background,
       }}
     >
       {/* Up/Down controls */}
@@ -266,21 +270,21 @@ function ReorderRow({
           width: 28,
           height: 28,
           borderRadius: 6,
-          backgroundColor: "#282828",
+          backgroundColor: colors.muted,
           alignItems: "center",
           justifyContent: "center",
         }}
       >
-        <Text style={{ fontSize: 12, fontWeight: "700", color: "#6b7280" }}>{displayIndex}</Text>
+        <Text style={{ fontSize: 12, fontWeight: "700", color: colors.mutedForeground }}>{displayIndex}</Text>
       </View>
 
       {/* Info */}
       <View style={{ flex: 1, gap: 1 }}>
-        <Text style={{ fontSize: 14, fontWeight: "600", color: "#e8e8e8", textAlign: "right" }} numberOfLines={1}>
+        <Text style={{ fontSize: 14, fontWeight: "600", color: colors.foreground, textAlign: "right" }} numberOfLines={1}>
           {media.title || media.file?.name || "Untitled"}
         </Text>
         {duration != null && (
-          <Text style={{ fontSize: 12, color: "#6b7280", textAlign: "right" }}>
+          <Text style={{ fontSize: 12, color: colors.mutedForeground, textAlign: "right" }}>
             {minuteToString(duration)}
           </Text>
         )}
@@ -297,6 +301,7 @@ function ReorderRow({
 export default function AlbumDetailScreen() {
   const router = useRouter();
   const qc = useQueryClient();
+  const colors = useColors();
   const { albumId } = useLocalSearchParams<{ albumId: string }>();
   const id = Number(albumId);
 
@@ -361,7 +366,7 @@ export default function AlbumDetailScreen() {
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#121212" }}>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
       <SafeArea>
         {/* Header */}
         <View
@@ -379,7 +384,7 @@ export default function AlbumDetailScreen() {
               width: 36,
               height: 36,
               borderRadius: 18,
-              backgroundColor: "#282828",
+              backgroundColor: colors.muted,
               alignItems: "center",
               justifyContent: "center",
             }}
@@ -388,7 +393,7 @@ export default function AlbumDetailScreen() {
           </Pressable>
 
           <Text
-            style={{ fontSize: 15, fontWeight: "700", color: "#fff", flex: 1, textAlign: "center", marginHorizontal: 8 }}
+            style={{ fontSize: 15, fontWeight: "700", color: colors.foreground, flex: 1, textAlign: "center", marginHorizontal: 8 }}
             numberOfLines={1}
           >
             {album?.name ?? "Album"}
@@ -400,7 +405,7 @@ export default function AlbumDetailScreen() {
               width: 36,
               height: 36,
               borderRadius: 18,
-              backgroundColor: "#282828",
+              backgroundColor: colors.muted,
               alignItems: "center",
               justifyContent: "center",
             }}
@@ -411,17 +416,17 @@ export default function AlbumDetailScreen() {
 
         {isLoading ? (
           <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-            <Text style={{ color: "#6b7280" }}>جاري التحميل...</Text>
+            <Text style={{ color: colors.mutedForeground }}>جاري التحميل...</Text>
           </View>
         ) : !album ? (
           <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-            <Text style={{ color: "#6b7280" }}>الألبوم غير موجود</Text>
+            <Text style={{ color: colors.mutedForeground }}>الألبوم غير موجود</Text>
           </View>
         ) : (
           <ScrollView showsVerticalScrollIndicator={false}>
             {/* Hero */}
             <View style={{ alignItems: "center", paddingHorizontal: 24, paddingTop: 16, paddingBottom: 24, gap: 10 }}>
-              {/* Art */}
+              {/* Art — white initials on brand color, intentional */}
               <View
                 style={{
                   width: 160,
@@ -443,13 +448,13 @@ export default function AlbumDetailScreen() {
               </View>
 
               {/* Name */}
-              <Text style={{ fontSize: 22, fontWeight: "800", color: "#fff", textAlign: "center", marginTop: 4 }}>
+              <Text style={{ fontSize: 22, fontWeight: "800", color: colors.foreground, textAlign: "center", marginTop: 4 }}>
                 {album.name}
               </Text>
 
               {/* Author */}
               {album.author?.name && (
-                <Text style={{ fontSize: 14, color: "#1DB954", fontWeight: "600" }}>
+                <Text style={{ fontSize: 14, color: colors.primary, fontWeight: "600" }}>
                   {album.author.name}
                 </Text>
               )}
@@ -460,7 +465,7 @@ export default function AlbumDetailScreen() {
                   <Text
                     style={{
                       fontSize: 14,
-                      color: "#9ca3af",
+                      color: colors.mutedForeground,
                       textAlign: "center",
                       lineHeight: 22,
                       writingDirection: "rtl",
@@ -470,14 +475,14 @@ export default function AlbumDetailScreen() {
                     {album.description}
                   </Text>
                   {album.description.length > 80 && (
-                    <Text style={{ fontSize: 12, color: "#1DB954", textAlign: "center", marginTop: 4 }}>
+                    <Text style={{ fontSize: 12, color: colors.primary, textAlign: "center", marginTop: 4 }}>
                       {descExpanded ? "أقل" : "المزيد"}
                     </Text>
                   )}
                 </Pressable>
               ) : (
                 <Pressable onPress={() => setEditModalVisible(true)}>
-                  <Text style={{ fontSize: 13, color: "#4a4a4a", fontStyle: "italic" }}>
+                  <Text style={{ fontSize: 13, color: colors.input, fontStyle: "italic" }}>
                     أضف وصفاً للألبوم...
                   </Text>
                 </Pressable>
@@ -485,14 +490,14 @@ export default function AlbumDetailScreen() {
 
               {/* Meta pills */}
               <View style={{ flexDirection: "row", gap: 10, marginTop: 4 }}>
-                <View style={{ paddingHorizontal: 10, paddingVertical: 4, backgroundColor: "#1e1e1e", borderRadius: 99 }}>
-                  <Text style={{ fontSize: 12, color: "#6b7280" }}>
+                <View style={{ paddingHorizontal: 10, paddingVertical: 4, backgroundColor: colors.card, borderRadius: 99 }}>
+                  <Text style={{ fontSize: 12, color: colors.mutedForeground }}>
                     {album.medias?.length ?? 0} مقطع
                   </Text>
                 </View>
                 {album.albumType && (
-                  <View style={{ paddingHorizontal: 10, paddingVertical: 4, backgroundColor: "#1e1e1e", borderRadius: 99 }}>
-                    <Text style={{ fontSize: 12, color: "#6b7280" }}>{album.albumType}</Text>
+                  <View style={{ paddingHorizontal: 10, paddingVertical: 4, backgroundColor: colors.card, borderRadius: 99 }}>
+                    <Text style={{ fontSize: 12, color: colors.mutedForeground }}>{album.albumType}</Text>
                   </View>
                 )}
               </View>
@@ -502,7 +507,9 @@ export default function AlbumDetailScreen() {
                 <Pressable
                   onPress={() => {
                     const first = tracks[0];
-                    if (first?.blog?.id) router.push(`/blog-view/${first.blog.id}` as any);
+                    if (first?.blog?.id) {
+                      router.push(`/blog-view-2/${first.blog.id}` as any);
+                    }
                   }}
                   style={{
                     flex: 1,
@@ -512,18 +519,18 @@ export default function AlbumDetailScreen() {
                     gap: 8,
                     paddingVertical: 13,
                     borderRadius: 12,
-                    backgroundColor: "#1DB954",
+                    backgroundColor: colors.primary,
                   }}
                 >
-                  <Icon name="Play" size={18} className="text-black" />
-                  <Text style={{ fontSize: 14, fontWeight: "700", color: "#000" }}>تشغيل الكل</Text>
+                  <Icon name="Play" size={18} className="text-primary-foreground" />
+                  <Text style={{ fontSize: 14, fontWeight: "700", color: colors.primaryForeground }}>تشغيل الكل</Text>
                 </Pressable>
                 <Pressable
                   style={{
                     width: 48,
                     height: 48,
                     borderRadius: 12,
-                    backgroundColor: "#282828",
+                    backgroundColor: colors.muted,
                     alignItems: "center",
                     justifyContent: "center",
                   }}
@@ -543,11 +550,11 @@ export default function AlbumDetailScreen() {
                   justifyContent: "space-between",
                   paddingBottom: 8,
                   borderBottomWidth: 1,
-                  borderBottomColor: "#1e1e1e",
+                  borderBottomColor: colors.border,
                   marginBottom: 4,
                 }}
               >
-                <Text style={{ fontSize: 14, fontWeight: "700", color: "#e8e8e8" }}>
+                <Text style={{ fontSize: 14, fontWeight: "700", color: colors.foreground }}>
                   المقاطع
                 </Text>
 
@@ -560,12 +567,12 @@ export default function AlbumDetailScreen() {
                       gap: 4,
                       paddingHorizontal: 10,
                       paddingVertical: 5,
-                      backgroundColor: "#282828",
+                      backgroundColor: colors.muted,
                       borderRadius: 8,
                     }}
                   >
                     <Icon name="ListOrdered" size={14} className="text-muted-foreground" />
-                    <Text style={{ fontSize: 12, color: "#9ca3af" }}>ترتيب</Text>
+                    <Text style={{ fontSize: 12, color: colors.mutedForeground }}>ترتيب</Text>
                   </Pressable>
                 )}
 
@@ -573,9 +580,9 @@ export default function AlbumDetailScreen() {
                   <View style={{ flexDirection: "row", gap: 8 }}>
                     <Pressable
                       onPress={cancelReorder}
-                      style={{ paddingHorizontal: 10, paddingVertical: 5, backgroundColor: "#282828", borderRadius: 8 }}
+                      style={{ paddingHorizontal: 10, paddingVertical: 5, backgroundColor: colors.muted, borderRadius: 8 }}
                     >
-                      <Text style={{ fontSize: 12, color: "#9ca3af" }}>إلغاء</Text>
+                      <Text style={{ fontSize: 12, color: colors.mutedForeground }}>إلغاء</Text>
                     </Pressable>
                     <Pressable
                       onPress={commitOrder}
@@ -583,12 +590,12 @@ export default function AlbumDetailScreen() {
                       style={{
                         paddingHorizontal: 12,
                         paddingVertical: 5,
-                        backgroundColor: "#1DB954",
+                        backgroundColor: colors.primary,
                         borderRadius: 8,
                         opacity: isSavingOrder ? 0.6 : 1,
                       }}
                     >
-                      <Text style={{ fontSize: 12, fontWeight: "700", color: "#000" }}>
+                      <Text style={{ fontSize: 12, fontWeight: "700", color: colors.primaryForeground }}>
                         {isSavingOrder ? "..." : "حفظ الترتيب"}
                       </Text>
                     </Pressable>
@@ -599,7 +606,7 @@ export default function AlbumDetailScreen() {
               {tracks.length === 0 ? (
                 <View style={{ alignItems: "center", paddingVertical: 48, gap: 10 }}>
                   <Icon name="Music2" size={40} className="text-muted-foreground" />
-                  <Text style={{ fontSize: 14, color: "#6b7280" }}>لا توجد مقاطع بعد</Text>
+                  <Text style={{ fontSize: 14, color: colors.mutedForeground }}>لا توجد مقاطع بعد</Text>
                 </View>
               ) : reorderMode ? (
                 tracks.map((media, idx) => (
@@ -620,7 +627,9 @@ export default function AlbumDetailScreen() {
                     media={media}
                     displayIndex={idx + 1}
                     onPress={() => {
-                      if (media.blog?.id) router.push(`/blog-view/${media.blog.id}` as any);
+                      if (media.blog?.id) {
+                        router.push(`/blog-view-2/${media.blog.id}` as any);
+                      }
                     }}
                   />
                 ))

@@ -112,37 +112,69 @@ async function attachTags(
   }
 }
 
+type AiProvider = "anthropic" | "openai" | "gemini";
+
+async function callAI(provider: AiProvider, prompt: string, maxTokens: number): Promise<string> {
+  if (provider === "anthropic") {
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) throw new Error("ANTHROPIC_API_KEY not configured");
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+      body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: maxTokens, messages: [{ role: "user", content: prompt }] }),
+    });
+    if (!res.ok) throw new Error(`Anthropic API error: ${res.status}`);
+    const data = await res.json();
+    return data.content?.[0]?.text ?? "";
+  }
+  if (provider === "openai") {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
+      body: JSON.stringify({ model: "gpt-4o", max_tokens: maxTokens, messages: [{ role: "user", content: prompt }] }),
+    });
+    if (!res.ok) throw new Error(`OpenAI API error: ${res.status}`);
+    const data = await res.json();
+    return data.choices?.[0]?.message?.content ?? "";
+  }
+  if (provider === "gemini") {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: maxTokens } }),
+      }
+    );
+    if (!res.ok) throw new Error(`Gemini API error: ${res.status}`);
+    const data = await res.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+  }
+  throw new Error(`Unknown AI provider: ${provider}`);
+}
+
 async function syncToc(
   db: any,
   bookId: number,
   html: string,
   bookUrl: string,
-  apiKey: string
+  provider: AiProvider
 ): Promise<number> {
-  // ── Call Claude for ToC ────────────────────────────────────────────────────
-  const tocRes = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 8192,
-      messages: [
-        {
-          role: "user",
-          content: `${SHAMELA_TOC_EXTRACT_PROMPT}\n\n<SHAMELA_BOOK_URL>${bookUrl}</SHAMELA_BOOK_URL>\n\n<PAGE_HTML>${html.slice(0, 60000)}</PAGE_HTML>`,
-        },
-      ],
-    }),
-  });
-
-  if (!tocRes.ok) return 0;
-
-  const tocData = await tocRes.json();
-  const tocRaw = tocData.content?.[0]?.text ?? "";
+  // ── Call AI for ToC ────────────────────────────────────────────────────────
+  let tocRaw: string;
+  try {
+    tocRaw = await callAI(
+      provider,
+      `${SHAMELA_TOC_EXTRACT_PROMPT}\n\n<SHAMELA_BOOK_URL>${bookUrl}</SHAMELA_BOOK_URL>\n\n<PAGE_HTML>${html.slice(0, 60000)}</PAGE_HTML>`,
+      8192
+    );
+  } catch {
+    return 0;
+  }
   let toc: {
     volumes: { number: number; title: string | null }[];
     chapters: {
@@ -742,7 +774,10 @@ export const bookRoutes = createTRPCRouter({
   // ── Sync book from Shamela URL ───────────────────────────────────────────────
 
   syncBookFromShamela: publicProcedure
-    .input(z.object({ shamelaUrl: z.string().min(1) }))
+    .input(z.object({
+      shamelaUrl: z.string().min(1),
+      aiProvider: z.enum(["anthropic", "openai", "gemini"]).default("anthropic"),
+    }))
     .mutation(async ({ ctx, input }) => {
       const { db } = ctx;
 
@@ -773,32 +808,12 @@ export const bookRoutes = createTRPCRouter({
       if (!htmlRes.ok) throw new Error(`Failed to fetch Shamela page: ${htmlRes.status}`);
       const html = await htmlRes.text();
 
-      // ── Call Claude for book metadata ─────────────────────────────────────
-      const apiKey = process.env.ANTHROPIC_API_KEY;
-      if (!apiKey) throw new Error("ANTHROPIC_API_KEY not configured");
-
-      const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-6",
-          max_tokens: 1024,
-          messages: [
-            {
-              role: "user",
-              content: `${SHAMELA_BOOK_META_PROMPT}\n\n<SHAMELA_BOOK_URL>${bookIndexUrl}</SHAMELA_BOOK_URL>\n\n<PAGE_HTML>${html.slice(0, 40000)}</PAGE_HTML>`,
-            },
-          ],
-        }),
-      });
-
-      if (!claudeRes.ok) throw new Error(`Claude API error: ${claudeRes.status}`);
-      const claudeData = await claudeRes.json();
-      const rawText = claudeData.content?.[0]?.text ?? "";
+      // ── Call AI for book metadata ─────────────────────────────────────────
+      const rawText = await callAI(
+        input.aiProvider,
+        `${SHAMELA_BOOK_META_PROMPT}\n\n<SHAMELA_BOOK_URL>${bookIndexUrl}</SHAMELA_BOOK_URL>\n\n<PAGE_HTML>${html.slice(0, 40000)}</PAGE_HTML>`,
+        1024
+      );
 
       let meta: {
         nameAr: string;
@@ -874,7 +889,7 @@ export const bookRoutes = createTRPCRouter({
           await attachTags(db, existing.blog.id, meta.description);
         }
 
-        const chaptersImported = await syncToc(db, existing.id, html, bookIndexUrl, apiKey);
+        const chaptersImported = await syncToc(db, existing.id, html, bookIndexUrl, input.aiProvider);
         return { book: updated, created: false, chaptersImported };
       } else {
         // ── CREATE new book ────────────────────────────────────────────────
@@ -907,7 +922,7 @@ export const bookRoutes = createTRPCRouter({
           await attachTags(db, blog.id, meta.description);
         }
 
-        const chaptersImported = await syncToc(db, book.id, html, bookIndexUrl, apiKey);
+        const chaptersImported = await syncToc(db, book.id, html, bookIndexUrl, input.aiProvider);
         return { book, created: true, chaptersImported };
       }
     }),

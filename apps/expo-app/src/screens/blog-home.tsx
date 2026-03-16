@@ -8,6 +8,7 @@ import { BlogCard } from "@/components/blog-card";
 import { BlogHomeAlbums } from "@/components/blog-home/blog-home-albums";
 import { BlogHomeAnalytics } from "@/components/blog-home/blog-home-analytics";
 import { BlogHomeBooks } from "@/components/blog-home/blog-home-books";
+import { BlogHomeBooksCta } from "@/components/blog-home/blog-home-books-cta";
 import type { BlogItem } from "@/components/blog-card";
 import {
   BlogCategory,
@@ -189,6 +190,7 @@ export default function BlogHomeScreen() {
             ListHeaderComponent={
               <>
                 <BlogHomeAnalytics />
+                <BlogHomeBooksCta />
                 <BlogHomeFeatured />
                 <BlogHomeChannels />
                 <BlogHomeRecentlyViewed />

@@ -5,11 +5,14 @@ import { useRef, useState } from "react";
 import { FlatList, ScrollView, Text, TextInput, View } from "react-native";
 
 import { _trpc } from "@/components/static-trpc";
+import { getBlogHref } from "@/components/blog-card/utils";
 import { SafeArea } from "@/components/safe-area";
 import { Icon } from "@/components/ui/icon";
+import { useColors } from "@/hooks/use-color";
 
 export default function SearchScreen() {
   const router = useRouter();
+  const colors = useColors();
   const [query, setQuery] = useState("");
   const [submitted, setSubmitted] = useState("");
   const inputRef = useRef<TextInput>(null);
@@ -62,13 +65,13 @@ export default function SearchScreen() {
             <TextInput
               ref={inputRef}
               placeholder="Search posts, tags…"
-              placeholderTextColor="#b3b3b3"
+              placeholderTextColor={colors.mutedForeground}
               value={query}
               onChangeText={setQuery}
               onSubmitEditing={() => handleSubmit(query)}
               autoFocus
               returnKeyType="search"
-              style={{ flex: 1, fontSize: 14, color: "#ffffff", paddingVertical: 0 }}
+              style={{ flex: 1, fontSize: 14, color: colors.foreground, paddingVertical: 0 }}
             />
             {query.length > 0 && (
               <Pressable
@@ -99,7 +102,11 @@ export default function SearchScreen() {
               ItemSeparatorComponent={() => <View className="h-2" />}
               renderItem={({ item }: { item: any }) => (
                 <Pressable
-                  onPress={() => router.push(`/blog-view/${item.id}` as any)}
+                  onPress={() =>
+                    router.push(
+                      getBlogHref({ id: item.id, type: item.type } as any) as any,
+                    )
+                  }
                   className="bg-card rounded-xl px-4 py-3 active:opacity-80"
                 >
                   <View className="flex-row items-center gap-2 mb-1.5">

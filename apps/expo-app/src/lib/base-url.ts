@@ -35,12 +35,13 @@ export const getBaseUrl = () => {
   return `http://${localhost}:${apiPort}`;
 };
 export const getWebUrl = () => {
-  const envBaseUrl = process.env.EXPO_PUBLIC_BASE_URL;
-  const useEnvBaseUrl =
+  const envWebUrl =
+    process.env.EXPO_PUBLIC_WEB_URL ?? process.env.EXPO_PUBLIC_BASE_URL;
+  const useEnvWebUrl =
     process.env.EXPO_PUBLIC_APP_VARIANT === "preview" ||
     process.env.EXPO_PUBLIC_FORCE_BASE_URL === "true";
-  if (useEnvBaseUrl && envBaseUrl) {
-    return envBaseUrl;
+  if (useEnvWebUrl && envWebUrl) {
+    return envWebUrl;
   }
 
   const debuggerHost = Constants.expoConfig?.hostUri;
@@ -53,6 +54,6 @@ export const getWebUrl = () => {
     );
   }
 
-  const apiPort = process.env.EXPO_PUBLIC_API_PORT ?? "3006";
-  return `http://${localhost}:${apiPort}`;
+  const webPort = process.env.EXPO_PUBLIC_WEB_PORT ?? "3000";
+  return `http://${localhost}:${webPort}`;
 };

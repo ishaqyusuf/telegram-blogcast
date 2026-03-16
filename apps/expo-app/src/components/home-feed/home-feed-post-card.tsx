@@ -1,6 +1,5 @@
 import { Pressable } from "@/components/ui/pressable";
-import { View, Text, TouchableOpacity, ImageBackground, I18nManager } from "react-native";
-import { Play } from "lucide-react-native";
+import { View, Text, ImageBackground, I18nManager } from "react-native";
 import { Link, useRouter } from "expo-router";
 import { HomeFeedPostAuthorHeader } from "./home-feed-post-author-header";
 import { HomeFeedPostFooter } from "./home-feed-post-footer";
@@ -11,19 +10,22 @@ import { minuteToString } from "@/lib/utils";
 import { useCallback } from "react";
 import { useAudioStore } from "@/store/audio-store";
 import { getTelegramFileUrl } from "@/lib/get-telegram-file";
+import { getBlogHref } from "@/components/blog-card/utils";
+import { Icon } from "@/components/ui/icon";
 
 const isRTL = I18nManager.isRTL;
 export type ItemProps = RouterOutputs["podcasts"]["posts"]["data"][number];
+
 function AudioPost({ post }: { post: ItemProps }) {
   const store = useAudioStore();
 
   return (
     <>
       <View className="mb-4">
-        <Text className="text-xl font-bold text-slate-900 dark:text-white mb-2 leading-tight text-right">
+        <Text className="text-xl font-bold text-foreground mb-2 leading-tight text-right">
           {post.caption || post?.audio?.title}
         </Text>
-        <Text className="text-slate-600 dark:text-slate-300 text-base leading-relaxed text-right">
+        <Text className="text-muted-foreground text-base leading-relaxed text-right">
           {post.content}
         </Text>
       </View>
@@ -39,10 +41,10 @@ function VideoPost({ post }: { post: ItemProps }) {
   return (
     <>
       <View className="mb-4">
-        <Text className="text-xl font-bold text-slate-900 dark:text-white mb-2 leading-tight text-right">
+        <Text className="text-xl font-bold text-foreground mb-2 leading-tight text-right">
           {post.caption}
         </Text>
-        <Text className="text-slate-600 dark:text-slate-300 text-base leading-relaxed text-right">
+        <Text className="text-muted-foreground text-base leading-relaxed text-right">
           {post.content}
         </Text>
       </View>
@@ -52,9 +54,9 @@ function VideoPost({ post }: { post: ItemProps }) {
         imageStyle={{ borderRadius: 12 }}
       >
         <View className="absolute inset-0 bg-black/30" />
-        <TouchableOpacity className="w-12 h-12 rounded-full bg-primary/90 items-center justify-center">
-          <Play size={28} color="white" fill="white" />
-        </TouchableOpacity>
+        <Pressable className="w-12 h-12 rounded-full bg-primary/90 items-center justify-center">
+          <Icon name="Play" size={28} className="text-primary-foreground" />
+        </Pressable>
         <View className="absolute bottom-2 right-2 bg-black/60 px-2 py-0.5 rounded">
           <Text className="text-xs font-medium text-white">
             {/* {post.video.duration} */}
@@ -67,9 +69,7 @@ function VideoPost({ post }: { post: ItemProps }) {
 
 function TextPost({ post }: { post: ItemProps }) {
   return (
-    <View
-      className="mb-2 pt-3 border-t border-slate-100 dark:border-slate-800"
-         >
+    <View className="mb-2 pt-3 border-t border-border">
       <Text className="text-foreground text-lg leading-relaxed text-right">
         {post.content}
       </Text>
@@ -81,14 +81,12 @@ export function HomeFeedPostCard({ post }: { post: ItemProps }) {
   const router = useRouter();
   return (
     <Pressable
-      onPress={(e) => {
-        // console.log(">>>>>>");
-        router.push(`/blog-view/${post.id}`);
+      onPress={() => {
+        router.push(getBlogHref({ id: post.id, type: post.type } as any) as any);
       }}
     >
-      <View className="bg-background rounded-2xl p-4 shadow-sm border border-foreground">
+      <View className="bg-card rounded-2xl p-4 shadow-sm border border-border">
         <HomeFeedPostAuthorHeader
-          // author={post.author}
           createdAt={formatDate(post.date, "MMM D, YYYY")}
         />
         {post.type === "audio" && <AudioPost post={post} />}

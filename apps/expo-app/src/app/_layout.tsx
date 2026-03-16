@@ -77,52 +77,33 @@ const InitialLayout = () => {
         <StatusBar style="dark" />
         {/* <StatusBar style="auto" /> */}
 
-        <Stack initialRouteName="home">
-          <Stack.Screen name="home" options={{ headerShown: false }} />
-          <Stack.Screen name="home2" options={{ headerShown: false }} />
-          <Stack.Screen
-            name="blog-view-2/[blogId]/index"
-            options={{ headerShown: false }}
-          />
+        <Stack initialRouteName="home" screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="home" />
+          <Stack.Screen name="home2" />
+          <Stack.Screen name="blog-view-2/[blogId]/index" />
           <Stack.Screen
             name="blog-view-2/[blogId]/transcribe-audio"
-            options={{ headerShown: false, presentation: "modal" }}
+            options={{ presentation: "modal" }}
           />
-          <Stack.Screen name="blog-search" options={{ headerShown: false }} />
-          <Stack.Screen
-            name="blog-view/[blogId]/index"
-            options={{ headerShown: false }}
-          />
+          <Stack.Screen name="blog-search" />
+          <Stack.Screen name="blog-view/[blogId]/index" />
           <Stack.Screen
             name="blog-form"
-            options={{ headerShown: false, presentation: "modal" }}
+            options={{ presentation: "modal" }}
           />
-          <Stack.Screen name="channels" options={{ headerShown: false }} />
-          <Stack.Screen
-            name="channels/[channelId]"
-            options={{ headerShown: false }}
-          />
-          <Stack.Screen name="play-history" options={{ headerShown: false }} />
-          <Stack.Screen name="search" options={{ headerShown: false }} />
-          <Stack.Screen name="albums" options={{ headerShown: false }} />
-          <Stack.Screen
-            name="albums/[albumId]"
-            options={{ headerShown: false }}
-          />
-          <Stack.Screen name="book-fetch" options={{ headerShown: false }} />
-          <Stack.Screen name="books" options={{ headerShown: false }} />
-          <Stack.Screen
-            name="books/[bookId]"
-            options={{ headerShown: false }}
-          />
-          <Stack.Screen
-            name="books/[bookId]/reader/[pageId]"
-            options={{ headerShown: false }}
-          />
+          <Stack.Screen name="channels" />
+          <Stack.Screen name="channels/[channelId]" />
+          <Stack.Screen name="play-history" />
+          <Stack.Screen name="search" />
+          <Stack.Screen name="albums" />
+          <Stack.Screen name="albums/[albumId]" />
+          <Stack.Screen name="book-fetch" />
+          <Stack.Screen name="books" />
+          <Stack.Screen name="books/[bookId]" />
+          <Stack.Screen name="books/[bookId]/reader/[pageId]" />
           <Stack.Screen
             name="blog-options/[blogId]/index"
             options={{
-              headerShown: false,
               presentation: "formSheet",
               sheetGrabberVisible: true,
               sheetAllowedDetents: [0.4, 0.7],
@@ -132,12 +113,11 @@ const InitialLayout = () => {
           <Stack.Screen
             name="blog-image-view"
             options={{
-              headerShown: false,
               presentation: "fullScreenModal",
               animation: "fade",
             }}
           />
-          <Stack.Screen name="index" options={{ headerShown: false }} />
+          <Stack.Screen name="index" />
           <Stack.Screen name="+not-found" />
         </Stack>
         {/* <Stack>

@@ -3,7 +3,10 @@ import { useRouter } from "expo-router";
 import { Alert, Share, Text, View } from "react-native";
 
 import { Icon, type IconKeys } from "@/components/ui/icon";
+import { _trpc } from "@/components/static-trpc";
+import { useQuery } from "@/lib/react-query";
 import { getWebUrl } from "@/lib/base-url";
+import { getBlogHref } from "./utils";
 
 type Props = {
   blogId: string;
@@ -43,6 +46,13 @@ function ActionRow({
 
 export function BlogCardOptionsSheet({ blogId }: Props) {
   const router = useRouter();
+  const numericBlogId = Number(blogId);
+  const { data: blog } = useQuery(
+    _trpc.blog.getBlog.queryOptions(
+      { id: numericBlogId || 0 },
+      { enabled: Number.isFinite(numericBlogId) && numericBlogId > 0 },
+    ),
+  );
 
   const onShare = async () => {
     const id = encodeURIComponent(blogId);
@@ -77,10 +87,28 @@ export function BlogCardOptionsSheet({ blogId }: Props) {
           label="Open post"
           icon="FileText"
           onPress={() => {
-            router.replace(`/blog-view/${blogId}`);
+            if (blog) {
+              router.replace(getBlogHref({ id: blog.id, type: blog.type } as any) as any);
+              return;
+            }
+            router.replace(`/blog-view/${blogId}` as any);
           }}
         />
         <ActionRow label="Share" icon="Share2" onPress={onShare} />
+        <ActionRow
+          label="Comment"
+          icon="MessageSquare"
+          onPress={() => {
+            if (blog) {
+              router.replace({
+                pathname: getBlogHref({ id: blog.id, type: blog.type } as any) as any,
+                params: { openComments: "1" },
+              });
+              return;
+            }
+            router.replace(`/blog-view/${blogId}` as any);
+          }}
+        />
         <ActionRow label="Save" icon="Bookmark" onPress={onComingSoon} />
         <ActionRow label="Like" icon="Heart" onPress={onComingSoon} />
         <ActionRow

@@ -2,7 +2,7 @@ import { Pressable } from "@/components/ui/pressable";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, FlatList, I18nManager, Modal, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Alert, FlatList, Modal, ScrollView, Text, View } from "react-native";
 
 import { AudioTranscript } from "@/components/audio-blog-view/audio-transcript";
 import { CommentsSheet } from "@/components/comments-sheet";
@@ -10,6 +10,7 @@ import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";
 import { useCommentsSheet } from "@/hooks/use-comments-sheet";
+import { useColors } from "@/hooks/use-color";
 import { usePlayHistorySync } from "@/hooks/use-play-history-sync";
 import { useAudioStore } from "@/store/audio-store";
 import { useRecentlyViewedStore } from "@/store/recently-viewed-store";
@@ -44,7 +45,8 @@ type Tab = "info" | "transcript";
 
 // ── Player controls ───────────────────────────────────────────────────────────
 
-function PlayerSection({ blogId }: { blogId: number }) {
+function PlayerSection() {
+  const colors = useColors();
   const isPlaying = useAudioStore((s) => s.isPlaying);
   const position = useAudioStore((s) => s.position);
   const duration = useAudioStore((s) => s.duration);
@@ -60,7 +62,7 @@ function PlayerSection({ blogId }: { blogId: number }) {
         <View className="relative h-10 justify-center">
           <View className="absolute w-full h-1.5 bg-muted rounded-full overflow-hidden">
             <View
-              style={{ height: "100%", backgroundColor: "#1DB954", borderRadius: 9999, width: `${progress * 100}%` }}
+              style={{ height: "100%", backgroundColor: colors.primary, borderRadius: 9999, width: `${progress * 100}%` }}
             />
           </View>
           <View
@@ -68,17 +70,17 @@ function PlayerSection({ blogId }: { blogId: number }) {
               position: "absolute",
               width: 16,
               height: 16,
-              backgroundColor: "#121212",
+              backgroundColor: colors.background,
               borderRadius: 9999,
               borderWidth: 2,
-              borderColor: "#1DB954",
+              borderColor: colors.primary,
               zIndex: 20,
               left: `${Math.min(progress * 100, 95)}%`,
             }}
           />
           <View className="absolute inset-0 flex-row items-center justify-between opacity-20 px-1 pointer-events-none">
             {[3, 5, 8, 4, 6, 3, 2, 5, 4, 3, 6, 4, 3, 5, 7].map((h, i) => (
-              <View key={i} style={{ width: 4, backgroundColor: "#fff", borderRadius: 9999, height: h * 3 }} />
+              <View key={i} style={{ width: 4, backgroundColor: colors.foreground, borderRadius: 9999, height: h * 3 }} />
             ))}
           </View>
         </View>
@@ -115,14 +117,64 @@ function PlayerSection({ blogId }: { blogId: number }) {
   );
 }
 
+function FloatingPlayerWidget({ visible }: { visible: boolean }) {
+  const colors = useColors();
+  const isPlaying = useAudioStore((s) => s.isPlaying);
+  const position = useAudioStore((s) => s.position);
+  const duration = useAudioStore((s) => s.duration);
+  const togglePlayPause = useAudioStore((s) => s.togglePlayPause);
+  const seek = useAudioStore((s) => s.seek);
+
+  if (!visible) return null;
+
+  return (
+    <View
+      pointerEvents="box-none"
+      style={{
+        position: "absolute",
+        left: 16,
+        right: 16,
+        bottom: 16,
+      }}
+    >
+      <View className="overflow-hidden rounded-2xl border border-border bg-card/95 px-4 py-3 shadow-2xl">
+        <View className="mb-3 h-1 overflow-hidden rounded-full bg-muted">
+          <View
+            style={{
+              width: `${duration > 0 ? (position / duration) * 100 : 0}%`,
+              height: "100%",
+              backgroundColor: colors.primary,
+            }}
+          />
+        </View>
+        <View className="flex-row items-center justify-between">
+          <Pressable className="p-2 active:opacity-50" onPress={() => seek(Math.max(0, position - 10000))}>
+            <Icon name="RotateCcw" size={20} className="text-muted-foreground" />
+          </Pressable>
+          <Pressable
+            onPress={() => togglePlayPause()}
+            className="size-12 items-center justify-center rounded-full bg-primary active:opacity-90"
+          >
+            <Icon name={isPlaying ? "Pause" : "Play"} size={22} className="text-primary-foreground" />
+          </Pressable>
+          <Pressable className="p-2 active:opacity-50" onPress={() => seek(Math.min(duration, position + 10000))}>
+            <Icon name="RotateCw" size={20} className="text-muted-foreground" />
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 // ── Info tab ──────────────────────────────────────────────────────────────────
 
 function InfoTab({ blog, onCommentsPress }: { blog: any; onCommentsPress: () => void }) {
+  const colors = useColors();
   const tags = blog.blogTags?.map((bt: any) => bt.tags?.title).filter(Boolean) ?? [];
   const commentCount = blog.blogs?.length ?? 0;
 
   return (
-    <ScrollView showsVerticalScrollIndicator={false} contentContainerClassName="pb-8 gap-4">
+    <View className="gap-4 pb-8">
       <View className="flex-row items-center gap-3 py-4 border-b border-border">
         <View className="size-10 rounded-full bg-muted items-center justify-center">
           <Text className="text-sm font-bold text-muted-foreground">AG</Text>
@@ -137,7 +189,7 @@ function InfoTab({ blog, onCommentsPress }: { blog: any; onCommentsPress: () => 
       </View>
 
       <View className="gap-2">
-        <Text style={{ fontSize: 20, fontWeight: "700", color: "#fff", textAlign: "right", writingDirection: "rtl" }}>
+        <Text style={{ fontSize: 20, fontWeight: "700", color: colors.foreground, textAlign: "right", writingDirection: "rtl" }}>
           {blog.content ?? "Untitled"}
         </Text>
         {tags.length > 0 && (
@@ -164,7 +216,7 @@ function InfoTab({ blog, onCommentsPress }: { blog: any; onCommentsPress: () => 
         </View>
         <Icon name="ChevronRight" size={16} className="text-muted-foreground" />
       </Pressable>
-    </ScrollView>
+    </View>
   );
 }
 
@@ -185,6 +237,7 @@ function MoreMenu({
   onAddToAlbum: () => void;
   onViewAlbum: () => void;
 }) {
+  const colors = useColors();
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable
@@ -193,9 +246,9 @@ function MoreMenu({
       >
         <Pressable
           onPress={() => {}}
-          style={{ backgroundColor: "#1e1e1e", borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, gap: 4 }}
+          style={{ backgroundColor: colors.card, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, gap: 4 }}
         >
-          <View style={{ width: 36, height: 4, backgroundColor: "#3a3a3a", borderRadius: 2, alignSelf: "center", marginBottom: 8 }} />
+          <View style={{ width: 36, height: 4, backgroundColor: colors.input, borderRadius: 2, alignSelf: "center", marginBottom: 8 }} />
 
           {/* Add / Change Album */}
           <Pressable
@@ -203,7 +256,7 @@ function MoreMenu({
             style={{ flexDirection: "row", alignItems: "center", gap: 14, paddingVertical: 14, paddingHorizontal: 8 }}
           >
             <Icon name="ListMusic" size={22} className="text-foreground" />
-            <Text style={{ fontSize: 15, color: "#e8e8e8", fontWeight: "500" }}>
+            <Text style={{ fontSize: 15, color: colors.foreground, fontWeight: "500" }}>
               {hasAlbum ? "تغيير الألبوم" : "إضافة إلى ألبوم"}
             </Text>
           </Pressable>
@@ -215,7 +268,7 @@ function MoreMenu({
               style={{ flexDirection: "row", alignItems: "center", gap: 14, paddingVertical: 14, paddingHorizontal: 8 }}
             >
               <Icon name="Disc3" size={22} className="text-foreground" />
-              <Text style={{ fontSize: 15, color: "#e8e8e8", fontWeight: "500" }}>عرض الألبوم</Text>
+              <Text style={{ fontSize: 15, color: colors.foreground, fontWeight: "500" }}>عرض الألبوم</Text>
             </Pressable>
           )}
 
@@ -225,7 +278,7 @@ function MoreMenu({
             style={{ flexDirection: "row", alignItems: "center", gap: 14, paddingVertical: 14, paddingHorizontal: 8 }}
           >
             <Icon name="Share2" size={22} className="text-foreground" />
-            <Text style={{ fontSize: 15, color: "#e8e8e8", fontWeight: "500" }}>مشاركة</Text>
+            <Text style={{ fontSize: 15, color: colors.foreground, fontWeight: "500" }}>مشاركة</Text>
           </Pressable>
 
           <View style={{ height: 20 }} />
@@ -256,6 +309,7 @@ function AddToAlbumPicker({
   addingAlbumId: number | null;
   onPick: (albumId: number, albumName: string) => void;
 }) {
+  const colors = useColors();
   const { data: albums, isLoading } = useQuery({
     ..._trpc.album.getAlbums.queryOptions(),
     enabled: visible,
@@ -270,20 +324,20 @@ function AddToAlbumPicker({
         <Pressable
           onPress={() => {}}
           style={{
-            backgroundColor: "#1e1e1e",
+            backgroundColor: colors.card,
             borderTopLeftRadius: 20,
             borderTopRightRadius: 20,
             maxHeight: "70%",
           }}
         >
           {/* Handle + header */}
-          <View style={{ padding: 20, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: "#2a2a2a" }}>
-            <View style={{ width: 36, height: 4, backgroundColor: "#3a3a3a", borderRadius: 2, alignSelf: "center", marginBottom: 12 }} />
+          <View style={{ padding: 20, paddingBottom: 12, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+            <View style={{ width: 36, height: 4, backgroundColor: colors.input, borderRadius: 2, alignSelf: "center", marginBottom: 12 }} />
             <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
               <Pressable onPress={onClose}>
                 <Icon name="X" size={20} className="text-muted-foreground" />
               </Pressable>
-              <Text style={{ fontSize: 15, fontWeight: "700", color: "#fff" }}>إضافة إلى ألبوم</Text>
+              <Text style={{ fontSize: 15, fontWeight: "700", color: colors.foreground }}>إضافة إلى ألبوم</Text>
               <View style={{ width: 20 }} />
             </View>
           </View>
@@ -291,12 +345,12 @@ function AddToAlbumPicker({
           {/* Album list */}
           {isLoading ? (
             <View style={{ alignItems: "center", paddingVertical: 40 }}>
-              <ActivityIndicator color="#1DB954" />
+              <ActivityIndicator color={colors.primary} />
             </View>
           ) : !albums?.length ? (
             <View style={{ alignItems: "center", paddingVertical: 40, gap: 8 }}>
               <Icon name="Disc3" size={36} className="text-muted-foreground" />
-              <Text style={{ color: "#6b7280", fontSize: 14 }}>لا توجد ألبومات</Text>
+              <Text style={{ color: colors.mutedForeground, fontSize: 14 }}>لا توجد ألبومات</Text>
             </View>
           ) : (
             <FlatList
@@ -318,7 +372,7 @@ function AddToAlbumPicker({
                       opacity: isAdding && !isThisAdding ? 0.4 : 1,
                     }}
                   >
-                    {/* Album art */}
+                    {/* Album art — intentional brand color background, keep white text */}
                     <View
                       style={{
                         width: 44,
@@ -340,10 +394,10 @@ function AddToAlbumPicker({
 
                     {/* Info */}
                     <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 14, fontWeight: "600", color: "#e8e8e8", textAlign: "right" }} numberOfLines={1}>
+                      <Text style={{ fontSize: 14, fontWeight: "600", color: colors.foreground, textAlign: "right" }} numberOfLines={1}>
                         {item.name}
                       </Text>
-                      <Text style={{ fontSize: 12, color: "#6b7280", textAlign: "right" }}>
+                      <Text style={{ fontSize: 12, color: colors.mutedForeground, textAlign: "right" }}>
                         {item._count?.medias ?? 0} مقطع
                       </Text>
                     </View>
@@ -365,7 +419,7 @@ function AddToAlbumPicker({
               paddingHorizontal: 16,
               paddingVertical: 16,
               borderTopWidth: 1,
-              borderTopColor: "#2a2a2a",
+              borderTopColor: colors.border,
               marginBottom: 8,
             }}
           >
@@ -374,14 +428,14 @@ function AddToAlbumPicker({
                 width: 44,
                 height: 44,
                 borderRadius: 8,
-                backgroundColor: "#2a2a2a",
+                backgroundColor: colors.muted,
                 alignItems: "center",
                 justifyContent: "center",
               }}
             >
               <Icon name="Plus" size={20} className="text-muted-foreground" />
             </View>
-            <Text style={{ fontSize: 14, fontWeight: "600", color: "#9ca3af" }}>إنشاء ألبوم جديد</Text>
+            <Text style={{ fontSize: 14, fontWeight: "600", color: colors.mutedForeground }}>إنشاء ألبوم جديد</Text>
           </Pressable>
         </Pressable>
       </Pressable>
@@ -445,7 +499,8 @@ function AlbumArtSection({ media }: { media: any }) {
 export default function AudioBlogScreen() {
   const router = useRouter();
   const qc = useQueryClient();
-  const { blogId } = useLocalSearchParams<{ blogId: string }>();
+  const colors = useColors();
+  const { blogId, openComments: openCommentsParam } = useLocalSearchParams<{ blogId: string; openComments?: string }>();
   const id = Number(blogId);
 
   const [activeTab, setActiveTab] = useState<Tab>("info");
@@ -453,8 +508,21 @@ export default function AudioBlogScreen() {
   const [albumPickerVisible, setAlbumPickerVisible] = useState(false);
   const [addingAlbumId, setAddingAlbumId] = useState<number | null>(null);
   const [addedToAlbumName, setAddedToAlbumName] = useState<string | null>(null);
+  const [controlsLayout, setControlsLayout] = useState({ y: 0, height: 0 });
+  const [showFloatingControls, setShowFloatingControls] = useState(false);
 
   const openComments = useCommentsSheet((s) => s.onOpen);
+  const loadAudio = useAudioStore((s) => s.loadAudio);
+
+  // Auto-open comments if navigated here with ?openComments=1
+  useEffect(() => {
+    if (openCommentsParam === "1") {
+      const timer = setTimeout(() => openComments(), 600);
+      return () => clearTimeout(timer);
+    }
+  }, [openCommentsParam]);
+  const loadedBlog = useAudioStore((s) => s.blog);
+  const audioError = useAudioStore((s) => s.error);
 
   const { data: blog } = useQuery(_trpc.blog.getBlog.queryOptions({ id }));
 
@@ -477,6 +545,30 @@ export default function AudioBlogScreen() {
     }
   }, [blog?.id]);
 
+  useEffect(() => {
+    if (!blog || blog.type !== "audio") return;
+
+    const media = blog.medias?.[0];
+    const file = media?.file;
+    if (!media?.id || !file?.fileId || !file?.fileName) return;
+    if (loadedBlog?.id === blog.id) return;
+
+    loadAudio({
+      id: blog.id,
+      type: "audio",
+      caption: blog.content ?? media.title ?? null,
+      content: null,
+      date: blog.blogDate,
+      audio: {
+        mediaId: media.id,
+        telegramFileId: file.fileId,
+        fileName: file.fileName,
+        title: media.title,
+        duration: file.duration,
+      },
+    } as any).catch(() => undefined);
+  }, [blog?.id, loadedBlog?.id, loadAudio]);
+
   const { mutate: addToAlbum, isPending: isAdding } = useMutation(
     _trpc.album.addMediaToAlbum.mutationOptions({
       onSuccess: (_, vars) => {
@@ -496,6 +588,11 @@ export default function AudioBlogScreen() {
     setAddingAlbumId(albumId);
     setAddedToAlbumName(albumName);
     addToAlbum({ albumId, mediaIds: [mediaId] });
+  }
+
+  function updateFloatingControls(scrollY: number) {
+    if (!controlsLayout.height) return;
+    setShowFloatingControls(scrollY > controlsLayout.y + controlsLayout.height + 12);
   }
 
   return (
@@ -525,101 +622,123 @@ export default function AudioBlogScreen() {
           </View>
         </View>
 
-        {/* Album art */}
-        <AlbumArtSection media={media} />
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          scrollEventThrottle={16}
+          contentContainerStyle={{ paddingBottom: 120 }}
+          onScroll={(event) => updateFloatingControls(event.nativeEvent.contentOffset.y)}
+        >
+          {/* Album art */}
+          <AlbumArtSection media={media} />
 
-        {/* Album strip */}
-        {media?.album && (
-          <Pressable
-            onPress={() => router.push(`/albums/${media.albumId}` as any)}
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 10,
-              marginHorizontal: 24,
-              marginTop: 12,
-              paddingHorizontal: 14,
-              paddingVertical: 10,
-              backgroundColor: "#1a1a2e",
-              borderRadius: 12,
-              borderWidth: 1,
-              borderColor: "#2d2d5e",
-            }}
-          >
-            <Icon name="Disc3" size={16} className="text-primary" />
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 13, fontWeight: "700", color: "#1DB954" }} numberOfLines={1}>
-                {media.album.name}
-              </Text>
-              {media.albumAudioIndex?.index && (
-                <Text style={{ fontSize: 11, color: "#6b7280" }}>
-                  المقطع {media.albumAudioIndex.index}
-                </Text>
-              )}
-            </View>
-            <Icon name="ChevronRight" size={14} className="text-muted-foreground" />
-          </Pressable>
-        )}
-
-        {/* "Added to album" confirmation */}
-        {addedToAlbumName && !isAdding && (
-          <View style={{ marginHorizontal: 24, marginTop: 8, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: "#14532d", borderRadius: 8, flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <Icon name="CheckCircle2" size={16} className="text-green-300" />
-            <Text style={{ fontSize: 13, color: "#86efac", flex: 1 }}>
-              تمت الإضافة إلى {addedToAlbumName}
-            </Text>
-            <Pressable onPress={() => setAddedToAlbumName(null)}>
-              <Icon name="X" size={14} className="text-green-400" />
-            </Pressable>
-          </View>
-        )}
-
-        {/* Category + duration */}
-        <View className="flex-row justify-between items-center px-6 pt-4">
-          <Text className="text-xs font-semibold tracking-wide text-primary uppercase">
-            {blog?.blogTags?.[0]?.tags?.title ?? "Audio"}
-          </Text>
-          <View className="flex-row items-center gap-1">
-            <Icon name="Headphones" size={14} className="text-primary" />
-            <Text className="text-xs font-medium text-primary">
-              {duration ? minuteToString(duration) : "—"}
-            </Text>
-          </View>
-        </View>
-
-        {/* Player controls */}
-        <View className="px-6 pt-2">
-          <PlayerSection blogId={id} />
-        </View>
-
-        {/* Tabs */}
-        <View className="flex-row mx-6 mt-4 bg-muted rounded-xl p-1">
-          {(["info", "transcript"] as Tab[]).map((tab) => (
+          {/* Album strip */}
+          {media?.album && (
             <Pressable
-              key={tab}
-              onPress={() => setActiveTab(tab)}
-              className={`flex-1 py-2 rounded-lg items-center ${activeTab === tab ? "bg-card shadow-sm" : ""}`}
+              onPress={() => router.push(`/albums/${media.albumId}` as any)}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 10,
+                marginHorizontal: 24,
+                marginTop: 12,
+                paddingHorizontal: 14,
+                paddingVertical: 10,
+                backgroundColor: colors.card,
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: colors.border,
+              }}
             >
-              <Text className={`text-sm font-bold capitalize ${activeTab === tab ? "text-foreground" : "text-muted-foreground"}`}>
-                {tab}
-              </Text>
+              <Icon name="Disc3" size={16} className="text-primary" />
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 13, fontWeight: "700", color: colors.primary }} numberOfLines={1}>
+                  {media.album.name}
+                </Text>
+                {media.albumAudioIndex?.index && (
+                  <Text style={{ fontSize: 11, color: colors.mutedForeground }}>
+                    المقطع {media.albumAudioIndex.index}
+                  </Text>
+                )}
+              </View>
+              <Icon name="ChevronRight" size={14} className="text-muted-foreground" />
             </Pressable>
-          ))}
-        </View>
+          )}
 
-        {/* Tab content */}
-        <View className="flex-1 mt-3 px-6">
-          {activeTab === "info" ? (
-            <InfoTab blog={blog ?? {}} onCommentsPress={openComments} />
-          ) : mediaId ? (
-            <AudioTranscript mediaId={mediaId} telegramFileId={telegramFileId} />
-          ) : (
-            <View className="flex-1 items-center justify-center">
-              <Text className="text-sm text-muted-foreground">No media attached</Text>
+          {/* "Added to album" confirmation */}
+          {addedToAlbumName && !isAdding && (
+            <View style={{ marginHorizontal: 24, marginTop: 8, paddingHorizontal: 14, paddingVertical: 8, backgroundColor: colors.success + "22", borderRadius: 8, flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <Icon name="CheckCircle2" size={16} className="text-success" />
+              <Text style={{ fontSize: 13, color: colors.success, flex: 1 }}>
+                تمت الإضافة إلى {addedToAlbumName}
+              </Text>
+              <Pressable onPress={() => setAddedToAlbumName(null)}>
+                <Icon name="X" size={14} className="text-success" />
+              </Pressable>
             </View>
           )}
-        </View>
+
+          {/* Category + duration */}
+          <View className="flex-row justify-between items-center px-6 pt-4">
+            <Text className="text-xs font-semibold tracking-wide text-primary uppercase">
+              {blog?.blogTags?.[0]?.tags?.title ?? "Audio"}
+            </Text>
+            <View className="flex-row items-center gap-1">
+              <Icon name="Headphones" size={14} className="text-primary" />
+              <Text className="text-xs font-medium text-primary">
+                {duration ? minuteToString(duration) : "—"}
+              </Text>
+            </View>
+          </View>
+
+          {/* Player controls */}
+          <View
+            className="px-6 pt-2"
+            onLayout={(event) => {
+              const { y, height } = event.nativeEvent.layout;
+              setControlsLayout({ y, height });
+            }}
+          >
+            <PlayerSection />
+            {audioError ? (
+              <Text className="pt-3 text-center text-xs text-destructive">
+                {audioError}
+              </Text>
+            ) : null}
+          </View>
+
+          {/* Tabs */}
+          <View className="mx-6 mt-4">
+            <View className="flex-row rounded-xl bg-muted p-1">
+              {(["info", "transcript"] as Tab[]).map((tab) => (
+                <Pressable
+                  key={tab}
+                  onPress={() => setActiveTab(tab)}
+                  className={`flex-1 py-2 rounded-lg items-center ${activeTab === tab ? "bg-card shadow-sm" : ""}`}
+                >
+                  <Text className={`text-sm font-bold capitalize ${activeTab === tab ? "text-foreground" : "text-muted-foreground"}`}>
+                    {tab}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+
+          {/* Tab content */}
+          <View className="mt-3 px-6">
+            {activeTab === "info" ? (
+              <InfoTab blog={blog ?? {}} onCommentsPress={openComments} />
+            ) : mediaId ? (
+              <AudioTranscript mediaId={mediaId} telegramFileId={telegramFileId} />
+            ) : (
+              <View className="items-center justify-center py-12">
+                <Text className="text-sm text-muted-foreground">No media attached</Text>
+              </View>
+            )}
+          </View>
+        </ScrollView>
       </SafeArea>
+
+      <FloatingPlayerWidget visible={showFloatingControls} />
 
       {/* Comments modal */}
       <CommentsSheet blogId={id} />

@@ -9,7 +9,7 @@ export default function NotFoundScreen() {
   const path = usePathname();
   return (
     <>
-      <Stack.Screen options={{ title: "Oops!" }} />
+      <Stack.Screen options={{ headerShown: false }} />
       <NotFound />
     </>
   );

@@ -10,7 +10,7 @@ import { CardFooter } from "./card-footer";
 import { CardHeader } from "./card-header";
 import { CardMedia } from "./card-media";
 import type { BlogItem } from "./types";
-import { resolveVariant } from "./utils";
+import { getBlogHref, resolveVariant } from "./utils";
 import { Icon } from "@/components/ui/icon";
 
 export type { BlogItem } from "./types";
@@ -26,8 +26,7 @@ export function BlogCard({
   const markViewed = useRecentlyViewedStore((state) => state.markViewed);
   const swipeRef = useRef<any>(null);
   const variant = resolveVariant(post);
-  const href =
-    post.type === "text" ? `/blog-view-text/${post.id}` : `/blog-view/${post.id}`;
+  const href = getBlogHref(post);
 
   const handlePress = () => {
     markViewed({
