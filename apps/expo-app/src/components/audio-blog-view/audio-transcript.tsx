@@ -1,6 +1,7 @@
+import { Pressable } from "@/components/ui/pressable";
 import { useMutation, useQuery } from "@/lib/react-query";
 import { useRef } from "react";
-import { FlatList, Pressable, Text, View } from "react-native";
+import { FlatList, Text, View } from "react-native";
 
 import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";

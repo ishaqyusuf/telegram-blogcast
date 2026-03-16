@@ -1,15 +1,8 @@
+import { Pressable } from "@/components/ui/pressable";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { formatDate } from "@acme/utils/dayjs";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import {
-  ActivityIndicator,
-  Linking,
-  Pressable,
-  ScrollView,
-  Share,
-  Text,
-  View,
-} from "react-native";
+import { ActivityIndicator, Linking, ScrollView, Share, Text, View } from "react-native";
 
 import { _trpc } from "@/components/static-trpc";
 import { SafeArea } from "@/components/safe-area";

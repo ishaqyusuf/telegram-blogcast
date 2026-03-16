@@ -1,17 +1,8 @@
+import { Pressable } from "@/components/ui/pressable";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  I18nManager,
-  Modal,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from "react-native";
+import { ActivityIndicator, Alert, FlatList, I18nManager, Modal, ScrollView, Text, View } from "react-native";
 
 import { AudioTranscript } from "@/components/audio-blog-view/audio-transcript";
 import { CommentsSheet } from "@/components/comments-sheet";

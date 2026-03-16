@@ -1,13 +1,7 @@
+import { Pressable } from "@/components/ui/pressable";
 import { formatDate } from "@acme/utils/dayjs";
 import { useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { ActivityIndicator, ScrollView, Text, TextInput, View } from "react-native";
 import { LegendList } from "@legendapp/list";
 
 import { Icon } from "@/components/ui/icon";

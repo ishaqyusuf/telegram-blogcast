@@ -1,4 +1,5 @@
-import { Pressable, Text, View } from "react-native";
+import { Pressable } from "@/components/ui/pressable";
+import { Text, View } from "react-native";
 import { Icon } from "@/components/ui/icon";
 import type { CommentsSheetState } from "./index";
 

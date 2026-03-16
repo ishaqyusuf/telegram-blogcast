@@ -1,6 +1,6 @@
+import { Pressable } from "@/components/ui/pressable";
 import { cn } from "@/lib/utils";
-import { LinkProps, useRouter } from "expo-router";
-import { Pressable } from "react-native";
+import { LinkProps } from "expo-router";
 
 interface Props {
   href: LinkProps["href"];
@@ -8,16 +8,8 @@ interface Props {
   className?;
 }
 export function PressableLink({ children, className, href }: Props) {
-  const router = useRouter();
-
   return (
-    <Pressable
-      className={cn(className)}
-      onPress={(e) => {
-        console.log({ href });
-        router.push(href);
-      }}
-    >
+    <Pressable className={cn(className)} href={href}>
       {children}
     </Pressable>
   );

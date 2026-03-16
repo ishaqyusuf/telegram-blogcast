@@ -1,5 +1,6 @@
+import { Pressable } from "@/components/ui/pressable";
 import { useRouter } from "expo-router";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 
 import { Icon } from "@/components/ui/icon";
 import { useRecentlyViewedStore } from "@/store/recently-viewed-store";

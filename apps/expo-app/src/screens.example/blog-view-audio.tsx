@@ -1,9 +1,9 @@
-import { PressableLink } from "@/components/pressable-link";
+import { Pressable } from "@/components/ui/pressable";
 import { SafeArea } from "@/components/safe-area";
 import { Icon } from "@/components/ui/icon";
 import { useLocalSearchParams } from "expo-router";
 import React from "react";
-import { View, Text, ScrollView, Pressable, Image } from "react-native";
+import { View, Text, ScrollView, Image } from "react-native";
 
 // --- Sub-Components ---
 
@@ -291,13 +291,13 @@ const CommentsSection = () => {
             </Text>
           </View>
         </View>
-        <PressableLink
+        <Pressable
           href={`/blog-form?type=audio-comment&audioBlogId=${blogId}`}
         >
           <Text className="text-xs font-medium text-muted-foreground">
             Add Comment
           </Text>
-        </PressableLink>
+        </Pressable>
       </View>
 
       <View>

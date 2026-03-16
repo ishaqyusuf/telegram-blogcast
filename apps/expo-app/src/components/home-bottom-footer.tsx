@@ -1,5 +1,6 @@
+import { Pressable } from "@/components/ui/pressable";
 import { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
 import { Icon } from "./ui/icon";
 import { _router } from "./static-router";

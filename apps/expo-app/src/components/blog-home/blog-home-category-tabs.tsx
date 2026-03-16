@@ -1,4 +1,5 @@
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Pressable } from "@/components/ui/pressable";
+import { ScrollView, Text, View } from "react-native";
 
 export const BLOG_CATEGORIES = [
   "All",

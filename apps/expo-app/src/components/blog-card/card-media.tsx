@@ -1,6 +1,7 @@
+import { Pressable } from "@/components/ui/pressable";
 import { MAX_LINE, normalizeExternalUrl, splitTextLinesWithLinks } from "@acme/blog";
 import { useRouter } from "expo-router";
-import { Image, I18nManager, Linking, Pressable, Text, View } from "react-native";
+import { Image, I18nManager, Linking, Text, View } from "react-native";
 
 import { minuteToString } from "@/lib/utils";
 import { Icon } from "@/components/ui/icon";

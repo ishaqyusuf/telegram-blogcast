@@ -1,5 +1,6 @@
+import { Pressable } from "@/components/ui/pressable";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
 import { _trpc } from "@/components/static-trpc";
 

@@ -1,9 +1,10 @@
+import { Pressable } from "@/components/ui/pressable";
 import { BlogCardShell } from "@/components/blog-card-shell";
 import { HomeBottomNav } from "@/components/home-bottom-footer";
 import { SafeArea } from "@/components/safe-area";
 import { Icon } from "@/components/ui/icon";
 import React from "react";
-import { View, Text, ScrollView, Pressable, Image } from "react-native";
+import { View, Text, ScrollView, Image } from "react-native";
 
 interface BlogHomeProps {
   onSearchPress: () => void;

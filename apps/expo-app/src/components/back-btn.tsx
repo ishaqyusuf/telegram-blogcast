@@ -1,4 +1,5 @@
-import { Pressable } from "react-native";
+import { Pressable } from "@/components/ui/pressable";
+
 import { _goBack } from "./static-router";
 import { Icon } from "./ui/icon";
 

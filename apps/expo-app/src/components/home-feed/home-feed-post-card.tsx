@@ -1,11 +1,5 @@
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  ImageBackground,
-  I18nManager,
-  Pressable,
-} from "react-native";
+import { Pressable } from "@/components/ui/pressable";
+import { View, Text, TouchableOpacity, ImageBackground, I18nManager } from "react-native";
 import { Play } from "lucide-react-native";
 import { Link, useRouter } from "expo-router";
 import { HomeFeedPostAuthorHeader } from "./home-feed-post-author-header";

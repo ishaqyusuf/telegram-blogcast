@@ -1,15 +1,8 @@
+import { Pressable } from "@/components/ui/pressable";
 import { SafeArea } from "@/components/safe-area";
 import { Icon } from "@/components/ui/icon";
 import React from "react";
-import {
-  View,
-  Text,
-  TextInput,
-  ScrollView,
-  Pressable,
-  KeyboardAvoidingView,
-  Platform,
-} from "react-native";
+import { View, Text, TextInput, ScrollView, KeyboardAvoidingView, Platform } from "react-native";
 
 // --- Sub-Components ---
 

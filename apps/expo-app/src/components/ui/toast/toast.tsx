@@ -1,19 +1,11 @@
+import { Pressable } from "@/components/ui/pressable";
 import { useToast } from "@/context/toast-context";
 import type {
   Toast as ToastType,
   ToastType as ToastVariant,
 } from "@/types/toast.types";
 import React, { useEffect, useRef } from "react";
-import {
-  LayoutAnimation,
-  Platform,
-  Pressable,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  UIManager,
-  View,
-} from "react-native";
+import { LayoutAnimation, Platform, StyleSheet, Text, TouchableOpacity, UIManager, View } from "react-native";
 import Animated, {
   Easing,
   runOnJS,

@@ -1,4 +1,5 @@
-import { Image, Pressable, Text, View } from "react-native";
+import { Pressable } from "@/components/ui/pressable";
+import { Image, Text, View } from "react-native";
 
 const BOOK_COLORS = ["#4c1d95", "#7c2d12", "#14532d", "#1e3a5f", "#3b0764", "#064e3b", "#831843", "#1e1b4b"];
 

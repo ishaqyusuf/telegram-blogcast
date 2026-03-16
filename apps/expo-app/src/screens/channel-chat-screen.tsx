@@ -1,14 +1,9 @@
+import { Pressable } from "@/components/ui/pressable";
 import { formatDate } from "@acme/utils/dayjs";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useRef, useState } from "react";
-import {
-  I18nManager,
-  Modal,
-  Pressable,
-  Text,
-  View,
-} from "react-native";
+import { I18nManager, Modal, Text, View } from "react-native";
 import { Swipeable } from "react-native-gesture-handler";
 import { LegendList } from "@legendapp/list";
 

@@ -1,7 +1,8 @@
+import { Pressable } from "@/components/ui/pressable";
 import { useQuery } from "@/lib/react-query";
 import { formatDate } from "@acme/utils/dayjs";
 import { useRouter } from "expo-router";
-import { FlatList, Pressable, Text, View } from "react-native";
+import { FlatList, Text, View } from "react-native";
 
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";

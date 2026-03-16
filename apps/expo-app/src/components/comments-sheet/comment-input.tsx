@@ -1,13 +1,7 @@
+import { Pressable } from "@/components/ui/pressable";
 import { useMutation } from "@/lib/react-query";
 import { useState } from "react";
-import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { KeyboardAvoidingView, Platform, Text, TextInput, View } from "react-native";
 
 import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";

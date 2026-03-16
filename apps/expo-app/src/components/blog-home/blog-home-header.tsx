@@ -1,5 +1,6 @@
+import { Pressable } from "@/components/ui/pressable";
 import { useRouter } from "expo-router";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { Path, Rect, Svg } from "react-native-svg";
 
 import { Icon } from "@/components/ui/icon";

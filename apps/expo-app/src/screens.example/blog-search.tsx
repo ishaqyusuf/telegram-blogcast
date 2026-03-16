@@ -1,5 +1,6 @@
+import { Pressable } from "@/components/ui/pressable";
 import React, { useState } from "react";
-import { View, Text, TextInput, Pressable, ScrollView } from "react-native";
+import { View, Text, TextInput, ScrollView } from "react-native";
 import { SafeArea } from "@/components/safe-area";
 import { Icon } from "@/components/ui/icon";
 

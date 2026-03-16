@@ -1,4 +1,5 @@
-import { Pressable, Text, View } from "react-native";
+import { Pressable } from "@/components/ui/pressable";
+import { Text, View } from "react-native";
 
 import { _router } from "@/components/static-router";
 import { Icon } from "@/components/ui/icon";

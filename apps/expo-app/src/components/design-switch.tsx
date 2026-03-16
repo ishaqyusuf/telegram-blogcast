@@ -1,7 +1,8 @@
+import { Pressable } from "@/components/ui/pressable";
 import { cn } from "@/lib/utils";
 import { getColorFromName } from "@gnd/utils/colors";
 import { useState } from "react";
-import { Pressable, View } from "react-native";
+import { View } from "react-native";
 
 interface Props {
   screens?: any[];

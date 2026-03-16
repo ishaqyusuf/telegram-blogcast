@@ -1,5 +1,6 @@
+import { Pressable } from "@/components/ui/pressable";
 import { useRouter } from "expo-router";
-import { Alert, Pressable, Text, View } from "react-native";
+import { Alert, Text, View } from "react-native";
 import { useRef } from "react";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 

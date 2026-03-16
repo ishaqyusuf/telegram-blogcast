@@ -1,13 +1,7 @@
+import { Pressable } from "@/components/ui/pressable";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useRef } from "react";
-import {
-  Animated,
-  Image,
-  PanResponder,
-  Pressable,
-  Text,
-  View,
-} from "react-native";
+import { Animated, Image, PanResponder, Text, View } from "react-native";
 
 import { Icon } from "@/components/ui/icon";
 

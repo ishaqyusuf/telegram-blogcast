@@ -1,6 +1,7 @@
+import { Pressable } from "@/components/ui/pressable";
 import { Icon, IconKeys } from "@/components/ui/icon";
 import React from "react";
-import { View, Text, ScrollView, Pressable, Image } from "react-native";
+import { View, Text, ScrollView, Image } from "react-native";
 import { SafeArea } from "@/components/safe-area";
 
 const Header = () => (

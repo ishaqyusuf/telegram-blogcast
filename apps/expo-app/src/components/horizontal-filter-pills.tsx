@@ -1,10 +1,11 @@
+import { Pressable } from "@/components/ui/pressable";
 import {
   FilterProvider,
   useCreateFilterContext,
   useFilterContext,
 } from "@/context/filter-context";
 import { cn } from "@/lib/utils";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { ScrollView, Text, View } from "react-native";
 
 function Root({ children, className = "", name }) {
   return (

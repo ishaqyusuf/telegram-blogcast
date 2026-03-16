@@ -1,4 +1,5 @@
-import { Pressable, Text, View } from "react-native";
+import { Pressable } from "@/components/ui/pressable";
+import { Text, View } from "react-native";
 
 const FEATURED_ITEMS = [
   { label: "Daily Reflections", color: "#4c1d95" },

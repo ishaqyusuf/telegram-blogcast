@@ -1,7 +1,8 @@
+import { Pressable } from "@/components/ui/pressable";
 import { Icon } from "@/components/ui/icon";
 import { useAuthContext } from "@/hooks/use-auth";
 import React from "react";
-import { Pressable, View, Text, Animated } from "react-native";
+import { View, Text, Animated } from "react-native";
 
 /**
  * AccessUnavailableScreen

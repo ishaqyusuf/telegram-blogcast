@@ -1,5 +1,6 @@
+import { Pressable } from "@/components/ui/pressable";
 import { useRouter } from "expo-router";
-import { Alert, Pressable, Share, Text, View } from "react-native";
+import { Alert, Share, Text, View } from "react-native";
 
 import { Icon, type IconKeys } from "@/components/ui/icon";
 import { getWebUrl } from "@/lib/base-url";

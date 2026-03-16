@@ -1,14 +1,8 @@
+import { Pressable } from "@/components/ui/pressable";
 import { useMutation, useQuery } from "@/lib/react-query";
 import { useRouter } from "expo-router";
 import { useRef, useState } from "react";
-import {
-  FlatList,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { FlatList, ScrollView, Text, TextInput, View } from "react-native";
 
 import { _trpc } from "@/components/static-trpc";
 import { SafeArea } from "@/components/safe-area";

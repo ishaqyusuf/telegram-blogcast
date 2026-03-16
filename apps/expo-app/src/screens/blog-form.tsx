@@ -1,17 +1,7 @@
+import { Pressable } from "@/components/ui/pressable";
 import { useEffect, useRef, useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import {
-  Alert,
-  Keyboard,
-  KeyboardEvent,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { Alert, Keyboard, KeyboardEvent, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View } from "react-native";
 import { Audio, AVPlaybackStatus } from "expo-av";
 
 import {
