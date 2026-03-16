@@ -1,4 +1,4 @@
-import { useQuery } from "@acme/ui/tanstack";
+import { useQuery } from "@/lib/react-query";
 import { Text, View } from "react-native";
 
 import { _trpc } from "@/components/static-trpc";

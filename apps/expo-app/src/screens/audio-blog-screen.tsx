@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@acme/ui/tanstack";
+import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {

@@ -1,4 +1,4 @@
-import { useQuery } from "@acme/ui/tanstack";
+import { useQuery } from "@/lib/react-query";
 import { formatDate } from "@acme/utils/dayjs";
 import { useRouter } from "expo-router";
 import { FlatList, Pressable, Text, View } from "react-native";

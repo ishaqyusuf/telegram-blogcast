@@ -1,4 +1,4 @@
-import { useMutation } from "@acme/ui/tanstack";
+import { useMutation } from "@/lib/react-query";
 import { useEffect, useRef } from "react";
 
 import { _trpc } from "@/components/static-trpc";

@@ -1,4 +1,4 @@
-import { useQuery } from "@acme/ui/tanstack";
+import { useQuery } from "@/lib/react-query";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { FlatList, Pressable, ScrollView, Text, View } from "react-native";

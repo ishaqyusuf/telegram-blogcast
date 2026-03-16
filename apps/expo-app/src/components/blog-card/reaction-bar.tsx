@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@acme/ui/tanstack";
+import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { Pressable, Text, View } from "react-native";
 
 import { _trpc } from "@/components/static-trpc";

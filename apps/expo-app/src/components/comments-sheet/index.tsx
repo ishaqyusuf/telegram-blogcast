@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@acme/ui/tanstack";
+import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { useState } from "react";
 import { Alert, Modal, TouchableWithoutFeedback, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";

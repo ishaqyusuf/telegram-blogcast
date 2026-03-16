@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "@acme/ui/tanstack";
+import { useMutation, useQuery } from "@/lib/react-query";
 import { useRef } from "react";
 import { FlatList, Pressable, Text, View } from "react-native";
 

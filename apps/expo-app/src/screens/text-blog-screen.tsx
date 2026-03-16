@@ -1,4 +1,4 @@
-import { useQuery } from "@acme/ui/tanstack";
+import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { formatDate } from "@acme/utils/dayjs";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
@@ -209,8 +209,8 @@ function ReactionButton({ emoji, blogId }: { emoji: string; blogId: number }) {
   const { data: reactions } = useQuery(
     _trpc.blog.getReactions.queryOptions({ blogId })
   );
-  const qc = require("@acme/ui/tanstack").useQueryClient();
-  const { mutate } = require("@acme/ui/tanstack").useMutation(
+  const qc = useQueryClient();
+  const { mutate } = useMutation(
     _trpc.blog.addReaction.mutationOptions({
       onSuccess: () =>
         qc.invalidateQueries({ queryKey: _trpc.blog.getReactions.queryKey({ blogId }) }),
