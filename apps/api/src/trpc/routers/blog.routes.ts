@@ -120,6 +120,117 @@ export const blogRoutes = createTRPCRouter({
       });
     }),
 
+  getComments: publicProcedure
+    .input(
+      z.object({
+        blogId: z.number(),
+        search: z.string().optional(),
+        tagId: z.number().optional(),
+      })
+    )
+    .query(async ({ ctx, input }) => {
+      const blog = await ctx.db.blog.findFirstOrThrow({
+        where: { id: input.blogId },
+        select: { arrangementMode: true },
+      });
+
+      const links = await ctx.db.blogComments.findMany({
+        where: { blogId: input.blogId, deletedAt: null },
+        orderBy: blog.arrangementMode === "indexed" ? { order: "asc" } : { createdAt: "asc" },
+        include: {
+          comment: {
+            where: {
+              deletedAt: null,
+              ...(input.search
+                ? { content: { contains: input.search, mode: "insensitive" } }
+                : {}),
+              ...(input.tagId
+                ? { blogTags: { some: { tagId: input.tagId, deletedAt: null } } }
+                : {}),
+            },
+            select: {
+              id: true,
+              content: true,
+              createdAt: true,
+              blogTags: { include: { tags: true }, where: { deletedAt: null } },
+            },
+          },
+        },
+      });
+
+      // Collect all unique tags from all (unfiltered) comments for the filter chips
+      const allLinks = await ctx.db.blogComments.findMany({
+        where: { blogId: input.blogId, deletedAt: null },
+        include: {
+          comment: {
+            select: { blogTags: { include: { tags: true }, where: { deletedAt: null } } },
+          },
+        },
+      });
+      const tagMap = new Map<number, string>();
+      allLinks.forEach((l) =>
+        l.comment?.blogTags.forEach((bt) => {
+          if (bt.tags) tagMap.set(bt.tags.id, bt.tags.title);
+        })
+      );
+
+      return {
+        comments: links.filter((l) => l.comment !== null),
+        arrangementMode: blog.arrangementMode,
+        availableTags: [...tagMap.entries()].map(([id, title]) => ({ id, title })),
+      };
+    }),
+
+  editComment: publicProcedure
+    .input(z.object({ commentId: z.number(), content: z.string().min(1) }))
+    .mutation(({ ctx, input }) =>
+      ctx.db.blog.update({
+        where: { id: input.commentId },
+        data: { content: input.content },
+      })
+    ),
+
+  deleteComment: publicProcedure
+    .input(z.object({ blogId: z.number(), commentId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const link = await ctx.db.blogComments.findFirst({
+        where: { blogId: input.blogId, commentId: input.commentId, deletedAt: null },
+      });
+      if (!link) throw new Error("Comment not found");
+      return ctx.db.blogComments.update({
+        where: { id: link.id },
+        data: { deletedAt: new Date() },
+      });
+    }),
+
+  reorderComments: publicProcedure
+    .input(
+      z.object({
+        blogId: z.number(),
+        order: z.array(z.object({ commentId: z.number(), order: z.number() })),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      await Promise.all(
+        input.order.map(({ commentId, order }) =>
+          ctx.db.blogComments.updateMany({
+            where: { blogId: input.blogId, commentId },
+            data: { order },
+          })
+        )
+      );
+      return { updated: input.order.length };
+    }),
+
+  setBlogArrangementMode: publicProcedure
+    .input(z.object({ blogId: z.number(), mode: z.enum(["default", "indexed"]) }))
+    .mutation(({ ctx, input }) =>
+      ctx.db.blog.update({
+        where: { id: input.blogId },
+        data: { arrangementMode: input.mode },
+      })
+    ),
+
   transcribeRange: publicProcedure
     .input(transcribeRangeSchema)
     .mutation(async (props) => {

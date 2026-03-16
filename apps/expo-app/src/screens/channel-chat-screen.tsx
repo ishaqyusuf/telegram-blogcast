@@ -1,7 +1,7 @@
 import { formatDate } from "@acme/utils/dayjs";
 import { useMutation, useQuery, useQueryClient } from "@acme/ui/tanstack";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
   I18nManager,
   Modal,
@@ -37,9 +37,46 @@ function DateDivider({ date }: { date: string | null | undefined }) {
   );
 }
 
+// ── Tag row helper ────────────────────────────────────────────────────────────
+
+function TagRow({ tags, activeTag, onTagPress }: { tags: string[]; activeTag: string | null; onTagPress: (tag: string) => void }) {
+  if (!tags || tags.length === 0) return null;
+  return (
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
+      {tags.slice(0, 4).map((tag) => (
+        <Pressable key={tag} onPress={() => onTagPress(tag)} hitSlop={4}>
+          <Text
+            style={{
+              fontSize: 10,
+              color: activeTag === tag ? "#fff" : "#1DB954",
+              backgroundColor: activeTag === tag ? "#1DB954" : "transparent",
+              paddingHorizontal: activeTag === tag ? 5 : 0,
+              paddingVertical: activeTag === tag ? 1 : 0,
+              borderRadius: 4,
+              fontWeight: activeTag === tag ? "700" : "400",
+            }}
+          >
+            #{tag}
+          </Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
 // ── Bubble content ────────────────────────────────────────────────────────────
 
-function TextBubble({ post, selected }: { post: BlogItem; selected?: boolean }) {
+function TextBubble({
+  post,
+  selected,
+  activeTag,
+  onTagPress,
+}: {
+  post: BlogItem;
+  selected?: boolean;
+  activeTag: string | null;
+  onTagPress: (tag: string) => void;
+}) {
   return (
     <View
       style={{
@@ -55,6 +92,7 @@ function TextBubble({ post, selected }: { post: BlogItem; selected?: boolean }) 
       >
         {post.content}
       </Text>
+      <TagRow tags={post.tags ?? []} activeTag={activeTag} onTagPress={onTagPress} />
       <View className="flex-row items-center justify-end gap-2 mt-1">
         {(post._count as any)?.comments > 0 && (
           <View className="flex-row items-center gap-0.5">
@@ -72,7 +110,17 @@ function TextBubble({ post, selected }: { post: BlogItem; selected?: boolean }) 
   );
 }
 
-function AudioBubble({ post, selected }: { post: BlogItem; selected?: boolean }) {
+function AudioBubble({
+  post,
+  selected,
+  activeTag,
+  onTagPress,
+}: {
+  post: BlogItem;
+  selected?: boolean;
+  activeTag: string | null;
+  onTagPress: (tag: string) => void;
+}) {
   const title = post.caption || post.audio?.title || "Audio";
   const router = useRouter();
   return (
@@ -109,6 +157,7 @@ function AudioBubble({ post, selected }: { post: BlogItem; selected?: boolean })
           {minuteToString(post.audio?.duration)}
         </Text>
       </View>
+      <TagRow tags={post.tags ?? []} activeTag={activeTag} onTagPress={onTagPress} />
       <View className="flex-row items-center justify-end gap-2 mt-1.5">
         {(post._count as any)?.comments > 0 && (
           <View className="flex-row items-center gap-0.5">
@@ -126,7 +175,17 @@ function AudioBubble({ post, selected }: { post: BlogItem; selected?: boolean })
   );
 }
 
-function ImageBubble({ post, selected }: { post: BlogItem; selected?: boolean }) {
+function ImageBubble({
+  post,
+  selected,
+  activeTag,
+  onTagPress,
+}: {
+  post: BlogItem;
+  selected?: boolean;
+  activeTag: string | null;
+  onTagPress: (tag: string) => void;
+}) {
   return (
     <View
       style={{
@@ -146,18 +205,21 @@ function ImageBubble({ post, selected }: { post: BlogItem; selected?: boolean })
           </Text>
         </View>
       )}
-      <View className="flex-row items-center justify-end gap-2 px-3 pb-2 mt-1">
-        {(post._count as any)?.comments > 0 && (
-          <View className="flex-row items-center gap-0.5">
-            <Icon name="MessageCircle" size={10} className="text-muted-foreground" />
-            <Text className="text-[9px] text-muted-foreground">
-              {(post._count as any).comments}
-            </Text>
-          </View>
-        )}
-        <Text className="text-[10px] text-muted-foreground">
-          {formatDate(post.date, "hh:mm A")}
-        </Text>
+      <View className="px-3 pb-2 mt-1">
+        <TagRow tags={post.tags ?? []} activeTag={activeTag} onTagPress={onTagPress} />
+        <View className="flex-row items-center justify-end gap-2 mt-1">
+          {(post._count as any)?.comments > 0 && (
+            <View className="flex-row items-center gap-0.5">
+              <Icon name="MessageCircle" size={10} className="text-muted-foreground" />
+              <Text className="text-[9px] text-muted-foreground">
+                {(post._count as any).comments}
+              </Text>
+            </View>
+          )}
+          <Text className="text-[10px] text-muted-foreground">
+            {formatDate(post.date, "hh:mm A")}
+          </Text>
+        </View>
       </View>
     </View>
   );
@@ -173,40 +235,25 @@ interface ContextMenuProps {
   onStartMerge: (id: number) => void;
 }
 
-function ContextMenu({
-  post,
-  onClose,
-  onDelete,
-  onAddToAlbum,
-  onStartMerge,
-}: ContextMenuProps) {
+function ContextMenu({ post, onClose, onDelete, onAddToAlbum, onStartMerge }: ContextMenuProps) {
   return (
     <View className="bg-card rounded-2xl overflow-hidden mx-4 shadow-xl">
       <Pressable
-        onPress={() => {
-          onAddToAlbum(post);
-          onClose();
-        }}
+        onPress={() => { onAddToAlbum(post); onClose(); }}
         className="flex-row items-center gap-3 px-4 py-3 active:bg-muted border-b border-border"
       >
         <Icon name="Music2" size={18} className="text-foreground" />
         <Text className="text-sm font-medium text-foreground">Add to Album</Text>
       </Pressable>
       <Pressable
-        onPress={() => {
-          onStartMerge(post.id);
-          onClose();
-        }}
+        onPress={() => { onStartMerge(post.id); onClose(); }}
         className="flex-row items-center gap-3 px-4 py-3 active:bg-muted border-b border-border"
       >
         <Icon name="Layers" size={18} className="text-foreground" />
         <Text className="text-sm font-medium text-foreground">Merge Selected</Text>
       </Pressable>
       <Pressable
-        onPress={() => {
-          onDelete(post.id);
-          onClose();
-        }}
+        onPress={() => { onDelete(post.id); onClose(); }}
         className="flex-row items-center gap-3 px-4 py-3 active:bg-muted"
       >
         <Icon name="Trash2" size={18} className="text-destructive" />
@@ -222,19 +269,25 @@ interface BubbleRowProps {
   post: BlogItem;
   selected: boolean;
   isSelectMode: boolean;
+  activeTag: string | null;
   onLongPress: (post: BlogItem) => void;
   onDelete: (id: number) => void;
   onToggleSelect: (id: number) => void;
+  onTagPress: (tag: string) => void;
 }
 
 function BubbleRow({
   post,
   selected,
   isSelectMode,
+  activeTag,
   onLongPress,
   onDelete,
   onToggleSelect,
+  onTagPress,
 }: BubbleRowProps) {
+  const router = useRouter();
+
   const renderRightActions = useCallback(() => {
     return (
       <Pressable
@@ -249,16 +302,20 @@ function BubbleRow({
   const handlePress = () => {
     if (isSelectMode) {
       onToggleSelect(post.id);
+    } else {
+      router.push(`/blog-view-2/${post.id}` as any);
     }
   };
 
+  const sharedBubbleProps = { post, selected, activeTag, onTagPress };
+
   const bubble =
     post.type === "audio" ? (
-      <AudioBubble post={post} selected={selected} />
+      <AudioBubble {...sharedBubbleProps} />
     ) : post.type === "image" ? (
-      <ImageBubble post={post} selected={selected} />
+      <ImageBubble {...sharedBubbleProps} />
     ) : (
-      <TextBubble post={post} selected={selected} />
+      <TextBubble {...sharedBubbleProps} />
     );
 
   return (
@@ -295,6 +352,59 @@ function BubbleRow({
   );
 }
 
+// ── Active tag bar ────────────────────────────────────────────────────────────
+
+function TagScrollBar({
+  tag,
+  matchCount,
+  currentMatchIdx,
+  onPrev,
+  onNext,
+  onClear,
+}: {
+  tag: string;
+  matchCount: number;
+  currentMatchIdx: number;
+  onPrev: () => void;
+  onNext: () => void;
+  onClear: () => void;
+}) {
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        backgroundColor: "#0d1f0d",
+        borderBottomWidth: 1,
+        borderBottomColor: "#1DB954",
+        gap: 8,
+      }}
+    >
+      <Pressable onPress={onPrev} style={{ padding: 4 }}>
+        <Icon name="ChevronUp" size={18} className="text-primary" />
+      </Pressable>
+      <Pressable onPress={onNext} style={{ padding: 4 }}>
+        <Icon name="ChevronDown" size={18} className="text-primary" />
+      </Pressable>
+      <View style={{ flex: 1, alignItems: "center" }}>
+        <Text style={{ fontSize: 13, fontWeight: "700", color: "#1DB954" }}>
+          #{tag}
+        </Text>
+        <Text style={{ fontSize: 10, color: "#6b7280" }}>
+          {matchCount === 0
+            ? "لا توجد نتائج"
+            : `${currentMatchIdx + 1} / ${matchCount}`}
+        </Text>
+      </View>
+      <Pressable onPress={onClear} style={{ padding: 4 }}>
+        <Icon name="X" size={16} className="text-muted-foreground" />
+      </Pressable>
+    </View>
+  );
+}
+
 // ── Main screen ──────────────────────────────────────────────────────────────
 
 export default function ChannelChatScreen() {
@@ -302,6 +412,8 @@ export default function ChannelChatScreen() {
   const queryClient = useQueryClient();
   const { channelId } = useLocalSearchParams<{ channelId: string }>();
   const id = Number(channelId);
+
+  const listRef = useRef<any>(null);
 
   const { data: channel } = useQuery(
     _trpc.channel.getChannel.queryOptions({ id })
@@ -315,10 +427,65 @@ export default function ChannelChatScreen() {
   } = useInfiniteLoader({
     route: _trpc?.blog.posts,
     input: { channelId: id },
+    queryOptions: { staleTime: 5 * 60 * 1000, gcTime: 10 * 60 * 1000 },
   });
 
-  // Inverted list data (newest at bottom → reverse for inverted={true})
   const reversedPosts = [...(posts ?? [])].reverse();
+
+  // ── Tag scroll ────────────────────────────────────────────────────────────
+  const [activeTag, setActiveTag] = useState<string | null>(null);
+  const [tagMatchIndices, setTagMatchIndices] = useState<number[]>([]);
+  const [tagMatchIdx, setTagMatchIdx] = useState(0);
+
+  function handleTagPress(tag: string) {
+    if (activeTag === tag) {
+      // Cycle to next match
+      const nextIdx = (tagMatchIdx + 1) % Math.max(tagMatchIndices.length, 1);
+      setTagMatchIdx(nextIdx);
+      const targetIndex = tagMatchIndices[nextIdx];
+      if (targetIndex != null) {
+        listRef.current?.scrollToIndex({ index: targetIndex, animated: true });
+      }
+      return;
+    }
+
+    setActiveTag(tag);
+    const indices = reversedPosts
+      .map((p, i) => ({ i, match: (p.tags ?? []).includes(tag) }))
+      .filter((x) => x.match)
+      .map((x) => x.i);
+    setTagMatchIndices(indices);
+    setTagMatchIdx(0);
+    if (indices.length > 0) {
+      listRef.current?.scrollToIndex({ index: indices[0], animated: true });
+    }
+  }
+
+  function prevTagMatch() {
+    const prevIdx =
+      (tagMatchIdx - 1 + Math.max(tagMatchIndices.length, 1)) %
+      Math.max(tagMatchIndices.length, 1);
+    setTagMatchIdx(prevIdx);
+    const targetIndex = tagMatchIndices[prevIdx];
+    if (targetIndex != null) {
+      listRef.current?.scrollToIndex({ index: targetIndex, animated: true });
+    }
+  }
+
+  function nextTagMatch() {
+    const nextIdx = (tagMatchIdx + 1) % Math.max(tagMatchIndices.length, 1);
+    setTagMatchIdx(nextIdx);
+    const targetIndex = tagMatchIndices[nextIdx];
+    if (targetIndex != null) {
+      listRef.current?.scrollToIndex({ index: targetIndex, animated: true });
+    }
+  }
+
+  function clearActiveTag() {
+    setActiveTag(null);
+    setTagMatchIndices([]);
+    setTagMatchIdx(0);
+  }
 
   // ── Delete ────────────────────────────────────────────────────────────────
   const deleteMutation = useMutation(
@@ -368,7 +535,6 @@ export default function ChannelChatScreen() {
   }
 
   // ── Add to Album modal ────────────────────────────────────────────────────
-  const [albumTargetPost, setAlbumTargetPost] = useState<BlogItem | null>(null);
   const [showAlbumModal, setShowAlbumModal] = useState(false);
   const [albumMediaIds, setAlbumMediaIds] = useState<number[]>([]);
   const [albumAuthorId, setAlbumAuthorId] = useState<number | undefined>();
@@ -381,9 +547,7 @@ export default function ChannelChatScreen() {
 
   function handleAddToAlbum(post: BlogItem) {
     const mediaId = post.audio?.id;
-    if (mediaId) {
-      openAlbumModal([mediaId], post.audio?.authorId ?? undefined);
-    }
+    if (mediaId) openAlbumModal([mediaId], post.audio?.authorId ?? undefined);
   }
 
   function handleBulkAddToAlbum() {
@@ -391,8 +555,7 @@ export default function ChannelChatScreen() {
     const mediaIds = selectedPosts
       .map((p) => p.audio?.id)
       .filter((id): id is number => !!id);
-    const firstAuthorId = selectedPosts[0]?.audio?.authorId ?? undefined;
-    openAlbumModal(mediaIds, firstAuthorId);
+    openAlbumModal(mediaIds, selectedPosts[0]?.audio?.authorId ?? undefined);
   }
 
   return (
@@ -407,10 +570,7 @@ export default function ChannelChatScreen() {
             }}
             className="size-10 items-center justify-center rounded-full active:bg-muted"
           >
-            <Icon
-              name={isSelectMode ? "X" : "ArrowLeft"}
-              className="text-foreground"
-            />
+            <Icon name={isSelectMode ? "X" : "ArrowLeft"} className="text-foreground" />
           </Pressable>
 
           {isSelectMode ? (
@@ -423,10 +583,7 @@ export default function ChannelChatScreen() {
                 <Icon name="Radio" size={18} className="text-primary" />
               </View>
               <View className="flex-1">
-                <Text
-                  className="text-sm font-bold text-foreground"
-                  numberOfLines={1}
-                >
+                <Text className="text-sm font-bold text-foreground" numberOfLines={1}>
                   {channel?.title ?? channel?.username ?? "Channel"}
                 </Text>
                 <Text className="text-xs text-muted-foreground">
@@ -441,29 +598,44 @@ export default function ChannelChatScreen() {
           </Pressable>
         </View>
 
-        {/* Messages — inverted so newest appear at bottom */}
+        {/* Active tag navigation bar */}
+        {activeTag && (
+          <TagScrollBar
+            tag={activeTag}
+            matchCount={tagMatchIndices.length}
+            currentMatchIdx={tagMatchIdx}
+            onPrev={prevTagMatch}
+            onNext={nextTagMatch}
+            onClear={clearActiveTag}
+          />
+        )}
+
+        {/* Messages */}
         <LegendList
+          ref={listRef}
           data={reversedPosts}
           keyExtractor={(item) => String(item.id)}
           inverted
           renderItem={({ item, index }) => {
-            // In inverted mode data is reversed; previous = next in reversed array
-            const prevPost =
-              index < reversedPosts.length - 1 ? reversedPosts[index + 1] : null;
+            const prevPost = index < reversedPosts.length - 1 ? reversedPosts[index + 1] : null;
             const showDate =
               !prevPost ||
-              formatDate(item.date, "YYYY-MM-DD") !==
-                formatDate(prevPost.date, "YYYY-MM-DD");
+              formatDate(item.date, "YYYY-MM-DD") !== formatDate(prevPost.date, "YYYY-MM-DD");
+            const isTagMatch = activeTag
+              ? (item.tags ?? []).includes(activeTag)
+              : false;
 
             return (
-              <View>
+              <View style={{ opacity: activeTag && !isTagMatch ? 0.35 : 1 }}>
                 <BubbleRow
                   post={item}
                   selected={selectedIds.has(item.id)}
                   isSelectMode={isSelectMode}
+                  activeTag={activeTag}
                   onLongPress={handleLongPress}
                   onDelete={handleDelete}
                   onToggleSelect={toggleSelect}
+                  onTagPress={handleTagPress}
                 />
                 {showDate && (
                   <View className="px-4">
@@ -477,13 +649,15 @@ export default function ChannelChatScreen() {
           ListFooterComponent={<View className="h-4" />}
           ListEmptyComponent={
             <View
-              style={{ flex: 1, alignItems: "center", justifyContent: "center", paddingVertical: 80, transform: [{ scaleY: -1 }] }}
+              style={{
+                flex: 1,
+                alignItems: "center",
+                justifyContent: "center",
+                paddingVertical: 80,
+                transform: [{ scaleY: -1 }],
+              }}
             >
-              <Icon
-                name="MessageCircle"
-                size={48}
-                className="text-muted-foreground mb-3"
-              />
+              <Icon name="MessageCircle" size={48} className="text-muted-foreground mb-3" />
               <Text className="text-sm text-muted-foreground">
                 {isFetching ? "Loading messages…" : "No messages yet"}
               </Text>

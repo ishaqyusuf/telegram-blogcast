@@ -5,10 +5,11 @@ import { consoleLog } from "@acme/utils";
 interface Props<T> {
   filter?;
   route: T;
+  queryOptions?: { staleTime?: number; gcTime?: number };
 }
 export function useInfiniteLoader<
   T extends { infiniteQueryOptions: any; "~types": { output: any } },
->({ filter, route }: Props<T>) {
+>({ filter, route, queryOptions }: Props<T>) {
   // const trpc = useTRPC();
   const { ref, inView } = useInView();
 
@@ -24,6 +25,9 @@ export function useInfiniteLoader<
         return meta?.cursor;
       },
       enabled: false,
+      staleTime: 5 * 60 * 1000,
+      gcTime: 10 * 60 * 1000,
+      ...queryOptions,
     },
   );
   const {

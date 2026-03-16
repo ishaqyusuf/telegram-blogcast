@@ -41,6 +41,10 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
       _count: {
         select: { blogs: true },
       },
+      blogTags: {
+        include: { tags: { select: { id: true, title: true } } },
+        where: { deletedAt: null },
+      },
     },
   });
   return await response(
@@ -100,7 +104,7 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
           }))
         ),
         doc: blogPdf(type, blog),
-        tags: [],
+        tags: blog.blogTags?.map((bt) => bt.tags?.title).filter(Boolean) ?? [],
         isBookmarked: false,
         likes: 0,
         coverImageUrl: null,
