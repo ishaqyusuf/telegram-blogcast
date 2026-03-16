@@ -1,7 +1,7 @@
 import { Pressable } from "@/components/ui/pressable";
 import { useMutation, useQuery } from "@/lib/react-query";
-import { Modal, Text, TextInput, View } from "react-native";
-import { useState } from "react";
+import { Modal, PanResponder, Text, TextInput, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
 
 import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";
@@ -116,6 +116,141 @@ function ProviderSheet({
   );
 }
 
+// ── Dual seek bar ─────────────────────────────────────────────────────────────
+
+function DualSeekBar({
+  fromSec,
+  toSec,
+  maxSec,
+  onFromChange,
+  onToChange,
+}: {
+  fromSec: number;
+  toSec: number;
+  maxSec: number;
+  onFromChange: (sec: number) => void;
+  onToChange: (sec: number) => void;
+}) {
+  const colors = useColors();
+  const [trackWidth, setTrackWidth] = useState(0);
+  const THUMB = 20;
+
+  // Refs to avoid stale closures in PanResponder
+  const trackWidthRef = useRef(0);
+  const fromSecRef = useRef(fromSec);
+  const toSecRef = useRef(toSec);
+  const maxSecRef = useRef(maxSec);
+  const onFromRef = useRef(onFromChange);
+  const onToRef = useRef(onToChange);
+  const activeThumb = useRef<"from" | "to" | null>(null);
+
+  useEffect(() => { fromSecRef.current = fromSec; }, [fromSec]);
+  useEffect(() => { toSecRef.current = toSec; }, [toSec]);
+  useEffect(() => { maxSecRef.current = maxSec; }, [maxSec]);
+  useEffect(() => { onFromRef.current = onFromChange; }, [onFromChange]);
+  useEffect(() => { onToRef.current = onToChange; }, [onToChange]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (evt) => {
+        const x = evt.nativeEvent.locationX;
+        const w = trackWidthRef.current;
+        const max = maxSecRef.current;
+        if (!w || !max) return;
+        const fromX = (fromSecRef.current / max) * w;
+        const toX = (toSecRef.current / max) * w;
+        activeThumb.current = Math.abs(x - fromX) <= Math.abs(x - toX) ? "from" : "to";
+        const sec = Math.round((x / w) * max);
+        if (activeThumb.current === "from") {
+          onFromRef.current(Math.max(0, Math.min(sec, toSecRef.current - 1)));
+        } else {
+          onToRef.current(Math.max(fromSecRef.current + 1, Math.min(sec, max)));
+        }
+      },
+      onPanResponderMove: (evt) => {
+        const x = evt.nativeEvent.locationX;
+        const w = trackWidthRef.current;
+        const max = maxSecRef.current;
+        if (!w || !max || !activeThumb.current) return;
+        const sec = Math.round((x / w) * max);
+        if (activeThumb.current === "from") {
+          onFromRef.current(Math.max(0, Math.min(sec, toSecRef.current - 1)));
+        } else {
+          onToRef.current(Math.max(fromSecRef.current + 1, Math.min(sec, max)));
+        }
+      },
+      onPanResponderRelease: () => {
+        activeThumb.current = null;
+      },
+    })
+  ).current;
+
+  const fromX = maxSec > 0 && trackWidth > 0 ? (fromSec / maxSec) * trackWidth : 0;
+  const toX = maxSec > 0 && trackWidth > 0 ? (toSec / maxSec) * trackWidth : trackWidth;
+
+  return (
+    <View style={{ gap: 6 }}>
+      <View
+        style={{ height: 44, justifyContent: "center" }}
+        onLayout={(e) => {
+          trackWidthRef.current = e.nativeEvent.layout.width;
+          setTrackWidth(e.nativeEvent.layout.width);
+        }}
+        {...panResponder.panHandlers}
+      >
+        {/* Track background */}
+        <View style={{ height: 4, backgroundColor: colors.muted, borderRadius: 2 }} />
+        {/* Active range highlight */}
+        <View
+          style={{
+            position: "absolute",
+            left: fromX,
+            width: Math.max(0, toX - fromX),
+            height: 4,
+            backgroundColor: colors.primary,
+            borderRadius: 2,
+          }}
+        />
+        {trackWidth > 0 && (
+          <>
+            {/* From thumb */}
+            <View
+              style={{
+                position: "absolute",
+                left: Math.max(0, fromX - THUMB / 2),
+                width: THUMB,
+                height: THUMB,
+                borderRadius: THUMB / 2,
+                backgroundColor: colors.background,
+                borderWidth: 2.5,
+                borderColor: colors.primary,
+              }}
+            />
+            {/* To thumb */}
+            <View
+              style={{
+                position: "absolute",
+                left: Math.min(trackWidth - THUMB, toX - THUMB / 2),
+                width: THUMB,
+                height: THUMB,
+                borderRadius: THUMB / 2,
+                backgroundColor: colors.primary,
+              }}
+            />
+          </>
+        )}
+      </View>
+      {/* Time labels */}
+      <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+        <Text style={{ fontSize: 11, fontWeight: "600", color: colors.primary }}>{formatSec(fromSec)}</Text>
+        <Text style={{ fontSize: 11, fontWeight: "600", color: colors.primary }}>{formatSec(toSec)}</Text>
+      </View>
+    </View>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
 interface AudioTranscriptProps {
@@ -170,11 +305,19 @@ export function AudioTranscript({ mediaId, telegramFileId }: AudioTranscriptProp
           </Text>
         </View>
 
-        {/* Range inputs */}
+        {/* Range seek bar */}
         <View style={{ width: "100%", gap: 10 }}>
           <Text style={{ fontSize: 12, fontWeight: "600", color: colors.mutedForeground, textAlign: "center" }}>
-            Transcribe range (MM:SS)
+            Transcribe range
           </Text>
+          <DualSeekBar
+            fromSec={fromSec}
+            toSec={toSec}
+            maxSec={durationSec || 300}
+            onFromChange={(sec) => setFromStr(formatSec(sec))}
+            onToChange={(sec) => setToStr(formatSec(sec))}
+          />
+          {/* Fine-tune inputs */}
           <View style={{ flexDirection: "row", alignItems: "center", gap: 10, justifyContent: "center" }}>
             <View style={{ alignItems: "center", gap: 4 }}>
               <Text style={{ fontSize: 11, color: colors.mutedForeground }}>From</Text>
