@@ -101,6 +101,49 @@ export const albumRoutes = createTRPCRouter({
       return { added: results.length };
     }),
 
+  updateAlbum: publicProcedure
+    .input(
+      z.object({
+        id: z.number(),
+        name: z.string().min(1).optional(),
+        description: z.string().optional(),
+        albumType: z.string().optional(),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { id, ...data } = input;
+      return ctx.db.album.update({
+        where: { id },
+        data: {
+          ...(data.name !== undefined ? { name: data.name } : {}),
+          ...(data.description !== undefined ? { description: data.description } : {}),
+          ...(data.albumType !== undefined ? { albumType: data.albumType } : {}),
+        },
+      });
+    }),
+
+  // Accepts the full desired order as [{mediaId, index}] and bulk-updates.
+  // Client sends the list after user finishes dragging / tapping up-down.
+  reorderTracks: publicProcedure
+    .input(
+      z.object({
+        albumId: z.number(),
+        order: z.array(z.object({ mediaId: z.number(), index: z.number() })),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { db } = ctx;
+      await Promise.all(
+        input.order.map(({ mediaId, index }) =>
+          db.albumAudioIndex.update({
+            where: { blogAudioId: mediaId },
+            data: { index },
+          })
+        )
+      );
+      return { updated: input.order.length };
+    }),
+
   getAuthors: publicProcedure.query(async ({ ctx }) => {
     return ctx.db.author.findMany({
       where: { deletedAt: null },
