@@ -407,6 +407,136 @@ function TagsSection({ blogId, tags }: { blogId: number; tags: BlogTag[] }) {
     );
 }
 
+// ── Brain Review Section ──────────────────────────────────────────────────────
+
+type BrainReview = RouterOutputs["blog"]["brainReview"];
+
+function BrainReviewSection({ blogId }: { blogId: number }) {
+    const [review, setReview] = useState<BrainReview | null>(null);
+    const [provider, setProvider] = useState<"openai" | "gemini">("openai");
+
+    const { mutate: generate, isPending, error } = useMutation(
+        _trpc.blog.brainReview.mutationOptions({
+            onSuccess(data) {
+                setReview(data);
+            },
+        }),
+    );
+
+    return (
+        <div className="space-y-4">
+            <p className="font-mono text-[10px] text-zinc-500 uppercase tracking-widest">
+                Brain Review
+            </p>
+
+            {/* Controls */}
+            <div className="flex gap-2 items-center flex-wrap">
+                <select
+                    value={provider}
+                    onChange={(e) => setProvider(e.target.value as "openai" | "gemini")}
+                    className="bg-zinc-900 border border-zinc-700 rounded-lg px-2 py-1.5 font-mono text-xs text-zinc-300 focus:outline-none focus:border-emerald-700"
+                >
+                    <option value="openai">OpenAI (GPT-4o mini)</option>
+                    <option value="gemini">Gemini 2.0 Flash</option>
+                </select>
+                <button
+                    onClick={() => generate({ blogId, provider })}
+                    disabled={isPending}
+                    className="px-4 py-1.5 rounded-lg bg-emerald-900/60 hover:bg-emerald-800/70 border border-emerald-700/60 font-mono text-xs text-emerald-300 transition-colors disabled:opacity-40"
+                >
+                    {isPending ? "Analyzing…" : review ? "Regenerate" : "Generate Brain Review"}
+                </button>
+            </div>
+
+            {/* Error */}
+            {error && (
+                <p className="font-mono text-xs text-red-400">
+                    {error.message}
+                </p>
+            )}
+
+            {/* Results */}
+            {review && (
+                <div className="space-y-4">
+                    {/* Summary */}
+                    <div className="bg-zinc-900/70 border border-zinc-800 rounded-xl p-4 space-y-2">
+                        <p className="font-mono text-[10px] text-emerald-500 uppercase tracking-widest">
+                            Summary
+                        </p>
+                        <p
+                            dir={isArabic(review.summary) ? "rtl" : "ltr"}
+                            lang={isArabic(review.summary) ? "ar" : undefined}
+                            className="text-sm text-zinc-300 leading-relaxed"
+                        >
+                            {review.summary}
+                        </p>
+                    </div>
+
+                    {/* Topics */}
+                    {review.topics.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                            {review.topics.map((topic) => (
+                                <span
+                                    key={topic}
+                                    className="px-2.5 py-1 rounded-full bg-zinc-800/80 border border-zinc-700 font-mono text-[11px] text-zinc-400"
+                                >
+                                    {topic}
+                                </span>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Key Points */}
+                    {review.keyPoints.length > 0 && (
+                        <div className="bg-zinc-900/70 border border-zinc-800 rounded-xl p-4 space-y-2">
+                            <p className="font-mono text-[10px] text-sky-500 uppercase tracking-widest">
+                                Key Points
+                            </p>
+                            <ul className="space-y-2">
+                                {review.keyPoints.map((point, i) => (
+                                    <li
+                                        key={i}
+                                        dir={isArabic(point) ? "rtl" : "ltr"}
+                                        lang={isArabic(point) ? "ar" : undefined}
+                                        className="flex gap-2 text-sm text-zinc-300"
+                                    >
+                                        <span className="text-sky-600 font-mono shrink-0">
+                                            {String(i + 1).padStart(2, "0")}
+                                        </span>
+                                        <span className="leading-relaxed">{point}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+
+                    {/* Action Items */}
+                    {review.actionItems.length > 0 && (
+                        <div className="bg-zinc-900/70 border border-zinc-800 rounded-xl p-4 space-y-2">
+                            <p className="font-mono text-[10px] text-amber-500 uppercase tracking-widest">
+                                Action Items
+                            </p>
+                            <ul className="space-y-2">
+                                {review.actionItems.map((item, i) => (
+                                    <li
+                                        key={i}
+                                        dir={isArabic(item) ? "rtl" : "ltr"}
+                                        lang={isArabic(item) ? "ar" : undefined}
+                                        className="flex gap-2 text-sm text-zinc-300"
+                                    >
+                                        <span className="text-amber-600 font-mono shrink-0">→</span>
+                                        <span className="leading-relaxed">{item}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
 // ── Comments Section ──────────────────────────────────────────────────────────
 
 function CommentsSection({
@@ -662,6 +792,11 @@ export default function BlogPage({
                         blogId={blogId}
                         tags={(blog as any).blogTags ?? []}
                     />
+
+                    <div className="border-t border-zinc-800/60" />
+
+                    {/* Brain Review */}
+                    <BrainReviewSection blogId={blogId} />
 
                     <div className="border-t border-zinc-800/60" />
 
