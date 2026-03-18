@@ -57,30 +57,71 @@ function PlayerSection() {
   const seek = useAudioStore((s) => s.seek);
 
   const progress = duration > 0 ? position / duration : 0;
+  const [trackWidth, setTrackWidth] = useState(0);
+
+  // Refs to avoid stale closures inside PanResponder
+  const trackWidthRef = useRef(0);
+  const durationRef = useRef(duration);
+  const seekRef = useRef(seek);
+  useEffect(() => { durationRef.current = duration; }, [duration]);
+  useEffect(() => { seekRef.current = seek; }, [seek]);
+
+  const seekPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (evt) => {
+        const x = evt.nativeEvent.locationX;
+        const w = trackWidthRef.current;
+        const d = durationRef.current;
+        if (!w || !d) return;
+        seekRef.current(Math.max(0, Math.min(d, (x / w) * d)));
+      },
+      onPanResponderMove: (evt) => {
+        const x = evt.nativeEvent.locationX;
+        const w = trackWidthRef.current;
+        const d = durationRef.current;
+        if (!w || !d) return;
+        seekRef.current(Math.max(0, Math.min(d, (x / w) * d)));
+      },
+    })
+  ).current;
+
+  const KNOB = 16;
+  const knobLeft = trackWidth > 0 ? Math.max(0, Math.min(trackWidth - KNOB, progress * trackWidth - KNOB / 2)) : 0;
 
   return (
     <View className="gap-4">
       {/* Scrubber */}
       <View className="py-2">
-        <View className="relative h-10 justify-center">
+        <View
+          className="relative h-10 justify-center"
+          onLayout={(e) => {
+            trackWidthRef.current = e.nativeEvent.layout.width;
+            setTrackWidth(e.nativeEvent.layout.width);
+          }}
+          {...seekPanResponder.panHandlers}
+        >
           <View className="absolute w-full h-1.5 bg-muted rounded-full overflow-hidden">
             <View
               style={{ height: "100%", backgroundColor: colors.primary, borderRadius: 9999, width: `${progress * 100}%` }}
             />
           </View>
-          <View
-            style={{
-              position: "absolute",
-              width: 16,
-              height: 16,
-              backgroundColor: colors.background,
-              borderRadius: 9999,
-              borderWidth: 2,
-              borderColor: colors.primary,
-              zIndex: 20,
-              left: `${Math.min(progress * 100, 95)}%`,
-            }}
-          />
+          {trackWidth > 0 && (
+            <View
+              style={{
+                position: "absolute",
+                width: KNOB,
+                height: KNOB,
+                backgroundColor: colors.background,
+                borderRadius: 9999,
+                borderWidth: 2,
+                borderColor: colors.primary,
+                zIndex: 20,
+                left: knobLeft,
+              }}
+            />
+          )}
           <View className="absolute inset-0 flex-row items-center justify-between opacity-20 px-1 pointer-events-none">
             {[3, 5, 8, 4, 6, 3, 2, 5, 4, 3, 6, 4, 3, 5, 7].map((h, i) => (
               <View key={i} style={{ width: 4, backgroundColor: colors.foreground, borderRadius: 9999, height: h * 3 }} />
