@@ -6,6 +6,37 @@ import { posts, postsSchema } from "../../queries/posts";
 import { consoleLog } from "@acme/utils";
 import { TRPCError } from "@trpc/server";
 
+// ── Brain Review helpers ──────────────────────────────────────────────────────
+
+const brainReviewSchema = z.object({
+  summary: z.string(),
+  keyPoints: z.array(z.string()),
+  actionItems: z.array(z.string()),
+  topics: z.array(z.string()),
+});
+
+export type BrainReview = z.infer<typeof brainReviewSchema>;
+
+function parseBrainReviewJson(raw: string): BrainReview {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "AI returned invalid JSON for brain review.",
+    });
+  }
+  const result = brainReviewSchema.safeParse(parsed);
+  if (!result.success) {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: "AI response did not match the expected brain review shape.",
+    });
+  }
+  return result.data;
+}
+
 export const blogRoutes = createTRPCRouter({
   posts: publicProcedure.input(postsSchema).query(async (props) => {
     consoleLog("Fetching posts with input:", props.input);
@@ -667,5 +698,138 @@ export const blogRoutes = createTRPCRouter({
         distinct: ["searchTerm"],
         select: { id: true, searchTerm: true, createdAt: true },
       });
+    }),
+
+  // ── Brain Review ──────────────────────────────────────────────────────────
+  // AI-powered analysis: summary, key points, and action items for a blog post
+
+  brainReview: publicProcedure
+    .input(
+      z.object({
+        blogId: z.number(),
+        provider: z.enum(["openai", "gemini"]).default("openai"),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { db } = ctx;
+
+      // Fetch blog content, tags, and saved transcript segments
+      const blog = await db.blog.findFirstOrThrow({
+        where: { id: input.blogId, deletedAt: null },
+        select: {
+          content: true,
+          type: true,
+          blogTags: { include: { tags: true }, where: { deletedAt: null } },
+          medias: {
+            take: 1,
+            include: { transcript: { include: { segments: { orderBy: { startSec: "asc" } } } } },
+          },
+        },
+      });
+
+      // Build the text corpus for analysis
+      const parts: string[] = [];
+
+      if (blog.content?.trim()) {
+        parts.push(`CONTENT:\n${blog.content.trim()}`);
+      }
+
+      const tags = blog.blogTags
+        .map((bt) => bt.tags?.title)
+        .filter(Boolean) as string[];
+      if (tags.length > 0) {
+        parts.push(`TAGS: ${tags.join(", ")}`);
+      }
+
+      const segments = blog.medias[0]?.transcript?.segments ?? [];
+      if (segments.length > 0) {
+        const transcriptText = segments.map((s) => s.text.trim()).join(" ");
+        parts.push(`TRANSCRIPT:\n${transcriptText}`);
+      }
+
+      if (parts.length === 0) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "This blog post has no content to review.",
+        });
+      }
+
+      const corpus = parts.join("\n\n");
+      const systemPrompt = [
+        "You are a precise content analyst. Given a blog post corpus, return ONLY valid JSON.",
+        'Shape: {"summary":string,"keyPoints":string[],"actionItems":string[],"topics":string[]}',
+        "Rules:",
+        "- summary: 2-3 sentence concise overview.",
+        "- keyPoints: 3-6 important insights, each ≤ 20 words.",
+        "- actionItems: 0-4 practical takeaways or next steps (empty array if none).",
+        "- topics: 2-5 short topic labels.",
+        "- Write in the same language as the content.",
+        "- No markdown, no extra keys, no explanation outside JSON.",
+      ].join(" ");
+
+      if (input.provider === "gemini") {
+        const geminiKey = process.env.GEMINI_API_KEY;
+        if (!geminiKey) {
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "GEMINI_API_KEY is not configured." });
+        }
+
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(geminiKey)}`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: `${systemPrompt}\n\nCORPUS:\n${corpus}` }] }],
+              generationConfig: { responseMimeType: "application/json" },
+            }),
+          },
+        );
+
+        if (!res.ok) {
+          const errText = await res.text();
+          consoleLog("[brainReview] Gemini error:", errText);
+          throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Gemini transcription failed. Check server logs." });
+        }
+
+        const json = (await res.json()) as {
+          candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
+        };
+        const text = json.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+        return parseBrainReviewJson(text);
+      }
+
+      // Default: OpenAI
+      const openAiKey = process.env.OPENAI_API_KEY;
+      if (!openAiKey) {
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "OPENAI_API_KEY is not configured." });
+      }
+
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          Authorization: `Bearer ${openAiKey}`,
+        },
+        body: JSON.stringify({
+          model: "gpt-4o-mini",
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: corpus },
+          ],
+        }),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        consoleLog("[brainReview] OpenAI error:", errText);
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "OpenAI request failed. Check server logs." });
+      }
+
+      const json = (await res.json()) as {
+        choices?: Array<{ message?: { content?: string } }>;
+      };
+      const text = json.choices?.[0]?.message?.content ?? "";
+      return parseBrainReviewJson(text);
     }),
 });
