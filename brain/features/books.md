@@ -50,15 +50,18 @@ Tracks the current scope, architecture, and roadmap for the books experience acr
   - `BookPage -> BookPageHighlight`
   - `BookPage -> BookPageComment`
   - `BookAuthor <-> Book` many-to-many
-- Planned model additions:
-  - `Book.contentHash`
-  - `Book.pagesUpdatedAt`
+  - `AiTokenUsage` — tracks provider, model, operation, inputTokens, outputTokens, bookId?, pageId?
 
 ### AI Integration
-- Metadata extraction prompt
-- Table-of-contents extraction prompt
-- Page-content extraction prompt
-- Providers mentioned in project notes: Claude, GPT-4o, Gemini
+- Metadata extraction prompt (`SHAMELA_BOOK_META_PROMPT`)
+- Table-of-contents extraction prompt (`SHAMELA_TOC_EXTRACT_PROMPT`)
+- Page-content extraction prompt (`SHAMELA_EXTRACT_PROMPT`)
+- Providers: Claude Sonnet 4.6 (Anthropic), GPT-4o (OpenAI), Gemini 2.0 Flash
+- **Anthropic uses `url-context-1` beta** — URL passed as a `document` content block; Claude fetches Shamela natively, bypassing server-side IP blocks
+- OpenAI/Gemini: server fetches HTML first, embeds in prompt
+- `callAI(provider, prompt, maxTokens, sourceUrl?)` → `{ text, inputTokens, outputTokens, model }`
+- `recordTokenUsage(db, result, provider, operation, bookId?, pageId?)` — non-fatal, writes to `AiTokenUsage`
+- `getTokenUsage` tRPC query — admin visibility into AI costs
 
 ### Current Gaps And Future Work
 - Reading progress and last-page tracking

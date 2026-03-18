@@ -25,6 +25,7 @@ interface AudioState {
   error: string | null;
   volume: number;
   blog: ItemProps;
+  isSeeking: boolean;
 
   // Playback speed: 0.75 | 1.0 | 1.25 | 1.5 | 2.0
   playbackRate: number;
@@ -66,6 +67,7 @@ export const useAudioStore = create<AudioState>()(
       volume: 1.0,
       playbackRate: 1.0,
       sleepTimerEnd: null,
+      isSeeking: false,
       blog: null!,
       loadAudio: async (blog) => {
         const uri = (await getTelegramFileUrl(blog?.audio?.telegramFileId))
@@ -115,7 +117,7 @@ export const useAudioStore = create<AudioState>()(
             FileSystem.File.downloadFileAsync(
               uri,
               file,
-              {}
+              {},
               // (downloadProgress) => {
               //   const progress =
               //     downloadProgress.totalBytesWritten /
@@ -157,7 +159,7 @@ export const useAudioStore = create<AudioState>()(
                   position: status.positionMillis || 0,
                 });
               }
-            }
+            },
           );
 
           const status = await sound.getStatusAsync();
@@ -234,10 +236,12 @@ export const useAudioStore = create<AudioState>()(
         if (!sound) return;
 
         try {
+          set({ position: positionMillis, isSeeking: true, error: null });
           await sound.setPositionAsync(positionMillis);
-          set({ position: positionMillis, error: null });
+          set({ isSeeking: false });
         } catch (err) {
           set({
+            isSeeking: false,
             error: err instanceof Error ? err.message : "Failed to seek",
           });
         }
@@ -337,7 +341,7 @@ export const useAudioStore = create<AudioState>()(
                   position: status.positionMillis || 0,
                 });
               }
-            }
+            },
           );
 
           // Restore position
@@ -372,8 +376,8 @@ export const useAudioStore = create<AudioState>()(
 
         // Update position every 100ms
         positionInterval = setInterval(async () => {
-          const { sound, isPlaying } = get();
-          if (sound && isPlaying) {
+          const { sound, isPlaying, isSeeking } = get();
+          if (sound && isPlaying && !isSeeking) {
             try {
               const status = await sound.getStatusAsync();
               if (status.isLoaded) {
@@ -429,6 +433,6 @@ export const useAudioStore = create<AudioState>()(
         duration: state.duration,
         playbackRate: state.playbackRate,
       }),
-    }
-  )
+    },
+  ),
 );

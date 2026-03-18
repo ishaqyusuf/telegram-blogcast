@@ -51,9 +51,18 @@ function ProviderSheet({
 }) {
   const colors = useColors();
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
       <Pressable
-        style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-end" }}
+        style={{
+          flex: 1,
+          backgroundColor: "rgba(0,0,0,0.6)",
+          justifyContent: "flex-end",
+        }}
         onPress={onClose}
       >
         <Pressable
@@ -76,7 +85,14 @@ function ProviderSheet({
               marginBottom: 12,
             }}
           />
-          <Text style={{ fontSize: 15, fontWeight: "700", color: colors.foreground, marginBottom: 8 }}>
+          <Text
+            style={{
+              fontSize: 15,
+              fontWeight: "700",
+              color: colors.foreground,
+              marginBottom: 8,
+            }}
+          >
             Select AI Provider
           </Text>
           {PROVIDERS.map((p) => {
@@ -84,7 +100,10 @@ function ProviderSheet({
             return (
               <Pressable
                 key={p.id}
-                onPress={() => { onSelect(p.id); onClose(); }}
+                onPress={() => {
+                  onSelect(p.id);
+                  onClose();
+                }}
                 style={{
                   flexDirection: "row",
                   alignItems: "center",
@@ -92,11 +111,19 @@ function ProviderSheet({
                   paddingVertical: 14,
                   paddingHorizontal: 12,
                   borderRadius: 12,
-                  backgroundColor: isSelected ? colors.primary + "22" : "transparent",
+                  backgroundColor: isSelected
+                    ? colors.primary + "22"
+                    : "transparent",
                 }}
               >
                 <View style={{ gap: 2 }}>
-                  <Text style={{ fontSize: 14, fontWeight: "600", color: colors.foreground }}>
+                  <Text
+                    style={{
+                      fontSize: 14,
+                      fontWeight: "600",
+                      color: colors.foreground,
+                    }}
+                  >
                     {p.label}
                   </Text>
                   <Text style={{ fontSize: 12, color: colors.mutedForeground }}>
@@ -104,7 +131,11 @@ function ProviderSheet({
                   </Text>
                 </View>
                 {isSelected && (
-                  <Icon name="CheckCircle2" size={20} className="text-primary" />
+                  <Icon
+                    name="CheckCircle2"
+                    size={20}
+                    className="text-primary"
+                  />
                 )}
               </Pressable>
             );
@@ -144,11 +175,21 @@ function DualSeekBar({
   const onToRef = useRef(onToChange);
   const activeThumb = useRef<"from" | "to" | null>(null);
 
-  useEffect(() => { fromSecRef.current = fromSec; }, [fromSec]);
-  useEffect(() => { toSecRef.current = toSec; }, [toSec]);
-  useEffect(() => { maxSecRef.current = maxSec; }, [maxSec]);
-  useEffect(() => { onFromRef.current = onFromChange; }, [onFromChange]);
-  useEffect(() => { onToRef.current = onToChange; }, [onToChange]);
+  useEffect(() => {
+    fromSecRef.current = fromSec;
+  }, [fromSec]);
+  useEffect(() => {
+    toSecRef.current = toSec;
+  }, [toSec]);
+  useEffect(() => {
+    maxSecRef.current = maxSec;
+  }, [maxSec]);
+  useEffect(() => {
+    onFromRef.current = onFromChange;
+  }, [onFromChange]);
+  useEffect(() => {
+    onToRef.current = onToChange;
+  }, [onToChange]);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -161,12 +202,17 @@ function DualSeekBar({
         if (!w || !max) return;
         const fromX = (fromSecRef.current / max) * w;
         const toX = (toSecRef.current / max) * w;
-        activeThumb.current = Math.abs(x - fromX) <= Math.abs(x - toX) ? "from" : "to";
+        activeThumb.current =
+          Math.abs(x - fromX) <= Math.abs(x - toX) ? "from" : "to";
         const sec = Math.round((x / w) * max);
         if (activeThumb.current === "from") {
-          onFromRef.current(Math.max(0, Math.min(sec, toSecRef.current - 1)));
+          const newFrom = Math.max(0, Math.min(sec, toSecRef.current - 1));
+          fromSecRef.current = newFrom;
+          onFromRef.current(newFrom);
         } else {
-          onToRef.current(Math.max(fromSecRef.current + 1, Math.min(sec, max)));
+          const newTo = Math.max(fromSecRef.current + 1, Math.min(sec, max));
+          toSecRef.current = newTo;
+          onToRef.current(newTo);
         }
       },
       onPanResponderMove: (evt) => {
@@ -176,19 +222,25 @@ function DualSeekBar({
         if (!w || !max || !activeThumb.current) return;
         const sec = Math.round((x / w) * max);
         if (activeThumb.current === "from") {
-          onFromRef.current(Math.max(0, Math.min(sec, toSecRef.current - 1)));
+          const newFrom = Math.max(0, Math.min(sec, toSecRef.current - 1));
+          fromSecRef.current = newFrom;
+          onFromRef.current(newFrom);
         } else {
-          onToRef.current(Math.max(fromSecRef.current + 1, Math.min(sec, max)));
+          const newTo = Math.max(fromSecRef.current + 1, Math.min(sec, max));
+          toSecRef.current = newTo;
+          onToRef.current(newTo);
         }
       },
       onPanResponderRelease: () => {
         activeThumb.current = null;
       },
-    })
+    }),
   ).current;
 
-  const fromX = maxSec > 0 && trackWidth > 0 ? (fromSec / maxSec) * trackWidth : 0;
-  const toX = maxSec > 0 && trackWidth > 0 ? (toSec / maxSec) * trackWidth : trackWidth;
+  const fromX =
+    maxSec > 0 && trackWidth > 0 ? (fromSec / maxSec) * trackWidth : 0;
+  const toX =
+    maxSec > 0 && trackWidth > 0 ? (toSec / maxSec) * trackWidth : trackWidth;
 
   return (
     <View style={{ gap: 6 }}>
@@ -201,7 +253,9 @@ function DualSeekBar({
         {...panResponder.panHandlers}
       >
         {/* Track background */}
-        <View style={{ height: 4, backgroundColor: colors.muted, borderRadius: 2 }} />
+        <View
+          style={{ height: 4, backgroundColor: colors.muted, borderRadius: 2 }}
+        />
         {/* Active range highlight */}
         <View
           style={{
@@ -244,8 +298,16 @@ function DualSeekBar({
       </View>
       {/* Time labels */}
       <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-        <Text style={{ fontSize: 11, fontWeight: "600", color: colors.primary }}>{formatSec(fromSec)}</Text>
-        <Text style={{ fontSize: 11, fontWeight: "600", color: colors.primary }}>{formatSec(toSec)}</Text>
+        <Text
+          style={{ fontSize: 11, fontWeight: "600", color: colors.primary }}
+        >
+          {formatSec(fromSec)}
+        </Text>
+        <Text
+          style={{ fontSize: 11, fontWeight: "600", color: colors.primary }}
+        >
+          {formatSec(toSec)}
+        </Text>
       </View>
     </View>
   );
@@ -258,7 +320,10 @@ interface AudioTranscriptProps {
   telegramFileId?: string;
 }
 
-export function AudioTranscript({ mediaId, telegramFileId }: AudioTranscriptProps) {
+export function AudioTranscript({
+  mediaId,
+  telegramFileId,
+}: AudioTranscriptProps) {
   const colors = useColors();
   const positionSec = useAudioStore((s) => s.position) / 1000;
   const durationMs = useAudioStore((s) => s.duration);
@@ -291,23 +356,61 @@ export function AudioTranscript({ mediaId, telegramFileId }: AudioTranscriptProp
   // ── No transcript yet ───────────────────────────────────────────────────────
   if (!transcript || transcript.status === "failed") {
     return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 16, paddingVertical: 48, paddingHorizontal: 24 }}>
-        <View style={{ width: 64, height: 64, borderRadius: 32, backgroundColor: colors.muted, alignItems: "center", justifyContent: "center" }}>
+      <View
+        style={{
+          flex: 1,
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 16,
+          paddingVertical: 48,
+          paddingHorizontal: 24,
+        }}
+      >
+        <View
+          style={{
+            width: 64,
+            height: 64,
+            borderRadius: 32,
+            backgroundColor: colors.muted,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
           <Icon name="FileText" size={28} className="text-muted-foreground" />
         </View>
 
         <View style={{ alignItems: "center", gap: 4 }}>
-          <Text style={{ fontSize: 16, fontWeight: "700", color: colors.foreground }}>
+          <Text
+            style={{
+              fontSize: 16,
+              fontWeight: "700",
+              color: colors.foreground,
+            }}
+          >
             No transcript yet
           </Text>
-          <Text style={{ fontSize: 14, color: colors.mutedForeground, textAlign: "center" }}>
-            Select a range and provider, then generate a transcript to read along.
+          <Text
+            style={{
+              fontSize: 14,
+              color: colors.mutedForeground,
+              textAlign: "center",
+            }}
+          >
+            Select a range and provider, then generate a transcript to read
+            along.
           </Text>
         </View>
 
         {/* Range seek bar */}
         <View style={{ width: "100%", gap: 10 }}>
-          <Text style={{ fontSize: 12, fontWeight: "600", color: colors.mutedForeground, textAlign: "center" }}>
+          <Text
+            style={{
+              fontSize: 12,
+              fontWeight: "600",
+              color: colors.mutedForeground,
+              textAlign: "center",
+            }}
+          >
             Transcribe range
           </Text>
           <DualSeekBar
@@ -318,9 +421,18 @@ export function AudioTranscript({ mediaId, telegramFileId }: AudioTranscriptProp
             onToChange={(sec) => setToStr(formatSec(sec))}
           />
           {/* Fine-tune inputs */}
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 10, justifyContent: "center" }}>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 10,
+              justifyContent: "center",
+            }}
+          >
             <View style={{ alignItems: "center", gap: 4 }}>
-              <Text style={{ fontSize: 11, color: colors.mutedForeground }}>From</Text>
+              <Text style={{ fontSize: 11, color: colors.mutedForeground }}>
+                From
+              </Text>
               <TextInput
                 value={fromStr}
                 onChangeText={setFromStr}
@@ -341,9 +453,19 @@ export function AudioTranscript({ mediaId, telegramFileId }: AudioTranscriptProp
                 }}
               />
             </View>
-            <Text style={{ fontSize: 16, color: colors.mutedForeground, marginTop: 16 }}>→</Text>
+            <Text
+              style={{
+                fontSize: 16,
+                color: colors.mutedForeground,
+                marginTop: 16,
+              }}
+            >
+              →
+            </Text>
             <View style={{ alignItems: "center", gap: 4 }}>
-              <Text style={{ fontSize: 11, color: colors.mutedForeground }}>To</Text>
+              <Text style={{ fontSize: 11, color: colors.mutedForeground }}>
+                To
+              </Text>
               <TextInput
                 value={toStr}
                 onChangeText={setToStr}
@@ -386,7 +508,13 @@ export function AudioTranscript({ mediaId, telegramFileId }: AudioTranscriptProp
         >
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
             <Icon name="Sparkles" size={16} className="text-primary" />
-            <Text style={{ fontSize: 14, fontWeight: "500", color: colors.foreground }}>
+            <Text
+              style={{
+                fontSize: 14,
+                fontWeight: "500",
+                color: colors.foreground,
+              }}
+            >
               {providerConfig.label}
             </Text>
           </View>
@@ -399,11 +527,21 @@ export function AudioTranscript({ mediaId, telegramFileId }: AudioTranscriptProp
                 borderRadius: 6,
               }}
             >
-              <Text style={{ fontSize: 11, fontWeight: "600", color: colors.primary }}>
+              <Text
+                style={{
+                  fontSize: 11,
+                  fontWeight: "600",
+                  color: colors.primary,
+                }}
+              >
                 {formatCost(rangeSec, providerConfig.costPerMin)}
               </Text>
             </View>
-            <Icon name="ChevronRight" size={16} className="text-muted-foreground" />
+            <Icon
+              name="ChevronRight"
+              size={16}
+              className="text-muted-foreground"
+            />
           </View>
         </Pressable>
 
@@ -411,7 +549,12 @@ export function AudioTranscript({ mediaId, telegramFileId }: AudioTranscriptProp
         <Pressable
           onPress={() => {
             if (!telegramFileId) return;
-            startTranscribe({ fileId: telegramFileId, fromSec, toSec, provider });
+            startTranscribe({
+              fileId: telegramFileId,
+              fromSec,
+              toSec,
+              provider,
+            });
           }}
           disabled={isTranscribing || !telegramFileId || rangeSec <= 0}
           style={{
@@ -419,12 +562,19 @@ export function AudioTranscript({ mediaId, telegramFileId }: AudioTranscriptProp
             paddingVertical: 12,
             borderRadius: 999,
             backgroundColor: colors.primary,
-            opacity: (isTranscribing || !telegramFileId || rangeSec <= 0) ? 0.4 : 1,
+            opacity:
+              isTranscribing || !telegramFileId || rangeSec <= 0 ? 0.4 : 1,
             width: "100%",
             alignItems: "center",
           }}
         >
-          <Text style={{ fontSize: 14, fontWeight: "700", color: colors.primaryForeground }}>
+          <Text
+            style={{
+              fontSize: 14,
+              fontWeight: "700",
+              color: colors.primaryForeground,
+            }}
+          >
             {isTranscribing ? "Transcribing…" : "Transcribe Audio"}
           </Text>
         </Pressable>
@@ -442,9 +592,19 @@ export function AudioTranscript({ mediaId, telegramFileId }: AudioTranscriptProp
   // ── In progress ─────────────────────────────────────────────────────────────
   if (transcript.status === "processing" || transcript.status === "pending") {
     return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 12, paddingVertical: 48 }}>
+      <View
+        style={{
+          flex: 1,
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 12,
+          paddingVertical: 48,
+        }}
+      >
         <Icon name="Loader" size={28} className="text-primary" />
-        <Text style={{ fontSize: 14, color: colors.mutedForeground }}>Transcribing…</Text>
+        <Text style={{ fontSize: 14, color: colors.mutedForeground }}>
+          Transcribing…
+        </Text>
       </View>
     );
   }
@@ -470,7 +630,9 @@ export function AudioTranscript({ mediaId, telegramFileId }: AudioTranscriptProp
                 paddingHorizontal: 12,
                 paddingVertical: 10,
                 borderRadius: 12,
-                backgroundColor: isActive ? colors.primary + "26" : "transparent",
+                backgroundColor: isActive
+                  ? colors.primary + "26"
+                  : "transparent",
               }}
             >
               {/* Timestamp badge */}
@@ -488,7 +650,9 @@ export function AudioTranscript({ mediaId, telegramFileId }: AudioTranscriptProp
                   style={{
                     fontSize: 10,
                     fontWeight: "700",
-                    color: isActive ? colors.primaryForeground : colors.mutedForeground,
+                    color: isActive
+                      ? colors.primaryForeground
+                      : colors.mutedForeground,
                   }}
                 >
                   {formatSec(seg.startSec)}

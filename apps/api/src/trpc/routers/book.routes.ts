@@ -94,7 +94,7 @@ function extractHashTags(text: string): string[] {
 async function attachTags(
   db: any,
   blogId: number,
-  description: string
+  description: string,
 ): Promise<void> {
   const tagNames = extractHashTags(description);
   for (const title of tagNames) {
@@ -114,31 +114,90 @@ async function attachTags(
 
 type AiProvider = "anthropic" | "openai" | "gemini";
 
-async function callAI(provider: AiProvider, prompt: string, maxTokens: number): Promise<string> {
+interface AiResult {
+  text: string;
+  inputTokens: number;
+  outputTokens: number;
+  model: string;
+}
+
+/**
+ * Call an AI provider with either a raw URL (Anthropic fetches it natively)
+ * or pre-fetched HTML for OpenAI/Gemini.
+ */
+async function callAI(
+  provider: AiProvider,
+  prompt: string,
+  maxTokens: number,
+  sourceUrl?: string, // if provided, Anthropic uses URL natively; others fetch HTML
+): Promise<AiResult> {
   if (provider === "anthropic") {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) throw new Error("ANTHROPIC_API_KEY not configured");
+
+    const userContent: any[] = sourceUrl
+      ? [
+          // Let Claude fetch the URL directly — avoids server-side Shamela blocks
+          { type: "document", source: { type: "url", url: sourceUrl } },
+          { type: "text", text: prompt },
+        ]
+      : [{ type: "text", text: prompt }];
+
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-      body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: maxTokens, messages: [{ role: "user", content: prompt }] }),
+      headers: {
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "anthropic-beta": "url-context-1",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: maxTokens,
+        messages: [{ role: "user", content: userContent }],
+      }),
     });
-    if (!res.ok) throw new Error(`Anthropic API error: ${res.status}`);
+    if (!res.ok)
+      throw new Error(`Anthropic API error: ${res.status} ${await res.text()}`);
     const data = await res.json();
-    return data.content?.[0]?.text ?? "";
+    return {
+      text: data.content?.[0]?.text ?? "",
+      inputTokens: data.usage?.input_tokens ?? 0,
+      outputTokens: data.usage?.output_tokens ?? 0,
+      model: "claude-sonnet-4-6",
+    };
   }
+
+  // For OpenAI / Gemini: embed the URL in the prompt and let the AI handle it
+  const fullPrompt = sourceUrl
+    ? `${prompt}\n\n<SOURCE_URL>${sourceUrl}</SOURCE_URL>`
+    : prompt;
+
   if (provider === "openai") {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
-      body: JSON.stringify({ model: "gpt-4o", max_tokens: maxTokens, messages: [{ role: "user", content: prompt }] }),
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4o",
+        max_tokens: maxTokens,
+        messages: [{ role: "user", content: fullPrompt }],
+      }),
     });
     if (!res.ok) throw new Error(`OpenAI API error: ${res.status}`);
     const data = await res.json();
-    return data.choices?.[0]?.message?.content ?? "";
+    return {
+      text: data.choices?.[0]?.message?.content ?? "",
+      inputTokens: data.usage?.prompt_tokens ?? 0,
+      outputTokens: data.usage?.completion_tokens ?? 0,
+      model: "gpt-4o",
+    };
   }
+
   if (provider === "gemini") {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
@@ -147,31 +206,61 @@ async function callAI(provider: AiProvider, prompt: string, maxTokens: number): 
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: maxTokens } }),
-      }
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: fullPrompt }] }],
+          generationConfig: { maxOutputTokens: maxTokens },
+        }),
+      },
     );
     if (!res.ok) throw new Error(`Gemini API error: ${res.status}`);
     const data = await res.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    const meta = data.usageMetadata ?? {};
+    return {
+      text: data.candidates?.[0]?.content?.parts?.[0]?.text ?? "",
+      inputTokens: meta.promptTokenCount ?? 0,
+      outputTokens: meta.candidatesTokenCount ?? 0,
+      model: "gemini-2.0-flash",
+    };
   }
+
   throw new Error(`Unknown AI provider: ${provider}`);
+}
+
+async function recordTokenUsage(
+  db: any,
+  result: AiResult,
+  provider: AiProvider,
+  operation: string,
+  bookId?: number,
+  pageId?: number,
+) {
+  try {
+    await db.aiTokenUsage.create({
+      data: {
+        provider,
+        model: result.model,
+        operation,
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
+        bookId: bookId ?? null,
+        pageId: pageId ?? null,
+      },
+    });
+  } catch {
+    // Non-fatal — never block the main flow
+  }
 }
 
 async function syncToc(
   db: any,
   bookId: number,
-  html: string,
   bookUrl: string,
-  provider: AiProvider
+  provider: AiProvider,
 ): Promise<number> {
-  // ── Call AI for ToC ────────────────────────────────────────────────────────
-  let tocRaw: string;
+  let result: AiResult;
   try {
-    tocRaw = await callAI(
-      provider,
-      `${SHAMELA_TOC_EXTRACT_PROMPT}\n\n<SHAMELA_BOOK_URL>${bookUrl}</SHAMELA_BOOK_URL>\n\n<PAGE_HTML>${html.slice(0, 60000)}</PAGE_HTML>`,
-      8192
-    );
+    result = await callAI(provider, SHAMELA_TOC_EXTRACT_PROMPT, 8192, bookUrl);
+    await recordTokenUsage(db, result, provider, "toc_extract", bookId);
   } catch {
     return 0;
   }
@@ -186,7 +275,7 @@ async function syncToc(
     }[];
   };
   try {
-    toc = JSON.parse(tocRaw);
+    toc = JSON.parse(result.text);
   } catch {
     return 0;
   }
@@ -205,7 +294,7 @@ async function syncToc(
   }
 
   // ── Bulk-insert chapter stubs (skip existing) ──────────────────────────────
-  const result = await db.bookPage.createMany({
+  const results = await db.bookPage.createMany({
     skipDuplicates: true,
     data: toc.chapters.map((ch) => ({
       bookId,
@@ -218,7 +307,7 @@ async function syncToc(
     })),
   });
 
-  return result.count;
+  return results.count;
 }
 
 export const bookRoutes = createTRPCRouter({
@@ -249,7 +338,7 @@ export const bookRoutes = createTRPCRouter({
         name: z.string().min(1),
         nameAr: z.string().optional(),
         url: z.string().optional(),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       return ctx.db.bookAuthor.create({ data: input });
@@ -263,7 +352,7 @@ export const bookRoutes = createTRPCRouter({
         shelfId: z.number().optional(),
         cursor: z.number().optional(),
         limit: z.number().min(1).max(100).default(20),
-      })
+      }),
     )
     .query(async ({ ctx, input }) => {
       const { db } = ctx;
@@ -346,7 +435,7 @@ export const bookRoutes = createTRPCRouter({
         coverColor: z.string().optional(),
         category: z.string().optional(),
         categoryUrl: z.string().optional(),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       const { db } = ctx;
@@ -410,7 +499,7 @@ export const bookRoutes = createTRPCRouter({
         coverColor: z.string().optional(),
         category: z.string().optional(),
         categoryUrl: z.string().optional(),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       const { db } = ctx;
@@ -455,7 +544,7 @@ export const bookRoutes = createTRPCRouter({
         bookId: z.number(),
         number: z.number(),
         title: z.string().optional(),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       return ctx.db.bookVolume.create({ data: input });
@@ -487,52 +576,30 @@ export const bookRoutes = createTRPCRouter({
         bookId: z.number(),
         shamelaUrl: z.string().url(),
         volumeId: z.number().optional(),
-      })
+        aiProvider: z
+          .enum(["anthropic", "openai", "gemini"])
+          .default("anthropic"),
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       const { db } = ctx;
 
-      // 1. Fetch the Shamela HTML
-      const htmlRes = await fetch(input.shamelaUrl);
-      const html = await htmlRes.text();
+      const aiResult = await callAI(
+        input.aiProvider,
+        SHAMELA_EXTRACT_PROMPT,
+        4096,
+        input.shamelaUrl,
+      );
 
-      // 2. Call Claude to extract structured page data
-      const apiKey = process.env.ANTHROPIC_API_KEY;
-      if (!apiKey) throw new Error("ANTHROPIC_API_KEY not configured");
-
-      const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-6",
-          max_tokens: 4096,
-          messages: [
-            {
-              role: "user",
-              content: `${SHAMELA_EXTRACT_PROMPT}\n\n<SHAMELA_PAGE_URL>${input.shamelaUrl}</SHAMELA_PAGE_URL>\n\n<PAGE_HTML>${html.slice(0, 40000)}</PAGE_HTML>`,
-            },
-          ],
-        }),
-      });
-
-      if (!claudeRes.ok) {
-        throw new Error(`Claude API error: ${claudeRes.status}`);
-      }
-
-      const claudeData = await claudeRes.json();
-      const rawText = claudeData.content?.[0]?.text ?? "";
       let pageData: any;
       try {
-        pageData = JSON.parse(rawText);
+        pageData = JSON.parse(aiResult.text);
       } catch {
-        throw new Error(`Failed to parse Claude response: ${rawText.slice(0, 200)}`);
+        throw new Error(
+          `Failed to parse AI response: ${aiResult.text.slice(0, 200)}`,
+        );
       }
 
-      // 3. Upsert BookPage
       const page = await db.bookPage.upsert({
         where: {
           bookId_shamelaPageNo: {
@@ -567,9 +634,11 @@ export const bookRoutes = createTRPCRouter({
         },
       });
 
-      // 4. Replace paragraphs
       await db.bookPageParagraph.deleteMany({ where: { pageId: page.id } });
-      if (Array.isArray(pageData.paragraphs) && pageData.paragraphs.length > 0) {
+      if (
+        Array.isArray(pageData.paragraphs) &&
+        pageData.paragraphs.length > 0
+      ) {
         await db.bookPageParagraph.createMany({
           data: pageData.paragraphs.map((p: any) => ({
             pageId: page.id,
@@ -580,7 +649,6 @@ export const bookRoutes = createTRPCRouter({
         });
       }
 
-      // 5. Replace footnotes
       await db.bookPageFootnote.deleteMany({ where: { pageId: page.id } });
       if (Array.isArray(pageData.footnotes) && pageData.footnotes.length > 0) {
         await db.bookPageFootnote.createMany({
@@ -594,12 +662,22 @@ export const bookRoutes = createTRPCRouter({
         });
       }
 
-      // 6. Stamp book with content hash + timestamp so clients can detect updates
-      const newHash = `${input.bookId}-${Date.now()}`;
       await db.book.update({
         where: { id: input.bookId },
-        data: { contentHash: newHash, pagesUpdatedAt: new Date() },
+        data: {
+          contentHash: `${input.bookId}-${Date.now()}`,
+          pagesUpdatedAt: new Date(),
+        },
       });
+
+      await recordTokenUsage(
+        db,
+        aiResult,
+        input.aiProvider,
+        "page_fetch",
+        input.bookId,
+        page.id,
+      );
 
       return page;
     }),
@@ -609,7 +687,10 @@ export const bookRoutes = createTRPCRouter({
       z.object({
         bookId: z.number(),
         currentShamelaPageNo: z.number(),
-      })
+        aiProvider: z
+          .enum(["anthropic", "openai", "gemini"])
+          .default("anthropic"),
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       const { db } = ctx;
@@ -623,48 +704,26 @@ export const bookRoutes = createTRPCRouter({
       });
       if (!currentPage) throw new Error("Current page not found");
 
-      // Construct next page URL by incrementing the page number in the URL
       const nextPageNo = input.currentShamelaPageNo + 1;
       const nextUrl = currentPage.shamelaUrl.replace(
         /\/(\d+)(\/?$)/,
-        `/${nextPageNo}$2`
+        `/${nextPageNo}$2`,
       );
 
-      // Call fetchPage logic inline
-      const apiKey = process.env.ANTHROPIC_API_KEY;
-      if (!apiKey) throw new Error("ANTHROPIC_API_KEY not configured");
+      const aiResult = await callAI(
+        input.aiProvider,
+        SHAMELA_EXTRACT_PROMPT,
+        4096,
+        nextUrl,
+      );
 
-      const htmlRes = await fetch(nextUrl);
-      const html = await htmlRes.text();
-
-      const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-6",
-          max_tokens: 4096,
-          messages: [
-            {
-              role: "user",
-              content: `${SHAMELA_EXTRACT_PROMPT}\n\n<SHAMELA_PAGE_URL>${nextUrl}</SHAMELA_PAGE_URL>\n\n<PAGE_HTML>${html.slice(0, 40000)}</PAGE_HTML>`,
-            },
-          ],
-        }),
-      });
-
-      if (!claudeRes.ok) throw new Error(`Claude API error: ${claudeRes.status}`);
-
-      const claudeData = await claudeRes.json();
-      const rawText = claudeData.content?.[0]?.text ?? "";
       let pageData: any;
       try {
-        pageData = JSON.parse(rawText);
+        pageData = JSON.parse(aiResult.text);
       } catch {
-        throw new Error(`Failed to parse Claude response: ${rawText.slice(0, 200)}`);
+        throw new Error(
+          `Failed to parse AI response: ${aiResult.text.slice(0, 200)}`,
+        );
       }
 
       const page = await db.bookPage.upsert({
@@ -701,7 +760,10 @@ export const bookRoutes = createTRPCRouter({
       });
 
       await db.bookPageParagraph.deleteMany({ where: { pageId: page.id } });
-      if (Array.isArray(pageData.paragraphs) && pageData.paragraphs.length > 0) {
+      if (
+        Array.isArray(pageData.paragraphs) &&
+        pageData.paragraphs.length > 0
+      ) {
         await db.bookPageParagraph.createMany({
           data: pageData.paragraphs.map((p: any) => ({
             pageId: page.id,
@@ -725,11 +787,22 @@ export const bookRoutes = createTRPCRouter({
         });
       }
 
-      // Stamp book with updated content hash so offline clients can detect updates
       await db.book.update({
         where: { id: input.bookId },
-        data: { contentHash: `${input.bookId}-${Date.now()}`, pagesUpdatedAt: new Date() },
+        data: {
+          contentHash: `${input.bookId}-${Date.now()}`,
+          pagesUpdatedAt: new Date(),
+        },
       });
+
+      await recordTokenUsage(
+        db,
+        aiResult,
+        input.aiProvider,
+        "page_fetch_next",
+        input.bookId,
+        page.id,
+      );
 
       return page;
     }),
@@ -745,7 +818,7 @@ export const bookRoutes = createTRPCRouter({
         endOffset: z.number(),
         color: z.string().default("#FFD700"),
         note: z.string().optional(),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       return ctx.db.bookPageHighlight.create({
@@ -767,7 +840,7 @@ export const bookRoutes = createTRPCRouter({
         pageId: z.number(),
         content: z.string().min(1),
         paragraphId: z.number().optional(),
-      })
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       return ctx.db.bookPageComment.create({
@@ -799,7 +872,13 @@ export const bookRoutes = createTRPCRouter({
       const fetchedCount = await ctx.db.bookPage.count({
         where: { bookId: input.id, status: "fetched", deletedAt: null },
       });
-      return { id: book.id, contentHash: book.contentHash, pagesUpdatedAt: book.pagesUpdatedAt, fetchedCount, totalCount };
+      return {
+        id: book.id,
+        contentHash: book.contentHash,
+        pagesUpdatedAt: book.pagesUpdatedAt,
+        fetchedCount,
+        totalCount,
+      };
     }),
 
   // ── Bulk download ─────────────────────────────────────────────────────────────
@@ -810,7 +889,15 @@ export const bookRoutes = createTRPCRouter({
       const { db } = ctx;
       const book = await db.book.findFirstOrThrow({
         where: { id: input.bookId, deletedAt: null },
-        select: { id: true, nameAr: true, nameEn: true, coverColor: true, shamelaId: true, contentHash: true, pagesUpdatedAt: true },
+        select: {
+          id: true,
+          nameAr: true,
+          nameEn: true,
+          coverColor: true,
+          shamelaId: true,
+          contentHash: true,
+          pagesUpdatedAt: true,
+        },
       });
       const volumes = await db.bookVolume.findMany({
         where: { bookId: input.bookId, deletedAt: null },
@@ -820,20 +907,46 @@ export const bookRoutes = createTRPCRouter({
       const pages = await db.bookPage.findMany({
         where: { bookId: input.bookId, deletedAt: null },
         select: {
-          id: true, volumeId: true, shamelaPageNo: true, shamelaUrl: true,
-          printedPageNo: true, chapterTitle: true, topicTitle: true, status: true,
-          paragraphs: { select: { id: true, pid: true, text: true, footnoteIds: true }, orderBy: { pid: "asc" } },
-          footnotes: { select: { id: true, marker: true, type: true, content: true } },
+          id: true,
+          volumeId: true,
+          shamelaPageNo: true,
+          shamelaUrl: true,
+          printedPageNo: true,
+          chapterTitle: true,
+          topicTitle: true,
+          status: true,
+          paragraphs: {
+            select: { id: true, pid: true, text: true, footnoteIds: true },
+            orderBy: { pid: "asc" },
+          },
+          footnotes: {
+            select: { id: true, marker: true, type: true, content: true },
+          },
         },
         orderBy: { shamelaPageNo: "asc" },
       });
       const highlights = await db.bookPageHighlight.findMany({
         where: { page: { bookId: input.bookId }, userId: 1 },
-        select: { id: true, pageId: true, paragraphId: true, color: true, note: true, createdAt: true, updatedAt: true },
+        select: {
+          id: true,
+          pageId: true,
+          paragraphId: true,
+          color: true,
+          note: true,
+          createdAt: true,
+          updatedAt: true,
+        },
       });
       const comments = await db.bookPageComment.findMany({
         where: { page: { bookId: input.bookId }, userId: 1, deletedAt: null },
-        select: { id: true, pageId: true, paragraphId: true, content: true, createdAt: true, updatedAt: true },
+        select: {
+          id: true,
+          pageId: true,
+          paragraphId: true,
+          content: true,
+          createdAt: true,
+          updatedAt: true,
+        },
       });
       return { book, volumes, pages, highlights, comments };
     }),
@@ -846,30 +959,85 @@ export const bookRoutes = createTRPCRouter({
       const { db } = ctx;
       const titleMatches = await db.bookPage.findMany({
         where: {
-          bookId: input.bookId, deletedAt: null,
+          bookId: input.bookId,
+          deletedAt: null,
           OR: [
             { chapterTitle: { contains: input.query } },
             { topicTitle: { contains: input.query } },
           ],
         },
-        select: { id: true, chapterTitle: true, topicTitle: true, printedPageNo: true, shamelaPageNo: true, status: true, volumeId: true },
+        select: {
+          id: true,
+          chapterTitle: true,
+          topicTitle: true,
+          printedPageNo: true,
+          shamelaPageNo: true,
+          status: true,
+          volumeId: true,
+        },
         take: 30,
       });
       const paraMatches = await db.bookPageParagraph.findMany({
-        where: { text: { contains: input.query }, page: { bookId: input.bookId, status: "fetched", deletedAt: null } },
+        where: {
+          text: { contains: input.query },
+          page: { bookId: input.bookId, status: "fetched", deletedAt: null },
+        },
         select: {
-          id: true, text: true,
-          page: { select: { id: true, chapterTitle: true, topicTitle: true, printedPageNo: true, shamelaPageNo: true, volumeId: true } },
+          id: true,
+          text: true,
+          page: {
+            select: {
+              id: true,
+              chapterTitle: true,
+              topicTitle: true,
+              printedPageNo: true,
+              shamelaPageNo: true,
+              volumeId: true,
+            },
+          },
         },
         take: 30,
       });
       const seen = new Set<number>();
-      const results: { pageId: number; chapterTitle: string | null; topicTitle: string | null; printedPageNo: number | null; shamelaPageNo: number; volumeId: number | null; snippet: string | null; matchType: "title" | "paragraph" }[] = [];
+      const results: {
+        pageId: number;
+        chapterTitle: string | null;
+        topicTitle: string | null;
+        printedPageNo: number | null;
+        shamelaPageNo: number;
+        volumeId: number | null;
+        snippet: string | null;
+        matchType: "title" | "paragraph";
+      }[] = [];
       for (const p of titleMatches) {
-        if (!seen.has(p.id)) { seen.add(p.id); results.push({ pageId: p.id, chapterTitle: p.chapterTitle, topicTitle: p.topicTitle, printedPageNo: p.printedPageNo, shamelaPageNo: p.shamelaPageNo, volumeId: p.volumeId, snippet: null, matchType: "title" }); }
+        if (!seen.has(p.id)) {
+          seen.add(p.id);
+          results.push({
+            pageId: p.id,
+            chapterTitle: p.chapterTitle,
+            topicTitle: p.topicTitle,
+            printedPageNo: p.printedPageNo,
+            shamelaPageNo: p.shamelaPageNo,
+            volumeId: p.volumeId,
+            snippet: null,
+            matchType: "title",
+          });
+        }
       }
       for (const p of paraMatches) {
-        if (!seen.has(p.page.id)) { seen.add(p.page.id); results.push({ pageId: p.page.id, chapterTitle: p.page.chapterTitle, topicTitle: p.page.topicTitle, printedPageNo: p.page.printedPageNo, shamelaPageNo: p.page.shamelaPageNo, volumeId: p.page.volumeId, snippet: p.text.slice(0, 200), matchType: "paragraph" }); }
+        if (!seen.has(p.page.id)) {
+          seen.add(p.page.id);
+          results.push({
+            pageId: p.page.id,
+            chapterTitle: p.page.chapterTitle,
+            topicTitle: p.page.topicTitle,
+            printedPageNo: p.page.printedPageNo,
+            shamelaPageNo: p.page.shamelaPageNo,
+            volumeId: p.page.volumeId,
+            snippet: p.text.slice(0, 200),
+            matchType: "paragraph",
+          });
+        }
       }
       return results;
     }),
@@ -881,25 +1049,45 @@ export const bookRoutes = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       return ctx.db.bookPageHighlight.findMany({
         where: { page: { bookId: input.bookId }, userId: 1 },
-        select: { id: true, pageId: true, paragraphId: true, color: true, note: true, createdAt: true, updatedAt: true },
+        select: {
+          id: true,
+          pageId: true,
+          paragraphId: true,
+          color: true,
+          note: true,
+          createdAt: true,
+          updatedAt: true,
+        },
       });
     }),
 
   syncHighlights: publicProcedure
-    .input(z.object({
-      highlights: z.array(z.object({
-        localId: z.string(),
-        pageId: z.number(),
-        paragraphId: z.number().optional(),
-        color: z.string(),
-        note: z.string().optional(),
-      })),
-    }))
+    .input(
+      z.object({
+        highlights: z.array(
+          z.object({
+            localId: z.string(),
+            pageId: z.number(),
+            paragraphId: z.number().optional(),
+            color: z.string(),
+            note: z.string().optional(),
+          }),
+        ),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       const results: { localId: string; serverId: number }[] = [];
       for (const h of input.highlights) {
         const created = await ctx.db.bookPageHighlight.create({
-          data: { pageId: h.pageId, paragraphId: h.paragraphId ?? null, color: h.color, note: h.note ?? null, userId: 1, startOffset: 0, endOffset: 0 },
+          data: {
+            pageId: h.pageId,
+            paragraphId: h.paragraphId ?? null,
+            color: h.color,
+            note: h.note ?? null,
+            userId: 1,
+            startOffset: 0,
+            endOffset: 0,
+          },
         });
         results.push({ localId: h.localId, serverId: created.id });
       }
@@ -913,24 +1101,40 @@ export const bookRoutes = createTRPCRouter({
     .query(async ({ ctx, input }) => {
       return ctx.db.bookPageComment.findMany({
         where: { page: { bookId: input.bookId }, userId: 1, deletedAt: null },
-        select: { id: true, pageId: true, paragraphId: true, content: true, createdAt: true, updatedAt: true },
+        select: {
+          id: true,
+          pageId: true,
+          paragraphId: true,
+          content: true,
+          createdAt: true,
+          updatedAt: true,
+        },
       });
     }),
 
   syncComments: publicProcedure
-    .input(z.object({
-      comments: z.array(z.object({
-        localId: z.string(),
-        pageId: z.number(),
-        paragraphId: z.number().optional(),
-        content: z.string(),
-      })),
-    }))
+    .input(
+      z.object({
+        comments: z.array(
+          z.object({
+            localId: z.string(),
+            pageId: z.number(),
+            paragraphId: z.number().optional(),
+            content: z.string(),
+          }),
+        ),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       const results: { localId: string; serverId: number }[] = [];
       for (const c of input.comments) {
         const created = await ctx.db.bookPageComment.create({
-          data: { pageId: c.pageId, paragraphId: c.paragraphId ?? null, content: c.content, userId: 1 },
+          data: {
+            pageId: c.pageId,
+            paragraphId: c.paragraphId ?? null,
+            content: c.content,
+            userId: 1,
+          },
         });
         results.push({ localId: c.localId, serverId: created.id });
       }
@@ -940,10 +1144,14 @@ export const bookRoutes = createTRPCRouter({
   // ── Sync book from Shamela URL ───────────────────────────────────────────────
 
   syncBookFromShamela: publicProcedure
-    .input(z.object({
-      shamelaUrl: z.string().min(1),
-      aiProvider: z.enum(["anthropic", "openai", "gemini"]).default("anthropic"),
-    }))
+    .input(
+      z.object({
+        shamelaUrl: z.string().min(1),
+        aiProvider: z
+          .enum(["anthropic", "openai", "gemini"])
+          .default("anthropic"),
+      }),
+    )
     .mutation(async ({ ctx, input }) => {
       const { db } = ctx;
 
@@ -953,7 +1161,8 @@ export const bookRoutes = createTRPCRouter({
 
       // Extract shamelaId from path  e.g. /book/12345  or /book/12345/67
       const match = bookUrl.match(/\/book\/(\d+)/);
-      if (!match) throw new Error("Invalid Shamela URL — expected a /book/... path");
+      if (!match)
+        throw new Error("Invalid Shamela URL — expected a /book/... path");
       const shamelaId = Number(match[1]);
 
       // Use the canonical book index URL (no page number)
@@ -969,16 +1178,12 @@ export const bookRoutes = createTRPCRouter({
         },
       });
 
-      // ── Fetch HTML ────────────────────────────────────────────────────────
-      const htmlRes = await fetch(bookIndexUrl);
-      if (!htmlRes.ok) throw new Error(`Failed to fetch Shamela page: ${htmlRes.status}`);
-      const html = await htmlRes.text();
-
       // ── Call AI for book metadata ─────────────────────────────────────────
-      const rawText = await callAI(
+      const metaResult = await callAI(
         input.aiProvider,
-        `${SHAMELA_BOOK_META_PROMPT}\n\n<SHAMELA_BOOK_URL>${bookIndexUrl}</SHAMELA_BOOK_URL>\n\n<PAGE_HTML>${html.slice(0, 40000)}</PAGE_HTML>`,
-        1024
+        SHAMELA_BOOK_META_PROMPT,
+        1024,
+        bookIndexUrl,
       );
 
       let meta: {
@@ -994,9 +1199,11 @@ export const bookRoutes = createTRPCRouter({
         description?: string | null;
       };
       try {
-        meta = JSON.parse(rawText);
+        meta = JSON.parse(metaResult.text);
       } catch {
-        throw new Error(`Failed to parse Claude response: ${rawText.slice(0, 200)}`);
+        throw new Error(
+          `Failed to parse AI response: ${metaResult.text.slice(0, 200)}`,
+        );
       }
 
       // ── Upsert shelf ──────────────────────────────────────────────────────
@@ -1044,9 +1251,7 @@ export const bookRoutes = createTRPCRouter({
             coverColor: meta.coverColor ?? undefined,
             shelfId: shelfId ?? undefined,
             shamelaUrl: bookIndexUrl,
-            ...(authorId
-              ? { authors: { set: [{ id: authorId }] } }
-              : {}),
+            ...(authorId ? { authors: { set: [{ id: authorId }] } } : {}),
           },
           include: { authors: true, shelf: true },
         });
@@ -1055,7 +1260,19 @@ export const bookRoutes = createTRPCRouter({
           await attachTags(db, existing.blog.id, meta.description);
         }
 
-        const chaptersImported = await syncToc(db, existing.id, html, bookIndexUrl, input.aiProvider);
+        await recordTokenUsage(
+          db,
+          metaResult,
+          input.aiProvider,
+          "book_meta_sync",
+          existing.id,
+        );
+        const chaptersImported = await syncToc(
+          db,
+          existing.id,
+          bookIndexUrl,
+          input.aiProvider,
+        );
         return { book: updated, created: false, chaptersImported };
       } else {
         // ── CREATE new book ────────────────────────────────────────────────
@@ -1088,8 +1305,35 @@ export const bookRoutes = createTRPCRouter({
           await attachTags(db, blog.id, meta.description);
         }
 
-        const chaptersImported = await syncToc(db, book.id, html, bookIndexUrl, input.aiProvider);
+        await recordTokenUsage(
+          db,
+          metaResult,
+          input.aiProvider,
+          "book_meta_sync",
+          book.id,
+        );
+        const chaptersImported = await syncToc(
+          db,
+          book.id,
+          bookIndexUrl,
+          input.aiProvider,
+        );
         return { book, created: true, chaptersImported };
       }
+    }),
+
+  getTokenUsage: publicProcedure
+    .input(
+      z.object({
+        bookId: z.number().optional(),
+        limit: z.number().default(100),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      return ctx.db.aiTokenUsage.findMany({
+        where: input.bookId ? { bookId: input.bookId } : undefined,
+        orderBy: { createdAt: "desc" },
+        take: input.limit,
+      });
     }),
 });

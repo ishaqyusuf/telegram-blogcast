@@ -2,13 +2,7 @@ import { useAudioStore } from "@/store/audio-store";
 import { useColors } from "@/hooks/use-color";
 import { usePathname, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import {
-  Animated,
-  Easing,
-  Pressable,
-  Text,
-  View,
-} from "react-native";
+import { Animated, Easing, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SkipBack5Icon, SkipForward5Icon } from "./skip-icons";
 import { Disc3, Pause, Play } from "lucide-react-native";
@@ -25,6 +19,88 @@ function formatTime(ms: number): string {
   const m = Math.floor(s / 60);
   const sec = s % 60;
   return `${m}:${sec.toString().padStart(2, "0")}`;
+}
+
+// ── Marquee text ──────────────────────────────────────────────────────────────
+
+function MarqueeText({ text, style }: { text: string; style?: any }) {
+  const containerWidth = useRef(0);
+  const textWidth = useRef(0);
+  const anim = useRef(new Animated.Value(0)).current;
+  const loop = useRef<Animated.CompositeAnimation | null>(null);
+
+  const startMarquee = () => {
+    const overflow = textWidth.current - containerWidth.current;
+    if (overflow <= 4) return; // fits — no animation needed
+    loop.current?.stop();
+    anim.setValue(0);
+    loop.current = Animated.loop(
+      Animated.sequence([
+        Animated.delay(1200),
+        Animated.timing(anim, {
+          toValue: -overflow,
+          duration: overflow * 22,
+          easing: Easing.linear,
+          useNativeDriver: true,
+        }),
+        Animated.delay(800),
+        Animated.timing(anim, {
+          toValue: 0,
+          duration: 350,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.current.start();
+  };
+
+  useEffect(() => {
+    loop.current?.stop();
+    anim.setValue(0);
+    textWidth.current = 0;
+  }, [text]);
+
+  useEffect(() => () => loop.current?.stop(), []);
+
+  return (
+    <View
+      style={{ overflow: "hidden" }}
+      onLayout={(e) => {
+        containerWidth.current = e.nativeEvent.layout.width;
+        startMarquee();
+      }}
+    >
+      {/* Visible animated text — numberOfLines keeps it one line */}
+      <Animated.Text
+        numberOfLines={1}
+        style={[style, { transform: [{ translateX: anim }] }]}
+      >
+        {text}
+      </Animated.Text>
+
+      {/* Off-screen ghost — measures true full text width */}
+      <Text
+        numberOfLines={1}
+        onLayout={(e) => {
+          textWidth.current = e.nativeEvent.layout.width;
+          startMarquee();
+        }}
+        style={[
+          style,
+          {
+            position: "absolute",
+            opacity: 0,
+            left: 0,
+            right: undefined,
+            width: 9999,
+          },
+        ]}
+      >
+        {text}
+      </Text>
+    </View>
+  );
 }
 
 export function GlobalAudioBar() {
@@ -79,7 +155,7 @@ export function GlobalAudioBar() {
           duration: 5000,
           easing: Easing.linear,
           useNativeDriver: true,
-        })
+        }),
       );
       spinLoop.current.start();
     } else {
@@ -143,7 +219,7 @@ export function GlobalAudioBar() {
         >
           {/* Album art — spinning disc */}
           <Pressable
-            onPress={() => router.push(`/blog-view-2/${blogId}/index` as any)}
+            onPress={() => router.push(`/blog-view-2/${blogId}` as any)}
             style={{
               width: ART,
               height: ART,
@@ -171,24 +247,22 @@ export function GlobalAudioBar() {
 
           {/* Track info */}
           <Pressable
-            onPress={() => router.push(`/blog-view-2/${blogId}/index` as any)}
-            style={{ flex: 1 }}
+            onPress={() => router.push(`/blog-view-2/${blogId}` as any)}
+            style={{ flex: 1, minWidth: 0 }}
           >
-            <Text
-              numberOfLines={1}
+            <MarqueeText
+              text={title}
               style={{
                 fontSize: 13,
                 fontWeight: "700",
                 color: colors.foreground,
-                textAlign: "left",
               }}
-            >
-              {title}
-            </Text>
+            />
             <Text
               style={{
                 fontSize: 11,
-                color: sleepRemaining != null ? "#f59e0b" : colors.mutedForeground,
+                color:
+                  sleepRemaining != null ? "#f59e0b" : colors.mutedForeground,
                 marginTop: 2,
               }}
             >
@@ -233,7 +307,12 @@ export function GlobalAudioBar() {
               {isPlaying ? (
                 <Pause size={18} color="#000" fill="#000" />
               ) : (
-                <Play size={18} color="#000" fill="#000" style={{ marginLeft: 2 }} />
+                <Play
+                  size={18}
+                  color="#000"
+                  fill="#000"
+                  style={{ marginLeft: 2 }}
+                />
               )}
             </Pressable>
 
