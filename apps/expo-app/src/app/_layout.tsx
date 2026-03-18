@@ -9,6 +9,7 @@ import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
+import { initLocalDb } from "@/db/local-db";
 import "react-native-reanimated";
 import "@/styles/global.css";
 import { useColorScheme } from "@/example/components/useColorScheme";
@@ -28,6 +29,7 @@ import { StaticTrpc } from "@/components/static-trpc";
 import { StatusBar } from "expo-status-bar";
 import { View } from "react-native";
 import { StaticRouter } from "@/components/static-router";
+import { GlobalAudioBar } from "@/components/global-audio-bar";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 export {
   // Catch any errors thrown by the Layout component.
@@ -56,6 +58,8 @@ export default function RootLayout() {
   useEffect(() => {
     if (loaded) {
       SplashScreen.hideAsync();
+      // Initialise local SQLite DB (creates tables if they don't exist)
+      initLocalDb().catch((e) => console.warn("[DB] initLocalDb error", e));
     }
   }, [loaded]);
 
@@ -101,6 +105,7 @@ const InitialLayout = () => {
           <Stack.Screen name="books" />
           <Stack.Screen name="books/[bookId]" />
           <Stack.Screen name="books/[bookId]/reader/[pageId]" />
+          <Stack.Screen name="books/[bookId]/search" />
           <Stack.Screen
             name="blog-options/[blogId]/index"
             options={{
@@ -143,6 +148,7 @@ const InitialLayout = () => {
 
           <Stack.Screen name="+not-found" />
         </Stack> */}
+        <GlobalAudioBar />
         <Toast />
       </TRPCReactProvider>
     </>
