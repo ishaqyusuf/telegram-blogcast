@@ -21,25 +21,28 @@ model BookAuthor {
 }
 
 model Book {
-  id          Int          @id @default(autoincrement())
-  createdAt   DateTime?    @default(now()) @db.Timestamp(0)
-  updatedAt   DateTime?    @updatedAt
-  deletedAt   DateTime?
-  blogId      Int          @unique
-  blog        Blog         @relation(fields: [blogId], references: [id])
-  nameAr      String?
-  nameEn      String?
-  coverUrl    String?
-  coverColor  String?
-  shamelaId   Int?
-  shamelaUrl  String?
-  category    String?
-  categoryUrl String?
-  shelfId     Int?
-  shelf       BookShelf?   @relation(fields: [shelfId], references: [id])
-  volumes     BookVolume[]
-  pages       BookPage[]
-  authors     BookAuthor[]
+  id              Int          @id @default(autoincrement())
+  createdAt       DateTime?    @default(now()) @db.Timestamp(0)
+  updatedAt       DateTime?    @updatedAt
+  deletedAt       DateTime?
+  blogId          Int          @unique
+  blog            Blog         @relation(fields: [blogId], references: [id])
+  nameAr          String?
+  nameEn          String?
+  coverUrl        String?
+  coverColor      String?
+  shamelaId       Int?
+  shamelaUrl      String?
+  category        String?
+  categoryUrl     String?
+  shelfId         Int?
+  shelf           BookShelf?   @relation(fields: [shelfId], references: [id])
+  volumes         BookVolume[]
+  pages           BookPage[]
+  authors         BookAuthor[]
+  // Offline sync fields — updated whenever a page is fetched
+  contentHash     String?
+  pagesUpdatedAt  DateTime?
 
   @@index([blogId])
   @@index([shelfId])

@@ -594,6 +594,13 @@ export const bookRoutes = createTRPCRouter({
         });
       }
 
+      // 6. Stamp book with content hash + timestamp so clients can detect updates
+      const newHash = `${input.bookId}-${Date.now()}`;
+      await db.book.update({
+        where: { id: input.bookId },
+        data: { contentHash: newHash, pagesUpdatedAt: new Date() },
+      });
+
       return page;
     }),
 
@@ -718,6 +725,12 @@ export const bookRoutes = createTRPCRouter({
         });
       }
 
+      // Stamp book with updated content hash so offline clients can detect updates
+      await db.book.update({
+        where: { id: input.bookId },
+        data: { contentHash: `${input.bookId}-${Date.now()}`, pagesUpdatedAt: new Date() },
+      });
+
       return page;
     }),
 
@@ -769,6 +782,159 @@ export const bookRoutes = createTRPCRouter({
         where: { id: input.id },
         data: { deletedAt: new Date() },
       });
+    }),
+
+  // ── Book meta (lightweight, for offline sync check) ─────────────────────────
+
+  getBookMeta: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .query(async ({ ctx, input }) => {
+      const book = await ctx.db.book.findFirstOrThrow({
+        where: { id: input.id, deletedAt: null },
+        select: { id: true, contentHash: true, pagesUpdatedAt: true },
+      });
+      const totalCount = await ctx.db.bookPage.count({
+        where: { bookId: input.id, deletedAt: null },
+      });
+      const fetchedCount = await ctx.db.bookPage.count({
+        where: { bookId: input.id, status: "fetched", deletedAt: null },
+      });
+      return { id: book.id, contentHash: book.contentHash, pagesUpdatedAt: book.pagesUpdatedAt, fetchedCount, totalCount };
+    }),
+
+  // ── Bulk download ─────────────────────────────────────────────────────────────
+
+  getBookForDownload: publicProcedure
+    .input(z.object({ bookId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      const { db } = ctx;
+      const book = await db.book.findFirstOrThrow({
+        where: { id: input.bookId, deletedAt: null },
+        select: { id: true, nameAr: true, nameEn: true, coverColor: true, shamelaId: true, contentHash: true, pagesUpdatedAt: true },
+      });
+      const volumes = await db.bookVolume.findMany({
+        where: { bookId: input.bookId, deletedAt: null },
+        select: { id: true, number: true, title: true },
+        orderBy: { number: "asc" },
+      });
+      const pages = await db.bookPage.findMany({
+        where: { bookId: input.bookId, deletedAt: null },
+        select: {
+          id: true, volumeId: true, shamelaPageNo: true, shamelaUrl: true,
+          printedPageNo: true, chapterTitle: true, topicTitle: true, status: true,
+          paragraphs: { select: { id: true, pid: true, text: true, footnoteIds: true }, orderBy: { pid: "asc" } },
+          footnotes: { select: { id: true, marker: true, type: true, content: true } },
+        },
+        orderBy: { shamelaPageNo: "asc" },
+      });
+      const highlights = await db.bookPageHighlight.findMany({
+        where: { page: { bookId: input.bookId }, userId: 1 },
+        select: { id: true, pageId: true, paragraphId: true, color: true, note: true, createdAt: true, updatedAt: true },
+      });
+      const comments = await db.bookPageComment.findMany({
+        where: { page: { bookId: input.bookId }, userId: 1, deletedAt: null },
+        select: { id: true, pageId: true, paragraphId: true, content: true, createdAt: true, updatedAt: true },
+      });
+      return { book, volumes, pages, highlights, comments };
+    }),
+
+  // ── Search book content ───────────────────────────────────────────────────────
+
+  searchBookContent: publicProcedure
+    .input(z.object({ bookId: z.number(), query: z.string().min(1).max(200) }))
+    .query(async ({ ctx, input }) => {
+      const { db } = ctx;
+      const titleMatches = await db.bookPage.findMany({
+        where: {
+          bookId: input.bookId, deletedAt: null,
+          OR: [
+            { chapterTitle: { contains: input.query } },
+            { topicTitle: { contains: input.query } },
+          ],
+        },
+        select: { id: true, chapterTitle: true, topicTitle: true, printedPageNo: true, shamelaPageNo: true, status: true, volumeId: true },
+        take: 30,
+      });
+      const paraMatches = await db.bookPageParagraph.findMany({
+        where: { text: { contains: input.query }, page: { bookId: input.bookId, status: "fetched", deletedAt: null } },
+        select: {
+          id: true, text: true,
+          page: { select: { id: true, chapterTitle: true, topicTitle: true, printedPageNo: true, shamelaPageNo: true, volumeId: true } },
+        },
+        take: 30,
+      });
+      const seen = new Set<number>();
+      const results: { pageId: number; chapterTitle: string | null; topicTitle: string | null; printedPageNo: number | null; shamelaPageNo: number; volumeId: number | null; snippet: string | null; matchType: "title" | "paragraph" }[] = [];
+      for (const p of titleMatches) {
+        if (!seen.has(p.id)) { seen.add(p.id); results.push({ pageId: p.id, chapterTitle: p.chapterTitle, topicTitle: p.topicTitle, printedPageNo: p.printedPageNo, shamelaPageNo: p.shamelaPageNo, volumeId: p.volumeId, snippet: null, matchType: "title" }); }
+      }
+      for (const p of paraMatches) {
+        if (!seen.has(p.page.id)) { seen.add(p.page.id); results.push({ pageId: p.page.id, chapterTitle: p.page.chapterTitle, topicTitle: p.page.topicTitle, printedPageNo: p.page.printedPageNo, shamelaPageNo: p.page.shamelaPageNo, volumeId: p.page.volumeId, snippet: p.text.slice(0, 200), matchType: "paragraph" }); }
+      }
+      return results;
+    }),
+
+  // ── Highlights bulk sync ──────────────────────────────────────────────────────
+
+  getHighlightsForBook: publicProcedure
+    .input(z.object({ bookId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      return ctx.db.bookPageHighlight.findMany({
+        where: { page: { bookId: input.bookId }, userId: 1 },
+        select: { id: true, pageId: true, paragraphId: true, color: true, note: true, createdAt: true, updatedAt: true },
+      });
+    }),
+
+  syncHighlights: publicProcedure
+    .input(z.object({
+      highlights: z.array(z.object({
+        localId: z.string(),
+        pageId: z.number(),
+        paragraphId: z.number().optional(),
+        color: z.string(),
+        note: z.string().optional(),
+      })),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const results: { localId: string; serverId: number }[] = [];
+      for (const h of input.highlights) {
+        const created = await ctx.db.bookPageHighlight.create({
+          data: { pageId: h.pageId, paragraphId: h.paragraphId ?? null, color: h.color, note: h.note ?? null, userId: 1, startOffset: 0, endOffset: 0 },
+        });
+        results.push({ localId: h.localId, serverId: created.id });
+      }
+      return results;
+    }),
+
+  // ── Comments bulk sync ────────────────────────────────────────────────────────
+
+  getCommentsForBook: publicProcedure
+    .input(z.object({ bookId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      return ctx.db.bookPageComment.findMany({
+        where: { page: { bookId: input.bookId }, userId: 1, deletedAt: null },
+        select: { id: true, pageId: true, paragraphId: true, content: true, createdAt: true, updatedAt: true },
+      });
+    }),
+
+  syncComments: publicProcedure
+    .input(z.object({
+      comments: z.array(z.object({
+        localId: z.string(),
+        pageId: z.number(),
+        paragraphId: z.number().optional(),
+        content: z.string(),
+      })),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const results: { localId: string; serverId: number }[] = [];
+      for (const c of input.comments) {
+        const created = await ctx.db.bookPageComment.create({
+          data: { pageId: c.pageId, paragraphId: c.paragraphId ?? null, content: c.content, userId: 1 },
+        });
+        results.push({ localId: c.localId, serverId: created.id });
+      }
+      return results;
     }),
 
   // ── Sync book from Shamela URL ───────────────────────────────────────────────

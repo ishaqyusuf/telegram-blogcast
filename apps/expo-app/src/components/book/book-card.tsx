@@ -1,5 +1,6 @@
 import { Pressable } from "@/components/ui/pressable";
 import { Image, Text, View } from "react-native";
+import { useBookOfflineStore } from "@/store/book-offline-store";
 
 const BOOK_COLORS = ["#4c1d95", "#7c2d12", "#14532d", "#1e3a5f", "#3b0764", "#064e3b", "#831843", "#1e1b4b"];
 
@@ -25,6 +26,7 @@ export function BookCard({
   onPress: () => void;
   index?: number;
 }) {
+  const isDownloaded = useBookOfflineStore((s) => s.isDownloaded(book.id));
   const bgColor = book.coverColor ?? BOOK_COLORS[index % BOOK_COLORS.length];
   const authorName = book.authors?.[0]?.nameAr ?? book.authors?.[0]?.name;
   const shelfName = book.shelf?.nameAr ?? book.shelf?.name;
@@ -83,6 +85,24 @@ export function BookCard({
             }}
           >
             <Text style={{ fontSize: 9, color: "white" }}>{shelfName}</Text>
+          </View>
+        )}
+        {/* Offline badge */}
+        {isDownloaded && (
+          <View
+            style={{
+              position: "absolute",
+              top: 6,
+              right: 6,
+              backgroundColor: "rgba(29,185,84,0.85)",
+              borderRadius: 10,
+              width: 18,
+              height: 18,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Text style={{ fontSize: 9, color: "#000", fontWeight: "700" }}>📥</Text>
           </View>
         )}
       </View>

@@ -1,15 +1,18 @@
 import { Pressable } from "@/components/ui/pressable";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, FlatList, Modal, PanResponder, ScrollView, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import { ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Modal, Platform, ScrollView, Text, View } from "react-native";
 
 import { AudioTranscript } from "@/components/audio-blog-view/audio-transcript";
-import { CommentsSheet } from "@/components/comments-sheet";
+import { useCommentsState } from "@/components/comments-sheet";
+import { CommentsHeader } from "@/components/comments-sheet/comments-header";
+import { CommentsAudioContext } from "@/components/comments-sheet/comments-audio-context";
+import { CommentsList } from "@/components/comments-sheet/comments-list";
+import { CommentInput } from "@/components/comments-sheet/comment-input";
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";
-import { useCommentsSheet } from "@/hooks/use-comments-sheet";
 import { useColors } from "@/hooks/use-color";
 import { usePlayHistorySync } from "@/hooks/use-play-history-sync";
 import { useAudioStore } from "@/store/audio-store";
@@ -545,6 +548,7 @@ export default function AudioBlogScreen() {
   const id = Number(blogId);
 
   const [activeTab, setActiveTab] = useState<Tab>("info");
+  const [showComments, setShowComments] = useState(openCommentsParam === "1");
   const [moreMenuVisible, setMoreMenuVisible] = useState(false);
   const [albumPickerVisible, setAlbumPickerVisible] = useState(false);
   const [addingAlbumId, setAddingAlbumId] = useState<number | null>(null);
@@ -552,16 +556,8 @@ export default function AudioBlogScreen() {
   const [controlsLayout, setControlsLayout] = useState({ y: 0, height: 0 });
   const [showFloatingControls, setShowFloatingControls] = useState(false);
 
-  const openComments = useCommentsSheet((s) => s.onOpen);
   const loadAudio = useAudioStore((s) => s.loadAudio);
-
-  // Auto-open comments if navigated here with ?openComments=1
-  useEffect(() => {
-    if (openCommentsParam === "1") {
-      const timer = setTimeout(() => openComments(), 600);
-      return () => clearTimeout(timer);
-    }
-  }, [openCommentsParam]);
+  const commentsState = useCommentsState(id);
   const loadedBlog = useAudioStore((s) => s.blog);
   const audioError = useAudioStore((s) => s.error);
 
@@ -639,6 +635,30 @@ export default function AudioBlogScreen() {
   return (
     <View className="flex-1 bg-background">
       <SafeArea className="flex-1">
+
+        {/* ── Comments inline view (YouTube-style) ───────────────── */}
+        {showComments ? (
+          <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+          >
+            <CommentsHeader
+              state={commentsState}
+              onClose={() => setShowComments(false)}
+            />
+            <CommentsAudioContext />
+            <View style={{ flex: 1 }}>
+              <CommentsList state={commentsState} />
+            </View>
+            <CommentInput
+              blogId={id}
+              autoFocus={openCommentsParam === "1"}
+              noKeyboardAvoid
+              onCommentAdded={commentsState.refetch}
+            />
+          </KeyboardAvoidingView>
+        ) : (
+          <>
         {/* Header */}
         <View className="flex-row items-center justify-between px-4 py-3">
           <Pressable
@@ -767,7 +787,7 @@ export default function AudioBlogScreen() {
           {/* Tab content */}
           <View className="mt-3 px-6">
             {activeTab === "info" ? (
-              <InfoTab blog={blog ?? {}} onCommentsPress={openComments} />
+              <InfoTab blog={blog ?? {}} onCommentsPress={() => setShowComments(true)} />
             ) : mediaId ? (
               <AudioTranscript mediaId={mediaId} telegramFileId={telegramFileId} />
             ) : (
@@ -777,12 +797,11 @@ export default function AudioBlogScreen() {
             )}
           </View>
         </ScrollView>
+          </>
+        )}
       </SafeArea>
 
-      <FloatingPlayerWidget visible={showFloatingControls} />
-
-      {/* Comments modal */}
-      <CommentsSheet blogId={id} />
+      {!showComments && <FloatingPlayerWidget visible={showFloatingControls} />}
 
       {/* More menu */}
       <MoreMenu

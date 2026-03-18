@@ -38,7 +38,7 @@ export interface CommentsSheetState {
 
 // ── State hook shared by both CommentsSheet and CommentContent ────────────────
 
-function useCommentsState(blogId: number): CommentsSheetState {
+export function useCommentsState(blogId: number): CommentsSheetState {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [activeTagId, setActiveTagId] = useState<number | null>(null);

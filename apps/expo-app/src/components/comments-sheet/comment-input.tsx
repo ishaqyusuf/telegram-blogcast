@@ -17,9 +17,16 @@ function formatTimestamp(positionMs: number) {
 interface CommentInputProps {
   blogId: number;
   onCommentAdded?: () => void;
+  autoFocus?: boolean;
+  noKeyboardAvoid?: boolean;
 }
 
-export function CommentInput({ blogId, onCommentAdded }: CommentInputProps) {
+export function CommentInput({
+  blogId,
+  onCommentAdded,
+  autoFocus,
+  noKeyboardAvoid,
+}: CommentInputProps) {
   const [text, setText] = useState("");
   const position = useAudioStore((s) => s.position);
 
@@ -43,11 +50,8 @@ export function CommentInput({ blogId, onCommentAdded }: CommentInputProps) {
     addComment({ blogId, content: trimmed });
   }
 
-  return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-    >
-      <View className="border-t border-border bg-background px-3 py-2">
+  const inner = (
+    <View className="border-t border-border bg-background px-3 py-2">
         <View className="flex-row items-end gap-2">
           {/* Avatar */}
           <View className="size-8 rounded-full bg-muted items-center justify-center shrink-0 mb-1">
@@ -61,6 +65,7 @@ export function CommentInput({ blogId, onCommentAdded }: CommentInputProps) {
               onChangeText={setText}
               placeholder="Add a comment…"
               placeholderTextColor="#535353"
+              autoFocus={autoFocus}
               multiline
               maxLength={500}
               style={{ flex: 1, fontSize: 14, color: "#ffffff", maxHeight: 100 }}
@@ -88,6 +93,13 @@ export function CommentInput({ blogId, onCommentAdded }: CommentInputProps) {
           )}
         </View>
       </View>
+  );
+
+  if (noKeyboardAvoid) return inner;
+
+  return (
+    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"}>
+      {inner}
     </KeyboardAvoidingView>
   );
 }

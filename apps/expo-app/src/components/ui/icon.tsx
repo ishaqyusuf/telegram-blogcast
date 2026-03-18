@@ -58,6 +58,14 @@ import {
   Music2,
   ListOrdered,
   Shuffle,
+  // Books feature icons
+  Download,
+  BookOpen,
+  BookMarked,
+  RefreshCw,
+  WifiOff,
+  HardDrive,
+  AlertCircle,
 } from "lucide-react-native";
 import { useColorScheme } from "nativewind";
 import { camel } from "@gnd/utils";
@@ -204,6 +212,14 @@ const appIcons = {
   Music2,
   ListOrdered,
   Shuffle,
+  // Books feature icons
+  Download,
+  BookOpen,
+  BookMarked,
+  RefreshCw,
+  WifiOff,
+  HardDrive,
+  AlertCircle,
 };
 export type IconKeys = keyof typeof appIcons;
 export { Icon };
