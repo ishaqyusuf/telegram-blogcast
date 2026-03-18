@@ -16,6 +16,7 @@ import { BottomSheetModal } from "@gorhom/bottom-sheet";
 
 import { useHighlightsSync, pullServerHighlights, syncPendingHighlights } from "@/hooks/use-highlights-sync";
 import { useCommentsSync, pullServerComments, syncPendingComments } from "@/hooks/use-comments-sync";
+import { useBookOfflineStore } from "@/store/book-offline-store";
 
 export default function BookReaderScreen() {
   const { bookId, pageId } = useLocalSearchParams<{ bookId: string; pageId: string }>();
@@ -23,6 +24,12 @@ export default function BookReaderScreen() {
   const qc = useQueryClient();
   const bookIdNum = Number(bookId);
   const pageIdNum = Number(pageId);
+
+  // ── Reading progress + bookmarks ────────────────────────────────────────────
+  const setLastPage   = useBookOfflineStore((s) => s.setLastPage);
+  const isBookmarked  = useBookOfflineStore((s) => s.isBookmarked);
+  const addBookmark   = useBookOfflineStore((s) => s.addBookmark);
+  const removeBookmark = useBookOfflineStore((s) => s.removeBookmark);
 
   const footnotesRef = useRef<BottomSheetModal>(null);
   const [highlightedMarker, setHighlightedMarker] = useState<string | null>(null);
@@ -43,6 +50,11 @@ export default function BookReaderScreen() {
   // ── Offline-first comments ─────────────────────────────────────────────────
   const { comments, addComment, deleteComment } =
     useCommentsSync(bookIdNum, pageIdNum);
+
+  // ── Save reading progress on every page open ───────────────────────────────
+  useEffect(() => {
+    setLastPage(bookIdNum, pageIdNum);
+  }, [bookIdNum, pageIdNum]);
 
   // Pull from server on mount (merge into SQLite)
   useEffect(() => {
@@ -105,6 +117,21 @@ export default function BookReaderScreen() {
     setSelectedParagraphId(null);
   };
 
+  const bookmarked = isBookmarked(bookIdNum, pageIdNum);
+  const toggleBookmark = () => {
+    if (bookmarked) {
+      removeBookmark(bookIdNum, pageIdNum);
+    } else {
+      addBookmark({
+        pageId: pageIdNum,
+        bookId: bookIdNum,
+        chapterTitle: page.chapterTitle ?? null,
+        pageNo: page.printedPageNo ?? null,
+        createdAt: Date.now(),
+      });
+    }
+  };
+
   return (
     <View style={{ flex: 1, backgroundColor: "#121212" }}>
       <SafeArea>
@@ -144,6 +171,22 @@ export default function BookReaderScreen() {
               {page.volume ? `  •  ج ${page.volume.number}` : ""}
             </Text>
           </View>
+
+          {/* Bookmark toggle */}
+          <Pressable
+            onPress={toggleBookmark}
+            style={{
+              width: 34, height: 34, borderRadius: 17,
+              backgroundColor: bookmarked ? "rgba(29,185,84,0.15)" : "#282828",
+              alignItems: "center", justifyContent: "center",
+            }}
+          >
+            <Icon
+              name="Bookmark"
+              size={18}
+              className={bookmarked ? "text-primary" : "text-foreground"}
+            />
+          </Pressable>
 
           <Pressable
             onPress={() => { setHighlightedMarker(null); footnotesRef.current?.present(); }}
@@ -222,7 +265,6 @@ export default function BookReaderScreen() {
                     >
                       {comment.content}
                     </Text>
-                    {/* Pending sync indicator */}
                     {comment.syncStatus === "pending_create" && (
                       <Icon name="Clock" size={12} className="text-muted-foreground" />
                     )}
@@ -296,7 +338,7 @@ export default function BookReaderScreen() {
             </Pressable>
           </View>
 
-          {/* Comment input — fixed above keyboard (YouTube-style) */}
+          {/* Comment input — fixed above keyboard */}
           {showCommentInput && (
             <View
               style={{

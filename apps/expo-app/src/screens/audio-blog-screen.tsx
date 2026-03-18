@@ -48,6 +48,90 @@ type Tab = "info" | "transcript";
 
 // ── Player controls ───────────────────────────────────────────────────────────
 
+const SPEED_OPTIONS = [0.75, 1.0, 1.25, 1.5, 2.0] as const;
+const SLEEP_OPTIONS = [5, 10, 15, 30, 45, 60] as const;
+
+function SpeedPickerModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const colors = useColors();
+  const playbackRate = useAudioStore((s) => s.playbackRate);
+  const setPlaybackRate = useAudioStore((s) => s.setPlaybackRate);
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-end" }} onPress={onClose}>
+        <Pressable onPress={() => {}} style={{ backgroundColor: colors.card, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, gap: 4 }}>
+          <View style={{ width: 36, height: 4, backgroundColor: colors.muted, borderRadius: 2, alignSelf: "center", marginBottom: 12 }} />
+          <Text style={{ fontSize: 16, fontWeight: "700", color: colors.foreground, textAlign: "center", marginBottom: 12 }}>سرعة التشغيل</Text>
+          <View style={{ flexDirection: "row", justifyContent: "space-around", flexWrap: "wrap", gap: 8 }}>
+            {SPEED_OPTIONS.map((rate) => {
+              const active = Math.abs(playbackRate - rate) < 0.01;
+              return (
+                <Pressable
+                  key={rate}
+                  onPress={() => { setPlaybackRate(rate); onClose(); }}
+                  style={{
+                    paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12,
+                    backgroundColor: active ? colors.primary : colors.muted,
+                    minWidth: 70, alignItems: "center",
+                  }}
+                >
+                  <Text style={{ fontSize: 15, fontWeight: "700", color: active ? "#000" : colors.mutedForeground }}>
+                    {rate}x
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <View style={{ height: 16 }} />
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function SleepTimerModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const colors = useColors();
+  const setSleepTimer = useAudioStore((s) => s.setSleepTimer);
+  const clearSleepTimer = useAudioStore((s) => s.clearSleepTimer);
+  const sleepTimerEnd = useAudioStore((s) => s.sleepTimerEnd);
+  const isActive = sleepTimerEnd != null && sleepTimerEnd > Date.now();
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.6)", justifyContent: "flex-end" }} onPress={onClose}>
+        <Pressable onPress={() => {}} style={{ backgroundColor: colors.card, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, gap: 4 }}>
+          <View style={{ width: 36, height: 4, backgroundColor: colors.muted, borderRadius: 2, alignSelf: "center", marginBottom: 12 }} />
+          <Text style={{ fontSize: 16, fontWeight: "700", color: colors.foreground, textAlign: "center", marginBottom: 12 }}>مؤقت النوم</Text>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "space-around", gap: 8 }}>
+            {SLEEP_OPTIONS.map((min) => (
+              <Pressable
+                key={min}
+                onPress={() => { setSleepTimer(min); onClose(); }}
+                style={{
+                  paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12,
+                  backgroundColor: colors.muted, minWidth: 70, alignItems: "center",
+                }}
+              >
+                <Text style={{ fontSize: 14, fontWeight: "700", color: colors.mutedForeground }}>{min} د</Text>
+              </Pressable>
+            ))}
+          </View>
+          {isActive && (
+            <Pressable
+              onPress={() => { clearSleepTimer(); onClose(); }}
+              style={{
+                marginTop: 12, paddingVertical: 12, borderRadius: 12,
+                backgroundColor: "rgba(239,68,68,0.12)", alignItems: "center",
+              }}
+            >
+              <Text style={{ color: "#ef4444", fontWeight: "700", fontSize: 14 }}>إلغاء المؤقت</Text>
+            </Pressable>
+          )}
+          <View style={{ height: 16 }} />
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 function PlayerSection() {
   const colors = useColors();
   const isPlaying = useAudioStore((s) => s.isPlaying);
@@ -55,6 +139,8 @@ function PlayerSection() {
   const duration = useAudioStore((s) => s.duration);
   const togglePlayPause = useAudioStore((s) => s.togglePlayPause);
   const seek = useAudioStore((s) => s.seek);
+  const playbackRate = useAudioStore((s) => s.playbackRate);
+  const [showSpeedPicker, setShowSpeedPicker] = useState(false);
 
   const progress = duration > 0 ? position / duration : 0;
   const [trackWidth, setTrackWidth] = useState(0);
@@ -136,9 +222,10 @@ function PlayerSection() {
 
       {/* Controls */}
       <View className="flex-row items-center justify-between">
-        <Pressable className="px-2 py-1 rounded-md bg-muted active:opacity-70">
-          <Text className="text-xs font-bold text-muted-foreground">1.0x</Text>
+        <Pressable onPress={() => setShowSpeedPicker(true)} className="px-2 py-1 rounded-md bg-muted active:opacity-70">
+          <Text className="text-xs font-bold text-muted-foreground">{playbackRate}x</Text>
         </Pressable>
+        <SpeedPickerModal visible={showSpeedPicker} onClose={() => setShowSpeedPicker(false)} />
         <View className="flex-row items-center gap-6">
           <Pressable className="p-2 active:opacity-50" onPress={() => seek(Math.max(0, position - 10000))}>
             <Icon name="RotateCcw" size={28} className="text-foreground" />
@@ -273,6 +360,7 @@ function MoreMenu({
   onClose,
   onAddToAlbum,
   onViewAlbum,
+  onSleepTimer,
 }: {
   visible: boolean;
   hasAlbum: boolean;
@@ -280,6 +368,7 @@ function MoreMenu({
   onClose: () => void;
   onAddToAlbum: () => void;
   onViewAlbum: () => void;
+  onSleepTimer: () => void;
 }) {
   const colors = useColors();
   return (
@@ -315,6 +404,15 @@ function MoreMenu({
               <Text style={{ fontSize: 15, color: colors.foreground, fontWeight: "500" }}>عرض الألبوم</Text>
             </Pressable>
           )}
+
+          {/* Sleep timer */}
+          <Pressable
+            onPress={() => { onClose(); setTimeout(onSleepTimer, 250); }}
+            style={{ flexDirection: "row", alignItems: "center", gap: 14, paddingVertical: 14, paddingHorizontal: 8 }}
+          >
+            <Icon name="Timer" size={22} className="text-foreground" />
+            <Text style={{ fontSize: 15, color: colors.foreground, fontWeight: "500" }}>مؤقت النوم</Text>
+          </Pressable>
 
           {/* Share */}
           <Pressable
@@ -550,6 +648,7 @@ export default function AudioBlogScreen() {
   const [activeTab, setActiveTab] = useState<Tab>("info");
   const [showComments, setShowComments] = useState(openCommentsParam === "1");
   const [moreMenuVisible, setMoreMenuVisible] = useState(false);
+  const [sleepTimerVisible, setSleepTimerVisible] = useState(false);
   const [albumPickerVisible, setAlbumPickerVisible] = useState(false);
   const [addingAlbumId, setAddingAlbumId] = useState<number | null>(null);
   const [addedToAlbumName, setAddedToAlbumName] = useState<string | null>(null);
@@ -811,7 +910,10 @@ export default function AudioBlogScreen() {
         onClose={() => setMoreMenuVisible(false)}
         onAddToAlbum={() => setAlbumPickerVisible(true)}
         onViewAlbum={() => router.push(`/albums/${media?.albumId}` as any)}
+        onSleepTimer={() => setSleepTimerVisible(true)}
       />
+
+      <SleepTimerModal visible={sleepTimerVisible} onClose={() => setSleepTimerVisible(false)} />
 
       {/* Album picker */}
       <AddToAlbumPicker

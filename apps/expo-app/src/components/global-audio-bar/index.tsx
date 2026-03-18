@@ -1,7 +1,7 @@
 import { useAudioStore } from "@/store/audio-store";
 import { useColors } from "@/hooks/use-color";
 import { usePathname, useRouter } from "expo-router";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Animated,
   Easing,
@@ -12,6 +12,13 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SkipBack5Icon, SkipForward5Icon } from "./skip-icons";
 import { Disc3, Pause, Play } from "lucide-react-native";
+
+function formatSleepRemaining(ms: number): string {
+  const totalSec = Math.max(0, Math.ceil(ms / 1000));
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
 
 function formatTime(ms: number): string {
   const s = Math.floor(ms / 1000);
@@ -33,6 +40,32 @@ export function GlobalAudioBar() {
   const duration = useAudioStore((s) => s.duration);
   const togglePlayPause = useAudioStore((s) => s.togglePlayPause);
   const seek = useAudioStore((s) => s.seek);
+  const sleepTimerEnd = useAudioStore((s) => s.sleepTimerEnd);
+  const clearSleepTimer = useAudioStore((s) => s.clearSleepTimer);
+  const pause = useAudioStore((s) => s.pause);
+
+  // ── Sleep timer countdown + enforcement ────────────────────────────────────
+  const [sleepRemaining, setSleepRemaining] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!sleepTimerEnd) {
+      setSleepRemaining(null);
+      return;
+    }
+    const tick = () => {
+      const remaining = sleepTimerEnd - Date.now();
+      if (remaining <= 0) {
+        setSleepRemaining(null);
+        clearSleepTimer();
+        pause();
+      } else {
+        setSleepRemaining(remaining);
+      }
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [sleepTimerEnd]);
 
   // ── Spinning disc animation ────────────────────────────────────────────────
   const spinAnim = useRef(new Animated.Value(0)).current;
@@ -155,11 +188,13 @@ export function GlobalAudioBar() {
             <Text
               style={{
                 fontSize: 11,
-                color: colors.mutedForeground,
+                color: sleepRemaining != null ? "#f59e0b" : colors.mutedForeground,
                 marginTop: 2,
               }}
             >
-              {formatTime(position)} / {formatTime(duration)}
+              {sleepRemaining != null
+                ? `💤 ${formatSleepRemaining(sleepRemaining)}`
+                : `${formatTime(position)} / ${formatTime(duration)}`}
             </Text>
           </Pressable>
 

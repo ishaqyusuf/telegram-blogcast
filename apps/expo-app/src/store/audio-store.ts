@@ -11,7 +11,7 @@ import { getTelegramFileUrl } from "@/lib/get-telegram-file";
 const Paths = {
   document: FileSystem.Paths.document,
 };
-let positionInterval: NodeJS.Timeout | null = null;
+let positionInterval: ReturnType<typeof setInterval> | null = null;
 interface AudioState {
   sound: Audio.Sound | null;
   isPlaying: boolean;
@@ -26,6 +26,12 @@ interface AudioState {
   volume: number;
   blog: ItemProps;
 
+  // Playback speed: 0.75 | 1.0 | 1.25 | 1.5 | 2.0
+  playbackRate: number;
+
+  // Sleep timer: ms timestamp when audio should stop (null = disabled)
+  sleepTimerEnd: number | null;
+
   // Actions
   loadAudio: (blog: ItemProps) => Promise<void>;
   play: () => Promise<void>;
@@ -39,6 +45,9 @@ interface AudioState {
   restoreAudio: () => Promise<void>;
   startPositionTracking: () => void;
   stopPositionTracking: () => void;
+  setPlaybackRate: (rate: number) => Promise<void>;
+  setSleepTimer: (minutes: number) => void;
+  clearSleepTimer: () => void;
 }
 
 export const useAudioStore = create<AudioState>()(
@@ -55,6 +64,8 @@ export const useAudioStore = create<AudioState>()(
       localPath: null,
       error: null,
       volume: 1.0,
+      playbackRate: 1.0,
+      sleepTimerEnd: null,
       blog: null!,
       loadAudio: async (blog) => {
         const uri = (await getTelegramFileUrl(blog?.audio?.telegramFileId))
@@ -384,6 +395,27 @@ export const useAudioStore = create<AudioState>()(
           positionInterval = null;
         }
       },
+
+      setPlaybackRate: async (rate: number) => {
+        const { sound } = get();
+        set({ playbackRate: rate });
+        if (sound) {
+          try {
+            // expo-av: setRateAsync(rate, shouldCorrectPitch)
+            await (sound as any).setRateAsync(rate, true);
+          } catch (err) {
+            console.warn("[audio] setRateAsync error", err);
+          }
+        }
+      },
+
+      setSleepTimer: (minutes: number) => {
+        set({ sleepTimerEnd: Date.now() + minutes * 60 * 1000 });
+      },
+
+      clearSleepTimer: () => {
+        set({ sleepTimerEnd: null });
+      },
     }),
     {
       name: "audio-storage",
@@ -395,6 +427,7 @@ export const useAudioStore = create<AudioState>()(
         volume: state.volume,
         isPlaying: state.isPlaying,
         duration: state.duration,
+        playbackRate: state.playbackRate,
       }),
     }
   )
