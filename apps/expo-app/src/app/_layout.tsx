@@ -91,6 +91,7 @@ const InitialLayout = () => {
           />
           <Stack.Screen name="blog-search" />
           <Stack.Screen name="blog-view/[blogId]/index" />
+          <Stack.Screen name="blog-view-text/[blogId]/index" />
           <Stack.Screen
             name="blog-form"
             options={{ presentation: "modal" }}

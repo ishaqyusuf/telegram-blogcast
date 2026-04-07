@@ -462,15 +462,16 @@ function FloatingPlayerWidget({ visible }: { visible: boolean }) {
 
 function InfoTab({
   blog,
+  commentsState,
   onCommentsPress,
 }: {
   blog: any;
+  commentsState: any;
   onCommentsPress: () => void;
 }) {
   const colors = useColors();
   const tags =
     blog.blogTags?.map((bt: any) => bt.tags?.title).filter(Boolean) ?? [];
-  const commentCount = blog.blogs?.length ?? 0;
 
   return (
     <View className="gap-4 pb-8">
@@ -517,21 +518,34 @@ function InfoTab({
         )}
       </View>
 
-      <Pressable
-        onPress={onCommentsPress}
-        className="flex-row items-center justify-between p-4 bg-card rounded-xl active:opacity-80"
-      >
-        <View className="flex-row items-center gap-2">
-          <Icon name="MessageCircle" size={18} className="text-foreground" />
-          <Text className="text-sm font-bold text-foreground">Comments</Text>
-          <View className="px-1.5 py-0.5 rounded-full bg-muted">
-            <Text className="text-xs text-muted-foreground">
-              {commentCount}
-            </Text>
+      {/* Inline comments section */}
+      <View className="mt-2">
+        <View className="flex-row items-center justify-between mb-3">
+          <View className="flex-row items-center gap-2">
+            <Icon name="MessageCircle" size={18} className="text-foreground" />
+            <Text className="text-sm font-bold text-foreground">Comments</Text>
+            <View className="px-1.5 py-0.5 rounded-full bg-muted">
+              <Text className="text-xs text-muted-foreground">
+                {commentsState.comments?.length ?? 0}
+              </Text>
+            </View>
           </View>
+          <Pressable
+            onPress={onCommentsPress}
+            className="flex-row items-center gap-1 px-3 py-1.5 rounded-full bg-primary active:opacity-80"
+          >
+            <Icon name="Plus" size={14} className="text-primary-foreground" />
+            <Text className="text-xs font-bold text-primary-foreground">
+              New Comment
+            </Text>
+          </Pressable>
         </View>
-        <Icon name="ChevronRight" size={16} className="text-muted-foreground" />
-      </Pressable>
+
+        {/* Embedded comments list */}
+        <View className="rounded-xl bg-card overflow-hidden">
+          <CommentsList state={commentsState} />
+        </View>
+      </View>
     </View>
   );
 }
@@ -1300,6 +1314,7 @@ export default function AudioBlogScreen() {
                 {activeTab === "info" ? (
                   <InfoTab
                     blog={blog ?? {}}
+                    commentsState={commentsState}
                     onCommentsPress={() => setShowComments(true)}
                   />
                 ) : mediaId ? (
