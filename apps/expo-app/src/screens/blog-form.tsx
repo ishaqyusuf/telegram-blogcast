@@ -33,6 +33,7 @@ export default function BlogFormScreen() {
     formData,
     isAudioComment,
     isCommentMode,
+    isEditMode,
     targetBlogId,
     canSubmit,
     isSubmitting,
@@ -274,7 +275,7 @@ export default function BlogFormScreen() {
             </Text>
           </Pressable>
           <Text className="text-base font-bold tracking-tight text-foreground">
-            {isCommentMode ? "Add Comment" : "New Story"}
+            {isCommentMode ? "Add Comment" : isEditMode ? "Edit Story" : "New Story"}
           </Text>
           {isCommentMode ? (
             <View className="w-14" />
@@ -501,51 +502,9 @@ export default function BlogFormScreen() {
                   </View>
                 </View>
 
-                <View className="flex-col gap-2">
-                  <Text className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                    Tags
-                  </Text>
-                  <View className="min-h-11 flex-row flex-wrap items-center gap-2 rounded-xl bg-muted/50 p-2">
-                    {(formData?.tags || []).map((tag) => (
-                      <View
-                        key={tag}
-                        className="flex-row items-center gap-1.5 rounded-full bg-accent/10 px-3 py-1"
-                      >
-                        <Text className="text-xs font-semibold text-accent-foreground">
-                          #{tag}
-                        </Text>
-                        <Pressable onPress={() => removeTag(tag)}>
-                          <Icon
-                            name="X"
-                            className="size-sm text-accent-foreground opacity-70"
-                          />
-                        </Pressable>
-                      </View>
-                    ))}
-                    <TextInput
-                      value={formData?.tagInput || ""}
-                      onChangeText={(value) => form.setValue("tagInput", value)}
-                      onSubmitEditing={addTag}
-                      onFocus={() => {
-                        tagInputFocusedRef.current = true;
-                        scrollToTagInput();
-                      }}
-                      onBlur={() => {
-                        tagInputFocusedRef.current = false;
-                      }}
-                      placeholder="Add a tag..."
-                      placeholderTextColor="rgba(128,128,128,0.65)"
-                      className="min-w-25 flex-1 p-1 text-sm text-foreground"
-                      returnKeyType="done"
-                    />
-                    <Pressable
-                      onPress={addTag}
-                      className="h-8 w-8 items-center justify-center rounded-lg bg-background"
-                    >
-                      <Icon name="Plus" className="size-sm text-foreground" />
-                    </Pressable>
-                  </View>
-                </View>
+                <Text className="text-[10px] text-muted-foreground">
+                  Tags are auto-extracted from #hashtags in your content.
+                </Text>
               </View>
             ) : null}
           </ScrollView>
@@ -585,7 +544,7 @@ export default function BlogFormScreen() {
                 className="h-12 flex-[1.4] flex-row items-center justify-center gap-2 rounded-2xl bg-foreground shadow-sm"
               >
                 <Text className="text-sm font-bold text-background">
-                  {isSubmitting ? "Saving..." : "Publish"}
+                  {isSubmitting ? "Saving..." : isEditMode ? "Update" : "Publish"}
                 </Text>
                 {!isSubmitting ? (
                   <Icon name="Send" className="size-sm text-background" />

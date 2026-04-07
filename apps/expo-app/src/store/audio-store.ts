@@ -150,7 +150,7 @@ export const useAudioStore = create<AudioState>()(
           // Load sound (either from local file or stream)
           const { sound } = await Audio.Sound.createAsync(
             { uri: audioSource },
-            { shouldPlay: true, volume: get().volume },
+            { shouldPlay: false, volume: get().volume },
             (status) => {
               if (status.isLoaded) {
                 set({
@@ -168,6 +168,7 @@ export const useAudioStore = create<AudioState>()(
             sound,
             uri,
             isLoading: false,
+            isPlaying: false,
             duration: status.isLoaded ? status.durationMillis || 0 : 0,
             position: 0,
             blog,

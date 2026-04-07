@@ -116,3 +116,35 @@ export const NAV_THEME: Record<"light" | "dark", Theme> = {
     },
   },
 };
+
+/** Convert any `rgb(...)`, `rgba(...)`, or hex color to `rgba(r, g, b, alpha)`. */
+export function withAlpha(color: string, alpha: number) {
+  if (color.startsWith("rgb(")) {
+    return color.replace("rgb(", "rgba(").replace(")", `, ${alpha})`);
+  }
+
+  if (color.startsWith("rgba(")) {
+    const channels = color.slice(5, -1).split(",").slice(0, 3).join(",");
+    return `rgba(${channels}, ${alpha})`;
+  }
+
+  if (color.startsWith("#")) {
+    const hex = color.slice(1);
+    const normalized =
+      hex.length === 3
+        ? hex
+            .split("")
+            .map((char) => `${char}${char}`)
+            .join("")
+        : hex;
+
+    if (normalized.length === 6) {
+      const r = Number.parseInt(normalized.slice(0, 2), 16);
+      const g = Number.parseInt(normalized.slice(2, 4), 16);
+      const b = Number.parseInt(normalized.slice(4, 6), 16);
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+  }
+
+  return color;
+}

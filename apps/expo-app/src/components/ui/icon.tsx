@@ -16,6 +16,7 @@ import {
   Share2,
   Clock,
   ArrowLeft,
+  ArrowUp,
   ChevronLeft,
   ChevronRight,
   X,
@@ -58,6 +59,11 @@ import {
   Music2,
   ListOrdered,
   Shuffle,
+  Moon,
+  Sun,
+  Menu,
+  Radio,
+  Layers,
   // Books feature icons
   Download,
   BookOpen,
@@ -96,8 +102,7 @@ function IconImpl({ name, ...props }: IconProps) {
       ?.split("-") || [];
   const color = colorChunk?.length ? camel(colorChunk?.join(" ")) : undefined;
 
-  const _themColor = THEME.light[color!];
-  // colorScheme === "dark" ? THEME.dark[color!] : THEME.light[color!];
+  const _themColor = colorScheme === "dark" ? THEME.dark[color!] : THEME.light[color!];
 
   props.style = {
     ...(props.style || ({} as any)),
@@ -171,6 +176,7 @@ const appIcons = {
   Share2,
   Clock,
   ArrowLeft,
+  ArrowUp,
   ChevronLeft,
   ChevronRight,
   X,
@@ -212,6 +218,11 @@ const appIcons = {
   Music2,
   ListOrdered,
   Shuffle,
+  Moon,
+  Sun,
+  Menu,
+  Radio,
+  Layers,
   // Books feature icons
   Download,
   BookOpen,

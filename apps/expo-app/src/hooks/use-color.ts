@@ -10,6 +10,5 @@ export function useColors() {
 
 export function useColorScheme() {
   const { colorScheme } = useNativeWindColorScheme();
-  return "light";
-  // return  colorScheme ?? "light"
+  return colorScheme ?? "light";
 }
