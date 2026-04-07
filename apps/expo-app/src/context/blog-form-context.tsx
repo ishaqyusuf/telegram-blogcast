@@ -1,8 +1,8 @@
 import { _trpc } from "@/components/static-trpc";
 import { useZodForm } from "@/components/use-zod-form";
 import { invalidateQueries } from "@/lib/trpc";
-import { useMutation } from "@tanstack/react-query";
-import { createContext, useContext, useMemo } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { createContext, useContext, useEffect, useMemo } from "react";
 import { useWatch } from "react-hook-form";
 import { z } from "zod";
 
@@ -62,11 +62,18 @@ export const useCreateBlogFormContext = (props: BlogFormContextProps = {}) => {
   const isValidBlogId = Number.isFinite(targetBlogId) && targetBlogId > 0;
   const isAudioComment = params.type === "audio-comment" && isValidBlogId;
   const isCommentMode = isAudioComment || params.mode === "comment";
+  const isEditMode = !isCommentMode && isValidBlogId;
 
   const initialTimestampFromParams = Number(params.timestamp);
   const hasTimestampParam =
     Number.isFinite(initialTimestampFromParams) &&
     initialTimestampFromParams >= 0;
+
+  // Fetch existing blog data when editing
+  const { data: existingBlog } = useQuery({
+    ...(trpc.blog.getBlog.queryOptions({ id: targetBlogId })),
+    enabled: isEditMode,
+  });
 
   const form = useZodForm(blogFormSchema, {
     defaultValues: {
@@ -81,6 +88,24 @@ export const useCreateBlogFormContext = (props: BlogFormContextProps = {}) => {
       selectedAttachments: [],
     },
   });
+
+  // Populate form when existing blog data loads (edit mode)
+  useEffect(() => {
+    if (isEditMode && existingBlog) {
+      if (existingBlog.content) {
+        form.setValue("content", existingBlog.content);
+      }
+      if (existingBlog.caption) {
+        form.setValue("title", existingBlog.caption);
+      }
+      const tags = existingBlog.blogTags
+        ?.map((bt: any) => bt.tags?.title)
+        .filter(Boolean) ?? [];
+      if (tags.length > 0) {
+        form.setValue("tags", tags);
+      }
+    }
+  }, [isEditMode, existingBlog?.id]);
 
   const formData = useWatch({
     control: form.control,
@@ -102,6 +127,14 @@ export const useCreateBlogFormContext = (props: BlogFormContextProps = {}) => {
     }),
   );
 
+  const updateBlogMutation = useMutation(
+    trpc.blog.updateBlog.mutationOptions({
+      onSuccess: () => {
+        invalidateQueries("infinite", ["blog.posts"]);
+      },
+    }),
+  );
+
   const addCommentMutation = useMutation(
     trpc.blog.addComment.mutationOptions({
       onSuccess: () => {
@@ -111,7 +144,7 @@ export const useCreateBlogFormContext = (props: BlogFormContextProps = {}) => {
   );
 
   const isSubmitting =
-    createBlogMutation.isPending || addCommentMutation.isPending;
+    createBlogMutation.isPending || addCommentMutation.isPending || updateBlogMutation.isPending;
 
   const setTimestampSec = (value: number) => {
     form.setValue("timestampSec", Math.max(0, Math.floor(value)));
@@ -162,6 +195,12 @@ export const useCreateBlogFormContext = (props: BlogFormContextProps = {}) => {
             ? Math.max(0, Number(formData.timestampSec || 0))
             : undefined,
       });
+    } else if (isEditMode) {
+      await (updateBlogMutation.mutateAsync as any)({
+        id: targetBlogId,
+        content: normalizedContent,
+        status: published ? "published" : "draft",
+      });
     } else {
       await (createBlogMutation.mutateAsync as any)({
         title: normalizedTitle,
@@ -181,6 +220,7 @@ export const useCreateBlogFormContext = (props: BlogFormContextProps = {}) => {
     formData,
     isAudioComment,
     isCommentMode,
+    isEditMode,
     targetBlogId,
     isValidBlogId,
     canSubmit,
@@ -192,6 +232,7 @@ export const useCreateBlogFormContext = (props: BlogFormContextProps = {}) => {
     updateTimestamp,
     submit,
     createBlogMutation,
+    updateBlogMutation,
     addCommentMutation,
   };
 };
