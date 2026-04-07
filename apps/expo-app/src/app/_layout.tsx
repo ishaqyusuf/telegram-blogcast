@@ -24,6 +24,7 @@ import Toast from "react-native-toast-message";
 import { ToastProviderWithViewport } from "@/components/ui/toast";
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import FlashMessage from "react-native-flash-message";
+import { PortalHost } from "@rn-primitives/portal";
 import { TRPCReactProvider } from "@/trpc/client";
 import { StaticTrpc } from "@/components/static-trpc";
 import { AppStatusBar } from "@/components/app-status-bar";
@@ -151,6 +152,7 @@ const InitialLayout = () => {
         </Stack> */}
         <GlobalAudioBar />
         <Toast />
+        <PortalHost />
       </TRPCReactProvider>
     </>
   );
