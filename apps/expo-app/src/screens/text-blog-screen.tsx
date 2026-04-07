@@ -127,7 +127,7 @@ export default function TextBlogScreen() {
                 <View
                   key={tag}
                   className="rounded-full px-2.5 py-1 border border-primary/25"
-                  style={{ backgroundColor: colors.primary + "1a" }}
+                  style={{ backgroundColor: colors.primary.replace("rgb(", "rgba(").replace(")", ", 0.1)") }}
                 >
                   <Text className="text-xs font-semibold text-primary">
                     #{tag}

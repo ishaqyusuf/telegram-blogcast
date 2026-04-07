@@ -105,7 +105,7 @@ export const useCreateBlogFormContext = (props: BlogFormContextProps = {}) => {
         form.setValue("tags", tags);
       }
     }
-  }, [isEditMode, existingBlog?.id]);
+  }, [isEditMode, existingBlog?.id, form]);
 
   const formData = useWatch({
     control: form.control,
