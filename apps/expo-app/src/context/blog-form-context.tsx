@@ -88,24 +88,25 @@ export const useCreateBlogFormContext = (props: BlogFormContextProps = {}) => {
       selectedAttachments: [],
     },
   });
+  const { setValue } = form;
 
   // Populate form when existing blog data loads (edit mode)
   useEffect(() => {
     if (isEditMode && existingBlog) {
       if (existingBlog.content) {
-        form.setValue("content", existingBlog.content);
+        setValue("content", existingBlog.content);
       }
       if (existingBlog.caption) {
-        form.setValue("title", existingBlog.caption);
+        setValue("title", existingBlog.caption);
       }
       const tags = existingBlog.blogTags
         ?.map((bt: any) => bt.tags?.title)
         .filter(Boolean) ?? [];
       if (tags.length > 0) {
-        form.setValue("tags", tags);
+        setValue("tags", tags);
       }
     }
-  }, [isEditMode, existingBlog?.id, form]);
+  }, [isEditMode, existingBlog, setValue]);
 
   const formData = useWatch({
     control: form.control,

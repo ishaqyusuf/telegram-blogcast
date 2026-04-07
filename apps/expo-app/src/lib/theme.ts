@@ -116,3 +116,16 @@ export const NAV_THEME: Record<"light" | "dark", Theme> = {
     },
   },
 };
+
+export function withAlpha(color: string, alpha: number) {
+  if (color.startsWith("rgb(")) {
+    return color.replace("rgb(", "rgba(").replace(")", `, ${alpha})`);
+  }
+
+  if (color.startsWith("rgba(")) {
+    const channels = color.slice(5, -1).split(",").slice(0, 3).join(",");
+    return `rgba(${channels}, ${alpha})`;
+  }
+
+  return color;
+}

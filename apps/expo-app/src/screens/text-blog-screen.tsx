@@ -10,6 +10,7 @@ import { Icon } from "@/components/ui/icon";
 import { CommentsSheet } from "@/components/comments-sheet";
 import { useCommentsSheet } from "@/hooks/use-comments-sheet";
 import { parseBlogContent, SEGMENT_COLORS, type ContentSegment } from "@/lib/parse-blog-content";
+import { withAlpha } from "@/lib/theme";
 import { useColors } from "@/hooks/use-color";
 
 // ── Styled content renderer ───────────────────────────────────────────────────
@@ -127,7 +128,7 @@ export default function TextBlogScreen() {
                 <View
                   key={tag}
                   className="rounded-full px-2.5 py-1 border border-primary/25"
-                  style={{ backgroundColor: colors.primary.replace("rgb(", "rgba(").replace(")", ", 0.1)") }}
+                  style={{ backgroundColor: withAlpha(colors.primary, 0.1) }}
                 >
                   <Text className="text-xs font-semibold text-primary">
                     #{tag}
