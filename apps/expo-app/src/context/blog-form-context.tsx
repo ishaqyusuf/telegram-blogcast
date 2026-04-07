@@ -188,7 +188,7 @@ export const useCreateBlogFormContext = (props: BlogFormContextProps = {}) => {
     if (!canSubmit || isSubmitting) return false;
 
     if (isCommentMode) {
-      await (addCommentMutation.mutateAsync as any)({
+      await addCommentMutation.mutateAsync({
         blogId: targetBlogId,
         content: normalizedContent,
         timestampSeconds:
@@ -197,13 +197,13 @@ export const useCreateBlogFormContext = (props: BlogFormContextProps = {}) => {
             : undefined,
       });
     } else if (isEditMode) {
-      await (updateBlogMutation.mutateAsync as any)({
+      await updateBlogMutation.mutateAsync({
         id: targetBlogId,
         content: normalizedContent,
         status: published ? "published" : "draft",
       });
     } else {
-      await (createBlogMutation.mutateAsync as any)({
+      await createBlogMutation.mutateAsync({
         title: normalizedTitle,
         content: normalizedContent,
         tags: formData?.tags || [],
