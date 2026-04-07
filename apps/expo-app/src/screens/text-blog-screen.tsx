@@ -8,14 +8,17 @@ import { _trpc } from "@/components/static-trpc";
 import { SafeArea } from "@/components/safe-area";
 import { Icon } from "@/components/ui/icon";
 import { CommentsSheet } from "@/components/comments-sheet";
+import { useCommentsSheet } from "@/hooks/use-comments-sheet";
 import { parseBlogContent, SEGMENT_COLORS, type ContentSegment } from "@/lib/parse-blog-content";
+import { useColors } from "@/hooks/use-color";
 
 // ── Styled content renderer ───────────────────────────────────────────────────
 
 function StyledContent({ text, style }: { text: string; style?: object }) {
+  const colors = useColors();
   const segments = parseBlogContent(text);
   return (
-    <Text style={[{ fontSize: 17, lineHeight: 30, color: "#e8e8e8", textAlign: "right", writingDirection: "rtl" }, style]}>
+    <Text style={[{ fontSize: 17, lineHeight: 30, color: colors.foreground, textAlign: "right", writingDirection: "rtl" }, style]}>
       {segments.map((seg: ContentSegment, i: number) => {
         if (seg.type === "text") return seg.value;
         if (seg.type === "link") {
@@ -44,6 +47,8 @@ function StyledContent({ text, style }: { text: string; style?: object }) {
 export default function TextBlogScreen() {
   const { blogId } = useLocalSearchParams<{ blogId: string }>();
   const router = useRouter();
+  const colors = useColors();
+  const { onOpen: openComments } = useCommentsSheet();
 
   const { data: blog, isLoading } = useQuery(
     _trpc.blog.getBlog.queryOptions({ id: Number(blogId) })
@@ -51,8 +56,8 @@ export default function TextBlogScreen() {
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, backgroundColor: "#121212", alignItems: "center", justifyContent: "center" }}>
-        <ActivityIndicator color="#1DB954" />
+      <View className="flex-1 bg-background items-center justify-center">
+        <ActivityIndicator color={colors.primary} />
       </View>
     );
   }
@@ -61,40 +66,24 @@ export default function TextBlogScreen() {
 
   const tags = blog.blogTags?.map((bt: any) => bt.tags?.title).filter(Boolean) ?? [];
   const date = blog.blogDate ?? blog.createdAt;
+  const commentCount = blog.blogs?.length ?? 0;
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#121212" }}>
+    <View className="flex-1 bg-background">
       <SafeArea>
         {/* Header */}
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "space-between",
-            paddingHorizontal: 16,
-            paddingVertical: 12,
-            borderBottomWidth: 1,
-            borderBottomColor: "#1e1e1e",
-          }}
-        >
+        <View className="flex-row items-center justify-between px-4 py-3 border-b border-border">
           <Pressable
             onPress={() => router.back()}
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 18,
-              backgroundColor: "#282828",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
+            className="size-9 rounded-full bg-secondary items-center justify-center"
           >
             <Icon name="ChevronLeft" size={22} className="text-foreground" />
           </Pressable>
 
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+          <View className="flex-row items-center gap-1">
             <Pressable
               onPress={() => router.push(`/blog-form?blogId=${blog.id}` as any)}
-              style={{ padding: 8 }}
+              className="p-2"
             >
               <Icon name="Pencil" size={18} className="text-muted-foreground" />
             </Pressable>
@@ -102,7 +91,7 @@ export default function TextBlogScreen() {
               onPress={() =>
                 Share.share({ message: blog.content ?? "" })
               }
-              style={{ padding: 8 }}
+              className="p-2"
             >
               <Icon name="Share2" size={18} className="text-muted-foreground" />
             </Pressable>
@@ -114,56 +103,33 @@ export default function TextBlogScreen() {
           showsVerticalScrollIndicator={false}
         >
           {/* Meta */}
-          <View
-            style={{
-              paddingHorizontal: 20,
-              paddingTop: 24,
-              paddingBottom: 16,
-              gap: 6,
-              alignItems: "flex-end",
-            }}
-          >
+          <View className="px-5 pt-6 pb-4 items-end gap-1.5">
             {/* Date row */}
             {date && (
-              <Text style={{ fontSize: 12, color: "#6b7280" }}>
+              <Text className="text-xs text-muted-foreground">
                 {formatDate(date, "D MMMM YYYY")}
               </Text>
             )}
           </View>
 
           {/* Content */}
-          <View style={{ paddingHorizontal: 20, paddingBottom: 28 }}>
+          <View className="px-5 pb-7">
             <StyledContent text={blog.content ?? ""} />
           </View>
 
           {/* Divider */}
-          <View style={{ height: 1, backgroundColor: "#1e1e1e", marginHorizontal: 20 }} />
+          <View className="h-px bg-border mx-5" />
 
           {/* Tags */}
           {tags.length > 0 && (
-            <View
-              style={{
-                paddingHorizontal: 20,
-                paddingVertical: 16,
-                flexDirection: "row",
-                flexWrap: "wrap",
-                gap: 8,
-                justifyContent: "flex-end",
-              }}
-            >
+            <View className="px-5 py-4 flex-row flex-wrap gap-2 justify-end">
               {tags.map((tag: string) => (
                 <View
                   key={tag}
-                  style={{
-                    backgroundColor: "#1a2e1a",
-                    borderRadius: 99,
-                    paddingHorizontal: 10,
-                    paddingVertical: 4,
-                    borderWidth: 1,
-                    borderColor: "rgba(29,185,84,0.25)",
-                  }}
+                  className="rounded-full px-2.5 py-1 border border-primary/25"
+                  style={{ backgroundColor: colors.primary + "1a" }}
                 >
-                  <Text style={{ fontSize: 12, color: "#1DB954", fontWeight: "600" }}>
+                  <Text className="text-xs font-semibold text-primary">
                     #{tag}
                   </Text>
                 </View>
@@ -172,23 +138,31 @@ export default function TextBlogScreen() {
           )}
 
           {/* Reactions */}
-          <View
-            style={{
-              paddingHorizontal: 20,
-              paddingVertical: 16,
-              flexDirection: "row",
-              justifyContent: "flex-end",
-              gap: 20,
-              borderTopWidth: 1,
-              borderTopColor: "#1e1e1e",
-            }}
-          >
+          <View className="px-5 py-4 flex-row justify-end gap-5 border-t border-border">
             {["❤️", "🤲", "💡"].map((emoji) => (
               <ReactionButton key={emoji} emoji={emoji} blogId={Number(blogId)} />
             ))}
           </View>
 
           {/* Comments CTA */}
+          <Pressable
+            onPress={openComments}
+            className="mx-5 mb-4 flex-row items-center justify-between p-4 bg-card rounded-xl active:opacity-80"
+          >
+            <View className="flex-row items-center gap-2">
+              <Icon name="MessageCircle" size={18} className="text-foreground" />
+              <Text className="text-sm font-bold text-foreground">Comments</Text>
+              {commentCount > 0 && (
+                <View className="px-1.5 py-0.5 rounded-full bg-muted">
+                  <Text className="text-xs text-muted-foreground">
+                    {commentCount}
+                  </Text>
+                </View>
+              )}
+            </View>
+            <Icon name="ChevronRight" size={16} className="text-muted-foreground" />
+          </Pressable>
+
           <CommentsSheet blogId={Number(blogId)} />
         </ScrollView>
       </SafeArea>
@@ -199,6 +173,7 @@ export default function TextBlogScreen() {
 // ── Inline reaction button ────────────────────────────────────────────────────
 
 function ReactionButton({ emoji, blogId }: { emoji: string; blogId: number }) {
+  const colors = useColors();
   const { data: reactions } = useQuery(
     _trpc.blog.getReactions.queryOptions({ blogId })
   );
@@ -217,21 +192,15 @@ function ReactionButton({ emoji, blogId }: { emoji: string; blogId: number }) {
   return (
     <Pressable
       onPress={() => mutate({ blogId, emoji })}
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 5,
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 99,
-        backgroundColor: active ? "rgba(29,185,84,0.12)" : "#1e1e1e",
-        borderWidth: 1,
-        borderColor: active ? "rgba(29,185,84,0.4)" : "#282828",
-      }}
+      className={`flex-row items-center gap-1.5 px-3 py-1.5 rounded-full border ${
+        active ? "border-primary/40 bg-primary/10" : "border-border bg-card"
+      }`}
     >
       <Text style={{ fontSize: 16 }}>{emoji}</Text>
       {count > 0 && (
-        <Text style={{ fontSize: 12, color: active ? "#1DB954" : "#6b7280", fontWeight: "600" }}>
+        <Text
+          className={`text-xs font-semibold ${active ? "text-primary" : "text-muted-foreground"}`}
+        >
           {count}
         </Text>
       )}
