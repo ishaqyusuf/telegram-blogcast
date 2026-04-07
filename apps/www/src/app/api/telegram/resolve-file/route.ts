@@ -10,26 +10,23 @@
 
 import { NextResponse } from "next/server";
 import { getClient } from "@telegram/telegram-client";
-import { resolveFileId } from "@telegram/file-id-resolver";
+// import { resolveFileId } from "@telegram/file-id-resolver";
 
 export async function POST(request) {
-    try {
-        const { channelId, messageId } = await request.json();
-
-        if (!channelId || !messageId) {
-            return NextResponse.json(
-                { error: "channelId and messageId are required" },
-                { status: 400 },
-            );
-        }
-
-        const client = await getClient();
-        const fileId = await resolveFileId(client, channelId, messageId);
-
-        return NextResponse.json({ fileId });
-    } catch (err) {
-        console.error("[resolve-file]", err);
-        return NextResponse.json({ error: err.message }, { status: 500 });
-    }
+    // try {
+    //     const { channelId, messageId } = await request.json();
+    //     if (!channelId || !messageId) {
+    //         return NextResponse.json(
+    //             { error: "channelId and messageId are required" },
+    //             { status: 400 },
+    //         );
+    //     }
+    //     const client = await getClient();
+    //     const fileId = await resolveFileId(client, channelId, messageId);
+    //     return NextResponse.json({ fileId });
+    // } catch (err) {
+    //     console.error("[resolve-file]", err);
+    //     return NextResponse.json({ error: err.message }, { status: 500 });
+    // }
 }
 
