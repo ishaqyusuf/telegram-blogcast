@@ -16,11 +16,11 @@ const server = z.object({
     AUTH_SECRET: z.string().min(32),
 
     // Trigger.dev
-    TRIGGER_SECRET_KEY: z.string(),
-    TRIGGER_PROJECT_ID: z.string(),
+    // TRIGGER_SECRET_KEY: z.string(),
+    // TRIGGER_PROJECT_ID: z.string(),
 
     // Better Stack
-    BETTERSTACK_TOKEN: z.string(),
+    // BETTERSTACK_TOKEN: z.string(),
 });
 
 const client = z.object({
@@ -45,10 +45,10 @@ const processEnv = {
 
     // Trigger.dev
     TRIGGER_SECRET_KEY: process.env.TRIGGER_SECRET_KEY,
-    TRIGGER_PROJECT_ID: process.env.TRIGGER_PROJECT_ID,
+    // TRIGGER_PROJECT_ID: process.env.TRIGGER_PROJECT_ID,
 
     // Better Stack
-    BETTERSTACK_TOKEN: process.env.BETTERSTACK_TOKEN,
+    // BETTERSTACK_TOKEN: process.env.BETTERSTACK_TOKEN,
 
     // client
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
