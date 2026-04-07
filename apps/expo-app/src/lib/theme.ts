@@ -117,6 +117,7 @@ export const NAV_THEME: Record<"light" | "dark", Theme> = {
   },
 };
 
+/** Convert any `rgb(...)`, `rgba(...)`, or hex color to `rgba(r, g, b, alpha)`. */
 export function withAlpha(color: string, alpha: number) {
   if (color.startsWith("rgb(")) {
     return color.replace("rgb(", "rgba(").replace(")", `, ${alpha})`);
