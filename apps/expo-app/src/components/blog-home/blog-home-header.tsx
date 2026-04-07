@@ -4,6 +4,8 @@ import { Text, View } from "react-native";
 import { Path, Rect, Svg } from "react-native-svg";
 
 import { Icon } from "@/components/ui/icon";
+import { useColorScheme } from "nativewind";
+import * as Haptics from "expo-haptics";
 
 function getGreeting() {
   const hour = new Date().getHours();
@@ -15,6 +17,12 @@ function getGreeting() {
 export function BlogHomeHeader() {
   const greeting = getGreeting();
   const router = useRouter();
+  const { colorScheme, setColorScheme } = useColorScheme();
+
+  function toggleColorScheme() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    setColorScheme(colorScheme === "dark" ? "light" : "dark");
+  }
 
   return (
     <View className="bg-background px-4 pb-4 pt-3">
@@ -39,9 +47,14 @@ export function BlogHomeHeader() {
           >
             <Icon name="Search" className="text-muted-foreground" />
           </Pressable>
-          <Pressable className="relative p-2 rounded-full active:bg-muted">
-            <Icon name="Bell" className="text-muted-foreground" />
-            <View className="absolute top-2 right-2 size-2 bg-destructive rounded-full border-2 border-background" />
+          <Pressable
+            onPress={toggleColorScheme}
+            className="p-2 rounded-full active:bg-muted"
+          >
+            <Icon
+              name={colorScheme === "dark" ? "Sun" : "Moon"}
+              className="text-muted-foreground"
+            />
           </Pressable>
           <View className="size-9 rounded-full bg-primary items-center justify-center">
             <Text className="text-xs font-bold text-primary-foreground">

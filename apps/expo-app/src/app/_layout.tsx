@@ -26,7 +26,7 @@ import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import FlashMessage from "react-native-flash-message";
 import { TRPCReactProvider } from "@/trpc/client";
 import { StaticTrpc } from "@/components/static-trpc";
-import { StatusBar } from "expo-status-bar";
+import { AppStatusBar } from "@/components/app-status-bar";
 import { View } from "react-native";
 import { StaticRouter } from "@/components/static-router";
 import { GlobalAudioBar } from "@/components/global-audio-bar";
@@ -78,7 +78,7 @@ const InitialLayout = () => {
       <TRPCReactProvider>
         <StaticTrpc />
         <StaticRouter />
-        <StatusBar style="dark" />
+        <AppStatusBar />
         {/* <StatusBar style="auto" /> */}
 
         <Stack initialRouteName="home" screenOptions={{ headerShown: false }}>
@@ -166,8 +166,7 @@ function RootLayoutNav() {
       <KeyboardProvider>
         <View className="flex-1">
           <ThemeProvider
-            value={DefaultTheme}
-            // value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
+            value={theme}
           >
             <AuthProvider value={useCreateAuthContext()}>
               <ToastProviderWithViewport>
