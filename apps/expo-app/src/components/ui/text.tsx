@@ -1,4 +1,3 @@
-import { useColors } from "@/hooks/use-color";
 import { cn } from "@/lib/utils";
 import * as Slot from "@rn-primitives/slot";
 import { cva, type VariantProps } from "class-variance-authority";
@@ -14,10 +13,6 @@ const textVariants = cva(
   ),
   {
     variants: {
-      color: {
-        default: "text-gray-800 dark:text-gray-100 ",
-        secondary: "text-gray-500 dark:text-gray-400",
-      },
       variant: {
         default: "",
         h1: cn(
@@ -49,7 +44,6 @@ const textVariants = cva(
     },
     defaultVariants: {
       variant: "default",
-      color: "default",
     },
   }
 );
@@ -80,7 +74,6 @@ function Text({
   className,
   asChild = false,
   variant = "default",
-  color,
   ...props
 }: React.ComponentProps<typeof RNText> &
   TextVariantProps &
@@ -88,11 +81,10 @@ function Text({
     asChild?: boolean;
   }) {
   const textClass = React.useContext(TextClassContext);
-  const Component: any = asChild ? Slot.Text : RNText;
-  const colors = useColors();
+  const Component = asChild ? Slot.Text : RNText;
   return (
     <Component
-      className={cn(textVariants({ variant, color }), textClass, className)}
+      className={cn(textVariants({ variant }), textClass, className)}
       role={variant ? ROLE[variant] : undefined}
       aria-level={variant ? ARIA_LEVEL[variant] : undefined}
       {...props}

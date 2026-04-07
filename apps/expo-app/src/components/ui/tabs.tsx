@@ -1,25 +1,19 @@
 import { TextClassContext } from "./text";
 import { cn } from "@/lib/utils";
 import * as TabsPrimitive from "@rn-primitives/tabs";
-import { Platform, View } from "react-native";
-import Animated, { FadeIn } from "react-native-reanimated";
+import { Platform } from "react-native";
 
 function Tabs({
   className,
   ...props
-}: TabsPrimitive.RootProps & React.RefAttributes<TabsPrimitive.RootRef>) {
-  return (
-    <TabsPrimitive.Root
-      className={cn("flex flex-col gap-2", className)}
-      {...props}
-    />
-  );
+}: React.ComponentProps<typeof TabsPrimitive.Root>) {
+  return <TabsPrimitive.Root className={cn("flex flex-col gap-2", className)} {...props} />;
 }
 
 function TabsList({
   className,
   ...props
-}: TabsPrimitive.ListProps & React.RefAttributes<TabsPrimitive.ListRef>) {
+}: React.ComponentProps<typeof TabsPrimitive.List>) {
   return (
     <TabsPrimitive.List
       className={cn(
@@ -35,7 +29,7 @@ function TabsList({
 function TabsTrigger({
   className,
   ...props
-}: TabsPrimitive.TriggerProps & React.RefAttributes<TabsPrimitive.TriggerRef>) {
+}: React.ComponentProps<typeof TabsPrimitive.Trigger>) {
   const { value } = TabsPrimitive.useRootContext();
   return (
     <TextClassContext.Provider
@@ -64,23 +58,12 @@ function TabsTrigger({
 function TabsContent({
   className,
   ...props
-}: TabsPrimitive.ContentProps & React.RefAttributes<TabsPrimitive.ContentRef>) {
+}: React.ComponentProps<typeof TabsPrimitive.Content>) {
   return (
     <TabsPrimitive.Content
       className={cn(Platform.select({ web: "flex-1 outline-none" }), className)}
       {...props}
-      asChild // Use asChild to pass styles to our animated view
-    >
-      <Animated.View
-        entering={FadeIn.duration(200)}
-        style={{
-          flex: 1,
-        }}
-      >
-        {/* We need a View here because Animated.View can't have text as a direct child */}
-        <View className="flex-1">{props.children}</View>
-      </Animated.View>
-    </TabsPrimitive.Content>
+    />
   );
 }
 
