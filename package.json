@@ -22,6 +22,8 @@
     "db:generate": "turbo -F @acme/db prisma-generate",
     "db:push-reset": "turbo -F @acme/db push-reset",
     "dev": "turbo dev --parallel --filter !@acme/api",
+    "build:preview": "bun run --filter @acme/expo-app build:preview",
+    "update:preview": "bun run --filter @acme/expo-app update:preview",
     "format": "biome format --write .",
     "lint": "turbo lint && manypkg check",
     "---format": "turbo format --continue -- --cache --cache-location='node_modules/.cache/.prettiercache' --ignore-path='../../.gitignore'",

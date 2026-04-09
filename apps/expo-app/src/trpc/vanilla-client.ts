@@ -5,12 +5,14 @@
 import { createTRPCClient, httpBatchLink } from "@trpc/client";
 import superjson from "superjson";
 import { AppRouter } from "@api/trpc/routers/_app";
-import { getBaseUrl } from "@/lib/base-url";
+import { getTrpcUrl } from "@/lib/base-url";
+import { trpcFetch } from "./fetch";
 
 export const vanillaTrpc = createTRPCClient<AppRouter>({
   links: [
     httpBatchLink({
-      url: `${getBaseUrl()}/api/trpc`,
+      url: getTrpcUrl(),
+      fetch: trpcFetch,
       transformer: superjson as any,
     }),
   ],

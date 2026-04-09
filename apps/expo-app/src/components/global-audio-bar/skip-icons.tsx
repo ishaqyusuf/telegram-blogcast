@@ -1,5 +1,5 @@
-import { RotateCcw, RotateCw } from "lucide-react-native";
 import { Text, View } from "react-native";
+import { Icon } from "@/components/ui/icon";
 
 interface SkipIconProps {
   size?: number;
@@ -12,7 +12,7 @@ export function SkipBack5Icon({ size = 24, color = "#ffffff" }: SkipIconProps) {
     <View
       style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}
     >
-      <RotateCcw size={size} color={color} strokeWidth={2} />
+      <Icon name="RotateCcw" size={size} color={color} strokeWidth={2} />
       <Text
         style={{
           position: "absolute",
@@ -35,7 +35,7 @@ export function SkipForward5Icon({ size = 24, color = "#ffffff" }: SkipIconProps
     <View
       style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}
     >
-      <RotateCw size={size} color={color} strokeWidth={2} />
+      <Icon name="RotateCw" size={size} color={color} strokeWidth={2} />
       <Text
         style={{
           position: "absolute",

@@ -10,6 +10,7 @@
     "strict": true,
     "noImplicitAny": false,
 
+    "types": ["@hugeicons/core-free-icons", "@hugeicons/react-native"],
     "paths": {
       "@/*": ["./src/*"],
       "@api/*": ["../api/src/*"],

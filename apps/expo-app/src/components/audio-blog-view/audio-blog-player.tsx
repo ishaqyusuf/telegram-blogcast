@@ -1,13 +1,7 @@
 import { View, Text, TouchableOpacity, Image } from "react-native";
-import {
-  Headphones,
-  Rewind,
-  Play,
-  FastForward,
-  Volume2,
-} from "lucide-react-native";
 import { DUMMY_AUDIO_BLOG } from "./__mocks__/data";
 import { useState } from "react";
+import { Icon } from "../ui/icon";
 
 function PlayerScrubber() {
   const { progress, currentTime, remainingTime } = DUMMY_AUDIO_BLOG;
@@ -65,13 +59,14 @@ function PlayerControls() {
       </TouchableOpacity>
       <View className="flex-row items-center gap-6">
         <TouchableOpacity className="p-2">
-          <Rewind size={32} className="text-foreground" />
+          <Icon name="RotateCcw" size={32} className="text-foreground" />
         </TouchableOpacity>
         <TouchableOpacity
           onPress={() => setIsPlaying(!isPlaying)}
           className="w-16 h-16 bg-primary text-primary-foreground rounded-full flex items-center justify-center shadow-lg"
         >
-          <Play
+          <Icon
+            name="Play"
             size={40}
             color="white"
             fill="white"
@@ -79,11 +74,11 @@ function PlayerControls() {
           />
         </TouchableOpacity>
         <TouchableOpacity className="p-2">
-          <FastForward size={32} className="text-foreground" />
+          <Icon name="RotateCw" size={32} className="text-foreground" />
         </TouchableOpacity>
       </View>
       <TouchableOpacity className="p-2">
-        <Volume2 size={20} className="text-muted-foreground" />
+        <Icon name="Volume2" size={20} className="text-muted-foreground" />
       </TouchableOpacity>
     </View>
   );
@@ -112,7 +107,7 @@ export function AudioBlogPlayer() {
             {category}
           </Text>
           <View className="flex-row items-center gap-1 opacity-80">
-            <Headphones size={16} className="text-primary" />
+            <Icon name="Headphones" size={16} className="text-primary" />
             <Text className="text-xs font-semibold tracking-wide text-primary uppercase">
               {listenCount}
             </Text>

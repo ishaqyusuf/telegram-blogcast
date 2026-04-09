@@ -1,6 +1,6 @@
 import { View, Text, TouchableOpacity, Image } from "react-native";
-import { BadgeCheck, MoreHorizontal } from "lucide-react-native";
 import { HomeFeedPostAuthor } from "./__mocks__/types";
+import { Icon } from "@/components/ui/icon";
 
 type HomeFeedPostAuthorHeaderProps = {
   author?: HomeFeedPostAuthor;
@@ -23,15 +23,13 @@ export function HomeFeedPostAuthorHeader({
             <Text className="text-sm font-bold text-foreground">
               {author?.name || "Admin"}
             </Text>
-            {author?.isVerified && (
-              <BadgeCheck size={14} className="text-primary" />
-            )}
+            {author?.isVerified && <Icon name="BadgeCheck" size={14} className="text-primary" />}
           </View>
           <Text className="text-xs text-muted-foreground">{createdAt}</Text>
         </View>
       </View>
       <TouchableOpacity className="p-1 rounded-full">
-        <MoreHorizontal size={24} className="text-muted-foreground" />
+        <Icon name="MoreHorizontal" size={24} className="text-muted-foreground" />
       </TouchableOpacity>
     </View>
   );

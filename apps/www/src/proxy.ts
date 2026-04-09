@@ -11,7 +11,12 @@ import { getSessionFromRequest } from "@/lib/auth";
 // ── Route config ──────────────────────────────────────────────────────────────
 
 // Paths that never require authentication
-const PUBLIC_PATHS = ["/login", "/api/auth/send-code", "/api/auth/verify-code"];
+const PUBLIC_PATHS = [
+    "/login",
+    "/api/auth/send-code",
+    "/api/auth/verify-code",
+    "/api/trpc",
+];
 
 // Paths proxied to an upstream service
 const PROXY_UPSTREAM = process.env.PROXY_UPSTREAM_URL ?? ""; // e.g. https://api.example.com
@@ -79,4 +84,3 @@ export const config = {
         "/((?!_next/static|_next/image|favicon.ico).*)",
     ],
 };
-

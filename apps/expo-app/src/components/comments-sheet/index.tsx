@@ -1,6 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
-import { useState } from "react";
-import { Alert, Modal, TouchableWithoutFeedback, View } from "react-native";
+import { useEffect, useState } from "react";
+import {
+  Alert,
+  Keyboard,
+  Modal,
+  Platform,
+  TouchableWithoutFeedback,
+  View,
+} from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 
 import { _trpc } from "@/components/static-trpc";
@@ -55,19 +62,21 @@ export function useCommentsState(blogId: number): CommentsSheetState {
   });
 
   const invalidate = () =>
-    qc.invalidateQueries({ queryKey: _trpc.blog.getComments.queryKey({ blogId }) });
+    qc.invalidateQueries({
+      queryKey: _trpc.blog.getComments.queryKey({ blogId }),
+    });
 
   const { mutate: editCommentMut, isPending: isEditPending } = useMutation(
     _trpc.blog.editComment.mutationOptions({
       onSuccess: invalidate,
       onError: (e) => Alert.alert("خطأ", e.message),
-    })
+    }),
   );
   const { mutate: deleteCommentMut, isPending: isDeletePending } = useMutation(
     _trpc.blog.deleteComment.mutationOptions({
       onSuccess: invalidate,
       onError: (e) => Alert.alert("خطأ", e.message),
-    })
+    }),
   );
   const { mutate: reorderMut, isPending: isReorderPending } = useMutation(
     _trpc.blog.reorderComments.mutationOptions({
@@ -76,10 +85,12 @@ export function useCommentsState(blogId: number): CommentsSheetState {
         setReorderMode(false);
       },
       onError: (e) => Alert.alert("خطأ", e.message),
-    })
+    }),
   );
   const { mutate: setModeMut } = useMutation(
-    _trpc.blog.setBlogArrangementMode.mutationOptions({ onSuccess: invalidate })
+    _trpc.blog.setBlogArrangementMode.mutationOptions({
+      onSuccess: invalidate,
+    }),
   );
 
   return {
@@ -116,6 +127,22 @@ interface CommentsSheetProps {
 export function CommentsSheet({ blogId = 0 }: CommentsSheetProps) {
   const { isOpen, onClose } = useCommentsSheet();
   const state = useCommentsState(blogId);
+  const [kbHeight, setKbHeight] = useState(0);
+
+  useEffect(() => {
+    const showEvent =
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent =
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+    const show = Keyboard.addListener(showEvent, (e) =>
+      setKbHeight(e.endCoordinates.height),
+    );
+    const hide = Keyboard.addListener(hideEvent, () => setKbHeight(0));
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, []);
 
   return (
     <Modal
@@ -129,7 +156,10 @@ export function CommentsSheet({ blogId = 0 }: CommentsSheetProps) {
           <View className="absolute inset-0" />
         </TouchableWithoutFeedback>
 
-        <View className="h-[85vh] bg-background rounded-t-4xl shadow-2xl overflow-hidden border-t border-border">
+        <View
+          className="h-[85vh] bg-background rounded-t-4xl shadow-2xl border-t border-border"
+          style={{ paddingBottom: kbHeight }}
+        >
           <View className="w-full flex items-center pt-3 pb-1 shrink-0">
             <View className="h-1.5 w-12 rounded-full bg-muted" />
           </View>
@@ -137,7 +167,7 @@ export function CommentsSheet({ blogId = 0 }: CommentsSheetProps) {
           <CommentsHeader state={state} onClose={onClose} />
           <CommentsAudioContext />
 
-          <View className="flex-1 relative">
+          <View className="flex-1 relative overflow-hidden">
             <CommentsList state={state} />
             <LinearGradient
               colors={["transparent", "rgba(18,18,18,0.9)"]}
@@ -145,7 +175,11 @@ export function CommentsSheet({ blogId = 0 }: CommentsSheetProps) {
             />
           </View>
 
-          <CommentInput blogId={blogId} onCommentAdded={state.refetch} />
+          <CommentInput
+            blogId={blogId}
+            onCommentAdded={state.refetch}
+            noKeyboardAvoid
+          />
         </View>
       </View>
     </Modal>
@@ -159,16 +193,16 @@ export function CommentContent({ blogId = 0 }: CommentsSheetProps) {
 
   return (
     <View className="w-full">
-      <CommentsHeader state={state} onClose={() => {}} />
-      <CommentsAudioContext />
+      {/* <CommentsHeader state={state} onClose={() => {}} /> */}
+      {/* <CommentsAudioContext /> */}
       <View className="relative">
         <CommentsList state={state} />
-        <LinearGradient
+        {/* <LinearGradient
           colors={["transparent", "rgba(18,18,18,1)"]}
-          className="absolute bottom-0 left-0 w-full h-20 pointer-events-none"
-        />
+          className="absolute bottom-0 left-0 w-full h-20 pointer-events-none" */}
+        {/* /> */}
       </View>
-      <CommentInput blogId={blogId} onCommentAdded={state.refetch} />
+      {/* <CommentInput blogId={blogId} onCommentAdded={state.refetch} /> */}
     </View>
   );
 }

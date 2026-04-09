@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useRouter } from "expo-router";
 import { View, Text, TouchableOpacity, Animated } from "react-native";
-import { Plus, Timer, MessageSquare } from "lucide-react-native";
 import { useAudioStore } from "@/store/audio-store";
 import { useCommentsSheet } from "@/hooks/use-comments-sheet";
+import { Icon } from "@/components/ui/icon";
 
 export function CommentsFab() {
   const router = useRouter();
@@ -72,7 +72,7 @@ export function CommentsFab() {
           className="flex-row items-center gap-3 bg-card border border-border p-2 pr-5 pl-2 rounded-full shadow-xl"
         >
           <View className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center text-primary">
-            <Timer size={20} className="text-primary" />
+            <Icon name="Timer" size={20} className="text-primary" />
           </View>
           <View className="flex flex-col items-start">
             <Text className="text-foreground font-bold text-sm">
@@ -90,7 +90,7 @@ export function CommentsFab() {
           className="flex-row items-center gap-3 bg-card border border-border p-2 pr-5 pl-2 rounded-full shadow-xl"
         >
           <View className="h-10 w-10 rounded-full bg-muted flex items-center justify-center text-foreground">
-            <MessageSquare size={20} className="text-foreground" />
+            <Icon name="MessageSquare" size={20} className="text-foreground" />
           </View>
           <Text className="text-foreground font-bold text-sm">Add Comment</Text>
         </TouchableOpacity>
@@ -100,7 +100,7 @@ export function CommentsFab() {
           onPress={toggleMenu}
           className="h-14 w-14 bg-primary text-primary-foreground rounded-2xl shadow-lg flex items-center justify-center"
         >
-          <Plus size={28} color="white" />
+          <Icon name="Plus" size={28} color="white" />
         </TouchableOpacity>
       </Animated.View>
     </View>

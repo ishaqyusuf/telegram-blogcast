@@ -7,12 +7,12 @@ const config: ExpoConfig = {
   version: "1.0.108",
   orientation: "portrait",
   icon: "./assets/icons/adaptive-icon.png",
-  scheme: "gndprodesk",
+  scheme: "alghurobaa",
   userInterfaceStyle: "automatic",
   newArchEnabled: true,
   ios: {
     supportsTablet: true,
-    bundleIdentifier: "com.gnd.prodesk",
+    bundleIdentifier: "com.alghurobaa.podcast",
     icon: {
       dark: "./assets/icons/ios-dark.png",
       light: "./assets/icons/ios-light.png",
@@ -31,7 +31,7 @@ const config: ExpoConfig = {
     },
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
-    package: "com.gnd.prodesk",
+    package: "com.alghurobaa.podcast",
   },
 
   web: {
@@ -64,17 +64,12 @@ const config: ExpoConfig = {
   extra: {
     router: {},
     eas: {
-      projectId: "8ea2eecb-4109-453c-827f-9b2de2e3a9aa", //pcruz321
-      // projectId: "1914ffbf-8d95-482a-af7e-e4e30a6206eb", //ishaqyusuf2
-      // projectId: "41f31ec0-9c44-4b41-af01-9a23d1b39d83", //ishaqyusuf
+      projectId: "9d8a8cd8-d310-4724-8a61-db39e6b56c9a", //ishaqyusuf
     },
   },
-  owner: "pcruz321",
-  // owner: "ishaqyusuf2",
+  owner: "ishaqyusuf",
   updates: {
-    url: "https://u.expo.dev/8ea2eecb-4109-453c-827f-9b2de2e3a9aa", //pcruz321
-    // url: "https://u.expo.dev/41f31ec0-9c44-4b41-af01-9a23d1b39d83", //ishaqyusuf
-    // url: "https://u.expo.dev/1914ffbf-8d95-482a-af7e-e4e30a6206eb", //ishaqyusuf2
+    url: "https://u.expo.dev/9d8a8cd8-d310-4724-8a61-db39e6b56c9a", //ishaqyusuf
   },
   runtimeVersion: {
     policy: "appVersion",

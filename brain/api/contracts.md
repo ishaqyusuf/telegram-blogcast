@@ -19,6 +19,8 @@ Tracks important request/response expectations and typed boundaries between clie
 - Prefer schema-validated inputs at API boundaries.
 - Preserve typed client/server alignment when changing router outputs.
 - Document breaking changes that require coordinated app updates.
+- `apps/www/src/app/api/trpc/[...trpc]/route.ts` is the web gateway for the shared Hono/tRPC handler from `apps/api/src/internal-api.ts`, so Expo can target `apps/www` in local development without changing router contracts.
+- Expo tRPC clients resolve their endpoint from `apps/expo-app/src/lib/base-url.ts`; prefer `EXPO_PUBLIC_TRPC_URL` or `EXPO_PUBLIC_TRPC_PORT` for local routing instead of overloading unrelated web/app env values.
 
 ### TODO
 - Record contract notes per router as features are implemented or refactored.

@@ -1,6 +1,6 @@
 import { View, Text } from "react-native";
-import { Music } from "lucide-react-native";
 import { DUMMY_AUDIO_CONTEXT } from "./__mocks__/data";
+import { Icon } from "@/components/ui/icon";
 
 export function CommentsAudioContext() {
   const { title, currentTime, progress } = DUMMY_AUDIO_CONTEXT;
@@ -9,7 +9,7 @@ export function CommentsAudioContext() {
       <View className="flex-row justify-between items-center mb-3">
         <View className="flex-row items-center gap-2 overflow-hidden">
           <View className="w-6 h-6 rounded bg-primary/20 flex items-center justify-center shrink-0">
-            <Music size={14} className="text-primary" />
+            <Icon name="Music" size={14} className="text-primary" />
           </View>
           <Text
             className="text-muted-foreground text-xs font-medium truncate"

@@ -1,14 +1,13 @@
 import { View, Text, TouchableOpacity } from "react-native";
-import { Home, Search, History, User } from "lucide-react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Icon } from "../ui/icon";
+import { Icon, type IconKeys } from "../ui/icon";
 
 const navItems = [
-  { name: "Home", icon: Home },
-  { name: "Search", icon: Search },
-  { name: "History", icon: History },
-  { name: "Profile", icon: User },
-];
+  { name: "Home", icon: "Home" },
+  { name: "Search", icon: "Search" },
+  { name: "History", icon: "History" },
+  { name: "Profile", icon: "User" },
+] satisfies Array<{ name: string; icon: IconKeys }>;
 
 export function AudioBlogBottomNav() {
   return (
@@ -28,7 +27,7 @@ export function AudioBlogBottomNav() {
               key={item.name}
               className="flex-col items-center gap-1 p-2 w-16"
             >
-              <item.icon size={26} className="text-muted-foreground" />
+              <Icon name={item.icon} size={26} className="text-muted-foreground" />
               <Text className="text-[10px] font-medium text-muted-foreground">
                 {item.name}
               </Text>

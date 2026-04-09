@@ -10,6 +10,15 @@ const app = new OpenAPIHono<Context>(); //.basePath("/api");
 
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import { db } from "@acme/db";
+
+const serializeHeaders = (headers: Headers) => {
+  if (typeof (headers as any).toJSON === "function") {
+    return (headers as any).toJSON();
+  }
+
+  return Object.fromEntries(headers.entries());
+};
+
 app.use(secureHeaders());
 if (process.env.NODE_ENV === "development")
   app.use(
@@ -44,7 +53,7 @@ app.use("/api/trpc/*", async (c) => {
         input,
         errorMessage: [error.message, error.code, error.name, error.stack],
         url,
-        headers: headers?.toJSON(),
+        headers: serializeHeaders(headers),
         port: process.env.PORT,
       };
       consoleLog("ERROR", msg);

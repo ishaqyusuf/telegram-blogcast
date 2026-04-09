@@ -7,9 +7,9 @@ import { createTRPCContext } from "@trpc/tanstack-react-query";
 import { useState } from "react";
 import superjson from "superjson";
 import { makeQueryClient } from "./query-client";
+import { trpcFetch } from "./fetch";
 import { AppRouter } from "@api/trpc/routers/_app";
-import { getBaseUrl } from "@/lib/base-url";
-import { getToken } from "@/lib/session-store";
+import { getTrpcUrl } from "@/lib/base-url";
 // import { generateRandomString } from "@/lib/utils";
 // import { authUser } from "@/app/(v1)/_actions/utils";
 
@@ -43,21 +43,9 @@ export function TRPCReactProvider(
     createTRPCClient<AppRouter>({
       links: [
         httpBatchLink({
-          // url: `${process.env.NEXT_PUBLIC_API_URL}/api/trpc`,
-          url:
-            // process.env.NODE_ENV === "production"
-            //   ? `${process.env.NEXT_PUBLIC_APP_URL}/api/trpc`
-            //   :
-            `${getBaseUrl()}/api/trpc`,
+          url: getTrpcUrl(),
+          fetch: trpcFetch,
           transformer: superjson as any,
-          // async headers() {
-          //   const headers = new Map<string, string>();
-          //   const token = getToken();
-
-          //   if (token) headers.set("Authorization", `Bearer ${token}`);
-
-          //   return headers;
-          // },
         }),
         loggerLink({
           enabled: (opts) =>

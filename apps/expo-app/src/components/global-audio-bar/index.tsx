@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { Animated, Easing, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SkipBack5Icon, SkipForward5Icon } from "./skip-icons";
-import { Disc3, Pause, Play } from "lucide-react-native";
+import { Icon } from "@/components/ui/icon";
 
 function formatSleepRemaining(ms: number): string {
   const totalSec = Math.max(0, Math.ceil(ms / 1000));

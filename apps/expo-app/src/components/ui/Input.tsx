@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons'
+import { Icon, type IconKeys } from '@/components/ui/icon'
 // import { useAuth } from '@providers/auth-provider'
 // import { cn } from '@utils/cn'
 import { useState } from 'react'
@@ -10,7 +10,7 @@ interface InputProps<T extends FieldValues> extends TextInputProps {
   className?: string
   control: Control<T>
   name: Path<T>
-  icon?: keyof typeof Ionicons.glyphMap
+  icon?: IconKeys
   secureTextEntry?: boolean
 }
 
@@ -63,7 +63,7 @@ export function Input<T extends FieldValues>({
                   resizeMode='contain'
                 />
               ) : (
-                <Ionicons name={icon} size={20} color='#6366F1' />
+                icon ? <Icon name={icon} size={20} color='#6366F1' /> : null
               )}
               <TextInput
                 value={value}
@@ -98,8 +98,8 @@ export function Input<T extends FieldValues>({
                 name === 'newPassword' ||
                 name === 'confirmNewPassword') &&
                 value.length > 0 && (
-                  <Ionicons
-                    name={isPasswordVisible ? 'eye-off-outline' : 'eye-outline'}
+                  <Icon
+                    name={isPasswordVisible ? 'EyeOff' : 'Eye'}
                     size={20}
                     color='#6366F1'
                     onPress={togglePasswordVisibility}
