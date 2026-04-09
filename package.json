@@ -21,7 +21,7 @@
     "db:migrate": "turbo -F @acme/db db-migrate",
     "db:generate": "turbo -F @acme/db prisma-generate",
     "db:push-reset": "turbo -F @acme/db push-reset",
-    "dev": "turbo dev --parallel",
+    "dev": "turbo dev --parallel --filter !@acme/api",
     "format": "biome format --write .",
     "lint": "turbo lint && manypkg check",
     "---format": "turbo format --continue -- --cache --cache-location='node_modules/.cache/.prettiercache' --ignore-path='../../.gitignore'",

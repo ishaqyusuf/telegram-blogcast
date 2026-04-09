@@ -31,7 +31,7 @@ export const getBaseUrl = () => {
     );
   }
 
-  const apiPort = process.env.EXPO_PUBLIC_API_PORT ?? "3006";
+  const apiPort = process.env.EXPO_PUBLIC_API_PORT ?? "3005";
   return `http://${localhost}:${apiPort}`;
 };
 export const getWebUrl = () => {
