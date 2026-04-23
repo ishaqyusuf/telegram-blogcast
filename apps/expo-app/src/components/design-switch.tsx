@@ -1,6 +1,6 @@
 import { Pressable } from "@/components/ui/pressable";
 import { cn } from "@/lib/utils";
-import { getColorFromName } from "@gnd/utils/colors";
+import { getColorFromName } from "@acme/utils/colors";
 import { useState } from "react";
 import { View } from "react-native";
 

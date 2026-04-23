@@ -39,6 +39,12 @@ export default function BookDetailScreen() {
   const { data: book, isLoading } = useQuery(
     _trpc.book.getBook.queryOptions({ id: bookIdNum })
   );
+  const { data: pageImportHistory } = useQuery(
+    _trpc.book.getBookPageImportHistory.queryOptions({
+      bookId: bookIdNum,
+      limit: 8,
+    })
+  );
 
   // Offline features
   const {
@@ -119,8 +125,8 @@ export default function BookDetailScreen() {
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, backgroundColor: "#121212", alignItems: "center", justifyContent: "center" }}>
-        <ActivityIndicator color="#1DB954" />
+      <View className="flex-1 items-center justify-center bg-background">
+        <ActivityIndicator color="rgb(29, 185, 84)" />
       </View>
     );
   }
@@ -138,99 +144,63 @@ export default function BookDetailScreen() {
   const bookmarks = getBookmarks(bookIdNum);
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#121212" }}>
+    <View className="flex-1 bg-background">
       <SafeArea>
-        {/* Header */}
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 12,
-            paddingHorizontal: 16,
-            paddingVertical: 12,
-          }}
-        >
+        <View className="flex-row items-center gap-3 px-4 py-3">
           <Pressable
             onPress={() => router.back()}
-            style={{
-              width: 36, height: 36, borderRadius: 18,
-              backgroundColor: "#282828", alignItems: "center", justifyContent: "center",
-            }}
+            className="size-9 items-center justify-center rounded-full bg-card"
           >
             <Icon name="ChevronLeft" size={22} className="text-foreground" />
           </Pressable>
 
           <Text
-            style={{ fontSize: 17, fontWeight: "700", color: "#fff", flex: 1, textAlign: "right", writingDirection: "rtl" }}
+            className="flex-1 text-right text-[17px] font-bold text-foreground"
+            style={{ writingDirection: "rtl" }}
             numberOfLines={1}
           >
             {book.nameAr ?? book.nameEn}
           </Text>
 
-          {/* Bookmarks toggle */}
           {bookmarks.length > 0 && (
             <Pressable
               onPress={() => setShowBookmarks(!showBookmarks)}
-              style={{
-                width: 36, height: 36, borderRadius: 18,
-                backgroundColor: showBookmarks ? "rgba(29,185,84,0.15)" : "#282828",
-                alignItems: "center", justifyContent: "center",
-              }}
+              className={showBookmarks ? "size-9 items-center justify-center rounded-full bg-primary/15" : "size-9 items-center justify-center rounded-full bg-card"}
             >
               <Icon name="Bookmark" size={18} className={showBookmarks ? "text-primary" : "text-foreground"} />
             </Pressable>
           )}
 
-          {/* Search button */}
           <Pressable
             onPress={() => router.push(`/books/${bookId}/search` as any)}
-            style={{
-              width: 36, height: 36, borderRadius: 18,
-              backgroundColor: "#282828", alignItems: "center", justifyContent: "center",
-            }}
+            className="size-9 items-center justify-center rounded-full bg-card"
           >
             <Icon name="Search" size={18} className="text-foreground" />
           </Pressable>
         </View>
 
-        {/* Update available banner */}
         {hasUpdate && (
           <Pressable
             onPress={download}
-            style={{
-              marginHorizontal: 16, marginBottom: 8,
-              backgroundColor: "rgba(29,185,84,0.12)",
-              borderRadius: 10, borderWidth: 1, borderColor: "rgba(29,185,84,0.3)",
-              paddingHorizontal: 14, paddingVertical: 10,
-              flexDirection: "row-reverse", alignItems: "center", gap: 8,
-            }}
+            className="mx-4 mb-2 flex-row-reverse items-center gap-2 rounded-xl border border-primary/30 bg-primary/12 px-3.5 py-2.5"
           >
             <Icon name="RefreshCw" size={15} className="text-primary" />
-            <Text style={{ flex: 1, fontSize: 13, color: "#1DB954", writingDirection: "rtl", textAlign: "right" }}>
+            <Text className="flex-1 text-right text-[13px] text-primary" style={{ writingDirection: "rtl" }}>
               محتوى جديد متاح — اضغط للتحديث
             </Text>
           </Pressable>
         )}
 
-        {/* Offline badge */}
         {!isOnline && (
-          <View
-            style={{
-              marginHorizontal: 16, marginBottom: 8,
-              backgroundColor: "#282828", borderRadius: 8,
-              paddingHorizontal: 12, paddingVertical: 6,
-              flexDirection: "row-reverse", alignItems: "center", gap: 6,
-            }}
-          >
+          <View className="mx-4 mb-2 flex-row-reverse items-center gap-1.5 rounded-lg bg-card px-3 py-1.5">
             <Icon name="WifiOff" size={13} className="text-muted-foreground" />
-            <Text style={{ fontSize: 12, color: "#6b7280" }}>
+            <Text className="text-xs text-muted-foreground">
               {isDownloaded ? "وضع بلا إنترنت — يتم القراءة من التخزين المحلي" : "لا يوجد اتصال بالإنترنت"}
             </Text>
           </View>
         )}
 
         <ScrollView contentContainerStyle={{ paddingBottom: 120 }}>
-          {/* Hero */}
           <View style={{ flexDirection: "row", gap: 14, paddingHorizontal: 16, marginBottom: 20 }}>
             <View
               style={{
@@ -249,31 +219,30 @@ export default function BookDetailScreen() {
             </View>
 
             <View style={{ flex: 1, gap: 6, justifyContent: "center" }}>
-              <Text style={{ fontSize: 18, fontWeight: "800", color: "#fff", writingDirection: "rtl", textAlign: "right" }}>
+              <Text className="text-right text-lg font-extrabold text-foreground" style={{ writingDirection: "rtl" }}>
                 {book.nameAr ?? book.nameEn}
               </Text>
               {book.nameEn && (
-                <Text style={{ fontSize: 13, color: "#b3b3b3" }}>{book.nameEn}</Text>
+                <Text className="text-[13px] text-muted-foreground">{book.nameEn}</Text>
               )}
               {book.authors.length > 0 && (
-                <Text style={{ fontSize: 14, color: "#1DB954", writingDirection: "rtl", textAlign: "right" }}>
+                <Text className="text-right text-sm text-primary" style={{ writingDirection: "rtl" }}>
                   {book.authors.map((a) => a.nameAr ?? a.name).join("، ")}
                 </Text>
               )}
               {book.shelf && (
-                <View style={{ alignSelf: "flex-end", backgroundColor: "#282828", borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 }}>
-                  <Text style={{ fontSize: 12, color: "#b3b3b3", writingDirection: "rtl" }}>
+                <View className="self-end rounded-md bg-card px-2 py-0.5">
+                  <Text className="text-xs text-muted-foreground" style={{ writingDirection: "rtl" }}>
                     {book.shelf.nameAr ?? book.shelf.name}
                   </Text>
                 </View>
               )}
               {book.category && (
-                <Text style={{ fontSize: 12, color: "#b3b3b3", writingDirection: "rtl", textAlign: "right" }}>
+                <Text className="text-right text-xs text-muted-foreground" style={{ writingDirection: "rtl" }}>
                   {book.category}
                 </Text>
               )}
 
-              {/* Offline / download row */}
               <View style={{ flexDirection: "row-reverse", gap: 6, marginTop: 4 }}>
                 {isDownloaded ? (
                   <Pressable
@@ -287,41 +256,32 @@ export default function BookDetailScreen() {
                         ]
                       )
                     }
-                    style={{
-                      flexDirection: "row-reverse", alignItems: "center", gap: 4,
-                      backgroundColor: "rgba(29,185,84,0.12)",
-                      borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5,
-                    }}
+                    className="flex-row-reverse items-center gap-1 rounded-lg bg-primary/12 px-2.5 py-1.5"
                   >
                     <Icon name="HardDrive" size={13} className="text-primary" />
-                    <Text style={{ fontSize: 12, color: "#1DB954" }}>محفوظ</Text>
+                    <Text className="text-xs text-primary">محفوظ</Text>
                   </Pressable>
                 ) : (
                   <Pressable
                     onPress={download}
                     disabled={isDownloading || !isOnline}
-                    style={{
-                      flexDirection: "row-reverse", alignItems: "center", gap: 4,
-                      backgroundColor: isDownloading ? "rgba(255,255,255,0.06)" : "#282828",
-                      borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5,
-                      opacity: !isOnline ? 0.5 : 1,
-                    }}
+                    className="flex-row-reverse items-center gap-1 rounded-lg bg-card px-2.5 py-1.5"
+                    style={{ opacity: !isOnline ? 0.5 : 1 }}
                   >
                     {isDownloading ? (
                       <ActivityIndicator size="small" color="#1DB954" />
                     ) : (
                       <Icon name="Download" size={13} className="text-muted-foreground" />
                     )}
-                    <Text style={{ fontSize: 12, color: "#b3b3b3" }}>
+                    <Text className="text-xs text-muted-foreground">
                       {isDownloading ? `${Math.round(progress * 100)}%` : "تحميل للقراءة دون اتصال"}
                     </Text>
                   </Pressable>
                 )}
               </View>
 
-              {/* Download progress bar */}
               {isDownloading && (
-                <View style={{ height: 3, backgroundColor: "#282828", borderRadius: 2, overflow: "hidden", marginTop: 4 }}>
+                <View className="mt-1 h-[3px] overflow-hidden rounded-full bg-card">
                   <View
                     style={{
                       height: "100%",
@@ -335,31 +295,21 @@ export default function BookDetailScreen() {
             </View>
           </View>
 
-          {/* ── Continue Reading banner ──────────────────────────────────────── */}
           {continuePageId && (
             <Pressable
               onPress={() => router.push(`/books/${bookId}/reader/${continuePageId}` as any)}
-              style={{
-                marginHorizontal: 16, marginBottom: 12,
-                backgroundColor: "rgba(29,185,84,0.1)",
-                borderRadius: 12, borderWidth: 1, borderColor: "rgba(29,185,84,0.25)",
-                paddingHorizontal: 16, paddingVertical: 12,
-                flexDirection: "row-reverse", alignItems: "center", gap: 10,
-              }}
+              className="mx-4 mb-3 flex-row-reverse items-center gap-2.5 rounded-xl border border-primary/25 bg-primary/10 px-4 py-3"
             >
               <View
-                style={{
-                  width: 36, height: 36, borderRadius: 18,
-                  backgroundColor: "#1DB954", alignItems: "center", justifyContent: "center",
-                }}
+                className="size-9 items-center justify-center rounded-full bg-primary"
               >
                 <Icon name="BookOpen" size={18} className="text-background" />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 13, fontWeight: "700", color: "#1DB954", writingDirection: "rtl", textAlign: "right" }}>
+                <Text className="text-right text-[13px] font-bold text-primary" style={{ writingDirection: "rtl" }}>
                   متابعة القراءة
                 </Text>
-                <Text style={{ fontSize: 11, color: "#6b7280", writingDirection: "rtl", textAlign: "right" }}>
+                <Text className="text-right text-[11px] text-muted-foreground" style={{ writingDirection: "rtl" }}>
                   اضغط للعودة إلى آخر صفحة
                 </Text>
               </View>
@@ -367,20 +317,15 @@ export default function BookDetailScreen() {
             </Pressable>
           )}
 
-          {/* ── Bookmarks list ───────────────────────────────────────────────── */}
           {showBookmarks && bookmarks.length > 0 && (
             <View style={{ paddingHorizontal: 16, marginBottom: 16 }}>
-              <Text style={{ fontSize: 14, fontWeight: "700", color: "#fff", textAlign: "right", writingDirection: "rtl", marginBottom: 8 }}>
+              <Text className="mb-2 text-right text-sm font-bold text-foreground" style={{ writingDirection: "rtl" }}>
                 العلامات المرجعية ({bookmarks.length})
               </Text>
               {bookmarks.map((bm) => (
                 <View
                   key={bm.pageId}
-                  style={{
-                    flexDirection: "row-reverse", alignItems: "center", gap: 10,
-                    backgroundColor: "#1E1E1E", borderRadius: 10,
-                    paddingHorizontal: 12, paddingVertical: 10, marginBottom: 6,
-                  }}
+                  className="mb-1.5 flex-row-reverse items-center gap-2.5 rounded-xl bg-card px-3 py-2.5"
                 >
                   <Icon name="Bookmark" size={15} className="text-primary" />
                   <Pressable
@@ -388,13 +333,14 @@ export default function BookDetailScreen() {
                     onPress={() => router.push(`/books/${bookId}/reader/${bm.pageId}` as any)}
                   >
                     <Text
-                      style={{ fontSize: 13, color: "#fff", writingDirection: "rtl", textAlign: "right" }}
+                      className="text-right text-[13px] text-foreground"
+                      style={{ writingDirection: "rtl" }}
                       numberOfLines={1}
                     >
                       {bm.chapterTitle ?? `صفحة ${bm.pageNo ?? bm.pageId}`}
                     </Text>
                     {bm.pageNo && (
-                      <Text style={{ fontSize: 11, color: "#6b7280" }}>ص {bm.pageNo}</Text>
+                      <Text className="text-[11px] text-muted-foreground">ص {bm.pageNo}</Text>
                     )}
                   </Pressable>
                   <Pressable onPress={() => removeBookmark(bookIdNum, bm.pageId)} hitSlop={10}>
@@ -405,31 +351,24 @@ export default function BookDetailScreen() {
             </View>
           )}
 
-          {/* Blog description */}
           {book.blog.content && (
             <View style={{ paddingHorizontal: 16, marginBottom: 20 }}>
-              <Text style={{ fontSize: 14, color: "#b3b3b3", lineHeight: 22, writingDirection: "rtl", textAlign: "right" }}>
+              <Text className="text-right text-sm leading-[22px] text-muted-foreground" style={{ writingDirection: "rtl" }}>
                 {book.blog.content}
               </Text>
             </View>
           )}
 
-          {/* ── Fetch Page Section ───────────────────────────────────────────── */}
           <View style={{ paddingHorizontal: 16, marginBottom: 20, gap: 8 }}>
             {showFetchInput ? (
               <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
-                <View
-                  style={{
-                    flexDirection: "row", gap: 8, backgroundColor: "#282828",
-                    borderRadius: 10, padding: 10, alignItems: "center",
-                  }}
-                >
+                <View className="flex-row items-center gap-2 rounded-xl bg-card p-2.5">
                   <TextInput
                     value={fetchUrl}
                     onChangeText={setFetchUrl}
                     placeholder="رابط صفحة الشاملة..."
                     placeholderTextColor="#666"
-                    style={{ flex: 1, fontSize: 13, color: "#fff", textAlign: "right" }}
+                    className="flex-1 text-right text-[13px] text-foreground"
                     autoFocus
                     returnKeyType="done"
                   />
@@ -438,12 +377,12 @@ export default function BookDetailScreen() {
                       if (!fetchUrl.trim()) return;
                       fetchPage({ bookId: bookIdNum, shamelaUrl: fetchUrl.trim() });
                     }}
-                    style={{ backgroundColor: "#1DB954", borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8 }}
+                    className="rounded-lg bg-primary px-3.5 py-2"
                   >
                     {isFetching ? (
                       <ActivityIndicator size="small" color="#000" />
                     ) : (
-                      <Text style={{ fontWeight: "700", color: "#000", fontSize: 13 }}>جلب</Text>
+                      <Text className="text-[13px] font-bold text-primary-foreground">جلب</Text>
                     )}
                   </Pressable>
                   <Pressable onPress={() => setShowFetchInput(false)}>
@@ -456,13 +395,10 @@ export default function BookDetailScreen() {
                 <View style={{ flexDirection: "row", gap: 8 }}>
                   <Pressable
                     onPress={() => setShowFetchInput(true)}
-                    style={{
-                      flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center",
-                      gap: 6, backgroundColor: "#1DB954", borderRadius: 10, paddingVertical: 10,
-                    }}
+                    className="flex-1 flex-row items-center justify-center gap-1.5 rounded-xl bg-primary py-2.5"
                   >
                     <Icon name="Download" size={16} className="text-background" />
-                    <Text style={{ fontWeight: "700", color: "#000", fontSize: 14 }}>جلب صفحة</Text>
+                    <Text className="text-sm font-bold text-primary-foreground">استيراد/إعادة صفحة</Text>
                   </Pressable>
 
                   {lastFetchedPage && (
@@ -470,24 +406,20 @@ export default function BookDetailScreen() {
                       onPress={() =>
                         fetchNext({ bookId: bookIdNum, currentShamelaPageNo: lastFetchedPage.shamelaPageNo })
                       }
-                      style={{
-                        flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center",
-                        gap: 6, backgroundColor: "#282828", borderRadius: 10, paddingVertical: 10,
-                      }}
+                      className="flex-1 flex-row items-center justify-center gap-1.5 rounded-xl bg-card py-2.5"
                     >
                       {isFetchingNext ? (
                         <ActivityIndicator size="small" color="#1DB954" />
                       ) : (
                         <>
                           <Icon name="ChevronRight" size={16} className="text-primary" />
-                          <Text style={{ fontWeight: "600", color: "#1DB954", fontSize: 14 }}>التالية</Text>
+                          <Text className="text-sm font-semibold text-primary">التالية</Text>
                         </>
                       )}
                     </Pressable>
                   )}
                 </View>
 
-                {/* ── Auto-fetch All ─────────────────────────────────────── */}
                 {totalCount > fetchedCount && (
                   <Pressable
                     onPress={() => {
@@ -498,24 +430,21 @@ export default function BookDetailScreen() {
                         startAutoFetch();
                       }
                     }}
-                    style={{
-                      flexDirection: "row", alignItems: "center", justifyContent: "center",
-                      gap: 8, backgroundColor: "#282828", borderRadius: 10, paddingVertical: 10,
-                      borderWidth: isAutoFetching ? 1 : 0, borderColor: "#1DB954",
-                    }}
+                    className="flex-row items-center justify-center gap-2 rounded-xl bg-card py-2.5"
+                    style={{ borderWidth: isAutoFetching ? 1 : 0, borderColor: "rgb(29, 185, 84)" }}
                   >
                     {isAutoFetching ? (
                       <>
                         <ActivityIndicator size="small" color="#1DB954" />
-                        <Text style={{ color: "#1DB954", fontWeight: "600", fontSize: 13 }}>
+                        <Text className="text-[13px] font-semibold text-primary">
                           جلب الكل... {autoFetchProgress.done}/{autoFetchProgress.total}
                         </Text>
-                        <Text style={{ color: "#6b7280", fontSize: 12 }}>اضغط للإيقاف</Text>
+                        <Text className="text-xs text-muted-foreground">اضغط للإيقاف</Text>
                       </>
                     ) : (
                       <>
                         <Icon name="RefreshCw" size={15} className="text-muted-foreground" />
-                        <Text style={{ color: "#b3b3b3", fontWeight: "600", fontSize: 13 }}>
+                        <Text className="text-[13px] font-semibold text-muted-foreground">
                           جلب الكل ({totalCount - fetchedCount} متبقي)
                         </Text>
                       </>
@@ -526,7 +455,93 @@ export default function BookDetailScreen() {
             )}
           </View>
 
-          {/* ── Chapter Tree ─────────────────────────────────────────────────── */}
+          {pageImportHistory?.length ? (
+            <View style={{ paddingHorizontal: 16, marginBottom: 20, gap: 8 }}>
+              <Text
+                className="text-right text-sm font-bold text-foreground"
+                style={{ writingDirection: "rtl" }}
+              >
+                سجل استيراد الصفحات
+              </Text>
+              {pageImportHistory.map((entry) => (
+                <View
+                  key={entry.id}
+                  className="rounded-xl bg-card px-3 py-3"
+                  style={{ gap: 6 }}
+                >
+                  <View className="flex-row items-center justify-between">
+                    <View
+                      className={
+                        entry.status === "success"
+                          ? "rounded-full bg-primary/15 px-2 py-1"
+                          : entry.status === "failed"
+                            ? "rounded-full bg-destructive/10 px-2 py-1"
+                            : "rounded-full bg-secondary px-2 py-1"
+                      }
+                    >
+                      <Text
+                        className={
+                          entry.status === "success"
+                            ? "text-[11px] font-semibold text-primary"
+                            : entry.status === "failed"
+                              ? "text-[11px] font-semibold text-destructive"
+                              : "text-[11px] font-semibold text-muted-foreground"
+                        }
+                      >
+                        {entry.status === "success"
+                          ? "ناجح"
+                          : entry.status === "failed"
+                            ? "فشل"
+                            : "قيد التنفيذ"}
+                      </Text>
+                    </View>
+                    <Text className="text-[11px] text-muted-foreground">
+                      #{entry.id}
+                    </Text>
+                  </View>
+
+                  <Text
+                    className="text-right text-[13px] font-semibold text-foreground"
+                    style={{ writingDirection: "rtl" }}
+                  >
+                    {entry.chapterTitle ?? entry.topicTitle ?? `صفحة ${entry.shamelaPageNo ?? "-"}`}
+                  </Text>
+                  <Text
+                    className="text-right text-[12px] text-muted-foreground"
+                    style={{ writingDirection: "rtl" }}
+                  >
+                    {entry.importMethod === "manual_paste"
+                      ? "إدخال يدوي"
+                      : "استيراد بالرابط"}
+                    {entry.paragraphCount ? ` • ${entry.paragraphCount} فقرات` : ""}
+                  </Text>
+                  {entry.errorMessage ? (
+                    <Text
+                      className="text-right text-[12px] text-destructive"
+                      style={{ writingDirection: "rtl" }}
+                    >
+                      {entry.errorMessage}
+                    </Text>
+                  ) : null}
+
+                  {entry.sourceUrl ? (
+                    <Pressable
+                      onPress={() => {
+                        setFetchUrl(entry.sourceUrl ?? "");
+                        setShowFetchInput(true);
+                      }}
+                      className="items-center rounded-lg bg-background py-2"
+                    >
+                      <Text className="text-[12px] font-semibold text-primary">
+                        إعادة استخدام الرابط
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              ))}
+            </View>
+          ) : null}
+
           {totalCount > 0 && (
             <View style={{ paddingHorizontal: 14 }}>
               <View
@@ -535,11 +550,11 @@ export default function BookDetailScreen() {
                   justifyContent: "space-between", marginBottom: 12,
                 }}
               >
-                <Text style={{ fontSize: 15, fontWeight: "700", color: "#fff", writingDirection: "rtl" }}>
+                <Text className="text-[15px] font-bold text-foreground" style={{ writingDirection: "rtl" }}>
                   الفهرس ({totalCount})
                 </Text>
                 {fetchedCount > 0 && (
-                  <Text style={{ fontSize: 12, color: "#6b7280" }}>
+                  <Text className="text-xs text-muted-foreground">
                     {fetchedCount} مجلوب · {totalCount - fetchedCount} متبقي
                   </Text>
                 )}

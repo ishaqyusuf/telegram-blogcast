@@ -2,8 +2,8 @@ import { z } from "zod";
 import {
   createSalesDispatchItemsSchema,
   createSalesDispatchSchema,
-} from "@gnd/utils/sales";
-import { salesType } from "@gnd/utils/constants";
+} from "@acme/utils/sales";
+import { salesType } from "@acme/utils/constants";
 import { salesCheckoutSuccessSchema } from "@notifications/schemas";
 import { ChannelName } from "@notifications/channels";
 // import { salesQueryParamsSchema } from "@api/schemas/sales";
@@ -22,7 +22,7 @@ export const taskNames = [
   "send-storefront-order-confirmation-email",
   "send-storefront-magic-login-code-email",
   "send-storefront-signup-validate-email",
-  "send-gnd-sales-email",
+  "send-sales-invoice-email",
   "send-storefront-abandoned-cart-email",
   "send-storefront-customer-anniversary-email",
   "send-storefront-delivery-confirmation-email",
@@ -165,7 +165,7 @@ export type SendStorefrontSignupValidateEmailPayload = z.infer<
   typeof sendStorefrontSignupValidateEmailSchema
 >;
 
-export const sendGndSalesEmailSchema = z.object({
+export const sendSalesInvoiceEmailSchema = z.object({
   email: z.string().email(),
   isQuote: z.boolean().optional(),
   customerName: z.string(),
@@ -181,7 +181,9 @@ export const sendGndSalesEmailSchema = z.object({
     }),
   ),
 });
-export type SendGndSalesEmailPayload = z.infer<typeof sendGndSalesEmailSchema>;
+export type SendSalesInvoiceEmailPayload = z.infer<
+  typeof sendSalesInvoiceEmailSchema
+>;
 
 export const sendStorefrontAbandonedCartEmailSchema = z.object({
   email: z.string().email(),

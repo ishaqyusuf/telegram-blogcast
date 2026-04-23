@@ -6,7 +6,7 @@ export const auth = betterAuth({
     enabled: true, // Enable authentication using email and password.
   },
   trustedOrigins: [
-    "gnd://",
+    "alghurobaa://",
     ...(process.env.NODE_ENV === "development"
       ? [
           "exp://*/*", // Trust all Expo development URLs

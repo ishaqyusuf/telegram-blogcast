@@ -1,5 +1,6 @@
-import { createTRPCRouter, publicProcedure } from "../init";
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { createTRPCRouter, publicProcedure } from "../init";
 
 const SHAMELA_EXTRACT_PROMPT = `You are a structured data extractor for Islamic books from Shamela (the largest Islamic digital library).
 
@@ -121,6 +122,158 @@ interface AiResult {
   model: string;
 }
 
+type ParsedBookMeta = {
+  nameAr: string;
+  nameEn?: string | null;
+  authorName?: string | null;
+  authorNameEn?: string | null;
+  authorUrl?: string | null;
+  category?: string | null;
+  categoryUrl?: string | null;
+  shelfName?: string | null;
+  coverColor?: string | null;
+  description?: string | null;
+};
+
+type ParsedPageData = {
+  shamelaPageNo: number;
+  printedPageNo?: number | null;
+  chapterTitle?: string | null;
+  chapterUrl?: string | null;
+  topicTitle?: string | null;
+  topicUrl?: string | null;
+  paragraphs?: {
+    pid?: number;
+    text?: string;
+    footnoteIds?: string | null;
+  }[];
+  footnotes?: {
+    marker?: string;
+    type?: string | null;
+    content?: string;
+    linkedParagraphs?: string | null;
+  }[];
+};
+
+class AiProviderError extends Error {
+  provider: AiProvider;
+  status: number;
+  retryAfterSeconds?: number;
+  bodyPreview?: string;
+
+  constructor(params: {
+    provider: AiProvider;
+    status: number;
+    message: string;
+    retryAfterSeconds?: number;
+    bodyPreview?: string;
+  }) {
+    super(params.message);
+    this.name = "AiProviderError";
+    this.provider = params.provider;
+    this.status = params.status;
+    this.retryAfterSeconds = params.retryAfterSeconds;
+    this.bodyPreview = params.bodyPreview;
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function parseRetryAfterSeconds(value: string | null): number | undefined {
+  if (!value) return undefined;
+
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds;
+
+  const dateMs = new Date(value).getTime();
+  if (Number.isNaN(dateMs)) return undefined;
+
+  return Math.max(0, Math.ceil((dateMs - Date.now()) / 1000));
+}
+
+function buildAiError(
+  provider: AiProvider,
+  status: number,
+  bodyText: string,
+  retryAfterSeconds?: number,
+): AiProviderError {
+  const bodyPreview = bodyText.trim().replace(/\s+/g, " ").slice(0, 240);
+  const messageParts = [`${provider} API error: ${status}`];
+
+  if (retryAfterSeconds && retryAfterSeconds > 0) {
+    messageParts.push(`retry after ${retryAfterSeconds}s`);
+  }
+
+  if (bodyPreview) {
+    messageParts.push(bodyPreview);
+  }
+
+  return new AiProviderError({
+    provider,
+    status,
+    retryAfterSeconds,
+    bodyPreview,
+    message: messageParts.join(" - "),
+  });
+}
+
+function isRetryableAiStatus(status: number): boolean {
+  return status === 429 || status >= 500;
+}
+
+function getAiRetryDelayMs(error: AiProviderError, attempt: number): number {
+  if (error.retryAfterSeconds && error.retryAfterSeconds > 0) {
+    return error.retryAfterSeconds * 1000;
+  }
+
+  return Math.min(1000 * 2 ** (attempt - 1), 8000);
+}
+
+async function withAiRetries<T>(operation: () => Promise<T>): Promise<T> {
+  const maxAttempts = 3;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (!(error instanceof AiProviderError)) throw error;
+
+      const shouldRetry =
+        attempt < maxAttempts && isRetryableAiStatus(error.status);
+
+      if (!shouldRetry) throw error;
+
+      await sleep(getAiRetryDelayMs(error, attempt));
+    }
+  }
+
+  throw new Error("AI request exhausted retries without a final error");
+}
+
+function rethrowAsTrpcError(error: unknown): never {
+  if (error instanceof TRPCError) {
+    throw error;
+  }
+
+  if (error instanceof AiProviderError) {
+    if (error.status === 429) {
+      throw new TRPCError({
+        code: "TOO_MANY_REQUESTS",
+        message: `${error.provider} is rate-limited right now. Please try again shortly or switch AI providers.`,
+      });
+    }
+
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: error.message,
+    });
+  }
+
+  throw error;
+}
+
 /**
  * Call an AI provider with either a raw URL (Anthropic fetches it natively)
  * or pre-fetched HTML for OpenAI/Gemini.
@@ -131,99 +284,133 @@ async function callAI(
   maxTokens: number,
   sourceUrl?: string, // if provided, Anthropic uses URL natively; others fetch HTML
 ): Promise<AiResult> {
-  if (provider === "anthropic") {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) throw new Error("ANTHROPIC_API_KEY not configured");
+  try {
+    return await withAiRetries(async () => {
+      if (provider === "anthropic") {
+        const apiKey = process.env.ANTHROPIC_API_KEY;
+        if (!apiKey) throw new Error("ANTHROPIC_API_KEY not configured");
 
-    const userContent: any[] = sourceUrl
-      ? [
-          // Let Claude fetch the URL directly — avoids server-side Shamela blocks
-          { type: "document", source: { type: "url", url: sourceUrl } },
-          { type: "text", text: prompt },
-        ]
-      : [{ type: "text", text: prompt }];
+        const userContent: any[] = sourceUrl
+          ? [
+              // Let Claude fetch the URL directly — avoids server-side Shamela blocks
+              { type: "document", source: { type: "url", url: sourceUrl } },
+              { type: "text", text: prompt },
+            ]
+          : [{ type: "text", text: prompt }];
 
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-        "anthropic-beta": "url-context-1",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: maxTokens,
-        messages: [{ role: "user", content: userContent }],
-      }),
+        const res = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "x-api-key": apiKey,
+            "anthropic-version": "2023-06-01",
+            "anthropic-beta": "url-context-1",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "claude-sonnet-4-6",
+            max_tokens: maxTokens,
+            messages: [{ role: "user", content: userContent }],
+          }),
+        });
+        if (!res.ok) {
+          throw buildAiError(
+            provider,
+            res.status,
+            await res.text(),
+            parseRetryAfterSeconds(res.headers.get("retry-after")),
+          );
+        }
+
+        const data: any = await res.json();
+        return {
+          text: data.content?.[0]?.text ?? "",
+          inputTokens: data.usage?.input_tokens ?? 0,
+          outputTokens: data.usage?.output_tokens ?? 0,
+          model: "claude-sonnet-4-6",
+        };
+      }
+
+      // For OpenAI / Gemini: embed the URL in the prompt and let the AI handle it
+      const fullPrompt = sourceUrl
+        ? `${prompt}\n\n<SOURCE_URL>${sourceUrl}</SOURCE_URL>`
+        : prompt;
+
+      if (provider === "openai") {
+        const apiKey = process.env.OPENAI_API_KEY;
+        if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
+        const res = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "gpt-4o",
+            max_tokens: maxTokens,
+            messages: [{ role: "user", content: fullPrompt }],
+          }),
+        });
+        if (!res.ok) {
+          throw buildAiError(
+            provider,
+            res.status,
+            await res.text(),
+            parseRetryAfterSeconds(res.headers.get("retry-after")),
+          );
+        }
+
+        const data: any = await res.json();
+        return {
+          text: data.choices?.[0]?.message?.content ?? "",
+          inputTokens: data.usage?.prompt_tokens ?? 0,
+          outputTokens: data.usage?.completion_tokens ?? 0,
+          model: "gpt-4o",
+        };
+      }
+
+      if (provider === "gemini") {
+        const apiKey = process.env.GEMINI_API_KEY;
+        if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: fullPrompt }] }],
+              generationConfig: { maxOutputTokens: maxTokens },
+            }),
+          },
+        );
+        if (!res.ok) {
+          console.log("Gemini API error details:", {
+            status: res.status,
+            headers: Object.fromEntries(res.headers.entries()),
+            texts: await res.text(),
+          });
+          throw buildAiError(
+            provider,
+            res.status,
+            await res.text(),
+            parseRetryAfterSeconds(res.headers.get("retry-after")),
+          );
+        }
+
+        const data: any = await res.json();
+        const meta = data.usageMetadata ?? {};
+        return {
+          text: data.candidates?.[0]?.content?.parts?.[0]?.text ?? "",
+          inputTokens: meta.promptTokenCount ?? 0,
+          outputTokens: meta.candidatesTokenCount ?? 0,
+          model: "gemini-2.0-flash",
+        };
+      }
+
+      throw new Error(`Unknown AI provider: ${provider}`);
     });
-    if (!res.ok)
-      throw new Error(`Anthropic API error: ${res.status} ${await res.text()}`);
-    const data = await res.json();
-    return {
-      text: data.content?.[0]?.text ?? "",
-      inputTokens: data.usage?.input_tokens ?? 0,
-      outputTokens: data.usage?.output_tokens ?? 0,
-      model: "claude-sonnet-4-6",
-    };
+  } catch (error) {
+    rethrowAsTrpcError(error);
   }
-
-  // For OpenAI / Gemini: embed the URL in the prompt and let the AI handle it
-  const fullPrompt = sourceUrl
-    ? `${prompt}\n\n<SOURCE_URL>${sourceUrl}</SOURCE_URL>`
-    : prompt;
-
-  if (provider === "openai") {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "gpt-4o",
-        max_tokens: maxTokens,
-        messages: [{ role: "user", content: fullPrompt }],
-      }),
-    });
-    if (!res.ok) throw new Error(`OpenAI API error: ${res.status}`);
-    const data = await res.json();
-    return {
-      text: data.choices?.[0]?.message?.content ?? "",
-      inputTokens: data.usage?.prompt_tokens ?? 0,
-      outputTokens: data.usage?.completion_tokens ?? 0,
-      model: "gpt-4o",
-    };
-  }
-
-  if (provider === "gemini") {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) throw new Error("GEMINI_API_KEY not configured");
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: fullPrompt }] }],
-          generationConfig: { maxOutputTokens: maxTokens },
-        }),
-      },
-    );
-    if (!res.ok) throw new Error(`Gemini API error: ${res.status}`);
-    const data = await res.json();
-    const meta = data.usageMetadata ?? {};
-    return {
-      text: data.candidates?.[0]?.content?.parts?.[0]?.text ?? "",
-      inputTokens: meta.promptTokenCount ?? 0,
-      outputTokens: meta.candidatesTokenCount ?? 0,
-      model: "gemini-2.0-flash",
-    };
-  }
-
-  throw new Error(`Unknown AI provider: ${provider}`);
 }
 
 async function recordTokenUsage(
@@ -308,6 +495,576 @@ async function syncToc(
   });
 
   return results.count;
+}
+
+function getDefaultBookUserId(): number {
+  return 1;
+}
+
+function safeString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+function normalizeSourceUrl(rawUrl: string): string {
+  const url = new URL(rawUrl.trim());
+  url.search = "";
+  url.hash = "";
+  return `${url.origin}${url.pathname}`.replace(/\/+$/, "");
+}
+
+function getShamelaBookInfo(rawUrl: string): { normalizedUrl: string; shamelaId: number; bookIndexUrl: string } {
+  const normalizedUrl = normalizeSourceUrl(rawUrl);
+  const match = normalizedUrl.match(/\/book\/(\d+)/);
+  if (!match) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Invalid Shamela URL — expected a /book/... path",
+    });
+  }
+
+  const shamelaId = Number(match[1]);
+  const bookIndexUrl = `${new URL(normalizedUrl).origin}/book/${shamelaId}`;
+
+  return { normalizedUrl, shamelaId, bookIndexUrl };
+}
+
+function parseBookMeta(text: string): ParsedBookMeta {
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: `Failed to parse AI response: ${text.slice(0, 200)}`,
+    });
+  }
+}
+
+function sanitizePageData(parsed: ParsedPageData): ParsedPageData {
+  return {
+    shamelaPageNo: Number(parsed.shamelaPageNo),
+    printedPageNo:
+      typeof parsed.printedPageNo === "number" ? parsed.printedPageNo : null,
+    chapterTitle: safeString(parsed.chapterTitle),
+    chapterUrl: safeString(parsed.chapterUrl),
+    topicTitle: safeString(parsed.topicTitle),
+    topicUrl: safeString(parsed.topicUrl),
+    paragraphs: (parsed.paragraphs ?? [])
+      .map((paragraph, index) => ({
+        pid:
+          typeof paragraph?.pid === "number" && Number.isFinite(paragraph.pid)
+            ? paragraph.pid
+            : index + 1,
+        text: safeString(paragraph?.text) ?? "",
+        footnoteIds: safeString(paragraph?.footnoteIds),
+      }))
+      .filter((paragraph) => paragraph.text.length > 0),
+    footnotes: (parsed.footnotes ?? [])
+      .map((footnote) => ({
+        marker: safeString(footnote?.marker) ?? "",
+        type: safeString(footnote?.type),
+        content: safeString(footnote?.content) ?? "",
+        linkedParagraphs: safeString(footnote?.linkedParagraphs),
+      }))
+      .filter((footnote) => footnote.marker.length > 0 && footnote.content.length > 0),
+  };
+}
+
+function parsePageData(text: string): ParsedPageData {
+  try {
+    return sanitizePageData(JSON.parse(text));
+  } catch {
+    throw new TRPCError({
+      code: "INTERNAL_SERVER_ERROR",
+      message: `Failed to parse AI response: ${text.slice(0, 200)}`,
+    });
+  }
+}
+
+async function createBookImportHistory(
+  db: any,
+  input: { bookId?: number | null; sourceUrl: string; normalizedUrl?: string | null; provider?: string | null; importMode?: string },
+) {
+  return db.bookImportHistory.create({
+    data: {
+      bookId: input.bookId ?? null,
+      sourceUrl: input.sourceUrl,
+      normalizedUrl: input.normalizedUrl ?? null,
+      provider: input.provider ?? null,
+      importMode: input.importMode ?? "link",
+      status: "pending",
+      startedAt: new Date(),
+    },
+  });
+}
+
+async function completeBookImportHistory(
+  db: any,
+  historyId: number,
+  input: {
+    status: "success" | "failed";
+    bookId?: number | null;
+    createdBookId?: number | null;
+    chaptersImported?: number;
+    metadataJson?: any;
+    errorMessage?: string | null;
+  },
+) {
+  return db.bookImportHistory.update({
+    where: { id: historyId },
+    data: {
+      bookId: input.bookId ?? undefined,
+      createdBookId: input.createdBookId ?? undefined,
+      chaptersImported: input.chaptersImported ?? 0,
+      metadataJson: input.metadataJson ?? undefined,
+      errorMessage: input.errorMessage ?? null,
+      status: input.status,
+      finishedAt: new Date(),
+    },
+  });
+}
+
+async function createBookPageImportHistory(
+  db: any,
+  input: {
+    bookId: number;
+    pageId?: number | null;
+    sourceUrl?: string | null;
+    provider?: string | null;
+    importMethod: string;
+    rawInput?: string | null;
+  },
+) {
+  return db.bookPageImportHistory.create({
+    data: {
+      bookId: input.bookId,
+      pageId: input.pageId ?? null,
+      sourceUrl: input.sourceUrl ?? null,
+      provider: input.provider ?? null,
+      importMethod: input.importMethod,
+      rawInput: input.rawInput ?? null,
+      status: "pending",
+      startedAt: new Date(),
+    },
+  });
+}
+
+async function completeBookPageImportHistory(
+  db: any,
+  historyId: number,
+  input: {
+    status: "success" | "failed";
+    pageId?: number | null;
+    shamelaPageNo?: number | null;
+    printedPageNo?: number | null;
+    paragraphCount?: number;
+    footnoteCount?: number;
+    chapterTitle?: string | null;
+    topicTitle?: string | null;
+    diffSummaryJson?: any;
+    errorMessage?: string | null;
+  },
+) {
+  return db.bookPageImportHistory.update({
+    where: { id: historyId },
+    data: {
+      pageId: input.pageId ?? undefined,
+      shamelaPageNo: input.shamelaPageNo ?? undefined,
+      printedPageNo: input.printedPageNo ?? undefined,
+      paragraphCount: input.paragraphCount ?? 0,
+      footnoteCount: input.footnoteCount ?? 0,
+      chapterTitle: input.chapterTitle ?? undefined,
+      topicTitle: input.topicTitle ?? undefined,
+      diffSummaryJson: input.diffSummaryJson ?? undefined,
+      errorMessage: input.errorMessage ?? null,
+      status: input.status,
+      finishedAt: new Date(),
+    },
+  });
+}
+
+async function upsertShelfAndAuthor(
+  db: any,
+  meta: ParsedBookMeta,
+): Promise<{ shelfId?: number; authorId?: number }> {
+  let shelfId: number | undefined;
+  if (meta.shelfName) {
+    const shelf = await db.bookShelf.upsert({
+      where: { name: meta.shelfName } as any,
+      create: { name: meta.shelfName, nameAr: meta.shelfName },
+      update: {},
+    });
+    shelfId = shelf.id;
+  }
+
+  let authorId: number | undefined;
+  if (meta.authorName) {
+    const author = await db.bookAuthor.upsert({
+      where: { name: meta.authorName },
+      create: {
+        name: meta.authorName,
+        nameAr: meta.authorName,
+        url: meta.authorUrl ?? undefined,
+      },
+      update: { url: meta.authorUrl ?? undefined },
+    });
+    authorId = author.id;
+  }
+
+  return { shelfId, authorId };
+}
+
+async function rebindPageAnnotations(
+  db: any,
+  pageId: number,
+  previousParagraphs: { id: number; pid: number; text: string }[],
+  nextParagraphs: { id: number; pid: number; text: string }[],
+) {
+  const nextByPid = new Map(nextParagraphs.map((paragraph) => [paragraph.pid, paragraph]));
+  const nextByText = new Map(nextParagraphs.map((paragraph) => [paragraph.text.trim(), paragraph]));
+  const previousById = new Map(previousParagraphs.map((paragraph) => [paragraph.id, paragraph]));
+
+  const rebindParagraph = (paragraphId: number | null | undefined, paragraphPid: number | null | undefined, quoteText: string | null | undefined) => {
+    if (paragraphPid != null && nextByPid.has(paragraphPid)) {
+      return nextByPid.get(paragraphPid) ?? null;
+    }
+
+    if (paragraphId != null) {
+      const previous = previousById.get(paragraphId);
+      if (previous && nextByPid.has(previous.pid)) {
+        return nextByPid.get(previous.pid) ?? null;
+      }
+      if (previous && nextByText.has(previous.text.trim())) {
+        return nextByText.get(previous.text.trim()) ?? null;
+      }
+    }
+
+    if (quoteText && nextByText.has(quoteText.trim())) {
+      return nextByText.get(quoteText.trim()) ?? null;
+    }
+
+    return null;
+  };
+
+  const highlights = await db.bookPageHighlight.findMany({ where: { pageId } });
+  for (const highlight of highlights) {
+    const targetParagraph = rebindParagraph(
+      highlight.paragraphId,
+      highlight.paragraphPid,
+      highlight.quoteText,
+    );
+    await db.bookPageHighlight.update({
+      where: { id: highlight.id },
+      data: {
+        paragraphId: targetParagraph?.id ?? null,
+        paragraphPid: targetParagraph?.pid ?? highlight.paragraphPid ?? null,
+        quoteText: targetParagraph?.text ?? highlight.quoteText ?? null,
+        pageShamelaPageNo: highlight.pageShamelaPageNo ?? undefined,
+      },
+    });
+  }
+
+  const comments = await db.bookPageComment.findMany({
+    where: { pageId, deletedAt: null },
+  });
+  for (const comment of comments) {
+    const targetParagraph = rebindParagraph(
+      comment.paragraphId,
+      comment.paragraphPid,
+      comment.quoteText,
+    );
+    await db.bookPageComment.update({
+      where: { id: comment.id },
+      data: {
+        paragraphId: targetParagraph?.id ?? null,
+        paragraphPid: targetParagraph?.pid ?? comment.paragraphPid ?? null,
+        quoteText: targetParagraph?.text ?? comment.quoteText ?? null,
+        pageShamelaPageNo: comment.pageShamelaPageNo ?? undefined,
+      },
+    });
+  }
+}
+
+async function saveParsedPageData(
+  db: any,
+  input: {
+    bookId: number;
+    pageData: ParsedPageData;
+    sourceUrl?: string | null;
+    volumeId?: number | null;
+    importMethod: string;
+    provider?: string | null;
+    rawInput?: string | null;
+  },
+) {
+  const existingPage = await db.bookPage.findFirst({
+    where: {
+      bookId: input.bookId,
+      shamelaPageNo: input.pageData.shamelaPageNo,
+    },
+    include: {
+      paragraphs: {
+        select: { id: true, pid: true, text: true },
+        orderBy: { pid: "asc" },
+      },
+    },
+  });
+
+  const history = await createBookPageImportHistory(db, {
+    bookId: input.bookId,
+    pageId: existingPage?.id ?? null,
+    sourceUrl: input.sourceUrl ?? null,
+    provider: input.provider ?? null,
+    importMethod: input.importMethod,
+    rawInput: input.rawInput ?? null,
+  });
+
+  try {
+    const page = await db.bookPage.upsert({
+      where: {
+        bookId_shamelaPageNo: {
+          bookId: input.bookId,
+          shamelaPageNo: input.pageData.shamelaPageNo,
+        },
+      },
+      create: {
+        bookId: input.bookId,
+        volumeId: input.volumeId ?? null,
+        shamelaPageNo: input.pageData.shamelaPageNo,
+        shamelaUrl: input.sourceUrl ?? "",
+        printedPageNo: input.pageData.printedPageNo ?? null,
+        chapterTitle: input.pageData.chapterTitle ?? null,
+        chapterUrl: input.pageData.chapterUrl ?? null,
+        topicTitle: input.pageData.topicTitle ?? null,
+        topicUrl: input.pageData.topicUrl ?? null,
+        rawJson: input.pageData,
+        status: "fetched",
+      },
+      update: {
+        volumeId: input.volumeId ?? undefined,
+        shamelaUrl: input.sourceUrl ?? existingPage?.shamelaUrl ?? "",
+        printedPageNo: input.pageData.printedPageNo ?? null,
+        chapterTitle: input.pageData.chapterTitle ?? null,
+        chapterUrl: input.pageData.chapterUrl ?? null,
+        topicTitle: input.pageData.topicTitle ?? null,
+        topicUrl: input.pageData.topicUrl ?? null,
+        rawJson: input.pageData,
+        status: "fetched",
+        deletedAt: null,
+      },
+      include: {
+        paragraphs: {
+          select: { id: true, pid: true, text: true },
+          orderBy: { pid: "asc" },
+        },
+      },
+    });
+
+    const previousParagraphs = existingPage?.paragraphs ?? [];
+
+    await db.bookPageParagraph.deleteMany({ where: { pageId: page.id } });
+    if ((input.pageData.paragraphs ?? []).length > 0) {
+      await db.bookPageParagraph.createMany({
+        data: (input.pageData.paragraphs ?? []).map((paragraph) => ({
+          pageId: page.id,
+          pid: paragraph.pid!,
+          text: paragraph.text!,
+          footnoteIds: paragraph.footnoteIds ?? null,
+        })),
+      });
+    }
+
+    await db.bookPageFootnote.deleteMany({ where: { pageId: page.id } });
+    if ((input.pageData.footnotes ?? []).length > 0) {
+      await db.bookPageFootnote.createMany({
+        data: (input.pageData.footnotes ?? []).map((footnote) => ({
+          pageId: page.id,
+          marker: footnote.marker!,
+          type: footnote.type ?? null,
+          content: footnote.content!,
+          linkedParagraphs: footnote.linkedParagraphs ?? null,
+        })),
+      });
+    }
+
+    const nextParagraphs = await db.bookPageParagraph.findMany({
+      where: { pageId: page.id },
+      select: { id: true, pid: true, text: true },
+      orderBy: { pid: "asc" },
+    });
+
+    await rebindPageAnnotations(db, page.id, previousParagraphs, nextParagraphs);
+
+    await db.book.update({
+      where: { id: input.bookId },
+      data: {
+        contentHash: `${input.bookId}-${Date.now()}`,
+        pagesUpdatedAt: new Date(),
+      },
+    });
+
+    const diffSummaryJson = {
+      previousParagraphCount: previousParagraphs.length,
+      nextParagraphCount: nextParagraphs.length,
+      preservedPageId: existingPage?.id === page.id,
+      remappedByPidCount: nextParagraphs.filter((paragraph) =>
+        previousParagraphs.some((previous) => previous.pid === paragraph.pid),
+      ).length,
+    };
+
+    await completeBookPageImportHistory(db, history.id, {
+      status: "success",
+      pageId: page.id,
+      shamelaPageNo: page.shamelaPageNo,
+      printedPageNo: page.printedPageNo,
+      paragraphCount: nextParagraphs.length,
+      footnoteCount: (input.pageData.footnotes ?? []).length,
+      chapterTitle: page.chapterTitle,
+      topicTitle: page.topicTitle,
+      diffSummaryJson,
+    });
+
+    return { page, historyId: history.id, diffSummaryJson };
+  } catch (error) {
+    await completeBookPageImportHistory(db, history.id, {
+      status: "failed",
+      errorMessage: error instanceof Error ? error.message : "Page import failed",
+    });
+    throw error;
+  }
+}
+
+async function syncBookFromShamelaInternal(
+  db: any,
+  input: { shamelaUrl: string; aiProvider: AiProvider },
+) {
+  const { normalizedUrl, shamelaId, bookIndexUrl } = getShamelaBookInfo(
+    input.shamelaUrl,
+  );
+
+  const existing = await db.book.findFirst({
+    where: { shamelaId, deletedAt: null },
+    include: {
+      blog: { select: { id: true } },
+      authors: true,
+      shelf: true,
+    },
+  });
+
+  const history = await createBookImportHistory(db, {
+    bookId: existing?.id ?? null,
+    sourceUrl: input.shamelaUrl,
+    normalizedUrl,
+    provider: input.aiProvider,
+    importMode: existing ? "reimport" : "link",
+  });
+
+  try {
+    const metaResult = await callAI(
+      input.aiProvider,
+      SHAMELA_BOOK_META_PROMPT,
+      1024,
+      bookIndexUrl,
+    );
+
+    const meta = parseBookMeta(metaResult.text);
+    const { shelfId, authorId } = await upsertShelfAndAuthor(db, meta);
+
+    let book: any;
+    let created = false;
+
+    if (existing) {
+      await db.blog.update({
+        where: { id: existing.blog.id },
+        data: {
+          content: meta.description ?? existing.blog.id.toString(),
+        },
+      });
+
+      book = await db.book.update({
+        where: { id: existing.id },
+        data: {
+          nameAr: meta.nameAr,
+          nameEn: meta.nameEn ?? undefined,
+          category: meta.category ?? undefined,
+          categoryUrl: meta.categoryUrl ?? undefined,
+          coverColor: meta.coverColor ?? undefined,
+          shelfId: shelfId ?? undefined,
+          shamelaUrl: bookIndexUrl,
+          ...(authorId ? { authors: { set: [{ id: authorId }] } } : {}),
+        },
+        include: { authors: true, shelf: true },
+      });
+
+      if (meta.description) {
+        await attachTags(db, existing.blog.id, meta.description);
+      }
+    } else {
+      created = true;
+      const blog = await db.blog.create({
+        data: {
+          type: "book",
+          content: meta.description ?? meta.nameAr,
+          published: true,
+          status: "published",
+        },
+      });
+
+      book = await db.book.create({
+        data: {
+          blogId: blog.id,
+          nameAr: meta.nameAr,
+          nameEn: meta.nameEn ?? undefined,
+          shamelaId,
+          shamelaUrl: bookIndexUrl,
+          category: meta.category ?? undefined,
+          categoryUrl: meta.categoryUrl ?? undefined,
+          coverColor: meta.coverColor ?? undefined,
+          shelfId,
+          ...(authorId ? { authors: { connect: { id: authorId } } } : {}),
+        },
+        include: { authors: true, shelf: true },
+      });
+
+      if (meta.description) {
+        await attachTags(db, blog.id, meta.description);
+      }
+    }
+
+    await recordTokenUsage(
+      db,
+      metaResult,
+      input.aiProvider,
+      "book_meta_sync",
+      book.id,
+    );
+
+    const chaptersImported = await syncToc(
+      db,
+      book.id,
+      bookIndexUrl,
+      input.aiProvider,
+    );
+
+    await completeBookImportHistory(db, history.id, {
+      status: "success",
+      bookId: book.id,
+      createdBookId: created ? book.id : null,
+      chaptersImported,
+      metadataJson: meta,
+    });
+
+    return { book, created, chaptersImported, historyId: history.id };
+  } catch (error) {
+    await completeBookImportHistory(db, history.id, {
+      status: "failed",
+      bookId: existing?.id ?? null,
+      errorMessage:
+        error instanceof Error ? error.message : "Book import failed",
+    });
+    throw error;
+  }
 }
 
 export const bookRoutes = createTRPCRouter({
@@ -570,6 +1327,41 @@ export const bookRoutes = createTRPCRouter({
       });
     }),
 
+  getBookImportHistory: publicProcedure
+    .input(
+      z.object({
+        bookId: z.number().optional(),
+        limit: z.number().min(1).max(50).default(20),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      return ctx.db.bookImportHistory.findMany({
+        where: input.bookId ? { bookId: input.bookId } : undefined,
+        include: {
+          book: {
+            select: { id: true, nameAr: true, nameEn: true, coverColor: true },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+        take: input.limit,
+      });
+    }),
+
+  getBookPageImportHistory: publicProcedure
+    .input(
+      z.object({
+        bookId: z.number(),
+        limit: z.number().min(1).max(50).default(20),
+      }),
+    )
+    .query(async ({ ctx, input }) => {
+      return ctx.db.bookPageImportHistory.findMany({
+        where: { bookId: input.bookId },
+        orderBy: { createdAt: "desc" },
+        take: input.limit,
+      });
+    }),
+
   fetchPage: publicProcedure
     .input(
       z.object({
@@ -583,91 +1375,20 @@ export const bookRoutes = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const { db } = ctx;
-
       const aiResult = await callAI(
         input.aiProvider,
         SHAMELA_EXTRACT_PROMPT,
         4096,
         input.shamelaUrl,
       );
-
-      let pageData: any;
-      try {
-        pageData = JSON.parse(aiResult.text);
-      } catch {
-        throw new Error(
-          `Failed to parse AI response: ${aiResult.text.slice(0, 200)}`,
-        );
-      }
-
-      const page = await db.bookPage.upsert({
-        where: {
-          bookId_shamelaPageNo: {
-            bookId: input.bookId,
-            shamelaPageNo: pageData.shamelaPageNo,
-          },
-        },
-        create: {
-          bookId: input.bookId,
-          volumeId: input.volumeId ?? null,
-          shamelaPageNo: pageData.shamelaPageNo,
-          shamelaUrl: input.shamelaUrl,
-          printedPageNo: pageData.printedPageNo ?? null,
-          chapterTitle: pageData.chapterTitle ?? null,
-          chapterUrl: pageData.chapterUrl ?? null,
-          topicTitle: pageData.topicTitle ?? null,
-          topicUrl: pageData.topicUrl ?? null,
-          rawJson: pageData,
-          status: "fetched",
-        },
-        update: {
-          volumeId: input.volumeId ?? undefined,
-          shamelaUrl: input.shamelaUrl,
-          printedPageNo: pageData.printedPageNo ?? null,
-          chapterTitle: pageData.chapterTitle ?? null,
-          chapterUrl: pageData.chapterUrl ?? null,
-          topicTitle: pageData.topicTitle ?? null,
-          topicUrl: pageData.topicUrl ?? null,
-          rawJson: pageData,
-          status: "fetched",
-          deletedAt: null,
-        },
-      });
-
-      await db.bookPageParagraph.deleteMany({ where: { pageId: page.id } });
-      if (
-        Array.isArray(pageData.paragraphs) &&
-        pageData.paragraphs.length > 0
-      ) {
-        await db.bookPageParagraph.createMany({
-          data: pageData.paragraphs.map((p: any) => ({
-            pageId: page.id,
-            pid: p.pid,
-            text: p.text,
-            footnoteIds: p.footnoteIds ?? null,
-          })),
-        });
-      }
-
-      await db.bookPageFootnote.deleteMany({ where: { pageId: page.id } });
-      if (Array.isArray(pageData.footnotes) && pageData.footnotes.length > 0) {
-        await db.bookPageFootnote.createMany({
-          data: pageData.footnotes.map((f: any) => ({
-            pageId: page.id,
-            marker: f.marker,
-            type: f.type ?? null,
-            content: f.content,
-            linkedParagraphs: f.linkedParagraphs ?? null,
-          })),
-        });
-      }
-
-      await db.book.update({
-        where: { id: input.bookId },
-        data: {
-          contentHash: `${input.bookId}-${Date.now()}`,
-          pagesUpdatedAt: new Date(),
-        },
+      const pageData = parsePageData(aiResult.text);
+      const { page, historyId, diffSummaryJson } = await saveParsedPageData(db, {
+        bookId: input.bookId,
+        pageData,
+        sourceUrl: input.shamelaUrl,
+        volumeId: input.volumeId ?? null,
+        importMethod: "reimport_url",
+        provider: input.aiProvider,
       });
 
       await recordTokenUsage(
@@ -679,7 +1400,7 @@ export const bookRoutes = createTRPCRouter({
         page.id,
       );
 
-      return page;
+      return { ...page, importHistoryId: historyId, diffSummaryJson };
     }),
 
   fetchNextPage: publicProcedure
@@ -716,83 +1437,14 @@ export const bookRoutes = createTRPCRouter({
         4096,
         nextUrl,
       );
-
-      let pageData: any;
-      try {
-        pageData = JSON.parse(aiResult.text);
-      } catch {
-        throw new Error(
-          `Failed to parse AI response: ${aiResult.text.slice(0, 200)}`,
-        );
-      }
-
-      const page = await db.bookPage.upsert({
-        where: {
-          bookId_shamelaPageNo: {
-            bookId: input.bookId,
-            shamelaPageNo: pageData.shamelaPageNo,
-          },
-        },
-        create: {
-          bookId: input.bookId,
-          volumeId: currentPage.volumeId,
-          shamelaPageNo: pageData.shamelaPageNo,
-          shamelaUrl: nextUrl,
-          printedPageNo: pageData.printedPageNo ?? null,
-          chapterTitle: pageData.chapterTitle ?? null,
-          chapterUrl: pageData.chapterUrl ?? null,
-          topicTitle: pageData.topicTitle ?? null,
-          topicUrl: pageData.topicUrl ?? null,
-          rawJson: pageData,
-          status: "fetched",
-        },
-        update: {
-          shamelaUrl: nextUrl,
-          printedPageNo: pageData.printedPageNo ?? null,
-          chapterTitle: pageData.chapterTitle ?? null,
-          chapterUrl: pageData.chapterUrl ?? null,
-          topicTitle: pageData.topicTitle ?? null,
-          topicUrl: pageData.topicUrl ?? null,
-          rawJson: pageData,
-          status: "fetched",
-          deletedAt: null,
-        },
-      });
-
-      await db.bookPageParagraph.deleteMany({ where: { pageId: page.id } });
-      if (
-        Array.isArray(pageData.paragraphs) &&
-        pageData.paragraphs.length > 0
-      ) {
-        await db.bookPageParagraph.createMany({
-          data: pageData.paragraphs.map((p: any) => ({
-            pageId: page.id,
-            pid: p.pid,
-            text: p.text,
-            footnoteIds: p.footnoteIds ?? null,
-          })),
-        });
-      }
-
-      await db.bookPageFootnote.deleteMany({ where: { pageId: page.id } });
-      if (Array.isArray(pageData.footnotes) && pageData.footnotes.length > 0) {
-        await db.bookPageFootnote.createMany({
-          data: pageData.footnotes.map((f: any) => ({
-            pageId: page.id,
-            marker: f.marker,
-            type: f.type ?? null,
-            content: f.content,
-            linkedParagraphs: f.linkedParagraphs ?? null,
-          })),
-        });
-      }
-
-      await db.book.update({
-        where: { id: input.bookId },
-        data: {
-          contentHash: `${input.bookId}-${Date.now()}`,
-          pagesUpdatedAt: new Date(),
-        },
+      const pageData = parsePageData(aiResult.text);
+      const { page, historyId, diffSummaryJson } = await saveParsedPageData(db, {
+        bookId: input.bookId,
+        pageData,
+        sourceUrl: nextUrl,
+        volumeId: currentPage.volumeId ?? null,
+        importMethod: "reimport_url",
+        provider: input.aiProvider,
       });
 
       await recordTokenUsage(
@@ -804,7 +1456,89 @@ export const bookRoutes = createTRPCRouter({
         page.id,
       );
 
-      return page;
+      return { ...page, importHistoryId: historyId, diffSummaryJson };
+    }),
+
+  importBookPageManually: publicProcedure
+    .input(
+      z.object({
+        bookId: z.number().optional(),
+        createBook: z
+          .object({
+            nameAr: z.string().min(1),
+            nameEn: z.string().optional(),
+            description: z.string().optional(),
+            shamelaUrl: z.string().optional(),
+          })
+          .optional(),
+        sourceUrl: z.string().url().optional(),
+        shamelaPageNo: z.number(),
+        printedPageNo: z.number().optional(),
+        chapterTitle: z.string().optional(),
+        topicTitle: z.string().optional(),
+        pageText: z.string().min(1),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const { db } = ctx;
+      let bookId = input.bookId;
+
+      if (!bookId && !input.createBook) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Select an existing book or create a new one first.",
+        });
+      }
+
+      if (!bookId && input.createBook) {
+        const createdBook = await ctx.db.book.create({
+          data: {
+            blog: {
+              create: {
+                type: "book",
+                content: input.createBook.description ?? input.createBook.nameAr,
+                published: true,
+                status: "published",
+              },
+            },
+            nameAr: input.createBook.nameAr,
+            nameEn: input.createBook.nameEn ?? undefined,
+            shamelaUrl: input.createBook.shamelaUrl ?? undefined,
+          },
+        });
+        bookId = createdBook.id;
+      }
+
+      const paragraphs = input.pageText
+        .split(/\n\s*\n|\r\n\s*\r\n/g)
+        .map((paragraph) => safeString(paragraph))
+        .filter(Boolean)
+        .map((text, index) => ({
+          pid: index + 1,
+          text: text!,
+          footnoteIds: null,
+        }));
+
+      const pageData: ParsedPageData = {
+        shamelaPageNo: input.shamelaPageNo,
+        printedPageNo: input.printedPageNo ?? null,
+        chapterTitle: input.chapterTitle ?? null,
+        chapterUrl: null,
+        topicTitle: input.topicTitle ?? null,
+        topicUrl: null,
+        paragraphs,
+        footnotes: [],
+      };
+
+      const result = await saveParsedPageData(db, {
+        bookId: bookId!,
+        pageData,
+        sourceUrl: input.sourceUrl ?? null,
+        importMethod: "manual_paste",
+        rawInput: input.pageText,
+      });
+
+      return { bookId, ...result };
     }),
 
   // ── Highlights ───────────────────────────────────────────────────────────────
@@ -821,8 +1555,24 @@ export const bookRoutes = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      const paragraph = input.paragraphId
+        ? await ctx.db.bookPageParagraph.findFirst({
+            where: { id: input.paragraphId },
+            select: {
+              pid: true,
+              text: true,
+              page: { select: { shamelaPageNo: true } },
+            },
+          })
+        : null;
       return ctx.db.bookPageHighlight.create({
-        data: { ...input, userId: 1 },
+        data: {
+          ...input,
+          userId: getDefaultBookUserId(),
+          pageShamelaPageNo: paragraph?.page.shamelaPageNo ?? null,
+          paragraphPid: paragraph?.pid ?? null,
+          quoteText: paragraph?.text ?? null,
+        },
       });
     }),
 
@@ -843,8 +1593,24 @@ export const bookRoutes = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      const paragraph = input.paragraphId
+        ? await ctx.db.bookPageParagraph.findFirst({
+            where: { id: input.paragraphId },
+            select: {
+              pid: true,
+              text: true,
+              page: { select: { shamelaPageNo: true } },
+            },
+          })
+        : null;
       return ctx.db.bookPageComment.create({
-        data: { ...input, userId: 1 },
+        data: {
+          ...input,
+          userId: getDefaultBookUserId(),
+          pageShamelaPageNo: paragraph?.page.shamelaPageNo ?? null,
+          paragraphPid: paragraph?.pid ?? null,
+          quoteText: paragraph?.text ?? null,
+        },
       });
     }),
 
@@ -926,24 +1692,35 @@ export const bookRoutes = createTRPCRouter({
         orderBy: { shamelaPageNo: "asc" },
       });
       const highlights = await db.bookPageHighlight.findMany({
-        where: { page: { bookId: input.bookId }, userId: 1 },
+        where: {
+          page: { bookId: input.bookId },
+          userId: getDefaultBookUserId(),
+        },
         select: {
           id: true,
           pageId: true,
           paragraphId: true,
+          paragraphPid: true,
           color: true,
           note: true,
+          quoteText: true,
           createdAt: true,
           updatedAt: true,
         },
       });
       const comments = await db.bookPageComment.findMany({
-        where: { page: { bookId: input.bookId }, userId: 1, deletedAt: null },
+        where: {
+          page: { bookId: input.bookId },
+          userId: getDefaultBookUserId(),
+          deletedAt: null,
+        },
         select: {
           id: true,
           pageId: true,
           paragraphId: true,
+          paragraphPid: true,
           content: true,
+          quoteText: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -1048,13 +1825,19 @@ export const bookRoutes = createTRPCRouter({
     .input(z.object({ bookId: z.number() }))
     .query(async ({ ctx, input }) => {
       return ctx.db.bookPageHighlight.findMany({
-        where: { page: { bookId: input.bookId }, userId: 1 },
+        where: {
+          page: { bookId: input.bookId },
+          userId: getDefaultBookUserId(),
+        },
         select: {
           id: true,
           pageId: true,
           paragraphId: true,
+          paragraphPid: true,
+          pageShamelaPageNo: true,
           color: true,
           note: true,
+          quoteText: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -1078,13 +1861,26 @@ export const bookRoutes = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const results: { localId: string; serverId: number }[] = [];
       for (const h of input.highlights) {
+        const paragraph = h.paragraphId
+          ? await ctx.db.bookPageParagraph.findFirst({
+              where: { id: h.paragraphId },
+              select: {
+                pid: true,
+                text: true,
+                page: { select: { shamelaPageNo: true } },
+              },
+            })
+          : null;
         const created = await ctx.db.bookPageHighlight.create({
           data: {
             pageId: h.pageId,
             paragraphId: h.paragraphId ?? null,
+            paragraphPid: paragraph?.pid ?? null,
+            pageShamelaPageNo: paragraph?.page.shamelaPageNo ?? null,
             color: h.color,
             note: h.note ?? null,
-            userId: 1,
+            quoteText: paragraph?.text ?? null,
+            userId: getDefaultBookUserId(),
             startOffset: 0,
             endOffset: 0,
           },
@@ -1100,12 +1896,19 @@ export const bookRoutes = createTRPCRouter({
     .input(z.object({ bookId: z.number() }))
     .query(async ({ ctx, input }) => {
       return ctx.db.bookPageComment.findMany({
-        where: { page: { bookId: input.bookId }, userId: 1, deletedAt: null },
+        where: {
+          page: { bookId: input.bookId },
+          userId: getDefaultBookUserId(),
+          deletedAt: null,
+        },
         select: {
           id: true,
           pageId: true,
           paragraphId: true,
+          paragraphPid: true,
+          pageShamelaPageNo: true,
           content: true,
+          quoteText: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -1128,12 +1931,25 @@ export const bookRoutes = createTRPCRouter({
     .mutation(async ({ ctx, input }) => {
       const results: { localId: string; serverId: number }[] = [];
       for (const c of input.comments) {
+        const paragraph = c.paragraphId
+          ? await ctx.db.bookPageParagraph.findFirst({
+              where: { id: c.paragraphId },
+              select: {
+                pid: true,
+                text: true,
+                page: { select: { shamelaPageNo: true } },
+              },
+            })
+          : null;
         const created = await ctx.db.bookPageComment.create({
           data: {
             pageId: c.pageId,
             paragraphId: c.paragraphId ?? null,
+            paragraphPid: paragraph?.pid ?? null,
+            pageShamelaPageNo: paragraph?.page.shamelaPageNo ?? null,
             content: c.content,
-            userId: 1,
+            quoteText: paragraph?.text ?? null,
+            userId: getDefaultBookUserId(),
           },
         });
         results.push({ localId: c.localId, serverId: created.id });
@@ -1152,175 +1968,12 @@ export const bookRoutes = createTRPCRouter({
           .default("anthropic"),
       }),
     )
-    .mutation(async ({ ctx, input }) => {
-      const { db } = ctx;
-
-      // Normalise URL — strip trailing slash, page numbers, query string
-      const url = new URL(input.shamelaUrl.trim());
-      const bookUrl = `${url.origin}${url.pathname}`.replace(/\/+$/, "");
-
-      // Extract shamelaId from path  e.g. /book/12345  or /book/12345/67
-      const match = bookUrl.match(/\/book\/(\d+)/);
-      if (!match)
-        throw new Error("Invalid Shamela URL — expected a /book/... path");
-      const shamelaId = Number(match[1]);
-
-      // Use the canonical book index URL (no page number)
-      const bookIndexUrl = `${url.origin}/book/${shamelaId}`;
-
-      // ── Check if book already exists ──────────────────────────────────────
-      const existing = await db.book.findFirst({
-        where: { shamelaId, deletedAt: null },
-        include: {
-          blog: { select: { id: true } },
-          authors: true,
-          shelf: true,
-        },
-      });
-
-      // ── Call AI for book metadata ─────────────────────────────────────────
-      const metaResult = await callAI(
-        input.aiProvider,
-        SHAMELA_BOOK_META_PROMPT,
-        1024,
-        bookIndexUrl,
-      );
-
-      let meta: {
-        nameAr: string;
-        nameEn?: string | null;
-        authorName?: string | null;
-        authorNameEn?: string | null;
-        authorUrl?: string | null;
-        category?: string | null;
-        categoryUrl?: string | null;
-        shelfName?: string | null;
-        coverColor?: string | null;
-        description?: string | null;
-      };
-      try {
-        meta = JSON.parse(metaResult.text);
-      } catch {
-        throw new Error(
-          `Failed to parse AI response: ${metaResult.text.slice(0, 200)}`,
-        );
-      }
-
-      // ── Upsert shelf ──────────────────────────────────────────────────────
-      let shelfId: number | undefined;
-      if (meta.shelfName) {
-        const shelf = await db.bookShelf.upsert({
-          where: { name: meta.shelfName } as any,
-          create: { name: meta.shelfName, nameAr: meta.shelfName },
-          update: {},
-        });
-        shelfId = shelf.id;
-      }
-
-      // ── Upsert author ─────────────────────────────────────────────────────
-      let authorId: number | undefined;
-      if (meta.authorName) {
-        const author = await db.bookAuthor.upsert({
-          where: { name: meta.authorName },
-          create: {
-            name: meta.authorName,
-            nameAr: meta.authorName,
-            url: meta.authorUrl ?? undefined,
-          },
-          update: { url: meta.authorUrl ?? undefined },
-        });
-        authorId = author.id;
-      }
-
-      if (existing) {
-        // ── UPDATE existing book ───────────────────────────────────────────
-        await db.blog.update({
-          where: { id: existing.blog.id },
-          data: {
-            content: meta.description ?? existing.blog.id.toString(),
-          },
-        });
-
-        const updated = await db.book.update({
-          where: { id: existing.id },
-          data: {
-            nameAr: meta.nameAr,
-            nameEn: meta.nameEn ?? undefined,
-            category: meta.category ?? undefined,
-            categoryUrl: meta.categoryUrl ?? undefined,
-            coverColor: meta.coverColor ?? undefined,
-            shelfId: shelfId ?? undefined,
-            shamelaUrl: bookIndexUrl,
-            ...(authorId ? { authors: { set: [{ id: authorId }] } } : {}),
-          },
-          include: { authors: true, shelf: true },
-        });
-
-        if (meta.description) {
-          await attachTags(db, existing.blog.id, meta.description);
-        }
-
-        await recordTokenUsage(
-          db,
-          metaResult,
-          input.aiProvider,
-          "book_meta_sync",
-          existing.id,
-        );
-        const chaptersImported = await syncToc(
-          db,
-          existing.id,
-          bookIndexUrl,
-          input.aiProvider,
-        );
-        return { book: updated, created: false, chaptersImported };
-      } else {
-        // ── CREATE new book ────────────────────────────────────────────────
-        const blog = await db.blog.create({
-          data: {
-            type: "book",
-            content: meta.description ?? meta.nameAr,
-            published: true,
-            status: "published",
-          },
-        });
-
-        const book = await db.book.create({
-          data: {
-            blogId: blog.id,
-            nameAr: meta.nameAr,
-            nameEn: meta.nameEn ?? undefined,
-            shamelaId,
-            shamelaUrl: bookIndexUrl,
-            category: meta.category ?? undefined,
-            categoryUrl: meta.categoryUrl ?? undefined,
-            coverColor: meta.coverColor ?? undefined,
-            shelfId,
-            ...(authorId ? { authors: { connect: { id: authorId } } } : {}),
-          },
-          include: { authors: true, shelf: true },
-        });
-
-        if (meta.description) {
-          await attachTags(db, blog.id, meta.description);
-        }
-
-        await recordTokenUsage(
-          db,
-          metaResult,
-          input.aiProvider,
-          "book_meta_sync",
-          book.id,
-        );
-        const chaptersImported = await syncToc(
-          db,
-          book.id,
-          bookIndexUrl,
-          input.aiProvider,
-        );
-        return { book, created: true, chaptersImported };
-      }
-    }),
+    .mutation(async ({ ctx, input }) =>
+      syncBookFromShamelaInternal(ctx.db, {
+        shamelaUrl: input.shamelaUrl,
+        aiProvider: input.aiProvider,
+      }),
+    ),
 
   getTokenUsage: publicProcedure
     .input(

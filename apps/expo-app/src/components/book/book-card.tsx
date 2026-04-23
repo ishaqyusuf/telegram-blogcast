@@ -109,7 +109,8 @@ export function BookCard({
 
       {/* Title */}
       <Text
-        style={{ fontSize: 13, fontWeight: "700", color: "#fff", textAlign: "right", writingDirection: "rtl" }}
+        className="text-right text-[13px] font-bold text-foreground"
+        style={{ writingDirection: "rtl" }}
         numberOfLines={2}
       >
         {book.nameAr ?? book.nameEn}
@@ -118,7 +119,8 @@ export function BookCard({
       {/* Author */}
       {authorName && (
         <Text
-          style={{ fontSize: 11, color: "#b3b3b3", marginTop: 2, textAlign: "right", writingDirection: "rtl" }}
+          className="mt-0.5 text-right text-[11px] text-muted-foreground"
+          style={{ writingDirection: "rtl" }}
           numberOfLines={1}
         >
           {authorName}

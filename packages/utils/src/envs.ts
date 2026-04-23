@@ -3,7 +3,7 @@ export function getAppUrl() {
     process.env.VERCEL_ENV === "production" ||
     process.env.NODE_ENV === "production"
   ) {
-    return "https://gndprodesk.com";
+    return "https://alghurobaa.com";
   }
 
   if (process.env.VERCEL_ENV === "preview") {
@@ -22,7 +22,7 @@ export function getStoreUrl() {
     process.env.VERCEL_ENV === "production" ||
     process.env.NODE_ENV === "production"
   ) {
-    return "https://store.gndprodesk.com";
+    return "https://store.alghurobaa.com";
   }
 
   if (process.env.VERCEL_ENV === "preview") {
@@ -37,7 +37,7 @@ export function getEmailUrl() {
   //   return "http://localhost:3000";
   // }
 
-  return "https://gndprodesk.com";
+  return "https://alghurobaa.com";
 }
 
 export function getWebsiteUrl() {
@@ -45,7 +45,7 @@ export function getWebsiteUrl() {
     process.env.VERCEL_ENV === "production" ||
     process.env.NODE_ENV === "production"
   ) {
-    return "https://gndprodesk.com";
+    return "https://alghurobaa.com";
   }
 
   if (process.env.VERCEL_ENV === "preview") {

@@ -21,7 +21,9 @@ Tracks the current scope, architecture, and roadmap for the books experience acr
   - `/books/[bookId]` via `book-detail-screen.tsx`: book metadata and chapter tree.
   - `/books/[bookId]/reader/[pageId]` via `book-reader-screen.tsx`: page reader.
   - `/books/[bookId]/search` via `book-search-screen.tsx`: search within book.
-  - `/book-fetch` via `book-fetch-screen.tsx`: add book from Shamela URL via AI.
+  - `/book-fetch` via `book-fetch-screen.tsx`: add book from Shamela URL via AI, browse recent import history, re-import a previous source URL, and paste manual page content into an existing or newly created book.
+- Visual system:
+  - Active books screens use the same semantic theme tokens as the home/feed surfaces (`bg-background`, `bg-card`, `text-foreground`, `text-muted-foreground`, `bg-primary`) instead of page-local hard-coded dark colors.
 - Components:
   - `book/book-card.tsx`
   - `book/book-page-view.tsx`
@@ -49,8 +51,14 @@ Tracks the current scope, architecture, and roadmap for the books experience acr
   - `BookPage -> BookPageFootnote`
   - `BookPage -> BookPageHighlight`
   - `BookPage -> BookPageComment`
+  - `Book -> BookImportHistory`
+  - `Book -> BookPageImportHistory`
   - `BookAuthor <-> Book` many-to-many
   - `AiTokenUsage` — tracks provider, model, operation, inputTokens, outputTokens, bookId?, pageId?
+- Import/annotation notes:
+  - `BookImportHistory` stores each book-level link import attempt with `pending | success | failed`, source URL, provider, summary counts, and any error message.
+  - `BookPageImportHistory` stores page-level imports from URL re-imports and manual page paste with counts and diff summary metadata.
+  - `BookPageHighlight` and `BookPageComment` now persist extra anchors (`pageShamelaPageNo`, `paragraphPid`, `quoteText`) so page re-import can remap annotations when paragraph row IDs change.
 
 ### AI Integration
 - Metadata extraction prompt (`SHAMELA_BOOK_META_PROMPT`)
@@ -58,8 +66,9 @@ Tracks the current scope, architecture, and roadmap for the books experience acr
 - Page-content extraction prompt (`SHAMELA_EXTRACT_PROMPT`)
 - Providers: Claude Sonnet 4.6 (Anthropic), GPT-4o (OpenAI), Gemini 2.0 Flash
 - **Anthropic uses `url-context-1` beta** — URL passed as a `document` content block; Claude fetches Shamela natively, bypassing server-side IP blocks
-- OpenAI/Gemini: server fetches HTML first, embeds in prompt
+- OpenAI/Gemini: the Shamela URL is embedded into the prompt as `<SOURCE_URL>...</SOURCE_URL>`
 - `callAI(provider, prompt, maxTokens, sourceUrl?)` → `{ text, inputTokens, outputTokens, model }`
+- `callAI` retries transient provider failures (`429`, `5xx`) with bounded backoff and surfaces provider rate limits as tRPC `TOO_MANY_REQUESTS` instead of a generic internal 500
 - `recordTokenUsage(db, result, provider, operation, bookId?, pageId?)` — non-fatal, writes to `AiTokenUsage`
 - `getTokenUsage` tRPC query — admin visibility into AI costs
 
@@ -68,6 +77,7 @@ Tracks the current scope, architecture, and roadmap for the books experience acr
 - Bookmarks
 - Auto-fetch all pages in sequence
 - Better offline support and incremental sync
+- Real authenticated user mapping for book annotations/import history instead of the current placeholder user binding in public procedures
 
 ### Planned Implementation Notes
 
@@ -86,6 +96,8 @@ Tracks the current scope, architecture, and roadmap for the books experience acr
   - Long-press paragraph
   - Show floating toolbar with color swatches and delete action
   - Render tinted paragraph backgrounds
+- Server behavior:
+  - When highlights are created or bulk-synced, the API also stores the page Shamela number, paragraph `pid`, and source quote text for later re-import remapping.
 - Local SQLite table plan:
   - `local_highlights(localId, serverId, pageId, paragraphId, color, note, createdAt, updatedAt, deletedAt, syncStatus)`
 - Sync pattern:
@@ -101,6 +113,19 @@ Tracks the current scope, architecture, and roadmap for the books experience acr
   - Local write first
   - Background push and reconciliation
   - Merge server comments on book open
+- Server behavior:
+  - Comments store the same paragraph-anchor metadata as highlights so comments can survive page re-imports.
+
+#### Import History And Manual Page Paste
+- Book import flow:
+  - `syncBookFromShamela` now records every book-level import attempt in `BookImportHistory`.
+  - The fetch screen shows recent attempts with success/failed state and a re-import CTA that reuses the saved source URL.
+- Page import flow:
+  - `fetchPage` and `fetchNextPage` now record `BookPageImportHistory` entries and preserve the page row when re-importing.
+  - Manual page paste creates or reuses a book, normalizes pasted text into paragraphs, and records the import as `manual_paste`.
+- Re-import preservation:
+  - Page refresh deletes and recreates paragraph content, then remaps highlights/comments by paragraph `pid` first and paragraph text second.
+  - Unmatched annotations are preserved on the page record with nullable paragraph linkage instead of being deleted.
 
 #### Search
 - Add or maintain route: `/books/[bookId]/search`

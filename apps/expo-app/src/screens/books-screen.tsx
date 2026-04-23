@@ -21,50 +21,26 @@ export default function BooksScreen() {
   const books = data?.data ?? [];
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#121212" }}>
+    <View className="flex-1 bg-background">
       <SafeArea>
-        {/* Header */}
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 12,
-            paddingHorizontal: 16,
-            paddingVertical: 12,
-          }}
-        >
+        <View className="flex-row items-center gap-3 px-4 py-3">
           <Pressable
             onPress={() => router.back()}
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 18,
-              backgroundColor: "#282828",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
+            className="size-9 items-center justify-center rounded-full bg-card"
           >
             <Icon name="ChevronLeft" size={22} className="text-foreground" />
           </Pressable>
-          <Text style={{ fontSize: 18, fontWeight: "700", color: "#fff", flex: 1 }}>
+          <Text className="flex-1 text-lg font-bold text-foreground">
             المكتبة
           </Text>
           <Pressable
             onPress={() => router.push("/book-fetch" as any)}
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 18,
-              backgroundColor: "#1DB954",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
+            className="size-9 items-center justify-center rounded-full bg-primary"
           >
             <Icon name="Plus" size={20} className="text-background" />
           </Pressable>
         </View>
 
-        {/* Shelf filter pills */}
         {shelves.length > 0 && (
           <ScrollView
             horizontal
@@ -73,20 +49,13 @@ export default function BooksScreen() {
           >
             <Pressable
               onPress={() => setSelectedShelfId(undefined)}
-              style={{
-                paddingHorizontal: 14,
-                paddingVertical: 6,
-                borderRadius: 20,
-                backgroundColor: selectedShelfId === undefined ? "#1DB954" : "#282828",
-              }}
+              className={
+                selectedShelfId === undefined
+                  ? "rounded-full bg-primary px-4 py-1.5"
+                  : "rounded-full bg-card px-4 py-1.5"
+              }
             >
-              <Text
-                style={{
-                  fontSize: 13,
-                  fontWeight: "600",
-                  color: selectedShelfId === undefined ? "#000" : "#fff",
-                }}
-              >
+              <Text className={selectedShelfId === undefined ? "text-sm font-semibold text-primary-foreground" : "text-sm font-semibold text-foreground"}>
                 الكل
               </Text>
             </Pressable>
@@ -94,20 +63,15 @@ export default function BooksScreen() {
               <Pressable
                 key={shelf.id}
                 onPress={() => setSelectedShelfId(shelf.id)}
-                style={{
-                  paddingHorizontal: 14,
-                  paddingVertical: 6,
-                  borderRadius: 20,
-                  backgroundColor: selectedShelfId === shelf.id ? "#1DB954" : "#282828",
-                }}
+                className={
+                  selectedShelfId === shelf.id
+                    ? "rounded-full bg-primary px-4 py-1.5"
+                    : "rounded-full bg-card px-4 py-1.5"
+                }
               >
                 <Text
-                  style={{
-                    fontSize: 13,
-                    fontWeight: "600",
-                    color: selectedShelfId === shelf.id ? "#000" : "#fff",
-                    writingDirection: "rtl",
-                  }}
+                  className={selectedShelfId === shelf.id ? "text-sm font-semibold text-primary-foreground" : "text-sm font-semibold text-foreground"}
+                  style={{ writingDirection: "rtl" }}
                 >
                   {shelf.nameAr ?? shelf.name}
                 </Text>
@@ -117,13 +81,13 @@ export default function BooksScreen() {
         )}
 
         {isLoading ? (
-          <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-            <Text style={{ color: "#b3b3b3" }}>جاري التحميل…</Text>
+          <View className="flex-1 items-center justify-center">
+            <Text className="text-muted-foreground">جاري التحميل…</Text>
           </View>
         ) : books.length === 0 ? (
-          <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 12 }}>
+          <View className="flex-1 items-center justify-center gap-3">
             <Icon name="BookOpen" size={48} className="text-muted-foreground" />
-            <Text style={{ color: "#b3b3b3" }}>لا توجد كتب</Text>
+            <Text className="text-muted-foreground">لا توجد كتب</Text>
           </View>
         ) : (
           <FlatList

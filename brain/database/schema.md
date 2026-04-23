@@ -29,3 +29,7 @@ Summarizes where the database schema lives and which major data domains exist.
 ### Working Notes
 - Books, blogs, channels, media, transcripts, and interactions are first-class modeled domains.
 - Update `brain/database/relationships.md` when cross-model ownership changes.
+- Books schema now also owns import/audit records:
+  - `BookImportHistory` for book-level imports from source links
+  - `BookPageImportHistory` for page-level URL/manual imports and re-import summaries
+- Book annotation records now carry stable remap anchors (`pageShamelaPageNo`, `paragraphPid`, `quoteText`) so highlights/comments can survive page content refreshes.

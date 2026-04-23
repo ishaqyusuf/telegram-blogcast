@@ -5,7 +5,7 @@ export function constructMetadata({
   title = `${process.env.NEXT_PUBLIC_APP_NAME} - Enterprice Management System`,
   // @ts-ignore
   description = `${process.env.NEXT_PUBLIC_APP_NAME}`,
-  image = "https://assets.gndprodesk.com/thumbnail.png",
+  image = "https://assets.alghurobaa.com/thumbnail.png",
   icons = [
     {
       rel: "apple-touch-icon",

@@ -8,8 +8,8 @@ export const authClient = createAuthClient({
 
   plugins: [
     expoClient({
-      scheme: "gndprodesk",
-      storagePrefix: "gndprodesk",
+      scheme: "alghurobaa",
+      storagePrefix: "alghurobaa",
       storage: SecureStore,
     }),
   ],

@@ -1,7 +1,11 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Pressable } from "@/components/ui/pressable";
-import { useMutation, useQueryClient } from "@/lib/react-query";
+import { _trpc } from "@/components/static-trpc";
+import { SafeArea } from "@/components/safe-area";
+import { Icon } from "@/components/ui/icon";
+import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Clipboard,
@@ -13,11 +17,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-
-import { _trpc } from "@/components/static-trpc";
-import { SafeArea } from "@/components/safe-area";
-import { Icon } from "@/components/ui/icon";
 
 type SyncResult = {
   book: {
@@ -33,9 +32,23 @@ type SyncResult = {
   };
   created: boolean;
   chaptersImported: number;
+  historyId: number;
+};
+
+type ManualResult = {
+  bookId: number;
+  page: {
+    id: number;
+    chapterTitle?: string | null;
+    topicTitle?: string | null;
+    shamelaPageNo: number;
+    printedPageNo?: number | null;
+  };
+  historyId: number;
 };
 
 type Step = "idle" | "fetching" | "done" | "error";
+type ManualStep = "idle" | "saving" | "done" | "error";
 type AiProvider = "anthropic" | "openai" | "gemini";
 
 const AI_PROVIDERS: { value: AiProvider; label: string }[] = [
@@ -45,6 +58,28 @@ const AI_PROVIDERS: { value: AiProvider; label: string }[] = [
 ];
 
 const BOOK_URL_KEY = "book-fetch:pending-url";
+
+function HistoryBadge({
+  status,
+}: {
+  status: "pending" | "success" | "failed" | string;
+}) {
+  const palette =
+    status === "success"
+      ? "bg-primary/15 text-primary"
+      : status === "failed"
+        ? "bg-destructive/10 text-destructive"
+        : "bg-secondary text-muted-foreground";
+
+  const label =
+    status === "success" ? "ناجح" : status === "failed" ? "فشل" : "قيد التنفيذ";
+
+  return (
+    <View className={`rounded-full px-2 py-1 ${palette}`}>
+      <Text className="text-[11px] font-semibold">{label}</Text>
+    </View>
+  );
+}
 
 export default function BookFetchScreen() {
   const router = useRouter();
@@ -57,21 +92,55 @@ export default function BookFetchScreen() {
   const [result, setResult] = useState<SyncResult | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
 
-  // Load persisted URL on mount
+  const [selectedBookId, setSelectedBookId] = useState<number | null>(null);
+  const [createBookInline, setCreateBookInline] = useState(false);
+  const [manualBookName, setManualBookName] = useState("");
+  const [manualPageNo, setManualPageNo] = useState("");
+  const [manualPrintedPageNo, setManualPrintedPageNo] = useState("");
+  const [manualChapterTitle, setManualChapterTitle] = useState("");
+  const [manualTopicTitle, setManualTopicTitle] = useState("");
+  const [manualLink, setManualLink] = useState("");
+  const [manualText, setManualText] = useState("");
+  const [manualStep, setManualStep] = useState<ManualStep>("idle");
+  const [manualResult, setManualResult] = useState<ManualResult | null>(null);
+  const [manualError, setManualError] = useState("");
+
+  const { data: importHistory } = useQuery(
+    _trpc.book.getBookImportHistory.queryOptions({ limit: 10 }),
+  );
+  const { data: booksData } = useQuery(
+    _trpc.book.getBooks.queryOptions({ limit: 12 }),
+  );
+
+  const selectableBooks = useMemo(
+    () => (Array.isArray((booksData as any)?.data) ? (booksData as any).data : []),
+    [booksData],
+  );
+
   useEffect(() => {
     AsyncStorage.getItem(BOOK_URL_KEY).then((saved) => {
       if (saved) setUrl(saved);
     });
   }, []);
 
-  // Persist URL whenever it changes (but not empty string)
-  const handleSetUrl = (val: string) => {
-    setUrl(val);
-    if (val.trim()) {
-      AsyncStorage.setItem(BOOK_URL_KEY, val.trim());
+  useEffect(() => {
+    if (!selectedBookId && selectableBooks.length > 0 && !createBookInline) {
+      setSelectedBookId(selectableBooks[0]?.id ?? null);
+    }
+  }, [createBookInline, selectableBooks, selectedBookId]);
+
+  const handleSetUrl = (value: string) => {
+    setUrl(value);
+    if (value.trim()) {
+      AsyncStorage.setItem(BOOK_URL_KEY, value.trim());
     } else {
       AsyncStorage.removeItem(BOOK_URL_KEY);
     }
+  };
+
+  const invalidateBooks = () => {
+    qc.invalidateQueries({ queryKey: _trpc.book.getBooks.queryKey() });
+    qc.invalidateQueries({ queryKey: _trpc.book.getBookImportHistory.queryKey({ limit: 10 }) });
   };
 
   const { mutate: syncBook } = useMutation(
@@ -84,14 +153,32 @@ export default function BookFetchScreen() {
       onSuccess: (data) => {
         setResult(data as SyncResult);
         setStep("done");
-        qc.invalidateQueries({ queryKey: _trpc.book.getBooks.queryKey() });
-        // Clear persisted URL only on success
         AsyncStorage.removeItem(BOOK_URL_KEY);
         setUrl("");
       },
-      onError: (e) => {
-        setErrorMsg(e.message);
+      onError: (error) => {
+        setErrorMsg(error.message);
         setStep("error");
+      },
+      onSettled: invalidateBooks,
+    }),
+  );
+
+  const { mutate: importManualPage } = useMutation(
+    _trpc.book.importBookPageManually.mutationOptions({
+      onMutate: () => {
+        setManualStep("saving");
+        setManualError("");
+        setManualResult(null);
+      },
+      onSuccess: (data) => {
+        setManualResult(data as ManualResult);
+        setManualStep("done");
+        qc.invalidateQueries({ queryKey: _trpc.book.getBooks.queryKey() });
+      },
+      onError: (error) => {
+        setManualError(error.message);
+        setManualStep("error");
       },
     }),
   );
@@ -103,9 +190,10 @@ export default function BookFetchScreen() {
     } catch {}
   };
 
-  const handleFetch = () => {
-    const trimmed = url.trim();
+  const handleFetch = (sourceUrl?: string) => {
+    const trimmed = (sourceUrl ?? url).trim();
     if (!trimmed) return;
+    handleSetUrl(trimmed);
     syncBook({ shamelaUrl: trimmed, aiProvider });
   };
 
@@ -116,43 +204,79 @@ export default function BookFetchScreen() {
     setTimeout(() => inputRef.current?.focus(), 100);
   };
 
+  const resetManual = () => {
+    setManualStep("idle");
+    setManualResult(null);
+    setManualError("");
+    setManualPageNo("");
+    setManualPrintedPageNo("");
+    setManualChapterTitle("");
+    setManualTopicTitle("");
+    setManualLink("");
+    setManualText("");
+    setManualBookName("");
+  };
+
+  const submitManualPage = () => {
+    const pageNumber = Number(manualPageNo);
+    if (!Number.isFinite(pageNumber) || pageNumber <= 0) {
+      setManualStep("error");
+      setManualError("أدخل رقم صفحة صحيحاً.");
+      return;
+    }
+
+    if (!manualText.trim()) {
+      setManualStep("error");
+      setManualError("ألصق محتوى الصفحة أولاً.");
+      return;
+    }
+
+    if (!createBookInline && !selectedBookId) {
+      setManualStep("error");
+      setManualError("اختر كتاباً أولاً.");
+      return;
+    }
+
+    if (createBookInline && !manualBookName.trim()) {
+      setManualStep("error");
+      setManualError("أدخل اسم الكتاب الجديد.");
+      return;
+    }
+
+    importManualPage({
+      bookId: createBookInline ? undefined : selectedBookId ?? undefined,
+      createBook: createBookInline
+        ? {
+            nameAr: manualBookName.trim(),
+            shamelaUrl: manualLink.trim() || undefined,
+          }
+        : undefined,
+      sourceUrl: manualLink.trim() || undefined,
+      shamelaPageNo: pageNumber,
+      printedPageNo: manualPrintedPageNo.trim()
+        ? Number(manualPrintedPageNo)
+        : undefined,
+      chapterTitle: manualChapterTitle.trim() || undefined,
+      topicTitle: manualTopicTitle.trim() || undefined,
+      pageText: manualText.trim(),
+    });
+  };
+
   return (
-    <View style={{ flex: 1, backgroundColor: "#121212" }}>
+    <View className="flex-1 bg-background">
       <SafeArea>
-        {/* Header */}
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 12,
-            paddingHorizontal: 16,
-            paddingVertical: 12,
-          }}
-        >
+        <View className="flex-row items-center gap-3 px-4 py-3">
           <Pressable
             onPress={() => router.back()}
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 18,
-              backgroundColor: "#282828",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
+            className="size-9 items-center justify-center rounded-full bg-card"
           >
             <Icon name="ChevronLeft" size={22} className="text-foreground" />
           </Pressable>
           <Text
-            style={{
-              fontSize: 18,
-              fontWeight: "700",
-              color: "#fff",
-              flex: 1,
-              textAlign: "right",
-              writingDirection: "rtl",
-            }}
+            className="flex-1 text-right text-lg font-bold text-foreground"
+            style={{ writingDirection: "rtl" }}
           >
-            إضافة كتاب من الشاملة
+            استيراد الكتب والصفحات
           </Text>
         </View>
 
@@ -161,169 +285,89 @@ export default function BookFetchScreen() {
           behavior={Platform.OS === "ios" ? "padding" : undefined}
         >
           <ScrollView
-            contentContainerStyle={{ padding: 16, gap: 16 }}
+            contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 40 }}
             keyboardShouldPersistTaps="handled"
           >
-            {/* Instructions */}
-            <View
-              style={{
-                backgroundColor: "rgba(29,185,84,0.08)",
-                borderRadius: 12,
-                padding: 14,
-                borderWidth: 1,
-                borderColor: "rgba(29,185,84,0.2)",
-                gap: 6,
-              }}
-            >
+            <View className="gap-1.5 rounded-xl border border-primary/20 bg-primary/10 p-3.5">
               <Text
-                style={{
-                  fontSize: 14,
-                  fontWeight: "700",
-                  color: "#1DB954",
-                  textAlign: "right",
-                  writingDirection: "rtl",
-                }}
+                className="text-right text-sm font-bold text-primary"
+                style={{ writingDirection: "rtl" }}
               >
-                كيفية الاستخدام
+                الاستيراد بالرابط
               </Text>
               <Text
-                style={{
-                  fontSize: 13,
-                  color: "#b3b3b3",
-                  lineHeight: 20,
-                  textAlign: "right",
-                  writingDirection: "rtl",
-                }}
+                className="text-right text-[13px] leading-5 text-muted-foreground"
+                style={{ writingDirection: "rtl" }}
               >
-                الصق رابط الكتاب من موقع الشاملة (shamela.ws) وسيتم استخراج
-                بيانات الكتاب تلقائياً وإضافته إلى المكتبة.
-              </Text>
-              <Text style={{ fontSize: 12, color: "#666", textAlign: "left" }}>
-                مثال: https://shamela.ws/book/12345
+                ألصق رابط كتاب الشاملة ليتم حفظ محاولة الاستيراد في السجل مع
+                حالة النجاح أو الفشل، ويمكنك إعادة الاستيراد من نفس السجل لاحقاً.
               </Text>
             </View>
 
-            {/* AI Provider selector */}
-            <View
-              style={{
-                backgroundColor: "#282828",
-                borderRadius: 12,
-                padding: 12,
-                gap: 8,
-              }}
-            >
+            <View className="gap-2 rounded-xl bg-card p-3">
               <Text
-                style={{
-                  fontSize: 13,
-                  fontWeight: "600",
-                  color: "#b3b3b3",
-                  textAlign: "right",
-                  writingDirection: "rtl",
-                }}
+                className="text-right text-[13px] font-semibold text-muted-foreground"
+                style={{ writingDirection: "rtl" }}
               >
                 نموذج الذكاء الاصطناعي
               </Text>
-              <View style={{ flexDirection: "row", gap: 8 }}>
-                {AI_PROVIDERS.map((p) => (
+              <View className="flex-row gap-2">
+                {AI_PROVIDERS.map((provider) => (
                   <Pressable
-                    key={p.value}
-                    onPress={() =>
-                      step !== "fetching" && setAiProvider(p.value)
+                    key={provider.value}
+                    onPress={() => step !== "fetching" && setAiProvider(provider.value)}
+                    className={
+                      aiProvider === provider.value
+                        ? "flex-1 items-center rounded-lg bg-primary py-2.5"
+                        : "flex-1 items-center rounded-lg bg-secondary py-2.5"
                     }
-                    style={{
-                      flex: 1,
-                      paddingVertical: 9,
-                      borderRadius: 8,
-                      alignItems: "center",
-                      backgroundColor:
-                        aiProvider === p.value ? "#1DB954" : "#333",
-                    }}
                   >
                     <Text
-                      style={{
-                        fontSize: 13,
-                        fontWeight: "700",
-                        color: aiProvider === p.value ? "#000" : "#b3b3b3",
-                      }}
+                      className={
+                        aiProvider === provider.value
+                          ? "text-[13px] font-bold text-primary-foreground"
+                          : "text-[13px] font-bold text-muted-foreground"
+                      }
                     >
-                      {p.label}
+                      {provider.label}
                     </Text>
                   </Pressable>
                 ))}
               </View>
             </View>
 
-            {/* URL input */}
-            <View
-              style={{
-                backgroundColor: "#282828",
-                borderRadius: 12,
-                padding: 12,
-                gap: 10,
-              }}
-            >
+            <View className="gap-2.5 rounded-xl bg-card p-3">
               <Text
-                style={{
-                  fontSize: 13,
-                  fontWeight: "600",
-                  color: "#b3b3b3",
-                  textAlign: "right",
-                  writingDirection: "rtl",
-                }}
+                className="text-right text-[13px] font-semibold text-muted-foreground"
+                style={{ writingDirection: "rtl" }}
               >
                 رابط الكتاب
               </Text>
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 8,
-                  backgroundColor: "#1a1a1a",
-                  borderRadius: 10,
-                  paddingHorizontal: 12,
-                  paddingVertical: 10,
-                }}
-              >
+              <View className="flex-row items-center gap-2 rounded-xl bg-background px-3 py-2.5">
                 <TextInput
                   ref={inputRef}
                   value={url}
                   onChangeText={handleSetUrl}
                   placeholder="https://shamela.ws/book/..."
                   placeholderTextColor="#444"
-                  style={{
-                    flex: 1,
-                    fontSize: 14,
-                    color: "#fff",
-                    textAlign: "left",
-                  }}
+                  className="flex-1 text-sm text-foreground"
                   autoCapitalize="none"
                   autoCorrect={false}
                   keyboardType="url"
                   returnKeyType="done"
-                  onSubmitEditing={handleFetch}
+                  onSubmitEditing={() => handleFetch()}
                   editable={step !== "fetching"}
                 />
                 {url ? (
-                  <Pressable onPress={() => setUrl("")}>
-                    <Icon
-                      name="X"
-                      size={16}
-                      className="text-muted-foreground"
-                    />
+                  <Pressable onPress={() => handleSetUrl("")}>
+                    <Icon name="X" size={16} className="text-muted-foreground" />
                   </Pressable>
                 ) : (
                   <Pressable
                     onPress={handlePaste}
-                    style={{
-                      backgroundColor: "#333",
-                      borderRadius: 6,
-                      paddingHorizontal: 10,
-                      paddingVertical: 5,
-                    }}
+                    className="rounded-md bg-secondary px-2.5 py-1.5"
                   >
-                    <Text
-                      style={{ fontSize: 12, fontWeight: "600", color: "#fff" }}
-                    >
+                    <Text className="text-xs font-semibold text-foreground">
                       لصق
                     </Text>
                   </Pressable>
@@ -331,25 +375,18 @@ export default function BookFetchScreen() {
               </View>
 
               <Pressable
-                onPress={handleFetch}
+                onPress={() => handleFetch()}
                 disabled={!url.trim() || step === "fetching"}
-                style={{
-                  backgroundColor:
-                    !url.trim() || step === "fetching" ? "#333" : "#1DB954",
-                  borderRadius: 10,
-                  paddingVertical: 12,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flexDirection: "row",
-                  gap: 8,
-                }}
+                className={
+                  !url.trim() || step === "fetching"
+                    ? "flex-row items-center justify-center gap-2 rounded-xl bg-secondary py-3"
+                    : "flex-row items-center justify-center gap-2 rounded-xl bg-primary py-3"
+                }
               >
                 {step === "fetching" ? (
                   <>
                     <ActivityIndicator size="small" color="#000" />
-                    <Text
-                      style={{ fontWeight: "700", color: "#000", fontSize: 15 }}
-                    >
+                    <Text className="text-[15px] font-bold text-primary-foreground">
                       جاري الجلب…
                     </Text>
                   </>
@@ -358,109 +395,50 @@ export default function BookFetchScreen() {
                     <Icon
                       name="Download"
                       size={18}
-                      className={
-                        !url.trim()
-                          ? "text-muted-foreground"
-                          : "text-background"
-                      }
+                      className={!url.trim() ? "text-muted-foreground" : "text-background"}
                     />
                     <Text
-                      style={{
-                        fontWeight: "700",
-                        fontSize: 15,
-                        color: !url.trim() ? "#555" : "#000",
-                      }}
+                      className={
+                        !url.trim()
+                          ? "text-[15px] font-bold text-muted-foreground"
+                          : "text-[15px] font-bold text-primary-foreground"
+                      }
                     >
-                      جلب الكتاب
+                      استيراد الكتاب
                     </Text>
                   </>
                 )}
               </Pressable>
             </View>
 
-            {/* Fetching state */}
             {step === "fetching" && (
-              <View
-                style={{
-                  backgroundColor: "#282828",
-                  borderRadius: 12,
-                  padding: 24,
-                  alignItems: "center",
-                  gap: 12,
-                }}
-              >
+              <View className="items-center gap-3 rounded-xl bg-card p-6">
                 <ActivityIndicator size="large" color="#1DB954" />
-                <Text
-                  style={{
-                    fontSize: 14,
-                    color: "#b3b3b3",
-                    textAlign: "center",
-                  }}
-                >
+                <Text className="text-center text-sm text-muted-foreground">
                   جاري استخراج بيانات الكتاب بواسطة الذكاء الاصطناعي…
                 </Text>
               </View>
             )}
 
-            {/* Error state */}
             {step === "error" && (
-              <View
-                style={{
-                  backgroundColor: "rgba(239,68,68,0.1)",
-                  borderRadius: 12,
-                  padding: 14,
-                  borderWidth: 1,
-                  borderColor: "rgba(239,68,68,0.3)",
-                  gap: 8,
-                }}
-              >
-                <View
-                  style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
-                >
-                  <Icon
-                    name="AlertCircle"
-                    size={18}
-                    className="text-destructive"
-                  />
-                  <Text
-                    style={{
-                      fontSize: 14,
-                      fontWeight: "700",
-                      color: "#ef4444",
-                    }}
-                  >
-                    حدث خطأ
-                  </Text>
+              <View className="gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-3.5">
+                <View className="flex-row items-center gap-2">
+                  <Icon name="AlertCircle" size={18} className="text-destructive" />
+                  <Text className="text-sm font-bold text-destructive">حدث خطأ</Text>
                 </View>
-                <Text
-                  style={{ fontSize: 13, color: "#b3b3b3", lineHeight: 20 }}
-                >
+                <Text className="text-[13px] leading-5 text-muted-foreground">
                   {errorMsg}
                 </Text>
                 <Pressable onPress={reset}>
-                  <Text
-                    style={{
-                      fontSize: 13,
-                      fontWeight: "600",
-                      color: "#1DB954",
-                    }}
-                  >
+                  <Text className="text-[13px] font-semibold text-primary">
                     حاول مجدداً
                   </Text>
                 </Pressable>
               </View>
             )}
 
-            {/* Success result card */}
             {step === "done" && result && (
-              <View
-                style={{
-                  backgroundColor: "#282828",
-                  borderRadius: 16,
-                  overflow: "hidden",
-                }}
-              >
-                {/* Status banner */}
+              <View className="overflow-hidden rounded-2xl bg-card">
                 <View
                   style={{
                     backgroundColor: result.created
@@ -476,56 +454,27 @@ export default function BookFetchScreen() {
                   <Icon
                     name={result.created ? "CheckCircle2" : "RefreshCw"}
                     size={16}
-                    className={
-                      result.created ? "text-primary" : "text-blue-400"
-                    }
+                    className={result.created ? "text-primary" : "text-blue-400"}
                   />
-                  <View
-                    style={{
-                      flexDirection: "row-reverse",
-                      alignItems: "center",
-                      gap: 6,
-                    }}
-                  >
+                  <View className="flex-row-reverse items-center gap-2">
                     <Text
-                      style={{
-                        fontSize: 13,
-                        fontWeight: "700",
-                        color: result.created ? "#1DB954" : "#60a5fa",
-                      }}
+                      className={
+                        result.created
+                          ? "text-[13px] font-bold text-primary"
+                          : "text-[13px] font-bold text-sky-400"
+                      }
                     >
-                      {result.created
-                        ? "تمت إضافة الكتاب بنجاح"
-                        : "تم تحديث بيانات الكتاب"}
+                      {result.created ? "تمت إضافة الكتاب" : "تم تحديث الكتاب"}
                     </Text>
-                    {result.chaptersImported > 0 && (
-                      <View
-                        style={{
-                          backgroundColor: "rgba(255,255,255,0.1)",
-                          borderRadius: 10,
-                          paddingHorizontal: 7,
-                          paddingVertical: 2,
-                        }}
-                      >
-                        <Text
-                          style={{
-                            fontSize: 11,
-                            color: "#e8e8e8",
-                            fontWeight: "600",
-                          }}
-                        >
-                          {result.chaptersImported} فصل
-                        </Text>
-                      </View>
-                    )}
+                    <View className="rounded-full bg-background/30 px-2 py-0.5">
+                      <Text className="text-[11px] font-semibold text-foreground">
+                        سجل #{result.historyId}
+                      </Text>
+                    </View>
                   </View>
                 </View>
 
-                {/* Book info */}
-                <View
-                  style={{ padding: 14, flexDirection: "row-reverse", gap: 12 }}
-                >
-                  {/* Cover thumbnail */}
+                <View style={{ padding: 14, flexDirection: "row-reverse", gap: 12 }}>
                   <View
                     style={{
                       width: 64,
@@ -560,131 +509,366 @@ export default function BookFetchScreen() {
 
                   <View style={{ flex: 1, gap: 5 }}>
                     <Text
-                      style={{
-                        fontSize: 16,
-                        fontWeight: "800",
-                        color: "#fff",
-                        writingDirection: "rtl",
-                        textAlign: "right",
-                      }}
+                      className="text-right text-base font-extrabold text-foreground"
+                      style={{ writingDirection: "rtl" }}
                       numberOfLines={2}
                     >
                       {result.book.nameAr}
                     </Text>
-                    {result.book.nameEn && (
-                      <Text
-                        style={{ fontSize: 12, color: "#b3b3b3" }}
-                        numberOfLines={1}
-                      >
-                        {result.book.nameEn}
-                      </Text>
-                    )}
                     {result.book.authors.length > 0 && (
                       <Text
-                        style={{
-                          fontSize: 13,
-                          color: "#1DB954",
-                          writingDirection: "rtl",
-                          textAlign: "right",
-                        }}
+                        className="text-right text-[13px] text-primary"
+                        style={{ writingDirection: "rtl" }}
                         numberOfLines={1}
                       >
-                        {result.book.authors
-                          .map((a) => a.nameAr ?? a.name)
-                          .join("، ")}
+                        {result.book.authors.map((author) => author.nameAr ?? author.name).join("، ")}
                       </Text>
                     )}
-                    {result.book.category && (
-                      <View
-                        style={{
-                          alignSelf: "flex-end",
-                          backgroundColor: "#333",
-                          borderRadius: 5,
-                          paddingHorizontal: 7,
-                          paddingVertical: 2,
-                        }}
-                      >
-                        <Text
-                          style={{
-                            fontSize: 11,
-                            color: "#b3b3b3",
-                            writingDirection: "rtl",
-                          }}
-                        >
-                          {result.book.category}
-                        </Text>
-                      </View>
-                    )}
-                    {result.book.shelf && (
-                      <Text
-                        style={{
-                          fontSize: 11,
-                          color: "#666",
-                          writingDirection: "rtl",
-                          textAlign: "right",
-                        }}
-                      >
-                        {result.book.shelf.nameAr ?? result.book.shelf.name}
-                      </Text>
-                    )}
+                    <Text className="text-[12px] text-muted-foreground">
+                      {result.chaptersImported} فصل/رابط تمت مزامنته
+                    </Text>
                   </View>
                 </View>
 
-                {/* Actions */}
-                <View
-                  style={{
-                    flexDirection: "row",
-                    gap: 8,
-                    paddingHorizontal: 14,
-                    paddingBottom: 14,
-                  }}
-                >
+                <View className="flex-row gap-2 px-3.5 pb-3.5">
                   <Pressable
-                    onPress={() =>
-                      router.push(`/books/${result.book.id}` as any)
-                    }
-                    style={{
-                      flex: 1,
-                      backgroundColor: "#1DB954",
-                      borderRadius: 10,
-                      paddingVertical: 11,
-                      alignItems: "center",
-                      justifyContent: "center",
-                      flexDirection: "row",
-                      gap: 6,
-                    }}
+                    onPress={() => router.push(`/books/${result.book.id}` as any)}
+                    className="flex-1 flex-row items-center justify-center gap-1.5 rounded-xl bg-primary py-3"
                   >
-                    <Icon
-                      name="BookOpen"
-                      size={16}
-                      className="text-background"
-                    />
-                    <Text
-                      style={{ fontWeight: "700", color: "#000", fontSize: 14 }}
-                    >
+                    <Icon name="BookOpen" size={16} className="text-background" />
+                    <Text className="text-sm font-bold text-primary-foreground">
                       فتح الكتاب
                     </Text>
                   </Pressable>
                   <Pressable
                     onPress={reset}
-                    style={{
-                      backgroundColor: "#333",
-                      borderRadius: 10,
-                      paddingVertical: 11,
-                      paddingHorizontal: 16,
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
+                    className="items-center justify-center rounded-xl bg-secondary px-4 py-3"
                   >
-                    <Text
-                      style={{ fontWeight: "600", color: "#fff", fontSize: 14 }}
-                    >
+                    <Text className="text-sm font-semibold text-foreground">
                       إضافة آخر
                     </Text>
                   </Pressable>
                 </View>
               </View>
             )}
+
+            <View className="gap-3 rounded-2xl bg-card p-3.5">
+              <View className="flex-row-reverse items-center justify-between">
+                <Text
+                  className="text-right text-sm font-bold text-foreground"
+                  style={{ writingDirection: "rtl" }}
+                >
+                  سجل الاستيراد الأخير
+                </Text>
+                <Icon name="History" size={16} className="text-muted-foreground" />
+              </View>
+
+              {importHistory?.length ? (
+                importHistory.map((entry) => (
+                  <View
+                    key={entry.id}
+                    className="gap-2 rounded-xl border border-border bg-background p-3"
+                  >
+                    <View className="flex-row items-center justify-between">
+                      <HistoryBadge status={entry.status} />
+                      <Text className="text-[11px] text-muted-foreground">
+                        #{entry.id}
+                      </Text>
+                    </View>
+                    <Text
+                      className="text-right text-[13px] font-semibold text-foreground"
+                      style={{ writingDirection: "rtl" }}
+                    >
+                      {entry.book?.nameAr ?? entry.book?.nameEn ?? "استيراد كتاب"}
+                    </Text>
+                    <Text className="text-xs text-muted-foreground" numberOfLines={1}>
+                      {entry.sourceUrl}
+                    </Text>
+                    {entry.errorMessage ? (
+                      <Text
+                        className="text-right text-[12px] text-destructive"
+                        style={{ writingDirection: "rtl" }}
+                      >
+                        {entry.errorMessage}
+                      </Text>
+                    ) : (
+                      <Text
+                        className="text-right text-[12px] text-muted-foreground"
+                        style={{ writingDirection: "rtl" }}
+                      >
+                        {entry.chaptersImported} فصل تمت مزامنته
+                      </Text>
+                    )}
+                    <View className="flex-row gap-2">
+                      {entry.bookId ? (
+                        <Pressable
+                          onPress={() => router.push(`/books/${entry.bookId}` as any)}
+                          className="flex-1 items-center rounded-lg bg-card py-2.5"
+                        >
+                          <Text className="text-[12px] font-semibold text-foreground">
+                            فتح
+                          </Text>
+                        </Pressable>
+                      ) : null}
+                      <Pressable
+                        onPress={() => handleFetch(entry.sourceUrl)}
+                        className="flex-1 items-center rounded-lg bg-primary py-2.5"
+                      >
+                        <Text className="text-[12px] font-bold text-primary-foreground">
+                          إعادة الاستيراد
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ))
+              ) : (
+                <Text
+                  className="text-right text-[13px] text-muted-foreground"
+                  style={{ writingDirection: "rtl" }}
+                >
+                  لا توجد محاولات استيراد بعد.
+                </Text>
+              )}
+            </View>
+
+            <View className="gap-3 rounded-2xl bg-card p-3.5">
+              <View className="gap-1">
+                <Text
+                  className="text-right text-sm font-bold text-foreground"
+                  style={{ writingDirection: "rtl" }}
+                >
+                  لصق صفحة يدوياً
+                </Text>
+                <Text
+                  className="text-right text-[13px] leading-5 text-muted-foreground"
+                  style={{ writingDirection: "rtl" }}
+                >
+                  أدخل رقم الصفحة، اختر كتاباً موجوداً أو أنشئ كتاباً جديداً، ثم الصق النص. رابط الصفحة اختياري ويمكن استخدامه لاحقاً لإعادة الاستيراد.
+                </Text>
+              </View>
+
+              <View className="flex-row gap-2">
+                <Pressable
+                  onPress={() => setCreateBookInline(false)}
+                  className={
+                    !createBookInline
+                      ? "flex-1 items-center rounded-lg bg-primary py-2.5"
+                      : "flex-1 items-center rounded-lg bg-secondary py-2.5"
+                  }
+                >
+                  <Text
+                    className={
+                      !createBookInline
+                        ? "text-[13px] font-bold text-primary-foreground"
+                        : "text-[13px] font-semibold text-foreground"
+                    }
+                  >
+                    كتاب موجود
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setCreateBookInline(true)}
+                  className={
+                    createBookInline
+                      ? "flex-1 items-center rounded-lg bg-primary py-2.5"
+                      : "flex-1 items-center rounded-lg bg-secondary py-2.5"
+                  }
+                >
+                  <Text
+                    className={
+                      createBookInline
+                        ? "text-[13px] font-bold text-primary-foreground"
+                        : "text-[13px] font-semibold text-foreground"
+                    }
+                  >
+                    إنشاء كتاب
+                  </Text>
+                </Pressable>
+              </View>
+
+              {createBookInline ? (
+                <TextInput
+                  value={manualBookName}
+                  onChangeText={setManualBookName}
+                  placeholder="اسم الكتاب"
+                  placeholderTextColor="#666"
+                  className="rounded-xl bg-background px-3 py-3 text-right text-sm text-foreground"
+                  style={{ writingDirection: "rtl" }}
+                />
+              ) : (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View className="flex-row gap-2">
+                    {selectableBooks.map((book) => (
+                      <Pressable
+                        key={book.id}
+                        onPress={() => setSelectedBookId(book.id)}
+                        className={
+                          selectedBookId === book.id
+                            ? "rounded-full bg-primary px-3 py-2"
+                            : "rounded-full bg-background px-3 py-2"
+                        }
+                      >
+                        <Text
+                          className={
+                            selectedBookId === book.id
+                              ? "text-[12px] font-bold text-primary-foreground"
+                              : "text-[12px] font-semibold text-foreground"
+                          }
+                        >
+                          {book.nameAr ?? book.nameEn ?? `#${book.id}`}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </ScrollView>
+              )}
+
+              <View className="flex-row gap-2">
+                <TextInput
+                  value={manualPageNo}
+                  onChangeText={setManualPageNo}
+                  placeholder="رقم صفحة الشاملة"
+                  placeholderTextColor="#666"
+                  keyboardType="number-pad"
+                  style={{
+                    flex: 1,
+                    borderRadius: 12,
+                    backgroundColor: "rgba(255,255,255,0.04)",
+                    paddingHorizontal: 12,
+                    paddingVertical: 12,
+                    textAlign: "right",
+                    fontSize: 14,
+                    color: "#e5e7eb",
+                  }}
+                />
+                <TextInput
+                  value={manualPrintedPageNo}
+                  onChangeText={setManualPrintedPageNo}
+                  placeholder="رقم الصفحة المطبوع (اختياري)"
+                  placeholderTextColor="#666"
+                  keyboardType="number-pad"
+                  style={{
+                    flex: 1,
+                    borderRadius: 12,
+                    backgroundColor: "rgba(255,255,255,0.04)",
+                    paddingHorizontal: 12,
+                    paddingVertical: 12,
+                    textAlign: "right",
+                    fontSize: 14,
+                    color: "#e5e7eb",
+                  }}
+                />
+              </View>
+
+              <TextInput
+                value={manualChapterTitle}
+                onChangeText={setManualChapterTitle}
+                placeholder="عنوان الباب (اختياري)"
+                placeholderTextColor="#666"
+                className="rounded-xl bg-background px-3 py-3 text-right text-sm text-foreground"
+                style={{ writingDirection: "rtl" }}
+              />
+              <TextInput
+                value={manualTopicTitle}
+                onChangeText={setManualTopicTitle}
+                placeholder="عنوان الموضوع (اختياري)"
+                placeholderTextColor="#666"
+                className="rounded-xl bg-background px-3 py-3 text-right text-sm text-foreground"
+                style={{ writingDirection: "rtl" }}
+              />
+              <TextInput
+                value={manualLink}
+                onChangeText={setManualLink}
+                placeholder="رابط الصفحة (اختياري)"
+                placeholderTextColor="#666"
+                className="rounded-xl bg-background px-3 py-3 text-sm text-foreground"
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <TextInput
+                value={manualText}
+                onChangeText={setManualText}
+                placeholder="الصق نص الصفحة هنا..."
+                placeholderTextColor="#666"
+                className="min-h-[180px] rounded-xl bg-background px-3 py-3 text-right text-sm text-foreground"
+                style={{ writingDirection: "rtl", textAlignVertical: "top" }}
+                multiline
+              />
+
+              <Pressable
+                onPress={submitManualPage}
+                disabled={manualStep === "saving"}
+                className={
+                  manualStep === "saving"
+                    ? "flex-row items-center justify-center gap-2 rounded-xl bg-secondary py-3"
+                    : "flex-row items-center justify-center gap-2 rounded-xl bg-primary py-3"
+                }
+              >
+                {manualStep === "saving" ? (
+                  <>
+                    <ActivityIndicator size="small" color="#000" />
+                    <Text className="text-[15px] font-bold text-primary-foreground">
+                      جاري الحفظ…
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <Icon name="FilePenLine" size={18} className="text-background" />
+                    <Text className="text-[15px] font-bold text-primary-foreground">
+                      حفظ الصفحة
+                    </Text>
+                  </>
+                )}
+              </Pressable>
+
+              {manualStep === "error" && manualError ? (
+                <Text
+                  className="text-right text-[13px] text-destructive"
+                  style={{ writingDirection: "rtl" }}
+                >
+                  {manualError}
+                </Text>
+              ) : null}
+
+              {manualStep === "done" && manualResult ? (
+                <View className="gap-2 rounded-xl border border-primary/20 bg-primary/10 p-3">
+                  <Text
+                    className="text-right text-sm font-bold text-primary"
+                    style={{ writingDirection: "rtl" }}
+                  >
+                    تم حفظ الصفحة بنجاح
+                  </Text>
+                  <Text
+                    className="text-right text-[13px] text-muted-foreground"
+                    style={{ writingDirection: "rtl" }}
+                  >
+                    صفحة #{manualResult.page.shamelaPageNo} في سجل #{manualResult.historyId}
+                  </Text>
+                  <View className="flex-row gap-2">
+                    <Pressable
+                      onPress={() =>
+                        router.push(
+                          `/books/${manualResult.bookId}/reader/${manualResult.page.id}` as any,
+                        )
+                      }
+                      className="flex-1 items-center rounded-lg bg-primary py-2.5"
+                    >
+                      <Text className="text-[12px] font-bold text-primary-foreground">
+                        فتح الصفحة
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={resetManual}
+                      className="flex-1 items-center rounded-lg bg-secondary py-2.5"
+                    >
+                      <Text className="text-[12px] font-semibold text-foreground">
+                        إضافة صفحة أخرى
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : null}
+            </View>
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeArea>

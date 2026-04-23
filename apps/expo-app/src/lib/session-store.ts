@@ -1,7 +1,7 @@
 import { ICan, Roles } from "@acme/utils/constants";
 import * as SecureStore from "expo-secure-store";
 
-export const SESSION_KEY = "gnd_prodesk";
+export const SESSION_KEY = "alghurobaa_session";
 
 export const getToken = () => {
   return SecureStore.getItem(SESSION_KEY);

@@ -16,6 +16,7 @@ Repository-specific guardrails for AI contributors working on code, docs, and re
 - Preserve project-specific UX choices such as RTL or Arabic-first considerations where relevant.
 - Do not overwrite user-authored files or docs unless explicitly requested.
 - Reflect architecture/API/database changes back into the Brain.
+- In React Native code, avoid combining `className` and `style` on the same component unless the exception is intentional and explained inline.
 
 ### Recommended Inputs For AI Tasks
 - Goal

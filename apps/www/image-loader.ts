@@ -9,6 +9,5 @@ export default function imageLoader({
     width,
     quality = 80,
 }: ImageLoaderParams): string {
-    return `https://gndprodesk.com/cdn-cgi/image/width=${width},quality=${quality}/${src}`;
+    return `https://alghurobaa.com/cdn-cgi/image/width=${width},quality=${quality}/${src}`;
 }
-

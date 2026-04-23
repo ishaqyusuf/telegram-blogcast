@@ -39,6 +39,8 @@ model Book {
   shelf          BookShelf?   @relation(fields: [shelfId], references: [id])
   volumes        BookVolume[]
   pages          BookPage[]
+  importHistory  BookImportHistory[]
+  pageImports    BookPageImportHistory[]
   authors        BookAuthor[]
   // Offline sync fields — updated whenever a page is fetched
   contentHash    String?
@@ -85,6 +87,7 @@ model BookPage {
   footnotes     BookPageFootnote[]
   highlights    BookPageHighlight[]
   comments      BookPageComment[]
+  importHistory BookPageImportHistory[]
 
   @@unique([bookId, shamelaPageNo])
   @@index([bookId])
@@ -125,10 +128,13 @@ model BookPageHighlight {
   paragraphId Int?
   paragraph   BookPageParagraph? @relation(fields: [paragraphId], references: [id])
   userId      Int
+  pageShamelaPageNo Int?
+  paragraphPid Int?
   startOffset Int
   endOffset   Int
   color       String             @default("#FFD700")
   note        String?
+  quoteText   String?
 
   @@index([pageId])
   @@index([userId])
@@ -144,9 +150,63 @@ model BookPageComment {
   userId      Int
   content     String
   paragraphId Int?
+  pageShamelaPageNo Int?
+  paragraphPid Int?
+  quoteText   String?
 
   @@index([pageId])
   @@index([userId])
+}
+
+model BookImportHistory {
+  id              Int       @id @default(autoincrement())
+  createdAt       DateTime  @default(now()) @db.Timestamp(0)
+  updatedAt       DateTime? @updatedAt
+  bookId          Int?
+  book            Book?     @relation(fields: [bookId], references: [id])
+  sourceUrl       String
+  normalizedUrl   String?
+  provider        String?
+  importMode      String    @default("link")
+  status          String    @default("pending")
+  errorMessage    String?
+  createdBookId   Int?
+  chaptersImported Int      @default(0)
+  metadataJson    Json?
+  startedAt       DateTime? @default(now()) @db.Timestamp(0)
+  finishedAt      DateTime?
+
+  @@index([bookId, createdAt])
+  @@index([status, createdAt])
+}
+
+model BookPageImportHistory {
+  id             Int       @id @default(autoincrement())
+  createdAt      DateTime  @default(now()) @db.Timestamp(0)
+  updatedAt      DateTime? @updatedAt
+  bookId         Int
+  book           Book      @relation(fields: [bookId], references: [id])
+  pageId         Int?
+  page           BookPage? @relation(fields: [pageId], references: [id])
+  sourceUrl      String?
+  provider       String?
+  importMethod   String
+  status         String    @default("pending")
+  errorMessage   String?
+  shamelaPageNo  Int?
+  printedPageNo  Int?
+  paragraphCount Int       @default(0)
+  footnoteCount  Int       @default(0)
+  chapterTitle   String?
+  topicTitle     String?
+  diffSummaryJson Json?
+  rawInput       String?
+  startedAt      DateTime? @default(now()) @db.Timestamp(0)
+  finishedAt     DateTime?
+
+  @@index([bookId, createdAt])
+  @@index([pageId, createdAt])
+  @@index([status, createdAt])
 }
 
 model AiTokenUsage {

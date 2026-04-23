@@ -18,7 +18,7 @@ import { constructMetadata } from "@/lib/construct-metadata";
 
 export async function generateMetadata({}) {
     return constructMetadata({
-        title: `Al-Ghurobaa - gndprodesk.com`,
+        title: `Al-Ghurobaa - alghurobaa.com`,
     });
 }
 // const inter = Inter({ subsets: ["latin"] });

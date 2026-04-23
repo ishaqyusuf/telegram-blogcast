@@ -2,7 +2,7 @@ import { createSalesHistorySchemaTask, TaskName } from "@jobs/schema";
 import { schemaTask } from "@trigger.dev/sdk/v3";
 import { copySales } from "@sales/copy-sales";
 import { createNoteAction } from "@notifications/note";
-import { db } from "@gnd/db";
+import { db } from "@acme/db";
 import { noteTagFilter } from "@notifications/utils";
 
 export const createSalesHistory = schemaTask({

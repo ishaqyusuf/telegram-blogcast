@@ -137,54 +137,39 @@ export default function BookSearchScreen() {
   const renderItem = ({ item }: { item: SearchResult }) => (
     <Pressable
       onPress={() => router.push(`/books/${bookId}/reader/${item.pageId}` as any)}
-      style={{
-        paddingHorizontal: 16,
-        paddingVertical: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: "rgba(255,255,255,0.05)",
-        gap: 4,
-      }}
+      className="gap-1 border-b border-border/40 px-4 py-3"
     >
-      {/* Chapter / topic title */}
       <Text
-        style={{ fontSize: 14, fontWeight: "700", color: "#fff", writingDirection: "rtl", textAlign: "right" }}
+        className="text-right text-sm font-bold text-foreground"
+        style={{ writingDirection: "rtl" }}
         numberOfLines={1}
       >
         {item.chapterTitle ?? item.topicTitle ?? "صفحة"}
       </Text>
 
-      {/* Snippet (paragraph match) */}
       {item.snippet && (
         <Text
-          style={{ fontSize: 13, color: "#b3b3b3", writingDirection: "rtl", textAlign: "right", lineHeight: 20 }}
+          className="text-right text-[13px] leading-5 text-muted-foreground"
+          style={{ writingDirection: "rtl" }}
           numberOfLines={2}
         >
           {item.snippet}
         </Text>
       )}
 
-      {/* Page number + match type badge */}
-      <View style={{ flexDirection: "row-reverse", alignItems: "center", gap: 8, marginTop: 2 }}>
-        <Text style={{ fontSize: 11, color: "#4b5563" }}>
+      <View className="mt-0.5 flex-row-reverse items-center gap-2">
+        <Text className="text-[11px] text-muted-foreground">
           {item.printedPageNo != null ? `ص ${item.printedPageNo}` : `#${item.shamelaPageNo}`}
         </Text>
         <View
-          style={{
-            backgroundColor:
-              item.matchType === "title"
-                ? "rgba(29,185,84,0.15)"
-                : "rgba(74,158,255,0.15)",
-            borderRadius: 6,
-            paddingHorizontal: 6,
-            paddingVertical: 2,
-          }}
+          className={
+            item.matchType === "title"
+              ? "rounded-md bg-primary/15 px-1.5 py-0.5"
+              : "rounded-md bg-sky-500/15 px-1.5 py-0.5"
+          }
         >
           <Text
-            style={{
-              fontSize: 10,
-              color: item.matchType === "title" ? "#1DB954" : "#4A9EFF",
-              fontWeight: "600",
-            }}
+            className={item.matchType === "title" ? "text-[10px] font-semibold text-primary" : "text-[10px] font-semibold text-sky-400"}
           >
             {item.matchType === "title" ? "عنوان" : "نص"}
           </Text>
@@ -194,53 +179,25 @@ export default function BookSearchScreen() {
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#121212" }}>
+    <View className="flex-1 bg-background">
       <SafeArea>
-        {/* Header */}
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 10,
-            paddingHorizontal: 16,
-            paddingVertical: 10,
-            borderBottomWidth: 1,
-            borderBottomColor: "#282828",
-          }}
-        >
+        <View className="flex-row items-center gap-2.5 border-b border-border px-4 py-2.5">
           <Pressable
             onPress={() => router.back()}
-            style={{
-              width: 34, height: 34, borderRadius: 17,
-              backgroundColor: "#282828", alignItems: "center", justifyContent: "center",
-            }}
+            className="size-[34px] items-center justify-center rounded-full bg-card"
           >
             <Icon name="ChevronLeft" size={20} className="text-foreground" />
           </Pressable>
 
-          {/* Search input */}
-          <View
-            style={{
-              flex: 1,
-              flexDirection: "row-reverse",
-              alignItems: "center",
-              backgroundColor: "#1E1E1E",
-              borderRadius: 10,
-              paddingHorizontal: 12,
-              paddingVertical: 8,
-              gap: 8,
-            }}
-          >
+          <View className="flex-1 flex-row-reverse items-center gap-2 rounded-xl bg-card px-3 py-2">
             <Icon name="Search" size={16} className="text-muted-foreground" />
             <TextInput
               value={query}
               onChangeText={setQuery}
               placeholder="ابحث في الكتاب..."
               placeholderTextColor="#666"
-              style={{
-                flex: 1, fontSize: 15, color: "#fff",
-                textAlign: "right", writingDirection: "rtl",
-              }}
+              className="flex-1 text-right text-[15px] text-foreground"
+              style={{ writingDirection: "rtl" }}
               autoFocus
               returnKeyType="search"
             />
@@ -251,35 +208,26 @@ export default function BookSearchScreen() {
             )}
           </View>
 
-          {/* Offline badge */}
           {isDownloaded && (
-            <View
-              style={{
-                backgroundColor: "rgba(29,185,84,0.12)",
-                borderRadius: 8,
-                paddingHorizontal: 8,
-                paddingVertical: 4,
-              }}
-            >
-              <Text style={{ fontSize: 11, color: "#1DB954" }}>محلي</Text>
+            <View className="rounded-lg bg-primary/12 px-2 py-1">
+              <Text className="text-[11px] text-primary">محلي</Text>
             </View>
           )}
         </View>
 
-        {/* Results */}
         {isSearching && debouncedQuery.length >= 2 ? (
-          <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-            <ActivityIndicator color="#1DB954" />
+          <View className="flex-1 items-center justify-center">
+            <ActivityIndicator color="rgb(29, 185, 84)" />
           </View>
         ) : debouncedQuery.length < 2 ? (
-          <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 8 }}>
+          <View className="flex-1 items-center justify-center gap-2">
             <Icon name="Search" size={40} className="text-muted-foreground" />
-            <Text style={{ color: "#4b5563", fontSize: 14 }}>اكتب للبحث في العناوين والنصوص</Text>
+            <Text className="text-sm text-muted-foreground">اكتب للبحث في العناوين والنصوص</Text>
           </View>
         ) : results.length === 0 ? (
-          <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 8 }}>
+          <View className="flex-1 items-center justify-center gap-2">
             <Icon name="SearchX" size={40} className="text-muted-foreground" />
-            <Text style={{ color: "#4b5563", fontSize: 14 }}>لا توجد نتائج لـ "{debouncedQuery}"</Text>
+            <Text className="text-sm text-muted-foreground">لا توجد نتائج لـ "{debouncedQuery}"</Text>
           </View>
         ) : (
           <FlatList
@@ -288,13 +236,8 @@ export default function BookSearchScreen() {
             renderItem={renderItem}
             keyboardShouldPersistTaps="handled"
             ListHeaderComponent={
-              <View
-                style={{
-                  paddingHorizontal: 16, paddingVertical: 8,
-                  flexDirection: "row-reverse", alignItems: "center",
-                }}
-              >
-                <Text style={{ fontSize: 12, color: "#6b7280" }}>
+              <View className="flex-row-reverse items-center px-4 py-2">
+                <Text className="text-xs text-muted-foreground">
                   {results.length} نتيجة
                 </Text>
               </View>

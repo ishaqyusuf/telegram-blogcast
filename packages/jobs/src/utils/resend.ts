@@ -1,13 +1,12 @@
 import { Resend } from "resend";
-import { render } from "@gnd/email/render";
-import { getRecipient } from "@gnd/utils/envs";
+import { getRecipient } from "@acme/utils/envs";
 import { nanoid } from "nanoid";
 // import { logger } from "@trigger.dev/core";
 
 export const resend = new Resend(process.env.RESEND_API_KEY!);
 type FromEmails =
-  | "GND Payment <pay@gndprodesk.com>"
-  | "GND Millwork <noreply@gndprodesk.com>";
+  | "Al-Ghurobaa Payment <pay@alghurobaa.com>"
+  | "Al-Ghurobaa <noreply@alghurobaa.com>";
 interface SendEmailProps {
   subject: string;
   from: FromEmails;
@@ -36,7 +35,7 @@ export async function sendEmail({
     headers: {
       "X-Entity-Ref-ID": nanoid(),
     },
-    html: render(content),
+    html: content,
   });
   if (response.error) {
     // logger.error(errorLog || "email failed to send", {

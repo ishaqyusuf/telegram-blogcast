@@ -78,8 +78,8 @@ export default function BookReaderScreen() {
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, backgroundColor: "#121212", alignItems: "center", justifyContent: "center" }}>
-        <ActivityIndicator color="#1DB954" />
+      <View className="flex-1 items-center justify-center bg-background">
+        <ActivityIndicator color="rgb(29, 185, 84)" />
       </View>
     );
   }
@@ -133,26 +133,12 @@ export default function BookReaderScreen() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#121212" }}>
+    <View className="flex-1 bg-background">
       <SafeArea>
-        {/* Header */}
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 10,
-            paddingHorizontal: 16,
-            paddingVertical: 10,
-            borderBottomWidth: 1,
-            borderBottomColor: "#282828",
-          }}
-        >
+        <View className="flex-row items-center gap-2.5 border-b border-border px-4 py-2.5">
           <Pressable
             onPress={() => router.back()}
-            style={{
-              width: 34, height: 34, borderRadius: 17,
-              backgroundColor: "#282828", alignItems: "center", justifyContent: "center",
-            }}
+            className="size-[34px] items-center justify-center rounded-full bg-card"
           >
             <Icon name="ChevronLeft" size={20} className="text-foreground" />
           </Pressable>
@@ -160,26 +146,22 @@ export default function BookReaderScreen() {
           <View style={{ flex: 1, alignItems: "flex-end" }}>
             {page.chapterTitle && (
               <Text
-                style={{ fontSize: 14, fontWeight: "700", color: "#fff", writingDirection: "rtl" }}
+                className="text-sm font-bold text-foreground"
+                style={{ writingDirection: "rtl" }}
                 numberOfLines={1}
               >
                 {page.chapterTitle}
               </Text>
             )}
-            <Text style={{ fontSize: 12, color: "#b3b3b3" }}>
+            <Text className="text-xs text-muted-foreground">
               {page.printedPageNo != null ? `ص ${page.printedPageNo}` : `#${page.shamelaPageNo}`}
               {page.volume ? `  •  ج ${page.volume.number}` : ""}
             </Text>
           </View>
 
-          {/* Bookmark toggle */}
           <Pressable
             onPress={toggleBookmark}
-            style={{
-              width: 34, height: 34, borderRadius: 17,
-              backgroundColor: bookmarked ? "rgba(29,185,84,0.15)" : "#282828",
-              alignItems: "center", justifyContent: "center",
-            }}
+            className={bookmarked ? "size-[34px] items-center justify-center rounded-full bg-primary/15" : "size-[34px] items-center justify-center rounded-full bg-card"}
           >
             <Icon
               name="Bookmark"
@@ -190,10 +172,7 @@ export default function BookReaderScreen() {
 
           <Pressable
             onPress={() => { setHighlightedMarker(null); footnotesRef.current?.present(); }}
-            style={{
-              width: 34, height: 34, borderRadius: 17,
-              backgroundColor: "#282828", alignItems: "center", justifyContent: "center",
-            }}
+            className="size-[34px] items-center justify-center rounded-full bg-card"
           >
             <Icon name="BookMarked" size={18} className="text-foreground" />
           </Pressable>
@@ -211,10 +190,8 @@ export default function BookReaderScreen() {
           >
             {page.topicTitle && (
               <Text
-                style={{
-                  fontSize: 15, fontWeight: "600", color: "#1DB954",
-                  textAlign: "center", marginBottom: 16, writingDirection: "rtl",
-                }}
+                className="mb-4 text-center text-[15px] font-semibold text-primary"
+                style={{ writingDirection: "rtl" }}
               >
                 {page.topicTitle}
               </Text>
@@ -242,26 +219,17 @@ export default function BookReaderScreen() {
             {/* Comments list */}
             {comments.length > 0 && (
               <View style={{ marginTop: 24, gap: 8 }}>
-                <Text style={{ fontSize: 14, fontWeight: "700", color: "#fff", textAlign: "right", writingDirection: "rtl" }}>
+                <Text className="text-right text-sm font-bold text-foreground" style={{ writingDirection: "rtl" }}>
                   التعليقات ({comments.length})
                 </Text>
                 {comments.map((comment) => (
                   <View
                     key={comment.localId}
-                    style={{
-                      backgroundColor: "#282828",
-                      borderRadius: 8,
-                      padding: 10,
-                      flexDirection: "row-reverse",
-                      gap: 8,
-                      alignItems: "flex-start",
-                    }}
+                    className="flex-row-reverse items-start gap-2 rounded-lg bg-card p-2.5"
                   >
                     <Text
-                      style={{
-                        flex: 1, fontSize: 14, color: "#e8e8e8",
-                        writingDirection: "rtl", textAlign: "right",
-                      }}
+                      className="flex-1 text-right text-sm text-foreground"
+                      style={{ writingDirection: "rtl" }}
                     >
                       {comment.content}
                     </Text>
@@ -277,80 +245,42 @@ export default function BookReaderScreen() {
             )}
           </ScrollView>
 
-          {/* Bottom toolbar */}
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              paddingHorizontal: 16,
-              paddingVertical: 12,
-              borderTopWidth: 1,
-              borderTopColor: "#282828",
-              gap: 8,
-              backgroundColor: "#121212",
-            }}
-          >
-            {/* Comment toggle */}
+          <View className="flex-row items-center gap-2 border-t border-border bg-background px-4 py-3">
             <Pressable
               onPress={() => setShowCommentInput(!showCommentInput)}
-              style={{
-                flex: 1,
-                flexDirection: "row", alignItems: "center", justifyContent: "center",
-                gap: 6, backgroundColor: "#282828", borderRadius: 10, paddingVertical: 10,
-              }}
+              className="flex-1 flex-row items-center justify-center gap-1.5 rounded-xl bg-card py-2.5"
             >
               <Icon name="MessageSquare" size={16} className="text-foreground" />
-              <Text style={{ fontSize: 13, fontWeight: "600", color: "#fff" }}>تعليق</Text>
+              <Text className="text-[13px] font-semibold text-foreground">تعليق</Text>
             </Pressable>
 
-            {/* Prev page */}
             <Pressable
               onPress={() => router.back()}
-              style={{
-                flexDirection: "row", alignItems: "center", justifyContent: "center",
-                gap: 6, backgroundColor: "#282828", borderRadius: 10,
-                paddingVertical: 10, paddingHorizontal: 16,
-              }}
+              className="flex-row items-center justify-center gap-1.5 rounded-xl bg-card px-4 py-2.5"
             >
               <Icon name="ChevronRight" size={18} className="text-foreground" />
-              <Text style={{ fontSize: 13, color: "#fff" }}>السابقة</Text>
+              <Text className="text-[13px] text-foreground">السابقة</Text>
             </Pressable>
 
-            {/* Next page */}
             <Pressable
               onPress={() =>
                 fetchNext({ bookId: bookIdNum, currentShamelaPageNo: page.shamelaPageNo })
               }
-              style={{
-                flexDirection: "row", alignItems: "center", justifyContent: "center",
-                gap: 6, backgroundColor: "#1DB954", borderRadius: 10,
-                paddingVertical: 10, paddingHorizontal: 16,
-              }}
+              className="flex-row items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2.5"
             >
               {isFetchingNext ? (
                 <ActivityIndicator size="small" color="#000" />
               ) : (
                 <>
-                  <Text style={{ fontSize: 13, fontWeight: "700", color: "#000" }}>التالية</Text>
+                  <Text className="text-[13px] font-bold text-primary-foreground">التالية</Text>
                   <Icon name="ChevronLeft" size={18} className="text-background" />
                 </>
               )}
             </Pressable>
           </View>
 
-          {/* Comment input — fixed above keyboard */}
           {showCommentInput && (
-            <View
-              style={{
-                flexDirection: "row",
-                gap: 8,
-                backgroundColor: "#1E1E1E",
-                borderTopWidth: 1,
-                borderTopColor: "#282828",
-                padding: 12,
-                alignItems: "center",
-              }}
-            >
+            <View className="flex-row items-center gap-2 border-t border-border bg-card px-3 py-3">
               <TextInput
                 value={commentText}
                 onChangeText={setCommentText}
@@ -360,22 +290,14 @@ export default function BookReaderScreen() {
                     : "أضف تعليقاً..."
                 }
                 placeholderTextColor="#666"
-                style={{
-                  flex: 1, fontSize: 14, color: "#fff",
-                  textAlign: "right", writingDirection: "rtl",
-                  maxHeight: 80,
-                }}
+                className="flex-1 text-right text-sm text-foreground"
+                style={{ writingDirection: "rtl", maxHeight: 80 }}
                 multiline
                 autoFocus
               />
               <Pressable
                 onPress={submitComment}
-                style={{
-                  backgroundColor: "#1DB954",
-                  borderRadius: 8,
-                  paddingHorizontal: 14,
-                  paddingVertical: 10,
-                }}
+                className="rounded-lg bg-primary px-3.5 py-2.5"
               >
                 <Icon name="Send" size={16} className="text-background" />
               </Pressable>

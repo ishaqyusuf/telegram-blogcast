@@ -79,7 +79,7 @@ import { camel } from "@gnd/utils";
 =======
 >>>>>>> d08ecb5 (Rebrand Expo app config and unify mobile icons)
 import { THEME } from "@/lib/theme";
-import { camel } from "@gnd/utils";
+import { camel } from "@acme/utils";
 import {
   Add01Icon as Plus,
   AlertCircleIcon as AlertCircle,

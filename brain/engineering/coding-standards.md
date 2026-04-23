@@ -15,6 +15,7 @@ Defines repository-wide implementation norms so code stays consistent across app
 - Reuse shared workspace packages before adding duplicate logic.
 - Keep domain logic separated from app-specific rendering code.
 - Favor typed contracts and schema validation at API boundaries.
+- In React Native components, do not mix `className` and `style` on the same element by default. Prefer one styling path per element; only use both when there is a clear platform-specific need and document that exception inline.
 
 ### Naming
 - File names: `kebab-case`

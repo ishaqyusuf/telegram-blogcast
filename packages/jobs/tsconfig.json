@@ -1,5 +1,5 @@
 {
-  "extends": "@gnd/tsconfig/base.json",
+  "extends": "@acme/tsconfig/base.json",
   "include": ["src", "../../types"],
   "exclude": ["node_modules"],
   "compilerOptions": {

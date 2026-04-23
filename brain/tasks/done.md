@@ -13,6 +13,8 @@ Tracks completed work that is still useful as project memory.
 ### Completed
 - Project Brain initialized with core system, product, engineering, database, API, task, and template documents.
 - Legacy `brain/tasks.md` preserved as `brain/tasks/legacy-tasks.md` to unblock the standard task-directory layout.
+- **Books import workflow** — added durable book/page import history, recent-history re-import CTA, and manual page paste into an existing or newly created book.
+- **Safe page re-import** — `fetchPage`/`fetchNextPage` now preserve the page row and remap highlight/comment anchors instead of only replacing page content blindly.
 - **Audio seek bar** — rewrote with `Animated.Value` for 60fps drag, haptic on drag start, seek only on release.
 - **DualSeekBar second seek** — refs updated immediately in PanResponder callbacks (not just via useEffect).
 - **Global audio bar route** — fixed wrong route `/blog-view-2/${blogId}/index` → `/blog-view-2/${blogId}`.

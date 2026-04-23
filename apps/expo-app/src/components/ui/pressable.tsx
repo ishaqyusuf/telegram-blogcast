@@ -6,7 +6,7 @@ import {
 } from "react-native";
 import * as Haptics from "expo-haptics";
 import { useColors } from "@/hooks/use-color";
-import { hexToRgba } from "@gnd/utils/colors";
+import { hexToRgba } from "@acme/utils/colors";
 
 type Props = BasePressableProps & {
   href?: LinkProps["href"];

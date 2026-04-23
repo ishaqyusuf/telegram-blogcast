@@ -23,5 +23,11 @@ High-level map of the API surface and where endpoint logic lives.
 - Podcasts
 - App/root router composition
 
-### Current Documentation Gap
-- Expand this file with endpoint-by-endpoint summaries as features are touched.
+### Books Router Highlights
+- `book.syncBookFromShamela`: imports or re-imports a Shamela book URL, stores `BookImportHistory`, refreshes metadata, and syncs TOC chapter stubs.
+- `book.getBookImportHistory`: returns recent book import attempts for the fetch screen/history UI.
+- `book.fetchPage`: imports or re-imports a single Shamela page, records `BookPageImportHistory`, refreshes paragraphs/footnotes, and remaps annotations against the new paragraph set.
+- `book.fetchNextPage`: fetches the next sequential Shamela page using the same preservation logic as `fetchPage`.
+- `book.importBookPageManually`: creates or reuses a book, splits pasted page text into paragraphs, stores the page, and records a `manual_paste` page-import history entry.
+- `book.getBookPageImportHistory`: returns recent page-level import attempts for a specific book.
+- `book.addHighlight`, `book.syncHighlights`, `book.addPageComment`, `book.syncComments`: now persist paragraph anchor metadata used during page re-import remapping.
