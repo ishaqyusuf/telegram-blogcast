@@ -273,8 +273,14 @@ export default function BookFetchScreen() {
             <Icon name="ChevronLeft" size={22} className="text-foreground" />
           </Pressable>
           <Text
-            className="flex-1 text-right text-lg font-bold text-foreground"
-            style={{ writingDirection: "rtl" }}
+            style={{
+              flex: 1,
+              textAlign: "right",
+              fontSize: 18,
+              fontWeight: "700",
+              color: "#f3f4f6",
+              writingDirection: "rtl",
+            }}
           >
             استيراد الكتب والصفحات
           </Text>
@@ -290,14 +296,24 @@ export default function BookFetchScreen() {
           >
             <View className="gap-1.5 rounded-xl border border-primary/20 bg-primary/10 p-3.5">
               <Text
-                className="text-right text-sm font-bold text-primary"
-                style={{ writingDirection: "rtl" }}
+                style={{
+                  textAlign: "right",
+                  fontSize: 14,
+                  fontWeight: "700",
+                  color: "#1DB954",
+                  writingDirection: "rtl",
+                }}
               >
                 الاستيراد بالرابط
               </Text>
               <Text
-                className="text-right text-[13px] leading-5 text-muted-foreground"
-                style={{ writingDirection: "rtl" }}
+                style={{
+                  textAlign: "right",
+                  fontSize: 13,
+                  lineHeight: 20,
+                  color: "#9ca3af",
+                  writingDirection: "rtl",
+                }}
               >
                 ألصق رابط كتاب الشاملة ليتم حفظ محاولة الاستيراد في السجل مع
                 حالة النجاح أو الفشل، ويمكنك إعادة الاستيراد من نفس السجل لاحقاً.
@@ -306,8 +322,13 @@ export default function BookFetchScreen() {
 
             <View className="gap-2 rounded-xl bg-card p-3">
               <Text
-                className="text-right text-[13px] font-semibold text-muted-foreground"
-                style={{ writingDirection: "rtl" }}
+                style={{
+                  textAlign: "right",
+                  fontSize: 13,
+                  fontWeight: "600",
+                  color: "#9ca3af",
+                  writingDirection: "rtl",
+                }}
               >
                 نموذج الذكاء الاصطناعي
               </Text>
@@ -338,8 +359,13 @@ export default function BookFetchScreen() {
 
             <View className="gap-2.5 rounded-xl bg-card p-3">
               <Text
-                className="text-right text-[13px] font-semibold text-muted-foreground"
-                style={{ writingDirection: "rtl" }}
+                style={{
+                  textAlign: "right",
+                  fontSize: 13,
+                  fontWeight: "600",
+                  color: "#9ca3af",
+                  writingDirection: "rtl",
+                }}
               >
                 رابط الكتاب
               </Text>
@@ -497,7 +523,7 @@ export default function BookFetchScreen() {
                       <Text
                         style={{
                           fontSize: 20,
-                          fontWeight: "bold",
+                          fontWeight: "700",
                           color: "white",
                           writingDirection: "rtl",
                         }}
@@ -509,16 +535,25 @@ export default function BookFetchScreen() {
 
                   <View style={{ flex: 1, gap: 5 }}>
                     <Text
-                      className="text-right text-base font-extrabold text-foreground"
-                      style={{ writingDirection: "rtl" }}
+                      style={{
+                        textAlign: "right",
+                        fontSize: 16,
+                        fontWeight: "800",
+                        color: "#f3f4f6",
+                        writingDirection: "rtl",
+                      }}
                       numberOfLines={2}
                     >
                       {result.book.nameAr}
                     </Text>
                     {result.book.authors.length > 0 && (
                       <Text
-                        className="text-right text-[13px] text-primary"
-                        style={{ writingDirection: "rtl" }}
+                        style={{
+                          textAlign: "right",
+                          fontSize: 13,
+                          color: "#1DB954",
+                          writingDirection: "rtl",
+                        }}
                         numberOfLines={1}
                       >
                         {result.book.authors.map((author) => author.nameAr ?? author.name).join("، ")}
@@ -555,8 +590,13 @@ export default function BookFetchScreen() {
             <View className="gap-3 rounded-2xl bg-card p-3.5">
               <View className="flex-row-reverse items-center justify-between">
                 <Text
-                  className="text-right text-sm font-bold text-foreground"
-                  style={{ writingDirection: "rtl" }}
+                  style={{
+                    textAlign: "right",
+                    fontSize: 14,
+                    fontWeight: "700",
+                    color: "#f3f4f6",
+                    writingDirection: "rtl",
+                  }}
                 >
                   سجل الاستيراد الأخير
                 </Text>
@@ -576,8 +616,13 @@ export default function BookFetchScreen() {
                       </Text>
                     </View>
                     <Text
-                      className="text-right text-[13px] font-semibold text-foreground"
-                      style={{ writingDirection: "rtl" }}
+                      style={{
+                        textAlign: "right",
+                        fontSize: 13,
+                        fontWeight: "600",
+                        color: "#f3f4f6",
+                        writingDirection: "rtl",
+                      }}
                     >
                       {entry.book?.nameAr ?? entry.book?.nameEn ?? "استيراد كتاب"}
                     </Text>
@@ -586,15 +631,23 @@ export default function BookFetchScreen() {
                     </Text>
                     {entry.errorMessage ? (
                       <Text
-                        className="text-right text-[12px] text-destructive"
-                        style={{ writingDirection: "rtl" }}
+                        style={{
+                          textAlign: "right",
+                          fontSize: 12,
+                          color: "#ef4444",
+                          writingDirection: "rtl",
+                        }}
                       >
                         {entry.errorMessage}
                       </Text>
                     ) : (
                       <Text
-                        className="text-right text-[12px] text-muted-foreground"
-                        style={{ writingDirection: "rtl" }}
+                        style={{
+                          textAlign: "right",
+                          fontSize: 12,
+                          color: "#9ca3af",
+                          writingDirection: "rtl",
+                        }}
                       >
                         {entry.chaptersImported} فصل تمت مزامنته
                       </Text>
@@ -623,8 +676,12 @@ export default function BookFetchScreen() {
                 ))
               ) : (
                 <Text
-                  className="text-right text-[13px] text-muted-foreground"
-                  style={{ writingDirection: "rtl" }}
+                  style={{
+                    textAlign: "right",
+                    fontSize: 13,
+                    color: "#9ca3af",
+                    writingDirection: "rtl",
+                  }}
                 >
                   لا توجد محاولات استيراد بعد.
                 </Text>
@@ -634,14 +691,24 @@ export default function BookFetchScreen() {
             <View className="gap-3 rounded-2xl bg-card p-3.5">
               <View className="gap-1">
                 <Text
-                  className="text-right text-sm font-bold text-foreground"
-                  style={{ writingDirection: "rtl" }}
+                  style={{
+                    textAlign: "right",
+                    fontSize: 14,
+                    fontWeight: "700",
+                    color: "#f3f4f6",
+                    writingDirection: "rtl",
+                  }}
                 >
                   لصق صفحة يدوياً
                 </Text>
                 <Text
-                  className="text-right text-[13px] leading-5 text-muted-foreground"
-                  style={{ writingDirection: "rtl" }}
+                  style={{
+                    textAlign: "right",
+                    fontSize: 13,
+                    lineHeight: 20,
+                    color: "#9ca3af",
+                    writingDirection: "rtl",
+                  }}
                 >
                   أدخل رقم الصفحة، اختر كتاباً موجوداً أو أنشئ كتاباً جديداً، ثم الصق النص. رابط الصفحة اختياري ويمكن استخدامه لاحقاً لإعادة الاستيراد.
                 </Text>
@@ -692,8 +759,16 @@ export default function BookFetchScreen() {
                   onChangeText={setManualBookName}
                   placeholder="اسم الكتاب"
                   placeholderTextColor="#666"
-                  className="rounded-xl bg-background px-3 py-3 text-right text-sm text-foreground"
-                  style={{ writingDirection: "rtl" }}
+                  style={{
+                    borderRadius: 12,
+                    backgroundColor: "rgba(255,255,255,0.04)",
+                    paddingHorizontal: 12,
+                    paddingVertical: 12,
+                    textAlign: "right",
+                    fontSize: 14,
+                    color: "#e5e7eb",
+                    writingDirection: "rtl",
+                  }}
                 />
               ) : (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -765,16 +840,32 @@ export default function BookFetchScreen() {
                 onChangeText={setManualChapterTitle}
                 placeholder="عنوان الباب (اختياري)"
                 placeholderTextColor="#666"
-                className="rounded-xl bg-background px-3 py-3 text-right text-sm text-foreground"
-                style={{ writingDirection: "rtl" }}
+                style={{
+                  borderRadius: 12,
+                  backgroundColor: "rgba(255,255,255,0.04)",
+                  paddingHorizontal: 12,
+                  paddingVertical: 12,
+                  textAlign: "right",
+                  fontSize: 14,
+                  color: "#e5e7eb",
+                  writingDirection: "rtl",
+                }}
               />
               <TextInput
                 value={manualTopicTitle}
                 onChangeText={setManualTopicTitle}
                 placeholder="عنوان الموضوع (اختياري)"
                 placeholderTextColor="#666"
-                className="rounded-xl bg-background px-3 py-3 text-right text-sm text-foreground"
-                style={{ writingDirection: "rtl" }}
+                style={{
+                  borderRadius: 12,
+                  backgroundColor: "rgba(255,255,255,0.04)",
+                  paddingHorizontal: 12,
+                  paddingVertical: 12,
+                  textAlign: "right",
+                  fontSize: 14,
+                  color: "#e5e7eb",
+                  writingDirection: "rtl",
+                }}
               />
               <TextInput
                 value={manualLink}
@@ -790,8 +881,18 @@ export default function BookFetchScreen() {
                 onChangeText={setManualText}
                 placeholder="الصق نص الصفحة هنا..."
                 placeholderTextColor="#666"
-                className="min-h-[180px] rounded-xl bg-background px-3 py-3 text-right text-sm text-foreground"
-                style={{ writingDirection: "rtl", textAlignVertical: "top" }}
+                style={{
+                  minHeight: 180,
+                  borderRadius: 12,
+                  backgroundColor: "rgba(255,255,255,0.04)",
+                  paddingHorizontal: 12,
+                  paddingVertical: 12,
+                  textAlign: "right",
+                  fontSize: 14,
+                  color: "#e5e7eb",
+                  writingDirection: "rtl",
+                  textAlignVertical: "top",
+                }}
                 multiline
               />
 
@@ -823,8 +924,12 @@ export default function BookFetchScreen() {
 
               {manualStep === "error" && manualError ? (
                 <Text
-                  className="text-right text-[13px] text-destructive"
-                  style={{ writingDirection: "rtl" }}
+                  style={{
+                    textAlign: "right",
+                    fontSize: 13,
+                    color: "#ef4444",
+                    writingDirection: "rtl",
+                  }}
                 >
                   {manualError}
                 </Text>
@@ -833,14 +938,23 @@ export default function BookFetchScreen() {
               {manualStep === "done" && manualResult ? (
                 <View className="gap-2 rounded-xl border border-primary/20 bg-primary/10 p-3">
                   <Text
-                    className="text-right text-sm font-bold text-primary"
-                    style={{ writingDirection: "rtl" }}
+                    style={{
+                      textAlign: "right",
+                      fontSize: 14,
+                      fontWeight: "700",
+                      color: "#1DB954",
+                      writingDirection: "rtl",
+                    }}
                   >
                     تم حفظ الصفحة بنجاح
                   </Text>
                   <Text
-                    className="text-right text-[13px] text-muted-foreground"
-                    style={{ writingDirection: "rtl" }}
+                    style={{
+                      textAlign: "right",
+                      fontSize: 13,
+                      color: "#9ca3af",
+                      writingDirection: "rtl",
+                    }}
                   >
                     صفحة #{manualResult.page.shamelaPageNo} في سجل #{manualResult.historyId}
                   </Text>
