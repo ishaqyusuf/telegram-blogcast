@@ -1,10 +1,6 @@
 import { Button } from "@/components/ui/button";
-<<<<<<< HEAD
-import { Input } from "@/components/ui/input";
-=======
 import { Icon } from "@/components/ui/icon";
-import { Input } from "@/components/ui/input-2";
->>>>>>> d08ecb5 (Rebrand Expo app config and unify mobile icons)
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Text } from "@/components/ui/text";
 import { Link, Stack } from "expo-router";
@@ -14,7 +10,7 @@ export default function NotFound() {
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <View className="flex-1 bg-white justify-center items-center px-8">
+      <View className="flex-1 bg-background justify-center items-center px-8">
         <View className="grid w-full gap-4">
           <Label>Input</Label>
           <Input placeholder="Type something..." className="w-full" />
@@ -55,29 +51,29 @@ export default function NotFound() {
 
         {/* Text Content */}
         <View className="items-center gap-3 mb-10">
-          <Text className="text-3xl font-bold text-[#333] text-center">
+          <Text className="text-3xl font-bold text-foreground text-center">
             Page Not Found
           </Text>
-          <Text className="text-base text-[#666] text-center leading-6 px-4">
+          <Text className="text-base text-muted-foreground text-center leading-6 px-4">
             Oops! The page you&apos;re looking for doesn&apos;t exist.
           </Text>
-          <Text className="text-base text-[#666] text-center leading-6">
+          <Text className="text-base text-muted-foreground text-center leading-6">
             It might have been moved or deleted.
           </Text>
         </View>
 
         {/* Home Button */}
         <Link href="/" asChild>
-          <TouchableOpacity className="bg-[#1BC464] px-8 py-4 rounded-2xl shadow-lg active:opacity-80">
+          <TouchableOpacity className="bg-primary px-8 py-4 rounded-2xl shadow-lg active:opacity-80">
             <View className="flex-row items-center gap-2">
-              <Icon name="Home" size={20} color="white" />
-              <Text className="text-white text-lg font-bold">Go Back Home</Text>
+              <Icon name="Home" size={20} className="text-primary-foreground" />
+              <Text className="text-primary-foreground text-lg font-bold">Go Back Home</Text>
             </View>
           </TouchableOpacity>
         </Link>
 
         {/* Additional Help Text */}
-        <Text className="text-sm text-[#999] text-center mt-8">
+        <Text className="text-sm text-muted-foreground text-center mt-8">
           Need help? Contact our support team
         </Text>
       </View>

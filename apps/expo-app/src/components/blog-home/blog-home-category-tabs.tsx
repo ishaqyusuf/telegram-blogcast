@@ -1,4 +1,5 @@
 import { Pressable } from "@/components/ui/pressable";
+import { useTranslation, type TranslationKey } from "@/lib/i18n";
 import { ScrollView, Text, View } from "react-native";
 
 export const BLOG_CATEGORIES = [
@@ -13,12 +14,24 @@ export const BLOG_CATEGORIES = [
 
 export type BlogCategory = (typeof BLOG_CATEGORIES)[number];
 
+const CATEGORY_KEYS: Record<BlogCategory, TranslationKey> = {
+  All: "all",
+  Audio: "audio",
+  Text: "text",
+  Picture: "picture",
+  Video: "video",
+  Likes: "likes",
+  Saved: "saved",
+};
+
 interface Props {
   selected: BlogCategory;
   onSelect: (value: BlogCategory) => void;
 }
 
 export function BlogHomeCategoryTabs({ selected, onSelect }: Props) {
+  const { t } = useTranslation();
+
   return (
     <View className="bg-background py-3 pl-4">
       <ScrollView
@@ -43,7 +56,7 @@ export function BlogHomeCategoryTabs({ selected, onSelect }: Props) {
                     : "text-muted-foreground font-medium"
                 }`}
               >
-                {cat}
+                {t(CATEGORY_KEYS[cat])}
               </Text>
             </Pressable>
           );

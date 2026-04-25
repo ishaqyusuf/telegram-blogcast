@@ -2,89 +2,87 @@ import { DarkTheme, DefaultTheme, type Theme } from "@react-navigation/native";
 
 export const THEME = {
   light: {
-    // Dark-first brand palette (mirrors dark theme — brand primary is green)
-    background: "rgb(18, 18, 18)",
-    foreground: "rgb(255, 255, 255)",
+    background: "rgb(248, 250, 252)",
+    foreground: "rgb(15, 23, 42)",
 
-    card: "rgb(30, 30, 30)",
-    cardForeground: "rgb(255, 255, 255)",
+    card: "rgb(255, 255, 255)",
+    cardForeground: "rgb(15, 23, 42)",
 
-    popover: "rgb(32, 32, 32)",
-    popoverForeground: "rgb(255, 255, 255)",
+    popover: "rgb(255, 255, 255)",
+    popoverForeground: "rgb(15, 23, 42)",
 
-    primary: "rgb(29, 185, 84)",
-    primaryForeground: "rgb(0, 0, 0)",
+    primary: "rgb(30, 64, 175)",
+    primaryForeground: "rgb(239, 246, 255)",
 
-    success: "rgb(34, 197, 94)",
-    successForeground: "rgb(236, 253, 245)",
+    success: "rgb(22, 163, 74)",
+    successForeground: "rgb(240, 253, 244)",
 
-    warn: "rgb(245, 158, 11)",
-    warnForeground: "rgb(255, 251, 235)",
+    warn: "rgb(217, 119, 6)",
+    warnForeground: "rgb(255, 247, 237)",
 
-    secondary: "rgb(40, 40, 40)",
-    secondaryForeground: "rgb(179, 179, 179)",
+    secondary: "rgb(241, 245, 249)",
+    secondaryForeground: "rgb(30, 41, 59)",
 
-    muted: "rgb(40, 40, 40)",
-    mutedForeground: "rgb(179, 179, 179)",
+    muted: "rgb(226, 232, 240)",
+    mutedForeground: "rgb(100, 116, 139)",
 
-    accent: "rgb(29, 185, 84)",
-    accentForeground: "rgb(0, 0, 0)",
+    accent: "rgb(219, 234, 254)",
+    accentForeground: "rgb(30, 64, 175)",
 
-    destructive: "rgb(178, 38, 38)",
-    destructiveForeground: "rgb(250, 250, 250)",
+    destructive: "rgb(185, 28, 28)",
+    destructiveForeground: "rgb(254, 242, 242)",
 
-    border: "rgb(40, 40, 40)",
-    input: "rgb(58, 58, 58)",
-    ring: "rgb(29, 185, 84)",
+    border: "rgb(203, 213, 225)",
+    input: "rgb(226, 232, 240)",
+    ring: "rgb(37, 99, 235)",
 
     radius: "0.65rem",
 
-    chart1: "rgb(29, 185, 84)",
-    chart2: "rgb(52, 211, 153)",
-    chart3: "rgb(251, 191, 36)",
-    chart4: "rgb(192, 132, 252)",
-    chart5: "rgb(244, 63, 94)",
+    chart1: "rgb(37, 99, 235)",
+    chart2: "rgb(13, 148, 136)",
+    chart3: "rgb(217, 119, 6)",
+    chart4: "rgb(99, 102, 241)",
+    chart5: "rgb(225, 29, 72)",
   },
 
   dark: {
-    // Spotify-inspired dark palette
-    background: "rgb(18, 18, 18)",
-    foreground: "rgb(255, 255, 255)",
+    background: "rgb(15, 23, 42)",
+    foreground: "rgb(226, 232, 240)",
 
-    card: "rgb(24, 24, 24)",
-    cardForeground: "rgb(255, 255, 255)",
+    card: "rgb(30, 41, 59)",
+    cardForeground: "rgb(226, 232, 240)",
 
-    popover: "rgb(32, 32, 32)",
-    popoverForeground: "rgb(255, 255, 255)",
+    popover: "rgb(30, 41, 59)",
+    popoverForeground: "rgb(226, 232, 240)",
 
-    primary: "rgb(29, 185, 84)",
-    primaryForeground: "rgb(0, 0, 0)",
+    primary: "rgb(96, 165, 250)",
+    primaryForeground: "rgb(15, 23, 42)",
 
-    success: "rgb(34, 197, 94)",
+    success: "rgb(22, 163, 74)",
     successForeground: "rgb(236, 253, 245)",
 
     warn: "rgb(245, 158, 11)",
     warnForeground: "rgb(255, 251, 235)",
 
-    secondary: "rgb(40, 40, 40)",
-    secondaryForeground: "rgb(179, 179, 179)",
+    secondary: "rgb(51, 65, 85)",
+    secondaryForeground: "rgb(226, 232, 240)",
 
-    muted: "rgb(40, 40, 40)",
-    mutedForeground: "rgb(179, 179, 179)",
+    muted: "rgb(30, 41, 59)",
+    mutedForeground: "rgb(148, 163, 184)",
 
-    accent: "rgb(29, 185, 84)",
-    accentForeground: "rgb(0, 0, 0)",
+    accent: "rgb(30, 58, 138)",
+    accentForeground: "rgb(219, 234, 254)",
 
-    destructive: "rgb(178, 38, 38)",
-    destructiveForeground: "rgb(250, 250, 250)",
+    destructive: "rgb(220, 38, 38)",
+    destructiveForeground: "rgb(254, 242, 242)",
 
-    border: "rgb(40, 40, 40)",
-    input: "rgb(48, 48, 48)",
-    ring: "rgb(29, 185, 84)",
+    border: "rgb(51, 65, 85)",
+    input: "rgb(71, 85, 105)",
+    ring: "rgb(125, 211, 252)",
 
     radius: "0.65rem",
 
-    chart1: "rgb(29, 185, 84)",
+    chart1: "rgb(96, 165, 250)",
     chart2: "rgb(52, 211, 153)",
     chart3: "rgb(251, 191, 36)",
     chart4: "rgb(192, 132, 252)",

@@ -2,10 +2,13 @@ import { Pressable } from "@/components/ui/pressable";
 import { useRouter } from "expo-router";
 import { Text, View } from "react-native";
 import { Path, Rect, Svg } from "react-native-svg";
+import { Settings } from "lucide-react-native";
 
 import { Icon } from "@/components/ui/icon";
+import { useTranslation } from "@/lib/i18n";
 import { useColorScheme } from "nativewind";
 import * as Haptics from "expo-haptics";
+import { useColors } from "@/hooks/use-color";
 
 function getGreeting() {
   const hour = new Date().getHours();
@@ -18,6 +21,8 @@ export function BlogHomeHeader() {
   const greeting = getGreeting();
   const router = useRouter();
   const { colorScheme, setColorScheme } = useColorScheme();
+  const { t } = useTranslation();
+  const colors = useColors();
 
   function toggleColorScheme() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
@@ -55,6 +60,14 @@ export function BlogHomeHeader() {
               name={colorScheme === "dark" ? "Sun" : "Moon"}
               className="text-muted-foreground"
             />
+          </Pressable>
+          <Pressable
+            onPress={() => router.push("/settings" as any)}
+            className="p-2 rounded-full active:bg-muted"
+            accessibilityRole="button"
+            accessibilityLabel={t("settings")}
+          >
+            <Settings size={20} color={colors.mutedForeground} />
           </Pressable>
           <View className="size-9 rounded-full bg-primary items-center justify-center">
             <Text className="text-xs font-bold text-primary-foreground">

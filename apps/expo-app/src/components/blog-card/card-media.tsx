@@ -5,6 +5,7 @@ import { Image, I18nManager, Linking, Text, View } from "react-native";
 
 import { minuteToString } from "@/lib/utils";
 import { Icon } from "@/components/ui/icon";
+import { useTranslation } from "@/lib/i18n";
 
 import type { BlogCardVariant, BlogItem } from "./types";
 import { getPrimaryImageUrl } from "./utils";
@@ -68,7 +69,7 @@ function CardText({ post }: { post: BlogItem }) {
 }
 
 function CardAudio({ post }: { post: BlogItem }) {
-  if (!post.audio?.telegramFileId) return null;
+  if (!post.audio?.telegramFileId && !(post.audio as any)?.url) return null;
 
   return (
     <View className="mb-1 flex-row items-center gap-3 rounded-xl border border-border bg-background p-3">
@@ -84,7 +85,7 @@ function CardAudio({ post }: { post: BlogItem }) {
             00:00
           </Text>
           <Text className="text-[10px] font-medium text-muted-foreground">
-            {minuteToString(post.audio.duration)}
+            {minuteToString(post.audio?.duration)}
           </Text>
         </View>
       </View>
@@ -144,6 +145,7 @@ export function CardMedia({
   post: BlogItem;
   variant: BlogCardVariant;
 }) {
+  const { t } = useTranslation();
   if (variant === "audio") {
     return (
       <>
@@ -189,7 +191,7 @@ export function CardMedia({
   return (
     <View className="mb-2 rounded-lg border border-border bg-background px-3 py-2">
       <Text className="text-sm text-muted-foreground">
-        Post has no renderable media payload.
+        {t("noRenderableMedia")}
       </Text>
     </View>
   );

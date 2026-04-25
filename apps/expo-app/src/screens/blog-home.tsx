@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, Text, View } from "react-native";
+import { Alert, Pressable, Text, View } from "react-native";
 import { LegendList } from "@legendapp/list";
 import { useMutation } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -26,7 +26,9 @@ import { useInfiniteLoader } from "@/components/infinite-loader";
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Sentry } from "@/lib/sentry";
 import { invalidateQueries } from "@/lib/trpc";
+import { useTranslation } from "@/lib/i18n";
 
 export function BlogHomeSkeleton() {
   return (
@@ -70,6 +72,7 @@ export function BlogHomeSkeleton() {
 export default function BlogHomeScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ category?: string }>();
+  const { t } = useTranslation();
 
   const selectedCategory = useMemo<BlogCategory>(() => {
     const map: Record<string, BlogCategory> = {
@@ -174,6 +177,19 @@ export default function BlogHomeScreen() {
     }
   }, [refetch]);
 
+  const handleSentryTestError = useCallback(async () => {
+    const error = new Error("Sentry home screen test error");
+    Sentry.captureException(error);
+    const didFlush = await Sentry.flush(2000);
+
+    Alert.alert(
+      didFlush ? "Sentry event sent" : "Sentry flush timed out",
+      didFlush
+        ? "The test error was queued for Sentry. Check the Sentry project now."
+        : "The test error may not have reached Sentry before timeout.",
+    );
+  }, []);
+
   return (
     <View className="flex-1 bg-background">
       <SafeArea>
@@ -201,8 +217,16 @@ export default function BlogHomeScreen() {
                   selected={selectedCategory}
                   onSelect={onSelectCategory}
                 />
+                <Pressable
+                  className="mx-4 mt-4 rounded-xl border border-red-300 bg-red-50 px-4 py-3"
+                  onPress={handleSentryTestError}
+                >
+                  <Text className="text-sm font-semibold text-red-700">
+                    Send Sentry Test Error
+                  </Text>
+                </Pressable>
                 <Text className="px-4 pt-4 pb-2 text-base font-bold text-foreground">
-                  Latest Posts
+                  {t("latestPosts")}
                 </Text>
                 <View className="h-4" />
               </>

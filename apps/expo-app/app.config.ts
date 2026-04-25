@@ -31,6 +31,7 @@ const config: ExpoConfig = {
     },
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
+    usesCleartextTraffic: true,
     package: "com.alghurobaa.podcast",
   },
 
@@ -41,6 +42,14 @@ const config: ExpoConfig = {
 
   plugins: [
     "expo-router",
+    [
+      "@sentry/react-native/expo",
+      {
+        url: "https://sentry.io/",
+        organization: process.env.SENTRY_ORG,
+        project: process.env.SENTRY_PROJECT_MOBILE ?? process.env.SENTRY_PROJECT,
+      },
+    ],
     [
       "expo-splash-screen",
       {

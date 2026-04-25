@@ -8,6 +8,8 @@ import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";
 import { minuteToString } from "@/lib/utils";
+import { useColors } from "@/hooks/use-color";
+import { useTranslation } from "@/lib/i18n";
 
 function formatProgress(progressMs: number, durationSec?: number | null) {
   const posMin = Math.floor(progressMs / 60000);
@@ -19,6 +21,8 @@ function formatProgress(progressMs: number, durationSec?: number | null) {
 
 export default function PlayHistoryScreen() {
   const router = useRouter();
+  const colors = useColors();
+  const { t } = useTranslation();
   const { data: history = [], isFetching } = useQuery(
     _trpc.blog.getRecentlyPlayed.queryOptions({ limit: 50 })
   );
@@ -35,7 +39,7 @@ export default function PlayHistoryScreen() {
             <Icon name="ArrowLeft" className="text-foreground" />
           </Pressable>
           <Text className="text-xl font-bold text-foreground flex-1">
-            Recently Played
+            {t("recentlyPlayed")}
           </Text>
           <View className="px-2 py-0.5 rounded-full bg-muted">
             <Text className="text-xs font-medium text-muted-foreground">
@@ -85,7 +89,7 @@ export default function PlayHistoryScreen() {
                     {/* Progress bar */}
                     <View className="h-1 w-full bg-muted rounded-full overflow-hidden">
                       <View
-                        style={{ height: "100%", backgroundColor: "#1DB954", borderRadius: 9999, width: `${progressPct}%` }}
+                        style={{ height: "100%", backgroundColor: colors.primary, borderRadius: 9999, width: `${progressPct}%` }}
                       />
                     </View>
 
@@ -114,7 +118,7 @@ export default function PlayHistoryScreen() {
             <View className="items-center justify-center py-20">
               <Icon name="History" size={48} className="text-muted-foreground mb-3" />
               <Text className="text-sm text-muted-foreground">
-                {isFetching ? "Loading history…" : "No recently played"}
+                {isFetching ? t("loadingHistory") : t("noRecentlyPlayed")}
               </Text>
             </View>
           }

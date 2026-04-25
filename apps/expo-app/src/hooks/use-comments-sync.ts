@@ -3,7 +3,7 @@
  * Offline-first comments: write to SQLite immediately, sync to server in background.
  */
 import { useCallback, useEffect, useState } from "react";
-import { localDb } from "@/db/local-db";
+import { localDb, withLocalDb } from "@/db/local-db";
 import { localComments, LocalComment } from "@/db/local-schema";
 import { eq, and, isNull } from "drizzle-orm";
 import { vanillaTrpc } from "@/trpc/vanilla-client";
@@ -22,21 +22,25 @@ export function useCommentsSync(bookId: number, pageId: number) {
   const [comments, setComments] = useState<LocalComment[]>([]);
 
   const load = useCallback(async () => {
-    const rows = await localDb
-      .select()
-      .from(localComments)
-      .where(
-        and(
-          eq(localComments.pageId, pageId),
-          isNull(localComments.deletedAt)
+    const rows = await withLocalDb(() =>
+      localDb
+        .select()
+        .from(localComments)
+        .where(
+          and(
+            eq(localComments.pageId, pageId),
+            isNull(localComments.deletedAt)
+          )
         )
-      );
+    );
     // Sort by createdAt asc
     rows.sort((a, b) => +a.createdAt - +b.createdAt);
     setComments(rows);
   }, [pageId]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load().catch((error) => console.warn("[Comments] load failed", error));
+  }, [load]);
 
   // ─── Add comment ──────────────────────────────────────────────────────────
 
@@ -44,16 +48,18 @@ export function useCommentsSync(bookId: number, pageId: number) {
     async (content: string, paragraphId?: number) => {
       const now = new Date();
       const localId = uuid();
-      await localDb.insert(localComments).values({
-        localId,
-        bookId,
-        pageId,
-        paragraphId: paragraphId ?? null,
-        content,
-        createdAt: now,
-        updatedAt: now,
-        syncStatus: "pending_create",
-      });
+      await withLocalDb(() =>
+        localDb.insert(localComments).values({
+          localId,
+          bookId,
+          pageId,
+          paragraphId: paragraphId ?? null,
+          content,
+          createdAt: now,
+          updatedAt: now,
+          syncStatus: "pending_create",
+        })
+      );
       await load();
       syncPendingComments(bookId).catch(() => {});
     },
@@ -64,25 +70,29 @@ export function useCommentsSync(bookId: number, pageId: number) {
 
   const deleteComment = useCallback(
     async (localId: string) => {
-      const [row] = await localDb
-        .select()
-        .from(localComments)
-        .where(eq(localComments.localId, localId));
-
-      if (!row) return;
-
-      if (row.serverId) {
-        const now = new Date();
-        await localDb
-          .update(localComments)
-          .set({ deletedAt: now, syncStatus: "pending_delete" })
+      const shouldSync = await withLocalDb(async () => {
+        const [row] = await localDb
+          .select()
+          .from(localComments)
           .where(eq(localComments.localId, localId));
-        syncPendingComments(bookId).catch(() => {});
-      } else {
+
+        if (!row) return false;
+
+        if (row.serverId) {
+          const now = new Date();
+          await localDb
+            .update(localComments)
+            .set({ deletedAt: now, syncStatus: "pending_delete" })
+            .where(eq(localComments.localId, localId));
+          return true;
+        }
+
         await localDb
           .delete(localComments)
           .where(eq(localComments.localId, localId));
-      }
+        return false;
+      });
+      if (shouldSync) syncPendingComments(bookId).catch(() => {});
       await load();
     },
     [bookId, load]
@@ -100,26 +110,28 @@ export async function pullServerComments(bookId: number) {
   try {
     const serverComments = await vanillaTrpc.book.getCommentsForBook.query({ bookId });
 
-    for (const sc of serverComments) {
-      const existing = await localDb
-        .select()
-        .from(localComments)
-        .where(eq(localComments.serverId, sc.id));
+    await withLocalDb(async () => {
+      for (const sc of serverComments) {
+        const existing = await localDb
+          .select()
+          .from(localComments)
+          .where(eq(localComments.serverId, sc.id));
 
-      if (existing.length === 0) {
-        await localDb.insert(localComments).values({
-          localId: uuid(),
-          serverId: sc.id,
-          bookId,
-          pageId: sc.pageId,
-          paragraphId: sc.paragraphId ?? null,
-          content: sc.content,
-          createdAt: sc.createdAt ?? new Date(),
-          updatedAt: sc.updatedAt ?? new Date(),
-          syncStatus: "synced",
-        }).onConflictDoNothing();
+        if (existing.length === 0) {
+          await localDb.insert(localComments).values({
+            localId: uuid(),
+            serverId: sc.id,
+            bookId,
+            pageId: sc.pageId,
+            paragraphId: sc.paragraphId ?? null,
+            content: sc.content,
+            createdAt: sc.createdAt ?? new Date(),
+            updatedAt: sc.updatedAt ?? new Date(),
+            syncStatus: "synced",
+          }).onConflictDoNothing();
+        }
       }
-    }
+    });
   } catch {}
 }
 
@@ -130,15 +142,17 @@ export async function syncPendingComments(bookId: number) {
   if (!netState.isConnected) return;
 
   // Push pending_create
-  const toCreate = await localDb
-    .select()
-    .from(localComments)
-    .where(
-      and(
-        eq(localComments.bookId, bookId),
-        eq(localComments.syncStatus, "pending_create")
+  const toCreate = await withLocalDb(() =>
+    localDb
+      .select()
+      .from(localComments)
+      .where(
+        and(
+          eq(localComments.bookId, bookId),
+          eq(localComments.syncStatus, "pending_create")
+        )
       )
-    );
+  );
 
   if (toCreate.length > 0) {
     try {
@@ -151,34 +165,42 @@ export async function syncPendingComments(bookId: number) {
         })),
       });
 
-      for (const r of results) {
-        await localDb
-          .update(localComments)
-          .set({ serverId: r.serverId, syncStatus: "synced" })
-          .where(eq(localComments.localId, r.localId));
-      }
+      await withLocalDb(async () => {
+        for (const r of results) {
+          await localDb
+            .update(localComments)
+            .set({ serverId: r.serverId, syncStatus: "synced" })
+            .where(eq(localComments.localId, r.localId));
+        }
+      });
     } catch {}
   }
 
   // Push pending_delete
-  const toDelete = await localDb
-    .select()
-    .from(localComments)
-    .where(
-      and(
-        eq(localComments.bookId, bookId),
-        eq(localComments.syncStatus, "pending_delete")
+  const toDelete = await withLocalDb(() =>
+    localDb
+      .select()
+      .from(localComments)
+      .where(
+        and(
+          eq(localComments.bookId, bookId),
+          eq(localComments.syncStatus, "pending_delete")
+        )
       )
-    );
+  );
 
   for (const c of toDelete) {
     if (!c.serverId) {
-      await localDb.delete(localComments).where(eq(localComments.localId, c.localId));
+      await withLocalDb(() =>
+        localDb.delete(localComments).where(eq(localComments.localId, c.localId))
+      );
       continue;
     }
     try {
       await vanillaTrpc.book.deletePageComment.mutate({ id: c.serverId });
-      await localDb.delete(localComments).where(eq(localComments.localId, c.localId));
+      await withLocalDb(() =>
+        localDb.delete(localComments).where(eq(localComments.localId, c.localId))
+      );
     } catch {}
   }
 }

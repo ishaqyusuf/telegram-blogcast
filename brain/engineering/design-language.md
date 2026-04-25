@@ -11,9 +11,10 @@ Captures the user-experience and visual-language constraints that shape the app 
 ## Template
 
 ### Visual Direction
-- Dark Spotify-like theme with backgrounds around `#121212` and surfaces around `#1E1E1E`.
-- Primary green accent: `#1DB954`.
-- Clean, media-focused presentation across audio, blog, and book experiences.
+- GND Expo-inspired token system: light surfaces use slate-50/white with slate foreground; dark surfaces use slate-900/slate-800 with slate-200 foreground.
+- Primary accent is blue (`rgb(30, 64, 175)` light, `rgb(96, 165, 250)` dark); avoid hard-coded Spotify green/black surface colors.
+- Use NativeWind semantic tokens (`bg-background`, `bg-card`, `border-border`, `text-foreground`, `text-muted-foreground`, `bg-primary`) across app surfaces.
+- Clean, media-focused presentation across audio, blog, and book experiences, with accent swatches drawn from the GND-compatible blue/teal/amber/indigo/rose palette.
 
 ### Content Direction
 - Arabic-first and RTL-aware where content requires it.
@@ -21,7 +22,7 @@ Captures the user-experience and visual-language constraints that shape the app 
 - Preserve readability for long-form educational content.
 
 ### Component-Level Notes
-- Icons: `lucide-react-native`.
+- Icons: Hugeicons via the shared `Icon` wrapper; icon color resolution must respect the active NativeWind color scheme.
 - Bottom sheets: `@gorhom/bottom-sheet` v5.
 - Audio UI uses persistent mini-player patterns and quick transport controls.
 

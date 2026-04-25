@@ -1,6 +1,9 @@
-import { ScrollView, Text, View } from "react-native";
-import { BottomSheetModal, BottomSheetView, BottomSheetScrollView } from "@gorhom/bottom-sheet";
-import { forwardRef, useCallback, useMemo } from "react";
+import { Text, View } from "react-native";
+import { BottomSheetModal, BottomSheetScrollView } from "@gorhom/bottom-sheet";
+import { forwardRef, useMemo } from "react";
+import { useTranslation } from "@/lib/i18n";
+import { useColors } from "@/hooks/use-color";
+import { withAlpha } from "@/lib/theme";
 
 type Footnote = {
   id: number;
@@ -17,30 +20,32 @@ type Props = {
 export const FootnotesSheet = forwardRef<BottomSheetModal, Props>(
   ({ footnotes, highlightedMarker }, ref) => {
     const snapPoints = useMemo(() => ["40%", "70%"], []);
+    const { t } = useTranslation();
+    const colors = useColors();
 
     return (
       <BottomSheetModal
         ref={ref}
         snapPoints={snapPoints}
-        backgroundStyle={{ backgroundColor: "#1e1e1e" }}
-        handleIndicatorStyle={{ backgroundColor: "#444" }}
+        backgroundStyle={{ backgroundColor: colors.card }}
+        handleIndicatorStyle={{ backgroundColor: colors.border }}
       >
         <BottomSheetScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}>
           <Text
             style={{
               fontSize: 16,
               fontWeight: "700",
-              color: "#fff",
+              color: colors.foreground,
               marginBottom: 12,
               writingDirection: "rtl",
               textAlign: "right",
             }}
           >
-            الحواشي
+            {t("footnotes")}
           </Text>
           {footnotes.length === 0 ? (
-            <Text style={{ color: "#b3b3b3", textAlign: "center", marginTop: 24 }}>
-              لا توجد حواشي في هذه الصفحة
+            <Text style={{ color: colors.mutedForeground, textAlign: "center", marginTop: 24 }}>
+              {t("noFootnotes")}
             </Text>
           ) : (
             <View style={{ gap: 12 }}>
@@ -50,11 +55,11 @@ export const FootnotesSheet = forwardRef<BottomSheetModal, Props>(
                   <View
                     key={fn.id}
                     style={{
-                      backgroundColor: isHighlighted ? "rgba(29,185,84,0.15)" : "rgba(255,255,255,0.05)",
+                      backgroundColor: isHighlighted ? withAlpha(colors.primary, 0.15) : colors.muted,
                       borderRadius: 8,
                       padding: 12,
                       borderWidth: isHighlighted ? 1 : 0,
-                      borderColor: isHighlighted ? "#1DB954" : "transparent",
+                      borderColor: isHighlighted ? colors.primary : "transparent",
                     }}
                   >
                     <View
@@ -67,25 +72,25 @@ export const FootnotesSheet = forwardRef<BottomSheetModal, Props>(
                     >
                       <View
                         style={{
-                          backgroundColor: "#1DB954",
+                          backgroundColor: colors.primary,
                           borderRadius: 12,
                           paddingHorizontal: 8,
                           paddingVertical: 2,
                         }}
                       >
-                        <Text style={{ fontSize: 12, color: "#000", fontWeight: "700" }}>
+                        <Text style={{ fontSize: 12, color: colors.primaryForeground, fontWeight: "700" }}>
                           {fn.marker}
                         </Text>
                       </View>
                       {fn.type && (
-                        <Text style={{ fontSize: 11, color: "#b3b3b3" }}>{fn.type}</Text>
+                        <Text style={{ fontSize: 11, color: colors.mutedForeground }}>{fn.type}</Text>
                       )}
                     </View>
                     <Text
                       style={{
                         fontSize: 15,
                         lineHeight: 26,
-                        color: "#e8e8e8",
+                        color: colors.foreground,
                         writingDirection: "rtl",
                         textAlign: "right",
                       }}

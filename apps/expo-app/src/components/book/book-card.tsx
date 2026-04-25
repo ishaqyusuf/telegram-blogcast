@@ -1,11 +1,12 @@
 import { Pressable } from "@/components/ui/pressable";
 import { Image, Text, View } from "react-native";
 import { useBookOfflineStore } from "@/store/book-offline-store";
+import { useColors } from "@/hooks/use-color";
 
-const BOOK_COLORS = ["#4c1d95", "#7c2d12", "#14532d", "#1e3a5f", "#3b0764", "#064e3b", "#831843", "#1e1b4b"];
+const BOOK_COLORS = ["#1e40af", "#0f766e", "#b45309", "#4f46e5", "#be123c", "#0369a1", "#7c3aed", "#334155"];
 
 export function getBookInitials(nameAr?: string | null, nameEn?: string | null) {
-  const name = nameAr ?? nameEn ?? "ك";
+  const name = nameAr ?? nameEn ?? "B";
   return name.slice(0, 2);
 }
 
@@ -27,6 +28,7 @@ export function BookCard({
   index?: number;
 }) {
   const isDownloaded = useBookOfflineStore((s) => s.isDownloaded(book.id));
+  const colors = useColors();
   const bgColor = book.coverColor ?? BOOK_COLORS[index % BOOK_COLORS.length];
   const authorName = book.authors?.[0]?.nameAr ?? book.authors?.[0]?.name;
   const shelfName = book.shelf?.nameAr ?? book.shelf?.name;
@@ -94,7 +96,7 @@ export function BookCard({
               position: "absolute",
               top: 6,
               right: 6,
-              backgroundColor: "rgba(29,185,84,0.85)",
+              backgroundColor: colors.primary,
               borderRadius: 10,
               width: 18,
               height: 18,
@@ -102,7 +104,7 @@ export function BookCard({
               justifyContent: "center",
             }}
           >
-            <Text style={{ fontSize: 9, color: "#000", fontWeight: "700" }}>📥</Text>
+            <Text style={{ fontSize: 9, color: colors.primaryForeground, fontWeight: "700" }}>↓</Text>
           </View>
         )}
       </View>

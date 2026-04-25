@@ -6,7 +6,7 @@ import {
   setSessionProfile,
   setToken,
 } from "@/lib/session-store";
-import { useRouter } from "expo-router";
+import { router } from "expo-router";
 import { createContext, useContext, useState } from "react";
 
 type AuthContextProps = ReturnType<typeof useCreateAuthContext>;
@@ -15,7 +15,6 @@ export const AuthProvider = AuthContext.Provider as any;
 export const useCreateAuthContext = () => {
   const [profile, setProfile] = useState(getSessionProfile());
   const [token, _setToken] = useState(getToken());
-  const router = useRouter();
   const isInstaller =
     profile?.role?.name === "1099 Contractor" ||
     profile?.role?.name === "Punchout";

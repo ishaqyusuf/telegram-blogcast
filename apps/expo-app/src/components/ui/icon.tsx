@@ -1,85 +1,7 @@
 import { cn } from "@/lib/utils";
-<<<<<<< HEAD
-import type { LucideProps } from "lucide-react-native";
-import {
-  Search,
-  Play,
-  Pause,
-  Heart,
-  Bookmark,
-  Trash2,
-  Home,
-  Compass,
-  User,
-  PenLine,
-  FileText,
-  MoreHorizontal,
-  Share2,
-  Clock,
-  ArrowLeft,
-  ArrowUp,
-  ChevronLeft,
-  ChevronRight,
-  X,
-  Image as ImageIcon,
-  Share,
-  Edit3,
-  Headphones,
-  RotateCcw,
-  RotateCw,
-  Volume2,
-  BarChart2,
-  PlayCircle,
-  Edit2,
-  Plus,
-  History,
-  MessageSquare,
-  MessageCircle,
-  ChevronsUpDown,
-  Send,
-  Mic,
-  FolderOpen,
-  BadgeCheck,
-  Bell,
-  AudioWaveform,
-  SkipForward,
-  SkipBack,
-  Sparkles,
-  Timer,
-  Captions,
-  Copy,
-  ListMusic,
-  Disc3,
-  CheckCircle2,
-  SearchX,
-  Loader,
-  ChevronUp,
-  ChevronDown,
-  GripVertical,
-  Pencil,
-  Music2,
-  ListOrdered,
-  Shuffle,
-  Moon,
-  Sun,
-  Menu,
-  Radio,
-  Layers,
-  // Books feature icons
-  Download,
-  BookOpen,
-  BookMarked,
-  RefreshCw,
-  WifiOff,
-  HardDrive,
-  AlertCircle,
-} from "lucide-react-native";
-import { useColorScheme } from "nativewind";
-import { camel } from "@gnd/utils";
-=======
->>>>>>> d08ecb5 (Rebrand Expo app config and unify mobile icons)
 import { THEME } from "@/lib/theme";
 import { camel } from "@acme/utils";
+import { useColorScheme } from "@/hooks/use-color";
 import {
   Add01Icon as Plus,
   AlertCircleIcon as AlertCircle,
@@ -131,6 +53,7 @@ import {
   Menu01Icon as Menu,
   Message01Icon as MessageSquare,
   Mic01Icon as Mic,
+  MoonIcon as Moon,
   MoreHorizontalIcon as MoreHorizontal,
   MusicNote01Icon as Music,
   MusicNote02Icon as Music2,
@@ -151,10 +74,10 @@ import {
   Share02Icon as Share2,
   ShuffleIcon as Shuffle,
   SparklesIcon as Sparkles,
+  Sun01Icon as Sun,
   Tick01Icon as Check,
   Timer01Icon as Timer,
-  Trash01Icon as Trash,
-  Trash02Icon as Trash2,
+  Delete02Icon as Trash2,
   UserIcon as User,
   VolumeHighIcon as Volume2,
   Vynil03Icon as Disc3,
@@ -175,79 +98,7 @@ const iconSizes = {
   lg: 28,
   xl: 32,
   "2xl": 40,
-<<<<<<< HEAD
-};
-// type T = IconProps['strokeWidth']
-function IconImpl({ name, ...props }: IconProps) {
-  let IconComponent;
-  const { colorScheme } = useColorScheme();
-  const [, ...colorChunk] =
-    props.className
-      ?.split(" ")
-      ?.reverse()
-      ?.find((a) => a?.startsWith("text-"))
-      ?.split("-") || [];
-  const color = colorChunk?.length ? camel(colorChunk?.join(" ")) : undefined;
-
-  const _themColor = colorScheme === "dark" ? THEME.dark[color!] : THEME.light[color!];
-
-  props.style = {
-    ...(props.style || ({} as any)),
-    color: _themColor || color,
-  };
-
-  let sizestr = props?.className
-    ?.split(" ")
-    ?.find((a) => a.startsWith("size-"))
-    ?.split("-")?.[1]!;
-  if (sizestr?.startsWith("[")) {
-    sizestr = sizestr.replace(/[\[\]px]/g, "");
-  }
-  sizestr = iconSizes[sizestr] || sizestr || iconSizes?.base;
-
-  props.size = +sizestr || props.size;
-  if (!IconComponent) IconComponent = appIcons![name!] || appIcons.X;
-  const otherClasses = props.className
-    ?.split(" ")
-    .filter((a) => ["size-", "text-"].every((b) => !a?.startsWith(b)));
-  if (otherClasses?.length)
-    return (
-      <View className={cn(otherClasses.join(" "))}>
-        <IconComponent {...props} />
-      </View>
-    );
-  return <IconComponent {...props} />;
-}
-
-function Icon({
-  // as: IconComponent,
-  className,
-  size = "size-base",
-
-  ...props
-}: IconProps) {
-  return (
-    <IconImpl
-      // as={IconComponent}
-      className={cn("text-foreground", className)}
-      size={size}
-      {...props}
-    />
-  );
-}
-// function camel(str?: string) {
-//   if (!str) return str;
-//   return str.replace(
-//     /^([A-Z])|\s(\w)/g,
-//     function (match: any, p1: any, p2: any, offset: any) {
-//       if (p2) return p2.toUpperCase();
-//       return p1.toLowerCase();
-//     }
-//   );
-// }
-=======
 } as const;
->>>>>>> d08ecb5 (Rebrand Expo app config and unify mobile icons)
 
 const appIcons = {
   Search,
@@ -256,8 +107,9 @@ const appIcons = {
   Heart,
   Bookmark,
   Trash2,
-  Trash,
+  Trash: Trash2,
   Home,
+  House: Home,
   Compass,
   User,
   PenLine,
@@ -288,6 +140,7 @@ const appIcons = {
   History,
   MessageSquare,
   MessageCircle,
+  ArrowUpDown: ChevronsUpDown,
   ChevronsUpDown,
   Send,
   Mic,
@@ -312,15 +165,8 @@ const appIcons = {
   Music2,
   ListOrdered,
   Shuffle,
-<<<<<<< HEAD
   Moon,
   Sun,
-  Menu,
-  Radio,
-  Layers,
-  // Books feature icons
-=======
->>>>>>> d08ecb5 (Rebrand Expo app config and unify mobile icons)
   Download,
   BookOpen,
   BookMarked,
@@ -335,7 +181,6 @@ const appIcons = {
   Info,
   LogOut,
   Menu,
-  ArrowUp,
   Eye,
   EyeOff,
   Library,
@@ -346,18 +191,28 @@ export type IconProps = Omit<HugeiconsProps, "icon"> & {
   name?: IconKeys;
 };
 
-function resolveColor(className?: string) {
-  const [, ...colorChunk] =
-    className
-      ?.split(" ")
-      .reverse()
-      .find((token) => token.startsWith("text-"))
-      ?.split("-") || [];
-
-  const colorKey = colorChunk.length ? camel(colorChunk.join(" ")) : undefined;
-  return colorKey
-    ? THEME.light[colorKey as keyof typeof THEME.light] ?? colorKey
+function resolveColor(className?: string, colorScheme: "light" | "dark" = "light") {
+  const textToken = className
+    ?.split(" ")
+    .reverse()
+    .find((token) => token.startsWith("text-"))
+    ?.slice(5);
+  const [colorToken, opacityToken] = (textToken || "").split("/");
+  const colorKey = colorToken
+    ? camel(colorToken.split("-").join(" "))
     : undefined;
+  const color = colorKey
+    ? THEME[colorScheme][colorKey as keyof typeof THEME.light] ?? colorKey
+    : undefined;
+  const parsedOpacity = opacityToken ? Number(opacityToken) : undefined;
+  const opacity =
+    parsedOpacity === undefined || Number.isNaN(parsedOpacity)
+      ? undefined
+      : parsedOpacity > 1
+        ? parsedOpacity / 100
+        : parsedOpacity;
+
+  return { color, opacity };
 }
 
 function resolveSize(className?: string, size?: string | number) {
@@ -383,8 +238,9 @@ function resolveSize(className?: string, size?: string | number) {
 }
 
 function IconImpl({ name = "X", className, size, style, ...props }: IconProps) {
+  const { colorScheme } = useColorScheme();
   const icon = appIcons[name] ?? appIcons.X;
-  const color = resolveColor(className);
+  const { color, opacity } = resolveColor(className, colorScheme);
   const otherClasses = className
     ?.split(" ")
     .filter((token) => ["size-", "text-"].every((prefix) => !token.startsWith(prefix)));
@@ -395,7 +251,7 @@ function IconImpl({ name = "X", className, size, style, ...props }: IconProps) {
       className={className}
       size={resolveSize(className, size)}
       color={color}
-      style={style}
+      style={opacity === undefined ? style : ([style, { opacity }] as any)}
       {...props}
     />
   );

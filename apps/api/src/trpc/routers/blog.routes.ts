@@ -6,6 +6,140 @@ import { posts, postsSchema } from "../../queries/posts";
 import { consoleLog } from "@acme/utils";
 import { TRPCError } from "@trpc/server";
 
+const blogStatusSchema = z.enum(["draft", "published"]);
+const blogMediaUploadSchema = z.object({
+  url: z.string().url(),
+  downloadUrl: z.string().url().optional(),
+  pathname: z.string().min(1),
+  contentType: z.string().min(1),
+  etag: z.string().optional(),
+  size: z.number().nonnegative().optional(),
+  name: z.string().optional(),
+  title: z.string().optional(),
+  width: z.number().nonnegative().optional(),
+  height: z.number().nonnegative().optional(),
+  duration: z.number().nonnegative().optional(),
+});
+
+type BlogMediaUpload = z.infer<typeof blogMediaUploadSchema>;
+
+function normalizeTagTitle(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  return trimmed.startsWith("#") ? trimmed.slice(1) : trimmed;
+}
+
+function extractHashTags(content: string) {
+  return [...(content.match(/#([\p{L}\p{N}_\u0600-\u06FF]+)/gu) ?? [])].map(
+    (tag) => tag.slice(1),
+  );
+}
+
+function inferBlogType(
+  requestedType: "text" | "audio" | "image" | "video" | "pdf" | undefined,
+  mediaUploads: BlogMediaUpload[],
+) {
+  if (requestedType && requestedType !== "text") return requestedType;
+  const firstMedia = mediaUploads[0];
+  if (!firstMedia) return requestedType ?? "text";
+  const contentType = firstMedia.contentType.toLowerCase();
+  if (contentType.startsWith("audio/")) return "audio";
+  if (contentType.startsWith("image/")) return "image";
+  if (contentType.startsWith("video/")) return "video";
+  if (contentType === "application/pdf" || firstMedia.pathname.endsWith(".pdf")) {
+    return "pdf";
+  }
+  return "text";
+}
+
+async function attachTagsToBlog(
+  db: any,
+  blogId: number,
+  values: Array<string | null | undefined>,
+) {
+  const uniqueTags = Array.from(
+    new Set(values.map((tag) => normalizeTagTitle(tag ?? "")).filter(Boolean)),
+  ).slice(0, 10);
+
+  for (const title of uniqueTags) {
+    const tag = await db.tags.upsert({
+      where: { title },
+      create: { title },
+      update: {},
+    });
+    const exists = await db.blogTags.findFirst({
+      where: { blogId, tagId: tag.id, deletedAt: null },
+    });
+    if (!exists) {
+      await db.blogTags.create({ data: { blogId, tagId: tag.id } });
+    }
+  }
+
+  return uniqueTags;
+}
+
+async function attachBlobMediaToBlog(
+  db: any,
+  blogId: number,
+  mediaUploads: BlogMediaUpload[],
+) {
+  for (const upload of mediaUploads) {
+    const fileUniqueId = `vercel:${upload.etag || upload.pathname}`;
+    const file = await db.file.upsert({
+      where: { fileUniqueId },
+      create: {
+        source: "vercel_blob",
+        fileType: upload.contentType.split("/")[0] || "file",
+        fileId: upload.pathname,
+        fileUniqueId,
+        fileSize: upload.size ?? null,
+        fileName: upload.name ?? upload.pathname.split("/").pop() ?? null,
+        mimeType: upload.contentType,
+        width: upload.width ?? null,
+        height: upload.height ?? null,
+        duration: upload.duration ?? null,
+        blobUrl: upload.url,
+        blobDownloadUrl: upload.downloadUrl ?? upload.url,
+        blobPathname: upload.pathname,
+        blobContentType: upload.contentType,
+        blobEtag: upload.etag ?? null,
+        storageMetadata: upload as any,
+      },
+      update: {
+        source: "vercel_blob",
+        fileType: upload.contentType.split("/")[0] || "file",
+        fileId: upload.pathname,
+        fileSize: upload.size ?? null,
+        fileName: upload.name ?? upload.pathname.split("/").pop() ?? null,
+        mimeType: upload.contentType,
+        width: upload.width ?? null,
+        height: upload.height ?? null,
+        duration: upload.duration ?? null,
+        blobUrl: upload.url,
+        blobDownloadUrl: upload.downloadUrl ?? upload.url,
+        blobPathname: upload.pathname,
+        blobContentType: upload.contentType,
+        blobEtag: upload.etag ?? null,
+        storageMetadata: upload as any,
+      },
+    });
+
+    const existing = await db.media.findFirst({
+      where: { blogId, fileId: file.id },
+    });
+    if (!existing) {
+      await db.media.create({
+        data: {
+          blogId,
+          fileId: file.id,
+          mimeType: upload.contentType,
+          title: upload.title ?? upload.name ?? null,
+        },
+      });
+    }
+  }
+}
+
 export const blogRoutes = createTRPCRouter({
   posts: publicProcedure.input(postsSchema).query(async (props) => {
     consoleLog("Fetching posts with input:", props.input);
@@ -48,73 +182,6 @@ export const blogRoutes = createTRPCRouter({
       return ctx.db.blog.update({
         where: { id: input.id },
         data: { deletedAt: new Date() },
-      });
-    }),
-
-  createBlog: publicProcedure
-    .input(
-      z.object({
-        title: z.string().trim().max(180).optional(),
-        content: z.string().trim().max(20000).optional(),
-        tags: z.array(z.string().trim().min(1).max(40)).max(10).optional(),
-        type: z.enum(["text", "audio", "image", "video"]).default("text"),
-        published: z.boolean().default(false),
-      }),
-    )
-    .mutation(async ({ ctx, input }) => {
-      const title = input.title?.trim() ?? "";
-      const body = input.content?.trim() ?? "";
-      const normalizedContent = [title, body].filter(Boolean).join("\n\n").trim();
-
-      if (!normalizedContent) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "Title or content is required.",
-        });
-      }
-
-      const now = new Date();
-      const uniqueTags = Array.from(
-        new Set(
-          (input.tags ?? [])
-            .map((tag) => tag.trim())
-            .filter(Boolean)
-            .map((tag) => (tag.startsWith("#") ? tag.slice(1) : tag)),
-        ),
-      ).slice(0, 10);
-
-      return ctx.db.$transaction(async (db) => {
-        const blog = await db.blog.create({
-          data: {
-            type: input.type,
-            content: normalizedContent,
-            blogDate: now,
-            published: input.published,
-            publishedAt: input.published ? now : null,
-            status: input.published ? "published" : "draft",
-            meta: {
-              title: title || null,
-              tags: uniqueTags,
-            },
-          },
-        });
-
-        for (const tagTitle of uniqueTags) {
-          const tag = await db.tags.upsert({
-            where: { title: tagTitle },
-            create: { title: tagTitle },
-            update: {},
-          });
-
-          await db.blogTags.create({
-            data: {
-              blogId: blog.id,
-              tagId: tag.id,
-            },
-          });
-        }
-
-        return blog;
       });
     }),
 
@@ -217,18 +284,10 @@ export const blogRoutes = createTRPCRouter({
         orderBy: blog.arrangementMode === "indexed" ? { order: "asc" } : { createdAt: "asc" },
         include: {
           comment: {
-            where: {
-              deletedAt: null,
-              ...(input.search
-                ? { content: { contains: input.search, mode: "insensitive" } }
-                : {}),
-              ...(input.tagId
-                ? { blogTags: { some: { tagId: input.tagId, deletedAt: null } } }
-                : {}),
-            },
             select: {
               id: true,
               content: true,
+              deletedAt: true,
               createdAt: true,
               blogTags: { include: { tags: true }, where: { deletedAt: null } },
             },
@@ -252,8 +311,26 @@ export const blogRoutes = createTRPCRouter({
         })
       );
 
+      const filteredLinks = links.filter((link) => {
+        const comment = link.comment;
+        if (!comment || comment.deletedAt) return false;
+        if (
+          input.search &&
+          !comment.content?.toLowerCase().includes(input.search.toLowerCase())
+        ) {
+          return false;
+        }
+        if (
+          input.tagId &&
+          !comment.blogTags.some((blogTag) => blogTag.tagId === input.tagId)
+        ) {
+          return false;
+        }
+        return true;
+      });
+
       return {
-        comments: links.filter((l) => l.comment !== null),
+        comments: filteredLinks,
         arrangementMode: blog.arrangementMode,
         availableTags: [...tagMap.entries()].map(([id, title]) => ({ id, title })),
       };
@@ -570,43 +647,60 @@ export const blogRoutes = createTRPCRouter({
   createBlog: publicProcedure
     .input(
       z.object({
-        content: z.string().min(1),
-        status: z.enum(["draft", "published"]).default("published"),
+        title: z.string().trim().max(180).optional(),
+        content: z.string().trim().max(20000).optional(),
+        tags: z.array(z.string().trim().min(1).max(40)).max(10).optional(),
+        type: z.enum(["text", "audio", "image", "video", "pdf"]).optional(),
+        published: z.boolean().optional(),
+        status: blogStatusSchema.optional(),
         channelId: z.number().optional(),
-      })
+        mediaUploads: z.array(blogMediaUploadSchema).max(10).optional(),
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       const { db } = ctx;
       const now = new Date();
-      const blog = await db.blog.create({
-        data: {
-          content: input.content,
-          type: "text",
-          published: input.status === "published",
-          publishedAt: input.status === "published" ? now : null,
-          blogDate: now,
-          status: input.status,
-          ...(input.channelId ? { channelId: input.channelId } : {}),
-        },
-      });
-      // Auto-tag from #hashtags embedded in content
-      const hashTags = [...(input.content.match(/#([\p{L}\p{N}_]+)/gu) ?? [])].map((t) =>
-        t.slice(1)
-      );
-      for (const title of [...new Set(hashTags)]) {
-        const tag = await db.tags.upsert({
-          where: { title },
-          create: { title },
-          update: {},
+      const title = input.title?.trim() ?? "";
+      const body = input.content?.trim() ?? "";
+      const mediaUploads = input.mediaUploads ?? [];
+      const normalizedContent = [title, body].filter(Boolean).join("\n\n").trim();
+
+      if (!normalizedContent && mediaUploads.length === 0) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Title, content, or media is required.",
         });
-        const exists = await db.blogTags.findFirst({
-          where: { blogId: blog.id, tagId: tag.id },
-        });
-        if (!exists) {
-          await db.blogTags.create({ data: { blogId: blog.id, tagId: tag.id } });
-        }
       }
-      return blog;
+
+      const status =
+        input.status ?? (input.published === false ? "draft" : "published");
+      const type = inferBlogType(input.type, mediaUploads);
+
+      return db.$transaction(async (tx) => {
+        const blog = await tx.blog.create({
+          data: {
+            content: normalizedContent || null,
+            type,
+            published: status === "published",
+            publishedAt: status === "published" ? now : null,
+            blogDate: now,
+            status,
+            ...(input.channelId ? { channelId: input.channelId } : {}),
+            meta: {
+              title: title || null,
+              mediaSource: mediaUploads.length > 0 ? "vercel_blob" : null,
+            },
+          },
+        });
+
+        await attachBlobMediaToBlog(tx, blog.id, mediaUploads);
+        await attachTagsToBlog(tx, blog.id, [
+          ...(input.tags ?? []),
+          ...extractHashTags(normalizedContent),
+        ]);
+
+        return blog;
+      });
     }),
 
   updateBlog: publicProcedure
@@ -614,42 +708,52 @@ export const blogRoutes = createTRPCRouter({
       z.object({
         id: z.number(),
         content: z.string().min(1),
-        status: z.enum(["draft", "published"]).optional(),
-      })
+        status: blogStatusSchema.optional(),
+        tags: z.array(z.string().trim().min(1).max(40)).max(10).optional(),
+        mediaUploads: z.array(blogMediaUploadSchema).max(10).optional(),
+      }),
     )
     .mutation(async ({ ctx, input }) => {
       const { db } = ctx;
-      const blog = await db.blog.update({
-        where: { id: input.id },
-        data: {
-          content: input.content,
-          ...(input.status
-            ? {
-                status: input.status,
-                published: input.status === "published",
-                publishedAt: input.status === "published" ? new Date() : undefined,
-              }
-            : {}),
-        },
+      return db.$transaction(async (tx) => {
+        const blog = await tx.blog.update({
+          where: { id: input.id },
+          data: {
+            content: input.content,
+            ...(input.status
+              ? {
+                  status: input.status,
+                  published: input.status === "published",
+                  publishedAt:
+                    input.status === "published" ? new Date() : undefined,
+                }
+              : {}),
+          },
+        });
+
+        await attachBlobMediaToBlog(tx, blog.id, input.mediaUploads ?? []);
+        await attachTagsToBlog(tx, blog.id, [
+          ...(input.tags ?? []),
+          ...extractHashTags(input.content),
+        ]);
+
+        return blog;
       });
-      // Sync auto-tags from content hashtags
-      const hashTags = [...(input.content.match(/#([\p{L}\p{N}_]+)/gu) ?? [])].map((t) =>
-        t.slice(1)
-      );
-      for (const title of [...new Set(hashTags)]) {
-        const tag = await db.tags.upsert({
-          where: { title },
-          create: { title },
-          update: {},
-        });
-        const exists = await db.blogTags.findFirst({
-          where: { blogId: blog.id, tagId: tag.id },
-        });
-        if (!exists) {
-          await db.blogTags.create({ data: { blogId: blog.id, tagId: tag.id } });
-        }
-      }
-      return blog;
+    }),
+
+  confirmBlobUpload: publicProcedure
+    .input(
+      z.object({
+        blogId: z.number(),
+        media: blogMediaUploadSchema,
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      await attachBlobMediaToBlog(ctx.db, input.blogId, [input.media]);
+      return ctx.db.blog.findFirstOrThrow({
+        where: { id: input.blogId },
+        include: { medias: { include: { file: true } } },
+      });
     }),
 
   saveSearch: publicProcedure

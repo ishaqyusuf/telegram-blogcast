@@ -6,8 +6,10 @@ import BottomSheet, { BottomSheetView } from "@gorhom/bottom-sheet";
 
 import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";
+import { useColors } from "@/hooks/use-color";
+import { useTranslation } from "@/lib/i18n";
 
-const ALBUM_COLORS = ["#4c1d95", "#7c2d12", "#14532d", "#1e3a5f", "#3b0764", "#064e3b"];
+const ALBUM_COLORS = ["#1e40af", "#0f766e", "#b45309", "#4f46e5", "#be123c", "#0369a1"];
 
 function getInitials(name?: string | null) {
   if (!name) return "AL";
@@ -26,6 +28,8 @@ interface Props {
 
 export function AddToAlbumModal({ mediaIds, authorId, onClose }: Props) {
   const queryClient = useQueryClient();
+  const colors = useColors();
+  const { t } = useTranslation();
   const [newAlbumName, setNewAlbumName] = useState("");
   const [creating, setCreating] = useState(false);
 
@@ -67,18 +71,18 @@ export function AddToAlbumModal({ mediaIds, authorId, onClose }: Props) {
       {/* Handle */}
       <View className="w-10 h-1 rounded-full bg-muted self-center mb-4" />
 
-      <Text className="text-base font-bold text-foreground mb-4">Add to Album</Text>
+      <Text className="text-base font-bold text-foreground mb-4">{t("addToAlbum")}</Text>
 
       {/* Create new album */}
       <View className="flex-row gap-2 mb-5">
         <View className="flex-1 flex-row items-center bg-muted rounded-xl px-3 h-10 gap-2">
           <Icon name="Plus" size={16} className="text-muted-foreground" />
           <TextInput
-            placeholder="New album name…"
-            placeholderTextColor="#b3b3b3"
+            placeholder={t("newAlbumName")}
+            placeholderTextColor={colors.mutedForeground}
             value={newAlbumName}
             onChangeText={setNewAlbumName}
-            style={{ flex: 1, fontSize: 14, color: "#ffffff", paddingVertical: 0 }}
+            style={{ flex: 1, fontSize: 14, color: colors.foreground, paddingVertical: 0 }}
           />
         </View>
         <Pressable
@@ -87,9 +91,9 @@ export function AddToAlbumModal({ mediaIds, authorId, onClose }: Props) {
           className={`px-4 h-10 rounded-xl bg-primary items-center justify-center active:opacity-80 ${!newAlbumName.trim() || isBusy ? "opacity-50" : "opacity-100"}`}
         >
           {isBusy ? (
-            <ActivityIndicator size="small" color="#fff" />
+            <ActivityIndicator size="small" color={colors.primaryForeground} />
           ) : (
-            <Text className="text-xs font-bold text-primary-foreground">Create</Text>
+            <Text className="text-xs font-bold text-primary-foreground">{t("create")}</Text>
           )}
         </Pressable>
       </View>

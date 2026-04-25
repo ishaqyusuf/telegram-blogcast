@@ -1,6 +1,12 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { createTRPCRouter, publicProcedure } from "../init";
+import {
+  createBookDocumentFromParagraphs,
+  createDocumentFromHtml,
+  getDocumentPlainText,
+  serializeDocumentToHtml,
+} from "@acme/document";
 
 const SHAMELA_EXTRACT_PROMPT = `You are a structured data extractor for Islamic books from Shamela (the largest Islamic digital library).
 
@@ -505,6 +511,60 @@ function safeString(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function getStoredContentMeta(rawJson: unknown) {
+  if (!isRecord(rawJson)) {
+    return {
+      contentDocument: null,
+      contentHtml: null,
+      contentPlainText: null,
+      contentVersion: 0,
+      contentUpdatedAt: null as string | null,
+    };
+  }
+
+  return {
+    contentDocument: rawJson.contentDocument ?? null,
+    contentHtml:
+      typeof rawJson.contentHtml === "string" ? rawJson.contentHtml : null,
+    contentPlainText:
+      typeof rawJson.contentPlainText === "string" ? rawJson.contentPlainText : null,
+    contentVersion:
+      typeof rawJson.contentVersion === "number" ? rawJson.contentVersion : 0,
+    contentUpdatedAt:
+      typeof rawJson.contentUpdatedAt === "string" ? rawJson.contentUpdatedAt : null,
+  };
+}
+
+function buildPageDocument(page: {
+  rawJson?: unknown;
+  paragraphs: { id: number; text: string }[];
+}) {
+  const stored = getStoredContentMeta(page.rawJson);
+  const fallbackDocument = createBookDocumentFromParagraphs(
+    page.paragraphs.map((paragraph) => ({
+      id: paragraph.id,
+      text: paragraph.text,
+    })),
+  );
+  const document = stored.contentDocument ?? fallbackDocument;
+  const contentHtml = stored.contentHtml ?? serializeDocumentToHtml(document as Parameters<typeof serializeDocumentToHtml>[0]);
+  const plainText =
+    stored.contentPlainText ??
+    getDocumentPlainText(document as Parameters<typeof getDocumentPlainText>[0]);
+
+  return {
+    document,
+    contentHtml,
+    plainText,
+    contentVersion: stored.contentVersion,
+    contentUpdatedAt: stored.contentUpdatedAt,
+  };
 }
 
 function normalizeSourceUrl(rawUrl: string): string {
@@ -1132,6 +1192,15 @@ export const bookRoutes = createTRPCRouter({
           },
           shelf: true,
           authors: true,
+          pages: {
+            where: { status: "fetched" },
+            orderBy: { shamelaPageNo: "asc" },
+            take: 1,
+            select: {
+              id: true,
+              shamelaPageNo: true,
+            },
+          },
         },
       });
 
@@ -1327,6 +1396,121 @@ export const bookRoutes = createTRPCRouter({
       });
     }),
 
+  getPageDocument: publicProcedure
+    .input(z.object({ pageId: z.number() }))
+    .query(async ({ ctx, input }) => {
+      const page = await ctx.db.bookPage.findFirstOrThrow({
+        where: { id: input.pageId, deletedAt: null },
+        select: {
+          id: true,
+          rawJson: true,
+          updatedAt: true,
+          paragraphs: {
+            select: { id: true, text: true },
+            orderBy: { pid: "asc" },
+          },
+        },
+      });
+      const content = buildPageDocument(page);
+
+      return {
+        pageId: page.id,
+        document: content.document,
+        contentHtml: content.contentHtml,
+        plainText: content.plainText,
+        contentVersion: content.contentVersion,
+        contentUpdatedAt: content.contentUpdatedAt ?? page.updatedAt?.toISOString() ?? null,
+      };
+    }),
+
+  savePageDocument: publicProcedure
+    .input(
+      z.object({
+        pageId: z.number(),
+        document: z.any(),
+        contentHtml: z.string().optional(),
+        plainText: z.string().optional(),
+        baseVersion: z.number().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const page = await ctx.db.bookPage.findFirstOrThrow({
+        where: { id: input.pageId, deletedAt: null },
+        select: {
+          id: true,
+          rawJson: true,
+          paragraphs: {
+            select: { id: true, text: true },
+            orderBy: { pid: "asc" },
+          },
+        },
+      });
+      const current = buildPageDocument(page);
+      const currentVersion = current.contentVersion ?? 0;
+
+      if (input.baseVersion != null && input.baseVersion !== currentVersion) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: "Page content changed since this draft was opened.",
+        });
+      }
+
+      const document = input.contentHtml
+        ? createDocumentFromHtml(input.contentHtml)
+        : (input.document as Parameters<typeof getDocumentPlainText>[0]);
+      const contentHtml = input.contentHtml ?? serializeDocumentToHtml(document);
+      const plainText =
+        input.plainText ??
+        getDocumentPlainText(document);
+      const nextVersion = currentVersion + 1;
+      const contentUpdatedAt = new Date().toISOString();
+      const baseRawJson = isRecord(page.rawJson) ? page.rawJson : {};
+      const paragraphs = plainText
+        .split(/\n\s*\n|\r\n\s*\r\n/g)
+        .map((paragraph) => safeString(paragraph) ?? "")
+        .filter(Boolean)
+        .map((text, index) => ({
+          pid: index + 1,
+          text,
+          footnoteIds: null as string | null,
+        }));
+
+      await ctx.db.bookPage.update({
+        where: { id: input.pageId },
+        data: {
+          rawJson: {
+            ...baseRawJson,
+            contentDocument: document,
+            contentHtml,
+            contentPlainText: plainText,
+            contentVersion: nextVersion,
+            contentUpdatedAt,
+          },
+        },
+      });
+
+      await ctx.db.bookPageParagraph.deleteMany({ where: { pageId: input.pageId } });
+      if (paragraphs.length > 0) {
+        await ctx.db.bookPageParagraph.createMany({
+          data: paragraphs.map((paragraph) => ({
+            pageId: input.pageId,
+            pid: paragraph.pid,
+            text: paragraph.text,
+            footnoteIds: paragraph.footnoteIds,
+          })),
+        });
+      }
+
+      return {
+        pageId: input.pageId,
+        document,
+        contentHtml,
+        plainText,
+        contentVersion: nextVersion,
+        contentUpdatedAt,
+      };
+    }),
+
   getBookImportHistory: publicProcedure
     .input(
       z.object({
@@ -1472,7 +1656,7 @@ export const bookRoutes = createTRPCRouter({
           })
           .optional(),
         sourceUrl: z.string().url().optional(),
-        shamelaPageNo: z.number(),
+        shamelaPageNo: z.number().optional(),
         printedPageNo: z.number().optional(),
         chapterTitle: z.string().optional(),
         topicTitle: z.string().optional(),
@@ -1509,6 +1693,13 @@ export const bookRoutes = createTRPCRouter({
         bookId = createdBook.id;
       }
 
+      const shamelaPageNo =
+        input.shamelaPageNo ??
+        ((await db.bookPage.aggregate({
+          where: { bookId },
+          _max: { shamelaPageNo: true },
+        }))._max.shamelaPageNo ?? 0) + 1;
+
       const paragraphs = input.pageText
         .split(/\n\s*\n|\r\n\s*\r\n/g)
         .map((paragraph) => safeString(paragraph))
@@ -1520,7 +1711,7 @@ export const bookRoutes = createTRPCRouter({
         }));
 
       const pageData: ParsedPageData = {
-        shamelaPageNo: input.shamelaPageNo,
+        shamelaPageNo,
         printedPageNo: input.printedPageNo ?? null,
         chapterTitle: input.chapterTitle ?? null,
         chapterUrl: null,
@@ -1835,6 +2026,8 @@ export const bookRoutes = createTRPCRouter({
           paragraphId: true,
           paragraphPid: true,
           pageShamelaPageNo: true,
+          startOffset: true,
+          endOffset: true,
           color: true,
           note: true,
           quoteText: true,
@@ -1852,8 +2045,11 @@ export const bookRoutes = createTRPCRouter({
             localId: z.string(),
             pageId: z.number(),
             paragraphId: z.number().optional(),
+            startOffset: z.number().optional(),
+            endOffset: z.number().optional(),
             color: z.string(),
             note: z.string().optional(),
+            quoteText: z.string().optional(),
           }),
         ),
       }),
@@ -1877,12 +2073,12 @@ export const bookRoutes = createTRPCRouter({
             paragraphId: h.paragraphId ?? null,
             paragraphPid: paragraph?.pid ?? null,
             pageShamelaPageNo: paragraph?.page.shamelaPageNo ?? null,
+            startOffset: h.startOffset ?? 0,
+            endOffset: h.endOffset ?? 0,
             color: h.color,
             note: h.note ?? null,
-            quoteText: paragraph?.text ?? null,
+            quoteText: h.quoteText ?? paragraph?.text ?? null,
             userId: getDefaultBookUserId(),
-            startOffset: 0,
-            endOffset: 0,
           },
         });
         results.push({ localId: h.localId, serverId: created.id });

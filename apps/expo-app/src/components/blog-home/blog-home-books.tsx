@@ -4,15 +4,24 @@ import { useRouter } from "expo-router";
 import { Image, ScrollView, Text, View } from "react-native";
 
 import { _trpc } from "@/components/static-trpc";
+import { useTranslation } from "@/lib/i18n";
 
-const BOOK_COLORS = ["#4c1d95", "#7c2d12", "#14532d", "#1e3a5f", "#3b0764", "#064e3b"];
+const BOOK_COLORS = ["#1e40af", "#0f766e", "#b45309", "#4f46e5", "#be123c", "#0369a1"];
 
 export function BlogHomeBooks() {
   const router = useRouter();
+  const { t, textAlign, writingDirection } = useTranslation();
   const { data } = useQuery(_trpc.book.getBooks.queryOptions({ limit: 8 }));
   const books = data?.data ?? [];
 
   if (books.length === 0) return null;
+
+  const getBookHref = (book: (typeof books)[number]) => {
+    const firstPageId = book.pages?.[0]?.id;
+    return firstPageId
+      ? `/books/${book.id}/reader/${firstPageId}`
+      : `/books/${book.id}`;
+  };
 
   return (
     <View style={{ paddingTop: 16, paddingBottom: 8 }}>
@@ -26,10 +35,15 @@ export function BlogHomeBooks() {
         }}
       >
         <Pressable onPress={() => router.push("/books" as any)}>
-          <Text style={{ fontSize: 14, fontWeight: "600", color: "#1DB954" }}>عرض الكل</Text>
+          <Text className="text-sm font-semibold text-primary">
+            {t("viewAll")}
+          </Text>
         </Pressable>
-        <Text style={{ fontSize: 16, fontWeight: "700", color: "#fff", writingDirection: "rtl" }}>
-          المكتبة
+        <Text
+          className="text-base font-bold text-foreground"
+          style={{ textAlign, writingDirection }}
+        >
+          {t("library")}
         </Text>
       </View>
 
@@ -44,7 +58,7 @@ export function BlogHomeBooks() {
           return (
             <Pressable
               key={book.id}
-              onPress={() => router.push(`/books/${book.id}` as any)}
+              onPress={() => router.push(getBookHref(book) as any)}
               style={{ width: 90 }}
             >
               <View
@@ -69,19 +83,21 @@ export function BlogHomeBooks() {
                   <Text
                     style={{ fontSize: 20, fontWeight: "bold", color: "white", textAlign: "center", writingDirection: "rtl" }}
                   >
-                    {(book.nameAr ?? "ك").slice(0, 2)}
+                    {(book.nameAr ?? book.nameEn ?? t("bookTitle")).slice(0, 2)}
                   </Text>
                 )}
               </View>
               <Text
-                style={{ fontSize: 12, fontWeight: "700", color: "#fff", textAlign: "right", writingDirection: "rtl" }}
+                className="text-[12px] font-bold text-foreground"
+                style={{ textAlign: "right", writingDirection: "rtl" }}
                 numberOfLines={2}
               >
                 {book.nameAr ?? book.nameEn}
               </Text>
               {authorName && (
                 <Text
-                  style={{ fontSize: 10, color: "#b3b3b3", textAlign: "right", writingDirection: "rtl", marginTop: 2 }}
+                  className="mt-0.5 text-[10px] text-muted-foreground"
+                  style={{ textAlign: "right", writingDirection: "rtl" }}
                   numberOfLines={1}
                 >
                   {authorName}

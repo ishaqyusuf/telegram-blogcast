@@ -14,11 +14,15 @@ import { ChapterTree } from "@/components/book/chapter-tree";
 import { useBookOffline } from "@/hooks/use-book-offline";
 import { useBookOfflineStore } from "@/store/book-offline-store";
 import { vanillaTrpc } from "@/trpc/vanilla-client";
+import { useTranslation } from "@/lib/i18n";
+import { useColors } from "@/hooks/use-color";
 
 export default function BookDetailScreen() {
   const { bookId } = useLocalSearchParams<{ bookId: string }>();
   const router = useRouter();
   const qc = useQueryClient();
+  const { t } = useTranslation();
+  const colors = useColors();
   const bookIdNum = Number(bookId);
 
   const [fetchUrl, setFetchUrl] = useState("");
@@ -64,7 +68,7 @@ export default function BookDetailScreen() {
         setFetchUrl("");
         setShowFetchInput(false);
       },
-      onError: (e) => Alert.alert("خطأ", e.message),
+      onError: (e) => Alert.alert(t("error"), e.message),
     })
   );
 
@@ -77,7 +81,7 @@ export default function BookDetailScreen() {
       },
       onError: (e) => {
         setFetchingPageId(null);
-        Alert.alert("خطأ", e.message);
+        Alert.alert(t("error"), e.message);
       },
     })
   );
@@ -87,7 +91,7 @@ export default function BookDetailScreen() {
       onSuccess: () => {
         qc.invalidateQueries({ queryKey: _trpc.book.getBook.queryKey({ id: bookIdNum }) });
       },
-      onError: (e) => Alert.alert("خطأ", e.message),
+      onError: (e) => Alert.alert(t("error"), e.message),
     })
   );
 
@@ -99,7 +103,7 @@ export default function BookDetailScreen() {
       .sort((a, b) => a.shamelaPageNo - b.shamelaPageNo);
 
     if (pending.length === 0) {
-      Alert.alert("جاهز", "جميع الصفحات مجلوبة بالفعل.");
+      Alert.alert(t("allCaughtUp"), t("allPagesFetched"));
       return;
     }
 
@@ -126,7 +130,7 @@ export default function BookDetailScreen() {
   if (isLoading) {
     return (
       <View className="flex-1 items-center justify-center bg-background">
-        <ActivityIndicator color="rgb(29, 185, 84)" />
+        <ActivityIndicator color={colors.primary} />
       </View>
     );
   }
@@ -142,6 +146,13 @@ export default function BookDetailScreen() {
 
   const continuePageId = getLastPage(bookIdNum);
   const bookmarks = getBookmarks(bookIdNum);
+
+  const openReader = (targetPageId: number) => {
+    void qc.prefetchQuery(_trpc.book.getPage.queryOptions({ pageId: targetPageId }));
+    requestAnimationFrame(() => {
+      router.push(`/books/${bookId}/reader/${targetPageId}` as any);
+    });
+  };
 
   return (
     <View className="flex-1 bg-background">
@@ -186,7 +197,7 @@ export default function BookDetailScreen() {
           >
             <Icon name="RefreshCw" size={15} className="text-primary" />
             <Text className="flex-1 text-right text-[13px] text-primary" style={{ writingDirection: "rtl" }}>
-              محتوى جديد متاح — اضغط للتحديث
+              {t("newContentAvailable")}
             </Text>
           </Pressable>
         )}
@@ -195,7 +206,7 @@ export default function BookDetailScreen() {
           <View className="mx-4 mb-2 flex-row-reverse items-center gap-1.5 rounded-lg bg-card px-3 py-1.5">
             <Icon name="WifiOff" size={13} className="text-muted-foreground" />
             <Text className="text-xs text-muted-foreground">
-              {isDownloaded ? "وضع بلا إنترنت — يتم القراءة من التخزين المحلي" : "لا يوجد اتصال بالإنترنت"}
+              {isDownloaded ? t("offlineReading") : t("noInternet")}
             </Text>
           </View>
         )}
@@ -205,7 +216,7 @@ export default function BookDetailScreen() {
             <View
               style={{
                 width: 110, height: 154, borderRadius: 10, overflow: "hidden",
-                backgroundColor: book.coverColor ?? "#4c1d95",
+                backgroundColor: book.coverColor ?? colors.primary,
                 flexShrink: 0, alignItems: "center", justifyContent: "center",
               }}
             >
@@ -213,7 +224,7 @@ export default function BookDetailScreen() {
                 <Image source={{ uri: book.coverUrl }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />
               ) : (
                 <Text style={{ fontSize: 24, fontWeight: "bold", color: "white", textAlign: "center", writingDirection: "rtl" }}>
-                  {(book.nameAr ?? "ك").slice(0, 2)}
+                  {(book.nameAr ?? book.nameEn ?? t("bookTitle")).slice(0, 2)}
                 </Text>
               )}
             </View>
@@ -248,18 +259,18 @@ export default function BookDetailScreen() {
                   <Pressable
                     onPress={() =>
                       Alert.alert(
-                        "إزالة من التخزين",
-                        "هل تريد حذف النسخة المحلية من هذا الكتاب؟",
+                        t("removeOffline"),
+                        t("removeOfflinePrompt"),
                         [
-                          { text: "إلغاء", style: "cancel" },
-                          { text: "حذف", style: "destructive", onPress: removeOffline },
+                          { text: t("cancel"), style: "cancel" },
+                          { text: t("delete"), style: "destructive", onPress: removeOffline },
                         ]
                       )
                     }
                     className="flex-row-reverse items-center gap-1 rounded-lg bg-primary/12 px-2.5 py-1.5"
                   >
                     <Icon name="HardDrive" size={13} className="text-primary" />
-                    <Text className="text-xs text-primary">محفوظ</Text>
+                    <Text className="text-xs text-primary">{t("savedOffline")}</Text>
                   </Pressable>
                 ) : (
                   <Pressable
@@ -269,12 +280,12 @@ export default function BookDetailScreen() {
                     style={{ opacity: !isOnline ? 0.5 : 1 }}
                   >
                     {isDownloading ? (
-                      <ActivityIndicator size="small" color="#1DB954" />
+                      <ActivityIndicator size="small" color={colors.primary} />
                     ) : (
                       <Icon name="Download" size={13} className="text-muted-foreground" />
                     )}
                     <Text className="text-xs text-muted-foreground">
-                      {isDownloading ? `${Math.round(progress * 100)}%` : "تحميل للقراءة دون اتصال"}
+                      {isDownloading ? `${Math.round(progress * 100)}%` : t("downloadOffline")}
                     </Text>
                   </Pressable>
                 )}
@@ -286,7 +297,7 @@ export default function BookDetailScreen() {
                     style={{
                       height: "100%",
                       width: `${Math.round(progress * 100)}%`,
-                      backgroundColor: "#1DB954",
+                      backgroundColor: colors.primary,
                       borderRadius: 2,
                     }}
                   />
@@ -297,7 +308,7 @@ export default function BookDetailScreen() {
 
           {continuePageId && (
             <Pressable
-              onPress={() => router.push(`/books/${bookId}/reader/${continuePageId}` as any)}
+              onPress={() => openReader(continuePageId)}
               className="mx-4 mb-3 flex-row-reverse items-center gap-2.5 rounded-xl border border-primary/25 bg-primary/10 px-4 py-3"
             >
               <View
@@ -307,10 +318,10 @@ export default function BookDetailScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text className="text-right text-[13px] font-bold text-primary" style={{ writingDirection: "rtl" }}>
-                  متابعة القراءة
+                  {t("continueReading")}
                 </Text>
                 <Text className="text-right text-[11px] text-muted-foreground" style={{ writingDirection: "rtl" }}>
-                  اضغط للعودة إلى آخر صفحة
+                  {t("backToLastPage")}
                 </Text>
               </View>
               <Icon name="ChevronLeft" size={18} className="text-primary" />
@@ -320,7 +331,7 @@ export default function BookDetailScreen() {
           {showBookmarks && bookmarks.length > 0 && (
             <View style={{ paddingHorizontal: 16, marginBottom: 16 }}>
               <Text className="mb-2 text-right text-sm font-bold text-foreground" style={{ writingDirection: "rtl" }}>
-                العلامات المرجعية ({bookmarks.length})
+                {t("bookmarks", { count: bookmarks.length })}
               </Text>
               {bookmarks.map((bm) => (
                 <View
@@ -330,17 +341,19 @@ export default function BookDetailScreen() {
                   <Icon name="Bookmark" size={15} className="text-primary" />
                   <Pressable
                     style={{ flex: 1 }}
-                    onPress={() => router.push(`/books/${bookId}/reader/${bm.pageId}` as any)}
+                    onPress={() => openReader(bm.pageId)}
                   >
                     <Text
                       className="text-right text-[13px] text-foreground"
                       style={{ writingDirection: "rtl" }}
                       numberOfLines={1}
                     >
-                      {bm.chapterTitle ?? `صفحة ${bm.pageNo ?? bm.pageId}`}
+                      {bm.chapterTitle ?? `${t("page")} ${bm.pageNo ?? bm.pageId}`}
                     </Text>
                     {bm.pageNo && (
-                      <Text className="text-[11px] text-muted-foreground">ص {bm.pageNo}</Text>
+                      <Text className="text-[11px] text-muted-foreground">
+                        {t("pageShort", { number: bm.pageNo })}
+                      </Text>
                     )}
                   </Pressable>
                   <Pressable onPress={() => removeBookmark(bookIdNum, bm.pageId)} hitSlop={10}>
@@ -366,8 +379,8 @@ export default function BookDetailScreen() {
                   <TextInput
                     value={fetchUrl}
                     onChangeText={setFetchUrl}
-                    placeholder="رابط صفحة الشاملة..."
-                    placeholderTextColor="#666"
+                    placeholder={t("pageLink")}
+                    placeholderTextColor={colors.mutedForeground}
                     className="flex-1 text-right text-[13px] text-foreground"
                     autoFocus
                     returnKeyType="done"
@@ -380,9 +393,9 @@ export default function BookDetailScreen() {
                     className="rounded-lg bg-primary px-3.5 py-2"
                   >
                     {isFetching ? (
-                      <ActivityIndicator size="small" color="#000" />
+                      <ActivityIndicator size="small" color={colors.primaryForeground} />
                     ) : (
-                      <Text className="text-[13px] font-bold text-primary-foreground">جلب</Text>
+                      <Text className="text-[13px] font-bold text-primary-foreground">{t("fetch")}</Text>
                     )}
                   </Pressable>
                   <Pressable onPress={() => setShowFetchInput(false)}>
@@ -398,7 +411,7 @@ export default function BookDetailScreen() {
                     className="flex-1 flex-row items-center justify-center gap-1.5 rounded-xl bg-primary py-2.5"
                   >
                     <Icon name="Download" size={16} className="text-background" />
-                    <Text className="text-sm font-bold text-primary-foreground">استيراد/إعادة صفحة</Text>
+                    <Text className="text-sm font-bold text-primary-foreground">{t("fetchPage")}</Text>
                   </Pressable>
 
                   {lastFetchedPage && (
@@ -409,11 +422,11 @@ export default function BookDetailScreen() {
                       className="flex-1 flex-row items-center justify-center gap-1.5 rounded-xl bg-card py-2.5"
                     >
                       {isFetchingNext ? (
-                        <ActivityIndicator size="small" color="#1DB954" />
+                        <ActivityIndicator size="small" color={colors.primary} />
                       ) : (
                         <>
                           <Icon name="ChevronRight" size={16} className="text-primary" />
-                          <Text className="text-sm font-semibold text-primary">التالية</Text>
+                          <Text className="text-sm font-semibold text-primary">{t("next")}</Text>
                         </>
                       )}
                     </Pressable>
@@ -431,21 +444,24 @@ export default function BookDetailScreen() {
                       }
                     }}
                     className="flex-row items-center justify-center gap-2 rounded-xl bg-card py-2.5"
-                    style={{ borderWidth: isAutoFetching ? 1 : 0, borderColor: "rgb(29, 185, 84)" }}
+                    style={{ borderWidth: isAutoFetching ? 1 : 0, borderColor: colors.primary }}
                   >
                     {isAutoFetching ? (
                       <>
-                        <ActivityIndicator size="small" color="#1DB954" />
+                        <ActivityIndicator size="small" color={colors.primary} />
                         <Text className="text-[13px] font-semibold text-primary">
-                          جلب الكل... {autoFetchProgress.done}/{autoFetchProgress.total}
+                          {t("fetchAllProgress", {
+                            done: autoFetchProgress.done,
+                            total: autoFetchProgress.total,
+                          })}
                         </Text>
-                        <Text className="text-xs text-muted-foreground">اضغط للإيقاف</Text>
+                        <Text className="text-xs text-muted-foreground">{t("stopFetch")}</Text>
                       </>
                     ) : (
                       <>
                         <Icon name="RefreshCw" size={15} className="text-muted-foreground" />
                         <Text className="text-[13px] font-semibold text-muted-foreground">
-                          جلب الكل ({totalCount - fetchedCount} متبقي)
+                          {t("fetchAll", { count: totalCount - fetchedCount })}
                         </Text>
                       </>
                     )}
@@ -461,7 +477,7 @@ export default function BookDetailScreen() {
                 className="text-right text-sm font-bold text-foreground"
                 style={{ writingDirection: "rtl" }}
               >
-                سجل استيراد الصفحات
+                {t("history")}
               </Text>
               {pageImportHistory.map((entry) => (
                 <View
@@ -489,10 +505,10 @@ export default function BookDetailScreen() {
                         }
                       >
                         {entry.status === "success"
-                          ? "ناجح"
+                          ? t("importSuccess")
                           : entry.status === "failed"
-                            ? "فشل"
-                            : "قيد التنفيذ"}
+                            ? t("importFailed")
+                            : t("importPending")}
                       </Text>
                     </View>
                     <Text className="text-[11px] text-muted-foreground">
@@ -504,16 +520,16 @@ export default function BookDetailScreen() {
                     className="text-right text-[13px] font-semibold text-foreground"
                     style={{ writingDirection: "rtl" }}
                   >
-                    {entry.chapterTitle ?? entry.topicTitle ?? `صفحة ${entry.shamelaPageNo ?? "-"}`}
+                    {entry.chapterTitle ?? entry.topicTitle ?? `${t("page")} ${entry.shamelaPageNo ?? "-"}`}
                   </Text>
                   <Text
                     className="text-right text-[12px] text-muted-foreground"
                     style={{ writingDirection: "rtl" }}
                   >
                     {entry.importMethod === "manual_paste"
-                      ? "إدخال يدوي"
-                      : "استيراد بالرابط"}
-                    {entry.paragraphCount ? ` • ${entry.paragraphCount} فقرات` : ""}
+                      ? t("entryManual")
+                      : t("bookImportTitle")}
+                    {entry.paragraphCount ? ` - ${t("paragraphCount", { count: entry.paragraphCount })}` : ""}
                   </Text>
                   {entry.errorMessage ? (
                     <Text
@@ -533,7 +549,7 @@ export default function BookDetailScreen() {
                       className="items-center rounded-lg bg-background py-2"
                     >
                       <Text className="text-[12px] font-semibold text-primary">
-                        إعادة استخدام الرابط
+                        {t("reuseLink")}
                       </Text>
                     </Pressable>
                   ) : null}
@@ -551,11 +567,14 @@ export default function BookDetailScreen() {
                 }}
               >
                 <Text className="text-[15px] font-bold text-foreground" style={{ writingDirection: "rtl" }}>
-                  الفهرس ({totalCount})
+                  {t("index", { count: totalCount })}
                 </Text>
                 {fetchedCount > 0 && (
                   <Text className="text-xs text-muted-foreground">
-                    {fetchedCount} مجلوب · {totalCount - fetchedCount} متبقي
+                    {t("fetchedRemaining", {
+                      fetched: fetchedCount,
+                      remaining: totalCount - fetchedCount,
+                    })}
                   </Text>
                 )}
               </View>
@@ -566,7 +585,7 @@ export default function BookDetailScreen() {
                 fetchingPageId={fetchingPageId}
                 onPagePress={(page) => {
                   if (page.status === "fetched") {
-                    router.push(`/books/${bookId}/reader/${page.id}` as any);
+                    openReader(page.id);
                   } else if (page.shamelaUrl && !fetchingPageId) {
                     setFetchingPageId(page.id);
                     fetchChapterPage({ bookId: bookIdNum, shamelaUrl: page.shamelaUrl });

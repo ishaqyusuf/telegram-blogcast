@@ -2,12 +2,12 @@ import { Pressable } from "@/components/ui/pressable";
 import { Text, View } from "react-native";
 
 const FEATURED_ITEMS = [
-  { label: "Daily Reflections", color: "#4c1d95" },
-  { label: "History", color: "#7c2d12" },
-  { label: "Popular Now", color: "#14532d" },
-  { label: "Religion", color: "#1e3a5f" },
-  { label: "Following", color: "#3b0764" },
-  { label: "New Releases", color: "#7f1d1d" },
+  { label: "Daily Reflections", color: "#1e40af" },
+  { label: "History", color: "#0f766e" },
+  { label: "Popular Now", color: "#b45309" },
+  { label: "Religion", color: "#4f46e5" },
+  { label: "Following", color: "#0369a1" },
+  { label: "New Releases", color: "#be123c" },
 ];
 
 function getInitials(label: string) {

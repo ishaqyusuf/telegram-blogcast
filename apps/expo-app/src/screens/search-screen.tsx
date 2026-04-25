@@ -9,23 +9,27 @@ import { getBlogHref } from "@/components/blog-card/utils";
 import { SafeArea } from "@/components/safe-area";
 import { Icon } from "@/components/ui/icon";
 import { useColors } from "@/hooks/use-color";
+import { useTranslation } from "@/lib/i18n";
 
 export default function SearchScreen() {
   const router = useRouter();
   const colors = useColors();
+  const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const [submitted, setSubmitted] = useState("");
   const inputRef = useRef<TextInput>(null);
 
   const { data: recentSearches = [] } = useQuery(
-    _trpc.blog.getRecentSearches.queryOptions()
+    _trpc.blog.getRecentSearches.queryOptions({ limit: 10 })
   );
 
   const { data: tags = [] } = useQuery(_trpc.blog.getTags.queryOptions());
 
   const { data: results = [] } = useQuery(
-    _trpc.blog.search.queryOptions({ q: submitted }),
-    { enabled: submitted.length > 0 }
+    _trpc.blog.search.queryOptions(
+      { q: submitted },
+      { enabled: submitted.length > 0 },
+    )
   );
 
   const saveSearch = useMutation(_trpc.blog.saveSearch.mutationOptions());
@@ -64,7 +68,7 @@ export default function SearchScreen() {
             <Icon name="Search" size={16} className="text-muted-foreground" />
             <TextInput
               ref={inputRef}
-              placeholder="Search posts, tags…"
+              placeholder={t("searchPostsTags")}
               placeholderTextColor={colors.mutedForeground}
               value={query}
               onChangeText={setQuery}
@@ -92,7 +96,9 @@ export default function SearchScreen() {
           results.length === 0 ? (
             <View className="flex-1 items-center justify-center gap-2">
               <Icon name="SearchX" size={40} className="text-muted-foreground" />
-              <Text className="text-muted-foreground">No results for "{submitted}"</Text>
+              <Text className="text-muted-foreground">
+                {t("noResultsFor", { query: submitted })}
+              </Text>
             </View>
           ) : (
             <FlatList
@@ -144,7 +150,7 @@ export default function SearchScreen() {
               <View className="px-4 pt-4">
                 <View className="flex-row items-center justify-between mb-3">
                   <Text className="text-base font-bold text-foreground">
-                    Recent Searches
+                    {t("recentSearches")}
                   </Text>
                 </View>
                 <View className="gap-1">
@@ -166,16 +172,18 @@ export default function SearchScreen() {
             {tags.length > 0 && (
               <View className="px-4 pt-6">
                 <Text className="text-base font-bold text-foreground mb-3">
-                  Browse Tags
+                  {t("browseTags")}
                 </Text>
                 <View className="flex-row flex-wrap gap-2">
-                  {tags.map((tag: string) => (
+                  {tags.map((tag: any) => (
                     <Pressable
-                      key={tag}
-                      onPress={() => handleTagPress(tag)}
+                      key={tag.id ?? tag.title ?? tag}
+                      onPress={() => handleTagPress(tag.title ?? tag)}
                       className="px-3 py-1.5 rounded-full bg-card active:opacity-70"
                     >
-                      <Text className="text-sm font-medium text-foreground">#{tag}</Text>
+                      <Text className="text-sm font-medium text-foreground">
+                        #{tag.title ?? tag}
+                      </Text>
                     </Pressable>
                   ))}
                 </View>

@@ -2,6 +2,8 @@ import { Pressable } from "@/components/ui/pressable";
 import { Text, View } from "react-native";
 import { Icon } from "@/components/ui/icon";
 import type { CommentsSheetState } from "./index";
+import { useColors } from "@/hooks/use-color";
+import { withAlpha } from "@/lib/theme";
 
 interface CommentsHeaderProps {
   state: CommentsSheetState;
@@ -9,6 +11,7 @@ interface CommentsHeaderProps {
 }
 
 export function CommentsHeader({ state, onClose }: CommentsHeaderProps) {
+  const colors = useColors();
   const {
     comments,
     isLoading,
@@ -46,14 +49,14 @@ export function CommentsHeader({ state, onClose }: CommentsHeaderProps) {
         justifyContent: "space-between",
         paddingHorizontal: 20,
         paddingVertical: 14,
-        backgroundColor: "#121212",
+        backgroundColor: colors.background,
         borderBottomWidth: 1,
-        borderBottomColor: "#1e1e1e",
+        borderBottomColor: colors.border,
         flexShrink: 0,
         zIndex: 30,
       }}
     >
-      <Text style={{ fontSize: 16, fontWeight: "700", color: "#fff" }}>
+      <Text style={{ fontSize: 16, fontWeight: "700", color: colors.foreground }}>
         {isLoading ? "التعليقات" : `التعليقات (${comments.length})`}
       </Text>
 
@@ -67,7 +70,7 @@ export function CommentsHeader({ state, onClose }: CommentsHeaderProps) {
             borderRadius: 17,
             alignItems: "center",
             justifyContent: "center",
-            backgroundColor: searchVisible ? "#1e3a2e" : "transparent",
+            backgroundColor: searchVisible ? withAlpha(colors.primary, 0.12) : "transparent",
           }}
         >
           <Icon
@@ -86,7 +89,7 @@ export function CommentsHeader({ state, onClose }: CommentsHeaderProps) {
             borderRadius: 17,
             alignItems: "center",
             justifyContent: "center",
-            backgroundColor: sortActive ? "#1e3a2e" : "transparent",
+            backgroundColor: sortActive ? withAlpha(colors.primary, 0.12) : "transparent",
           }}
         >
           <Icon

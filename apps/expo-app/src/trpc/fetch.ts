@@ -14,7 +14,21 @@ export const trpcFetch: typeof fetch = async (input, init) => {
     });
   }
 
-  const response = await fetch(input, init);
+  let response: Response;
+  try {
+    response = await fetch(input, init);
+  } catch (error) {
+    console.error("[tRPC] Network request failed before reaching endpoint.", {
+      url: requestUrl,
+      method: init?.method ?? (typeof input === "string" ? "GET" : input.method),
+      error,
+    });
+
+    throw new Error(
+      `Network request failed for ${requestUrl}. In Expo dev, make sure apps/api is running on the same machine and that the mobile device can reach it over the local network.`,
+    );
+  }
+
   const url = typeof input === "string" ? input : input.url;
   const contentType = response.headers.get("content-type");
   const shouldInspectBody =

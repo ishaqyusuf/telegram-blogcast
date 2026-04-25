@@ -11,43 +11,43 @@
 
 @layer base {
   .dark {
-    /* Core surfaces — Spotify-inspired dark palette */
-    --background: rgb(18, 18, 18);
-    --foreground: rgb(255, 255, 255);
+    /* Core surfaces */
+    --background: rgb(15, 23, 42);
+    --foreground: rgb(226, 232, 240);
 
-    --card: rgb(24, 24, 24);
-    --card-foreground: rgb(255, 255, 255);
+    --card: rgb(30, 41, 59);
+    --card-foreground: rgb(226, 232, 240);
 
-    --popover: rgb(32, 32, 32);
-    --popover-foreground: rgb(255, 255, 255);
+    --popover: rgb(30, 41, 59);
+    --popover-foreground: rgb(226, 232, 240);
 
-    /* Brand / primary — Spotify green */
-    --primary: rgb(29, 185, 84);
-    --primary-foreground: rgb(0, 0, 0);
+    /* Brand / primary */
+    --primary: rgb(96, 165, 250);
+    --primary-foreground: rgb(15, 23, 42);
 
     /* UI layers */
-    --secondary: rgb(40, 40, 40);
-    --secondary-foreground: rgb(179, 179, 179);
+    --secondary: rgb(51, 65, 85);
+    --secondary-foreground: rgb(226, 232, 240);
 
-    --muted: rgb(40, 40, 40);
-    --muted-foreground: rgb(179, 179, 179);
+    --muted: rgb(30, 41, 59);
+    --muted-foreground: rgb(148, 163, 184);
 
-    --accent: rgb(29, 185, 84);
-    --accent-foreground: rgb(0, 0, 0);
+    --accent: rgb(30, 58, 138);
+    --accent-foreground: rgb(219, 234, 254);
 
     /* States */
-    --destructive: rgb(178, 38, 38);
-    --destructive-foreground: rgb(250, 250, 250);
+    --destructive: rgb(220, 38, 38);
+    --destructive-foreground: rgb(254, 242, 242);
 
     /* Borders & inputs */
-    --border: rgb(40, 40, 40);
-    --input: rgb(48, 48, 48);
+    --border: rgb(51, 65, 85);
+    --input: rgb(71, 85, 105);
 
     /* Focus ring */
-    --ring: rgb(29, 185, 84);
+    --ring: rgb(125, 211, 252);
 
     /* Charts */
-    --chart-1: rgb(29, 185, 84);
+    --chart-1: rgb(96, 165, 250);
     --chart-2: rgb(52, 211, 153);
     --chart-3: rgb(251, 191, 36);
     --chart-4: rgb(192, 132, 252);
@@ -56,45 +56,45 @@
   :root {
     --radius: 0.65rem;
 
-    --background: rgb(255, 255, 255);
-    --foreground: rgb(10, 7, 5);
+    --background: rgb(248, 250, 252);
+    --foreground: rgb(15, 23, 42);
 
     --card: rgb(255, 255, 255);
-    --card-foreground: rgb(10, 7, 5);
+    --card-foreground: rgb(15, 23, 42);
 
     --popover: rgb(255, 255, 255);
-    --popover-foreground: rgb(10, 7, 5);
+    --popover-foreground: rgb(15, 23, 42);
 
-    --primary: rgb(250, 204, 21);
-    --primary-foreground: rgb(59, 28, 6);
+    --primary: rgb(30, 64, 175);
+    --primary-foreground: rgb(239, 246, 255);
 
-    --success: rgb(34, 197, 94);
+    --success: rgb(22, 163, 74);
     --success-foreground: rgb(240, 253, 244);
 
-    --warn: rgb(245, 158, 11);
-    --warn-foreground: rgb(69, 26, 3);
+    --warn: rgb(217, 119, 6);
+    --warn-foreground: rgb(255, 247, 237);
 
-    --secondary: rgb(245, 245, 244);
-    --secondary-foreground: rgb(26, 22, 20);
+    --secondary: rgb(241, 245, 249);
+    --secondary-foreground: rgb(30, 41, 59);
 
-    --muted: rgb(245, 245, 244);
-    --muted-foreground: rgb(120, 113, 108);
+    --muted: rgb(226, 232, 240);
+    --muted-foreground: rgb(100, 116, 139);
 
-    --accent: rgb(245, 245, 244);
-    --accent-foreground: rgb(26, 22, 20);
+    --accent: rgb(219, 234, 254);
+    --accent-foreground: rgb(30, 64, 175);
 
-    --destructive: rgb(239, 68, 68);
-    --destructive-foreground: rgb(250, 250, 249);
+    --destructive: rgb(185, 28, 28);
+    --destructive-foreground: rgb(254, 242, 242);
 
-    --border: rgb(229, 231, 235);
-    --input: rgb(229, 231, 235);
-    --ring: rgb(10, 7, 5);
+    --border: rgb(203, 213, 225);
+    --input: rgb(226, 232, 240);
+    --ring: rgb(37, 99, 235);
 
-    --chart-1: rgb(234, 88, 12);
-    --chart-2: rgb(22, 163, 151);
-    --chart-3: rgb(30, 64, 92);
-    --chart-4: rgb(250, 204, 21);
-    --chart-5: rgb(249, 115, 22);
+    --chart-1: rgb(37, 99, 235);
+    --chart-2: rgb(13, 148, 136);
+    --chart-3: rgb(217, 119, 6);
+    --chart-4: rgb(99, 102, 241);
+    --chart-5: rgb(225, 29, 72);
   }
 }
 @layer base {

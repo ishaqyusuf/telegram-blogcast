@@ -3,6 +3,7 @@ import Constants from "expo-constants";
 const PREVIEW_OR_FORCED_BASE_URL =
   process.env.EXPO_PUBLIC_APP_VARIANT === "preview" ||
   process.env.EXPO_PUBLIC_FORCE_BASE_URL === "true";
+const IS_DEV = typeof __DEV__ !== "undefined" && __DEV__;
 
 const getLocalHost = () => {
   const debuggerHost = Constants.expoConfig?.hostUri;
@@ -40,7 +41,7 @@ export const getBaseUrl = () => {
     return logResolvedUrl("baseUrl", envBaseUrl);
   }
 
-  const apiPort = process.env.EXPO_PUBLIC_API_PORT ?? "3005";
+  const apiPort = process.env.EXPO_PUBLIC_API_PORT ?? "3006";
   return logResolvedUrl("baseUrl", getLocalUrl(apiPort));
 };
 
@@ -52,25 +53,24 @@ export const getTrpcUrl = () => {
     return logResolvedUrl("trpcUrl", `${getBaseUrl()}/api/trpc`);
   }
 
-  if (envTrpcUrl) return logResolvedUrl("trpcUrl", envTrpcUrl);
-
   const trpcPort =
     process.env.EXPO_PUBLIC_TRPC_PORT ?? process.env.EXPO_PUBLIC_API_PORT;
 
-  if (trpcPort) {
+  if (IS_DEV && trpcPort) {
     if (
-      __DEV__ &&
       !process.env.EXPO_PUBLIC_TRPC_PORT &&
       !envTrpcUrl &&
       process.env.EXPO_PUBLIC_API_PORT === "3005"
     ) {
       console.warn(
-        "Using EXPO_PUBLIC_API_PORT=3005 as the Expo tRPC target. Prefer EXPO_PUBLIC_TRPC_PORT or EXPO_PUBLIC_TRPC_URL when routing Expo through apps/www.",
+        "Using EXPO_PUBLIC_API_PORT=3005 as the Expo tRPC target. Prefer pointing Expo directly at apps/api on port 3006 unless you intentionally want to route through apps/www.",
       );
     }
 
     return logResolvedUrl("trpcUrl", `${getLocalUrl(trpcPort)}/api/trpc`);
   }
+
+  if (envTrpcUrl) return logResolvedUrl("trpcUrl", envTrpcUrl);
 
   return logResolvedUrl("trpcUrl", `${getBaseUrl()}/api/trpc`);
 };

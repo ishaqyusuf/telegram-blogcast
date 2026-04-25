@@ -1,6 +1,14 @@
-import { Pressable } from "@/components/ui/pressable";
-import { Text, View } from "react-native";
+import { Text, View, Pressable } from "react-native";
 import { HighlightToolbar } from "./highlight-toolbar";
+import { useColors } from "@/hooks/use-color";
+import { withAlpha } from "@/lib/theme";
+import { RichContent } from "@/components/rich-content/rich-content";
+import {
+  createBookDocumentFromParagraphs,
+  createBookHighlightAnnotations,
+  type BookHighlightInput,
+  type RangeAnnotation,
+} from "@acme/document/book";
 
 type Paragraph = {
   id: number;
@@ -13,6 +21,9 @@ type HighlightEntry = {
   localId: string;
   paragraphId: number | null;
   color: string;
+  startOffset?: number | null;
+  endOffset?: number | null;
+  quoteText?: string | null;
 };
 
 type Props = {
@@ -40,6 +51,29 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
+function resolveHighlightRange(text: string, highlight: HighlightEntry) {
+  const startOffset = highlight.startOffset ?? null;
+  const endOffset = highlight.endOffset ?? null;
+
+  if (
+    startOffset != null &&
+    endOffset != null &&
+    startOffset >= 0 &&
+    endOffset > startOffset &&
+    endOffset <= text.length
+  ) {
+    return { start: startOffset, end: endOffset };
+  }
+
+  const quoteText = highlight.quoteText?.trim();
+  if (!quoteText) return null;
+
+  const start = text.indexOf(quoteText);
+  if (start === -1) return null;
+
+  return { start, end: start + quoteText.length };
+}
+
 export function BookPageView({
   paragraphs,
   highlights = [],
@@ -51,20 +85,42 @@ export function BookPageView({
   onDismissHighlight,
   showToolbarForParagraphId,
 }: Props) {
+  const colors = useColors();
+
   return (
     <View style={{ gap: 16 }}>
       {paragraphs.map((para) => {
         const footnoteIds = parseFootnoteIds(para.footnoteIds);
         const isSelected = selectedParagraphId === para.id;
-        const highlight = highlights.find((h) => h.paragraphId === para.id);
+        const paragraphHighlights = highlights.filter((h) => h.paragraphId === para.id);
+        const highlight = paragraphHighlights[0];
         const showToolbar = showToolbarForParagraphId === para.id;
+        const rangeHighlights = paragraphHighlights.filter((h) => resolveHighlightRange(para.text, h));
+        const hasSegmentHighlight =
+          paragraphHighlights.length > 0 && rangeHighlights.length !== paragraphHighlights.length;
+        const annotationInputs: BookHighlightInput[] = [];
+        for (const highlight of rangeHighlights) {
+          const range = resolveHighlightRange(para.text, highlight);
+          if (!range) continue;
+
+          annotationInputs.push({
+            id: highlight.localId,
+            blockId: String(para.id),
+            startOffset: range.start,
+            endOffset: range.end,
+            color: hexToRgba(highlight.color, 0.28),
+            note: null,
+            quoteText: highlight.quoteText ?? null,
+          });
+        }
+        const annotations: RangeAnnotation[] = createBookHighlightAnnotations(annotationInputs);
 
         // Background: highlight color takes precedence over selection
         let bgColor = "transparent";
-        if (highlight) {
+        if (hasSegmentHighlight && highlight) {
           bgColor = hexToRgba(highlight.color, 0.18);
         } else if (isSelected) {
-          bgColor = "rgba(29,185,84,0.1)";
+          bgColor = withAlpha(colors.primary, 0.1);
         }
 
         return (
@@ -81,27 +137,29 @@ export function BookPageView({
 
             <Pressable
               onLongPress={() => onLongPress?.(para)}
+              delayLongPress={250}
               style={{
                 backgroundColor: bgColor,
                 borderRadius: 8,
                 padding: 4,
-                borderLeftWidth: highlight ? 2 : 0,
+                borderLeftWidth: paragraphHighlights.length > 0 ? 2 : 0,
                 borderLeftColor: highlight?.color ?? "transparent",
               }}
             >
               <View style={{ flexDirection: "row-reverse", flexWrap: "wrap" }}>
-                <Text
-                  style={{
-                    fontSize: 18,
-                    lineHeight: 32,
-                    color: "#e8e8e8",
-                    writingDirection: "rtl",
-                    textAlign: "right",
-                    flex: 1,
-                  }}
-                >
-                  {para.text}
-                </Text>
+                <View style={{ flex: 1 }}>
+                  <RichContent
+                    document={createBookDocumentFromParagraphs([{ id: para.id, text: para.text }])}
+                    annotations={annotations}
+                    selectable
+                    style={{
+                      fontSize: 18,
+                      lineHeight: 32,
+                      color: colors.foreground,
+                    }}
+                    blockContainerStyle={{ gap: 0 }}
+                  />
+                </View>
               </View>
 
               {footnoteIds.length > 0 && (
@@ -118,13 +176,13 @@ export function BookPageView({
                       key={marker}
                       onPress={() => onFootnotePress?.(marker)}
                       style={{
-                        backgroundColor: "rgba(29,185,84,0.2)",
+                        backgroundColor: withAlpha(colors.primary, 0.2),
                         borderRadius: 10,
                         paddingHorizontal: 6,
                         paddingVertical: 2,
                       }}
                     >
-                      <Text style={{ fontSize: 11, color: "#1DB954" }}>{marker}</Text>
+                      <Text style={{ fontSize: 11, color: colors.primary }}>{marker}</Text>
                     </Pressable>
                   ))}
                 </View>

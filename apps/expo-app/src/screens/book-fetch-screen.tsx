@@ -3,6 +3,9 @@ import { Pressable } from "@/components/ui/pressable";
 import { _trpc } from "@/components/static-trpc";
 import { SafeArea } from "@/components/safe-area";
 import { Icon } from "@/components/ui/icon";
+import { useTranslation } from "@/lib/i18n";
+import { useColors } from "@/hooks/use-color";
+import { withAlpha } from "@/lib/theme";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -64,6 +67,7 @@ function HistoryBadge({
 }: {
   status: "pending" | "success" | "failed" | string;
 }) {
+  const { t } = useTranslation();
   const palette =
     status === "success"
       ? "bg-primary/15 text-primary"
@@ -72,7 +76,11 @@ function HistoryBadge({
         : "bg-secondary text-muted-foreground";
 
   const label =
-    status === "success" ? "ناجح" : status === "failed" ? "فشل" : "قيد التنفيذ";
+    status === "success"
+      ? t("importSuccess")
+      : status === "failed"
+        ? t("importFailed")
+        : t("importPending");
 
   return (
     <View className={`rounded-full px-2 py-1 ${palette}`}>
@@ -85,6 +93,8 @@ export default function BookFetchScreen() {
   const router = useRouter();
   const qc = useQueryClient();
   const inputRef = useRef<TextInput>(null);
+  const { t, textAlign, writingDirection, isRtl } = useTranslation();
+  const colors = useColors();
 
   const [url, setUrl] = useState("");
   const [step, setStep] = useState<Step>("idle");
@@ -218,28 +228,45 @@ export default function BookFetchScreen() {
   };
 
   const submitManualPage = () => {
-    const pageNumber = Number(manualPageNo);
-    if (!Number.isFinite(pageNumber) || pageNumber <= 0) {
+    const trimmedPageNo = manualPageNo.trim();
+    const pageNumber = trimmedPageNo ? Number(trimmedPageNo) : undefined;
+    const trimmedPrintedPageNo = manualPrintedPageNo.trim();
+    const printedPageNumber = trimmedPrintedPageNo
+      ? Number(trimmedPrintedPageNo)
+      : undefined;
+    if (
+      pageNumber !== undefined &&
+      (!Number.isFinite(pageNumber) || pageNumber <= 0)
+    ) {
       setManualStep("error");
-      setManualError("أدخل رقم صفحة صحيحاً.");
+      setManualError(t("enterValidPage"));
+      return;
+    }
+
+    if (
+      printedPageNumber !== undefined &&
+      (!Number.isFinite(printedPageNumber) || printedPageNumber <= 0)
+    ) {
+      setManualStep("error");
+      setManualError(t("enterValidPage"));
       return;
     }
 
     if (!manualText.trim()) {
       setManualStep("error");
-      setManualError("ألصق محتوى الصفحة أولاً.");
+      setManualError(t("pasteContentFirst"));
       return;
     }
 
     if (!createBookInline && !selectedBookId) {
       setManualStep("error");
-      setManualError("اختر كتاباً أولاً.");
+      setManualError(t("chooseBookFirst"));
       return;
     }
 
     if (createBookInline && !manualBookName.trim()) {
       setManualStep("error");
-      setManualError("أدخل اسم الكتاب الجديد.");
+      setManualError(t("enterBookTitle"));
       return;
     }
 
@@ -253,9 +280,7 @@ export default function BookFetchScreen() {
         : undefined,
       sourceUrl: manualLink.trim() || undefined,
       shamelaPageNo: pageNumber,
-      printedPageNo: manualPrintedPageNo.trim()
-        ? Number(manualPrintedPageNo)
-        : undefined,
+      printedPageNo: printedPageNumber,
       chapterTitle: manualChapterTitle.trim() || undefined,
       topicTitle: manualTopicTitle.trim() || undefined,
       pageText: manualText.trim(),
@@ -265,7 +290,10 @@ export default function BookFetchScreen() {
   return (
     <View className="flex-1 bg-background">
       <SafeArea>
-        <View className="flex-row items-center gap-3 px-4 py-3">
+        <View
+          className="items-center gap-3 px-4 py-3"
+          style={{ flexDirection: isRtl ? "row-reverse" : "row" }}
+        >
           <Pressable
             onPress={() => router.back()}
             className="size-9 items-center justify-center rounded-full bg-card"
@@ -275,14 +303,14 @@ export default function BookFetchScreen() {
           <Text
             style={{
               flex: 1,
-              textAlign: "right",
+              textAlign,
               fontSize: 18,
               fontWeight: "700",
-              color: "#f3f4f6",
-              writingDirection: "rtl",
+              color: colors.foreground,
+              writingDirection,
             }}
           >
-            استيراد الكتب والصفحات
+            {t("booksAndPages")}
           </Text>
         </View>
 
@@ -297,40 +325,39 @@ export default function BookFetchScreen() {
             <View className="gap-1.5 rounded-xl border border-primary/20 bg-primary/10 p-3.5">
               <Text
                 style={{
-                  textAlign: "right",
+                  textAlign,
                   fontSize: 14,
                   fontWeight: "700",
-                  color: "#1DB954",
-                  writingDirection: "rtl",
+                  color: colors.primary,
+                  writingDirection,
                 }}
               >
-                الاستيراد بالرابط
+                {t("bookImportTitle")}
               </Text>
               <Text
                 style={{
-                  textAlign: "right",
+                  textAlign,
                   fontSize: 13,
                   lineHeight: 20,
-                  color: "#9ca3af",
-                  writingDirection: "rtl",
+                  color: colors.mutedForeground,
+                  writingDirection,
                 }}
               >
-                ألصق رابط كتاب الشاملة ليتم حفظ محاولة الاستيراد في السجل مع
-                حالة النجاح أو الفشل، ويمكنك إعادة الاستيراد من نفس السجل لاحقاً.
+                {t("bookImportDescription")}
               </Text>
             </View>
 
             <View className="gap-2 rounded-xl bg-card p-3">
               <Text
                 style={{
-                  textAlign: "right",
+                  textAlign,
                   fontSize: 13,
                   fontWeight: "600",
-                  color: "#9ca3af",
-                  writingDirection: "rtl",
+                  color: colors.mutedForeground,
+                  writingDirection,
                 }}
               >
-                نموذج الذكاء الاصطناعي
+                {t("aiModel")}
               </Text>
               <View className="flex-row gap-2">
                 {AI_PROVIDERS.map((provider) => (
@@ -360,14 +387,14 @@ export default function BookFetchScreen() {
             <View className="gap-2.5 rounded-xl bg-card p-3">
               <Text
                 style={{
-                  textAlign: "right",
+                  textAlign,
                   fontSize: 13,
                   fontWeight: "600",
-                  color: "#9ca3af",
-                  writingDirection: "rtl",
+                  color: colors.mutedForeground,
+                  writingDirection,
                 }}
               >
-                رابط الكتاب
+                {t("bookLink")}
               </Text>
               <View className="flex-row items-center gap-2 rounded-xl bg-background px-3 py-2.5">
                 <TextInput
@@ -375,7 +402,7 @@ export default function BookFetchScreen() {
                   value={url}
                   onChangeText={handleSetUrl}
                   placeholder="https://shamela.ws/book/..."
-                  placeholderTextColor="#444"
+                  placeholderTextColor={colors.mutedForeground}
                   className="flex-1 text-sm text-foreground"
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -394,7 +421,7 @@ export default function BookFetchScreen() {
                     className="rounded-md bg-secondary px-2.5 py-1.5"
                   >
                     <Text className="text-xs font-semibold text-foreground">
-                      لصق
+                      {t("paste")}
                     </Text>
                   </Pressable>
                 )}
@@ -411,9 +438,9 @@ export default function BookFetchScreen() {
               >
                 {step === "fetching" ? (
                   <>
-                    <ActivityIndicator size="small" color="#000" />
+                    <ActivityIndicator size="small" color={colors.primaryForeground} />
                     <Text className="text-[15px] font-bold text-primary-foreground">
-                      جاري الجلب…
+                      {t("fetchingBook")}
                     </Text>
                   </>
                 ) : (
@@ -430,7 +457,7 @@ export default function BookFetchScreen() {
                           : "text-[15px] font-bold text-primary-foreground"
                       }
                     >
-                      استيراد الكتاب
+                      {t("fetchBook")}
                     </Text>
                   </>
                 )}
@@ -439,9 +466,9 @@ export default function BookFetchScreen() {
 
             {step === "fetching" && (
               <View className="items-center gap-3 rounded-xl bg-card p-6">
-                <ActivityIndicator size="large" color="#1DB954" />
+                <ActivityIndicator size="large" color={colors.primary} />
                 <Text className="text-center text-sm text-muted-foreground">
-                  جاري استخراج بيانات الكتاب بواسطة الذكاء الاصطناعي…
+                  {t("fetchingBookDetails")}
                 </Text>
               </View>
             )}
@@ -450,14 +477,16 @@ export default function BookFetchScreen() {
               <View className="gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-3.5">
                 <View className="flex-row items-center gap-2">
                   <Icon name="AlertCircle" size={18} className="text-destructive" />
-                  <Text className="text-sm font-bold text-destructive">حدث خطأ</Text>
+                  <Text className="text-sm font-bold text-destructive">
+                    {t("error")}
+                  </Text>
                 </View>
                 <Text className="text-[13px] leading-5 text-muted-foreground">
                   {errorMsg}
                 </Text>
                 <Pressable onPress={reset}>
                   <Text className="text-[13px] font-semibold text-primary">
-                    حاول مجدداً
+                    {t("tryAgain")}
                   </Text>
                 </Pressable>
               </View>
@@ -468,8 +497,8 @@ export default function BookFetchScreen() {
                 <View
                   style={{
                     backgroundColor: result.created
-                      ? "rgba(29,185,84,0.15)"
-                      : "rgba(59,130,246,0.15)",
+                      ? withAlpha(colors.primary, 0.15)
+                      : withAlpha(colors.accent, 0.5),
                     paddingHorizontal: 14,
                     paddingVertical: 8,
                     flexDirection: "row-reverse",
@@ -490,11 +519,11 @@ export default function BookFetchScreen() {
                           : "text-[13px] font-bold text-sky-400"
                       }
                     >
-                      {result.created ? "تمت إضافة الكتاب" : "تم تحديث الكتاب"}
+                      {result.created ? t("addedBook") : t("updatedBook")}
                     </Text>
                     <View className="rounded-full bg-background/30 px-2 py-0.5">
                       <Text className="text-[11px] font-semibold text-foreground">
-                        سجل #{result.historyId}
+                        {t("historyRecord", { id: result.historyId })}
                       </Text>
                     </View>
                   </View>
@@ -507,7 +536,7 @@ export default function BookFetchScreen() {
                       height: 88,
                       borderRadius: 8,
                       overflow: "hidden",
-                      backgroundColor: result.book.coverColor ?? "#4c1d95",
+                      backgroundColor: result.book.coverColor ?? colors.primary,
                       flexShrink: 0,
                       alignItems: "center",
                       justifyContent: "center",
@@ -528,7 +557,7 @@ export default function BookFetchScreen() {
                           writingDirection: "rtl",
                         }}
                       >
-                        {(result.book.nameAr ?? "ك").slice(0, 2)}
+                        {(result.book.nameAr ?? result.book.nameEn ?? t("bookTitle")).slice(0, 2)}
                       </Text>
                     )}
                   </View>
@@ -539,7 +568,7 @@ export default function BookFetchScreen() {
                         textAlign: "right",
                         fontSize: 16,
                         fontWeight: "800",
-                        color: "#f3f4f6",
+                        color: colors.foreground,
                         writingDirection: "rtl",
                       }}
                       numberOfLines={2}
@@ -551,7 +580,7 @@ export default function BookFetchScreen() {
                         style={{
                           textAlign: "right",
                           fontSize: 13,
-                          color: "#1DB954",
+                          color: colors.primary,
                           writingDirection: "rtl",
                         }}
                         numberOfLines={1}
@@ -560,7 +589,7 @@ export default function BookFetchScreen() {
                       </Text>
                     )}
                     <Text className="text-[12px] text-muted-foreground">
-                      {result.chaptersImported} فصل/رابط تمت مزامنته
+                      {t("syncedChapters", { count: result.chaptersImported })}
                     </Text>
                   </View>
                 </View>
@@ -572,7 +601,7 @@ export default function BookFetchScreen() {
                   >
                     <Icon name="BookOpen" size={16} className="text-background" />
                     <Text className="text-sm font-bold text-primary-foreground">
-                      فتح الكتاب
+                      {t("openBook")}
                     </Text>
                   </Pressable>
                   <Pressable
@@ -580,7 +609,7 @@ export default function BookFetchScreen() {
                     className="items-center justify-center rounded-xl bg-secondary px-4 py-3"
                   >
                     <Text className="text-sm font-semibold text-foreground">
-                      إضافة آخر
+                      {t("addAnother")}
                     </Text>
                   </Pressable>
                 </View>
@@ -591,14 +620,14 @@ export default function BookFetchScreen() {
               <View className="flex-row-reverse items-center justify-between">
                 <Text
                   style={{
-                    textAlign: "right",
+                    textAlign,
                     fontSize: 14,
                     fontWeight: "700",
-                    color: "#f3f4f6",
-                    writingDirection: "rtl",
+                    color: colors.foreground,
+                    writingDirection,
                   }}
                 >
-                  سجل الاستيراد الأخير
+                  {t("history")}
                 </Text>
                 <Icon name="History" size={16} className="text-muted-foreground" />
               </View>
@@ -620,11 +649,11 @@ export default function BookFetchScreen() {
                         textAlign: "right",
                         fontSize: 13,
                         fontWeight: "600",
-                        color: "#f3f4f6",
+                        color: colors.foreground,
                         writingDirection: "rtl",
                       }}
                     >
-                      {entry.book?.nameAr ?? entry.book?.nameEn ?? "استيراد كتاب"}
+                      {entry.book?.nameAr ?? entry.book?.nameEn ?? t("importBook")}
                     </Text>
                     <Text className="text-xs text-muted-foreground" numberOfLines={1}>
                       {entry.sourceUrl}
@@ -645,11 +674,11 @@ export default function BookFetchScreen() {
                         style={{
                           textAlign: "right",
                           fontSize: 12,
-                          color: "#9ca3af",
+                          color: colors.mutedForeground,
                           writingDirection: "rtl",
                         }}
                       >
-                        {entry.chaptersImported} فصل تمت مزامنته
+                        {t("syncedChaptersShort", { count: entry.chaptersImported })}
                       </Text>
                     )}
                     <View className="flex-row gap-2">
@@ -659,7 +688,7 @@ export default function BookFetchScreen() {
                           className="flex-1 items-center rounded-lg bg-card py-2.5"
                         >
                           <Text className="text-[12px] font-semibold text-foreground">
-                            فتح
+                            {t("open")}
                           </Text>
                         </Pressable>
                       ) : null}
@@ -668,7 +697,7 @@ export default function BookFetchScreen() {
                         className="flex-1 items-center rounded-lg bg-primary py-2.5"
                       >
                         <Text className="text-[12px] font-bold text-primary-foreground">
-                          إعادة الاستيراد
+                          {t("importRetry")}
                         </Text>
                       </Pressable>
                     </View>
@@ -679,11 +708,11 @@ export default function BookFetchScreen() {
                   style={{
                     textAlign: "right",
                     fontSize: 13,
-                    color: "#9ca3af",
+                    color: colors.mutedForeground,
                     writingDirection: "rtl",
                   }}
                 >
-                  لا توجد محاولات استيراد بعد.
+                  {t("noImportHistory")}
                 </Text>
               )}
             </View>
@@ -692,25 +721,25 @@ export default function BookFetchScreen() {
               <View className="gap-1">
                 <Text
                   style={{
-                    textAlign: "right",
+                    textAlign,
                     fontSize: 14,
                     fontWeight: "700",
-                    color: "#f3f4f6",
-                    writingDirection: "rtl",
+                    color: colors.foreground,
+                    writingDirection,
                   }}
                 >
-                  لصق صفحة يدوياً
+                  {t("manualPaste")}
                 </Text>
                 <Text
                   style={{
-                    textAlign: "right",
+                    textAlign,
                     fontSize: 13,
                     lineHeight: 20,
-                    color: "#9ca3af",
-                    writingDirection: "rtl",
+                    color: colors.mutedForeground,
+                    writingDirection,
                   }}
                 >
-                  أدخل رقم الصفحة، اختر كتاباً موجوداً أو أنشئ كتاباً جديداً، ثم الصق النص. رابط الصفحة اختياري ويمكن استخدامه لاحقاً لإعادة الاستيراد.
+                  {t("manualBookDescription")}
                 </Text>
               </View>
 
@@ -730,7 +759,7 @@ export default function BookFetchScreen() {
                         : "text-[13px] font-semibold text-foreground"
                     }
                   >
-                    كتاب موجود
+                    {t("existingBook")}
                   </Text>
                 </Pressable>
                 <Pressable
@@ -748,7 +777,7 @@ export default function BookFetchScreen() {
                         : "text-[13px] font-semibold text-foreground"
                     }
                   >
-                    إنشاء كتاب
+                    {t("createBook")}
                   </Text>
                 </Pressable>
               </View>
@@ -757,17 +786,17 @@ export default function BookFetchScreen() {
                 <TextInput
                   value={manualBookName}
                   onChangeText={setManualBookName}
-                  placeholder="اسم الكتاب"
-                  placeholderTextColor="#666"
+                  placeholder={t("bookTitle")}
+                  placeholderTextColor={colors.mutedForeground}
                   style={{
                     borderRadius: 12,
-                    backgroundColor: "rgba(255,255,255,0.04)",
+                    backgroundColor: colors.background,
                     paddingHorizontal: 12,
                     paddingVertical: 12,
-                    textAlign: "right",
+                    textAlign,
                     fontSize: 14,
-                    color: "#e5e7eb",
-                    writingDirection: "rtl",
+                    color: colors.foreground,
+                    writingDirection,
                   }}
                 />
               ) : (
@@ -802,35 +831,35 @@ export default function BookFetchScreen() {
                 <TextInput
                   value={manualPageNo}
                   onChangeText={setManualPageNo}
-                  placeholder="رقم صفحة الشاملة"
-                  placeholderTextColor="#666"
+                  placeholder={t("pageNumber")}
+                  placeholderTextColor={colors.mutedForeground}
                   keyboardType="number-pad"
                   style={{
                     flex: 1,
                     borderRadius: 12,
-                    backgroundColor: "rgba(255,255,255,0.04)",
+                    backgroundColor: colors.background,
                     paddingHorizontal: 12,
                     paddingVertical: 12,
-                    textAlign: "right",
+                    textAlign,
                     fontSize: 14,
-                    color: "#e5e7eb",
+                    color: colors.foreground,
                   }}
                 />
                 <TextInput
                   value={manualPrintedPageNo}
                   onChangeText={setManualPrintedPageNo}
-                  placeholder="رقم الصفحة المطبوع (اختياري)"
-                  placeholderTextColor="#666"
+                  placeholder={t("printedPageNumber")}
+                  placeholderTextColor={colors.mutedForeground}
                   keyboardType="number-pad"
                   style={{
                     flex: 1,
                     borderRadius: 12,
-                    backgroundColor: "rgba(255,255,255,0.04)",
+                    backgroundColor: colors.background,
                     paddingHorizontal: 12,
                     paddingVertical: 12,
-                    textAlign: "right",
+                    textAlign,
                     fontSize: 14,
-                    color: "#e5e7eb",
+                    color: colors.foreground,
                   }}
                 />
               </View>
@@ -838,40 +867,40 @@ export default function BookFetchScreen() {
               <TextInput
                 value={manualChapterTitle}
                 onChangeText={setManualChapterTitle}
-                placeholder="عنوان الباب (اختياري)"
-                placeholderTextColor="#666"
+                placeholder={t("chapterTitle")}
+                placeholderTextColor={colors.mutedForeground}
                 style={{
                   borderRadius: 12,
-                  backgroundColor: "rgba(255,255,255,0.04)",
+                  backgroundColor: colors.background,
                   paddingHorizontal: 12,
                   paddingVertical: 12,
-                  textAlign: "right",
+                  textAlign,
                   fontSize: 14,
-                  color: "#e5e7eb",
-                  writingDirection: "rtl",
+                  color: colors.foreground,
+                  writingDirection,
                 }}
               />
               <TextInput
                 value={manualTopicTitle}
                 onChangeText={setManualTopicTitle}
-                placeholder="عنوان الموضوع (اختياري)"
-                placeholderTextColor="#666"
+                placeholder={t("topicTitle")}
+                placeholderTextColor={colors.mutedForeground}
                 style={{
                   borderRadius: 12,
-                  backgroundColor: "rgba(255,255,255,0.04)",
+                  backgroundColor: colors.background,
                   paddingHorizontal: 12,
                   paddingVertical: 12,
-                  textAlign: "right",
+                  textAlign,
                   fontSize: 14,
-                  color: "#e5e7eb",
-                  writingDirection: "rtl",
+                  color: colors.foreground,
+                  writingDirection,
                 }}
               />
               <TextInput
                 value={manualLink}
                 onChangeText={setManualLink}
-                placeholder="رابط الصفحة (اختياري)"
-                placeholderTextColor="#666"
+                placeholder={t("pageLink")}
+                placeholderTextColor={colors.mutedForeground}
                 className="rounded-xl bg-background px-3 py-3 text-sm text-foreground"
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -879,18 +908,18 @@ export default function BookFetchScreen() {
               <TextInput
                 value={manualText}
                 onChangeText={setManualText}
-                placeholder="الصق نص الصفحة هنا..."
-                placeholderTextColor="#666"
+                placeholder={t("pageContent")}
+                placeholderTextColor={colors.mutedForeground}
                 style={{
                   minHeight: 180,
                   borderRadius: 12,
-                  backgroundColor: "rgba(255,255,255,0.04)",
+                  backgroundColor: colors.background,
                   paddingHorizontal: 12,
                   paddingVertical: 12,
-                  textAlign: "right",
+                  textAlign,
                   fontSize: 14,
-                  color: "#e5e7eb",
-                  writingDirection: "rtl",
+                  color: colors.foreground,
+                  writingDirection,
                   textAlignVertical: "top",
                 }}
                 multiline
@@ -907,16 +936,16 @@ export default function BookFetchScreen() {
               >
                 {manualStep === "saving" ? (
                   <>
-                    <ActivityIndicator size="small" color="#000" />
+                    <ActivityIndicator size="small" color={colors.primaryForeground} />
                     <Text className="text-[15px] font-bold text-primary-foreground">
-                      جاري الحفظ…
+                      {t("saving")}
                     </Text>
                   </>
                 ) : (
                   <>
                     <Icon name="FilePenLine" size={18} className="text-background" />
                     <Text className="text-[15px] font-bold text-primary-foreground">
-                      حفظ الصفحة
+                      {t("savePage")}
                     </Text>
                   </>
                 )}
@@ -925,10 +954,10 @@ export default function BookFetchScreen() {
               {manualStep === "error" && manualError ? (
                 <Text
                   style={{
-                    textAlign: "right",
+                    textAlign,
                     fontSize: 13,
                     color: "#ef4444",
-                    writingDirection: "rtl",
+                    writingDirection,
                   }}
                 >
                   {manualError}
@@ -939,24 +968,27 @@ export default function BookFetchScreen() {
                 <View className="gap-2 rounded-xl border border-primary/20 bg-primary/10 p-3">
                   <Text
                     style={{
-                      textAlign: "right",
+                      textAlign,
                       fontSize: 14,
                       fontWeight: "700",
-                      color: "#1DB954",
-                      writingDirection: "rtl",
+                    color: colors.primary,
+                      writingDirection,
                     }}
                   >
-                    تم حفظ الصفحة بنجاح
+                    {t("bookSaved")}
                   </Text>
                   <Text
                     style={{
-                      textAlign: "right",
+                      textAlign,
                       fontSize: 13,
-                      color: "#9ca3af",
-                      writingDirection: "rtl",
+                      color: colors.mutedForeground,
+                      writingDirection,
                     }}
                   >
-                    صفحة #{manualResult.page.shamelaPageNo} في سجل #{manualResult.historyId}
+                    {t("pageSavedMeta", {
+                      page: manualResult.page.shamelaPageNo,
+                      history: manualResult.historyId,
+                    })}
                   </Text>
                   <View className="flex-row gap-2">
                     <Pressable
@@ -968,7 +1000,7 @@ export default function BookFetchScreen() {
                       className="flex-1 items-center rounded-lg bg-primary py-2.5"
                     >
                       <Text className="text-[12px] font-bold text-primary-foreground">
-                        فتح الصفحة
+                        {t("openPage")}
                       </Text>
                     </Pressable>
                     <Pressable
@@ -976,7 +1008,7 @@ export default function BookFetchScreen() {
                       className="flex-1 items-center rounded-lg bg-secondary py-2.5"
                     >
                       <Text className="text-[12px] font-semibold text-foreground">
-                        إضافة صفحة أخرى
+                        {t("addAnotherPage")}
                       </Text>
                     </Pressable>
                   </View>

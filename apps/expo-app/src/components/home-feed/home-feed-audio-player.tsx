@@ -3,6 +3,7 @@ import { useCallback } from "react";
 import { ItemProps } from "./home-feed-post-card";
 import { useAudioStore } from "@/store/audio-store";
 import { Icon } from "../ui/icon";
+import { useColors } from "@/hooks/use-color";
 
 export function HomeFeedAudioPlayer({
   duration,
@@ -12,6 +13,7 @@ export function HomeFeedAudioPlayer({
   duration: string;
 }) {
   const store = useAudioStore();
+  const colors = useColors();
   const isCurrent = store.blog?.id === post?.id;
   const isPlayying = isCurrent && store.isPlaying;
   const playPause = useCallback(async () => {
@@ -42,7 +44,7 @@ export function HomeFeedAudioPlayer({
                 style={{
                   width: 4,
                   borderRadius: 9999,
-                  backgroundColor: i < 4 ? "#1DB954" : "#535353",
+                  backgroundColor: i < 4 ? colors.primary : colors.border,
                   height: h * 2 + 4,
                 }}
               />

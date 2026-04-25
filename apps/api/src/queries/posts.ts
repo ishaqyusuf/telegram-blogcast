@@ -57,6 +57,25 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
   return await response(
     data.map((blog) => {
       const type: BlogType = blog.type as any;
+      const serializeFile = (file: any) =>
+        file
+          ? {
+              source: file.source ?? "telegram",
+              fileId: file.fileId,
+              fileUniqueId: file.fileUniqueId,
+              fileName: file.fileName,
+              fileSize: file.fileSize,
+              mimeType: file.mimeType,
+              blobUrl: file.blobUrl,
+              blobDownloadUrl: file.blobDownloadUrl,
+              blobPathname: file.blobPathname,
+              blobContentType: file.blobContentType,
+            }
+          : null;
+      const getMediaUrl = (file: any) =>
+        file?.source === "vercel_blob"
+          ? file.blobDownloadUrl || file.blobUrl
+          : null;
       const blogAudio = () => {
         const [media] = blog.medias;
         if (!media || !media.file) return null;
@@ -76,7 +95,9 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
         return {
           title: media.title,
           mediaId: media.id,
+          source: media.file.source ?? "telegram",
           telegramFileId: media.file.fileId,
+          url: getMediaUrl(media.file),
           fileName: media.file?.fileName,
           displayName,
           size: media.file.fileSize,
@@ -108,9 +129,19 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
           "image",
           blog.medias.map(({ file }) => ({
             fileId: file?.fileId,
+            source: file?.source ?? "telegram",
+            url: getMediaUrl(file),
+            file: serializeFile(file),
           })),
         ),
         doc: blogPdf(type, blog),
+        media: blog.medias.map((media) => ({
+          id: media.id,
+          title: media.title,
+          mimeType: media.mimeType,
+          file: serializeFile(media.file),
+          url: getMediaUrl(media.file),
+        })),
         tags: blog.blogTags?.map((bt) => bt.tags?.title).filter(Boolean) ?? [],
         isBookmarked: false,
         likes: 0,

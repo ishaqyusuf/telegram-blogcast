@@ -4,16 +4,17 @@ import { useRouter } from "expo-router";
 import { ScrollView, Text, View } from "react-native";
 
 import { _trpc } from "@/components/static-trpc";
+import { useTranslation } from "@/lib/i18n";
 
 const CHANNEL_COLORS = [
-  "#4c1d95",
-  "#7c2d12",
-  "#14532d",
-  "#1e3a5f",
-  "#3b0764",
-  "#7f1d1d",
-  "#064e3b",
   "#1e40af",
+  "#0f766e",
+  "#b45309",
+  "#4f46e5",
+  "#be123c",
+  "#0369a1",
+  "#7c3aed",
+  "#334155",
 ];
 
 function getInitials(value?: string | null) {
@@ -28,6 +29,7 @@ function getInitials(value?: string | null) {
 
 export function BlogHomeChannels() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { data: channels = [] } = useQuery(
     _trpc.channel.getChannels.queryOptions()
   );
@@ -38,9 +40,9 @@ export function BlogHomeChannels() {
     <View className="pt-4 pb-2">
       {/* Section header */}
       <View className="flex-row items-center justify-between px-4 mb-3">
-        <Text className="text-base font-bold text-foreground">Channels</Text>
+        <Text className="text-base font-bold text-foreground">{t("channels")}</Text>
         <Pressable onPress={() => router.push("/channels" as any)} className="active:opacity-70">
-          <Text className="text-sm font-medium text-primary">See all</Text>
+          <Text className="text-sm font-medium text-primary">{t("viewAll")}</Text>
         </Pressable>
       </View>
 

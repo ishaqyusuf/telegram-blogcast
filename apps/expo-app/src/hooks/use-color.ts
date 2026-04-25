@@ -1,14 +1,24 @@
 import { THEME } from "@/lib/theme";
 import { useColorScheme as useNativeWindColorScheme } from "nativewind";
 
+type AppColorScheme = "light" | "dark" | "system";
+
 export function useColors() {
   const { colorScheme } = useColorScheme();
-  const _theme = colorScheme ?? "light";
 
-  return _theme === "dark" ? THEME.dark : THEME.light;
+  return colorScheme === "dark" ? THEME.dark : THEME.light;
 }
 
 export function useColorScheme() {
-  const { colorScheme } = useNativeWindColorScheme();
-  return colorScheme ?? "light";
+  const { colorScheme, setColorScheme, toggleColorScheme } =
+    useNativeWindColorScheme();
+
+  const resolvedColorScheme: "light" | "dark" =
+    colorScheme === "dark" ? "dark" : "light";
+
+  return {
+    colorScheme: resolvedColorScheme,
+    setColorScheme: (scheme: AppColorScheme) => setColorScheme(scheme as any),
+    toggleColorScheme,
+  };
 }

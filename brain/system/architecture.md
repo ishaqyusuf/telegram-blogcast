@@ -20,6 +20,7 @@ Documents the main architectural decisions, runtime boundaries, and integration 
 - Shared packages provide reusable domain logic, auth helpers, utilities, DB access, and UI primitives.
 - Clients consume typed APIs instead of talking to the database directly.
 - Database schema is split into domain-focused Prisma files under `packages/db/src/schema`.
+- Expo media uploads use the Next.js web surface for Vercel Blob client-upload token exchange, then persist media ownership through the shared tRPC API.
 
 ### Architectural Constraints
 - Favor shared workspace packages over duplicated app-local business logic.

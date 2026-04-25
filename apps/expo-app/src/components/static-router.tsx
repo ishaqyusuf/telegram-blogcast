@@ -1,20 +1,13 @@
-import { useRouter } from "expo-router";
+import { router, type Router } from "expo-router";
 
-type Router = ReturnType<typeof useRouter>;
-export let _router: Router;
-export let _goBack: Router["back"];
-export let _push: Router["push"];
-export let _replace: Router["replace"];
-export let _setRouteParams: Router["setParams"];
+export const _router = router;
+export const _goBack: Router["back"] = (...args) => router.back(...args);
+export const _push: Router["push"] = (...args) => router.push(...args);
+export const _replace: Router["replace"] = (...args) => router.replace(...args);
+export const _setRouteParams: Router["setParams"] = (...args) =>
+  router.setParams(...args);
 
 export function StaticRouter() {
-  _router = useRouter();
-  // _qc = useQueryClient();
-  _goBack = _router?.back;
-  _push = _router?.push;
-  _replace = _router?.replace;
-  _setRouteParams = _router?.setParams;
-
   return null; // nothing to render
 }
 // export {

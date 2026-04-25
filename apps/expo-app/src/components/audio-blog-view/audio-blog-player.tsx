@@ -2,9 +2,11 @@ import { View, Text, TouchableOpacity, Image } from "react-native";
 import { DUMMY_AUDIO_BLOG } from "./__mocks__/data";
 import { useState } from "react";
 import { Icon } from "../ui/icon";
+import { useColors } from "@/hooks/use-color";
 
 function PlayerScrubber() {
   const { progress, currentTime, remainingTime } = DUMMY_AUDIO_BLOG;
+  const colors = useColors();
   return (
     <View className="py-2">
       <View className="relative h-10 flex items-center">
@@ -12,7 +14,7 @@ function PlayerScrubber() {
         <View className="absolute w-full h-1.5 bg-muted rounded-full overflow-hidden">
           {/* Progress */}
           <View
-            style={{ height: "100%", backgroundColor: "#1DB954", borderRadius: 9999, width: `${progress * 100}%` }}
+            style={{ height: "100%", backgroundColor: colors.primary, borderRadius: 9999, width: `${progress * 100}%` }}
           />
         </View>
         {/* Comment Markers */}
@@ -28,10 +30,10 @@ function PlayerScrubber() {
             position: "absolute",
             width: 16,
             height: 16,
-            backgroundColor: "#fff",
+            backgroundColor: colors.background,
             borderRadius: 9999,
             borderWidth: 2,
-            borderColor: "#1DB954",
+            borderColor: colors.primary,
             zIndex: 20,
             left: `${progress * 100}%`,
           }}

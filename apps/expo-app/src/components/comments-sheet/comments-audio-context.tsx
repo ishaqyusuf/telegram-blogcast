@@ -1,9 +1,11 @@
 import { View, Text } from "react-native";
 import { DUMMY_AUDIO_CONTEXT } from "./__mocks__/data";
 import { Icon } from "@/components/ui/icon";
+import { useColors } from "@/hooks/use-color";
 
 export function CommentsAudioContext() {
   const { title, currentTime, progress } = DUMMY_AUDIO_CONTEXT;
+  const colors = useColors();
   return (
     <View className="px-6 pb-6 pt-1 bg-background shrink-0 border-b border-border z-30">
       <View className="flex-row justify-between items-center mb-3">
@@ -26,7 +28,7 @@ export function CommentsAudioContext() {
         <View className="absolute w-full h-1.5 bg-primary/20 rounded-full overflow-hidden">
           {/* Progress Fill */}
           <View
-            style={{ height: "100%", backgroundColor: "#1DB954", width: `${progress * 100}%` }}
+            style={{ height: "100%", backgroundColor: colors.primary, width: `${progress * 100}%` }}
           />
         </View>
         {/* Comment Markers (Ticks) */}
@@ -38,9 +40,9 @@ export function CommentsAudioContext() {
             position: "absolute",
             height: 16,
             width: 16,
-            backgroundColor: "#fff",
+            backgroundColor: colors.background,
             borderWidth: 2,
-            borderColor: "#1DB954",
+            borderColor: colors.primary,
             borderRadius: 9999,
             zIndex: 10,
             top: "50%",

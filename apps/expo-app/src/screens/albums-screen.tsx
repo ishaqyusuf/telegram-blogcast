@@ -6,8 +6,9 @@ import { FlatList, Text, View } from "react-native";
 import { _trpc } from "@/components/static-trpc";
 import { SafeArea } from "@/components/safe-area";
 import { Icon } from "@/components/ui/icon";
+import { useTranslation } from "@/lib/i18n";
 
-const ALBUM_COLORS = ["#4c1d95", "#7c2d12", "#14532d", "#1e3a5f", "#3b0764", "#064e3b"];
+const ALBUM_COLORS = ["#1e40af", "#0f766e", "#b45309", "#4f46e5", "#be123c", "#0369a1"];
 
 function getInitials(name?: string | null) {
   if (!name) return "AL";
@@ -20,6 +21,7 @@ function getInitials(name?: string | null) {
 
 export default function AlbumsScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { data: albums = [], isLoading } = useQuery(
     _trpc.album.getAlbums.queryOptions()
   );
@@ -35,17 +37,17 @@ export default function AlbumsScreen() {
           >
             <Icon name="ChevronLeft" size={22} className="text-foreground" />
           </Pressable>
-          <Text className="text-lg font-bold text-foreground flex-1">Albums</Text>
+          <Text className="text-lg font-bold text-foreground flex-1">{t("albums")}</Text>
         </View>
 
         {isLoading ? (
           <View className="flex-1 items-center justify-center">
-            <Text className="text-muted-foreground">Loading albums…</Text>
+            <Text className="text-muted-foreground">{t("loading")}</Text>
           </View>
         ) : albums.length === 0 ? (
           <View className="flex-1 items-center justify-center gap-3">
             <Icon name="Music2" size={48} className="text-muted-foreground" />
-            <Text className="text-muted-foreground">No albums yet</Text>
+            <Text className="text-muted-foreground">{t("noAlbums")}</Text>
           </View>
         ) : (
           <FlatList

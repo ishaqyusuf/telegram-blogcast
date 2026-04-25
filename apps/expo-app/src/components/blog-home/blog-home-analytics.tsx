@@ -5,10 +5,10 @@ import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";
 
 const STATS = [
-  { key: "totalPosts", label: "Posts", icon: "FileText" as const, color: "#4c1d95" },
-  { key: "audioPosts", label: "Audio", icon: "Headphones" as const, color: "#14532d" },
-  { key: "totalViews", label: "Views", icon: "Eye" as const, color: "#1e3a5f" },
-  { key: "totalReactions", label: "Reactions", icon: "Heart" as const, color: "#7c2d12" },
+  { key: "totalPosts", label: "Posts", icon: "FileText" as const, color: "#1e40af" },
+  { key: "audioPosts", label: "Audio", icon: "Headphones" as const, color: "#0f766e" },
+  { key: "totalViews", label: "Views", icon: "Eye" as const, color: "#b45309" },
+  { key: "totalReactions", label: "Reactions", icon: "Heart" as const, color: "#be123c" },
 ] as const;
 
 export function BlogHomeAnalytics() {

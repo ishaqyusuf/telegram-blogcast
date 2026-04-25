@@ -56,8 +56,11 @@ export const localHighlights = sqliteTable("local_highlights", {
   bookId:      integer("book_id").notNull(),
   pageId:      integer("page_id").notNull(),
   paragraphId: integer("paragraph_id"),
+  startOffset: integer("start_offset"),
+  endOffset:   integer("end_offset"),
   color:       text("color").notNull().default("#FFD700"),
   note:        text("note"),
+  quoteText:   text("quote_text"),
   createdAt:   integer("created_at", { mode: "timestamp" }).notNull(),
   updatedAt:   integer("updated_at", { mode: "timestamp" }).notNull(),
   deletedAt:   integer("deleted_at", { mode: "timestamp" }),
@@ -79,8 +82,20 @@ export const localComments = sqliteTable("local_comments", {
   syncStatus:  text("sync_status").notNull().default("pending_create"),
 });
 
+export const localPageDrafts = sqliteTable("local_page_drafts", {
+  pageId:       integer("page_id").primaryKey(),
+  bookId:       integer("book_id").notNull(),
+  contentJson:  text("content_json").notNull(),
+  contentHtml:  text("content_html"),
+  plainText:    text("plain_text").notNull(),
+  baseVersion:  integer("base_version"),
+  updatedAt:    integer("updated_at", { mode: "timestamp" }).notNull(),
+  syncStatus:   text("sync_status").notNull().default("pending_update"),
+});
+
 export type LocalHighlight = typeof localHighlights.$inferSelect;
 export type LocalComment   = typeof localComments.$inferSelect;
+export type LocalPageDraft = typeof localPageDrafts.$inferSelect;
 export type LocalPage      = typeof localPages.$inferSelect;
 export type LocalParagraph = typeof localParagraphs.$inferSelect;
 export type LocalFootnote  = typeof localFootnotes.$inferSelect;

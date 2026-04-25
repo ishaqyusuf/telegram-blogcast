@@ -21,6 +21,9 @@ Tracks important request/response expectations and typed boundaries between clie
 - Document breaking changes that require coordinated app updates.
 - `apps/www/src/app/api/trpc/[...trpc]/route.ts` is the web gateway for the shared Hono/tRPC handler from `apps/api/src/internal-api.ts`, so Expo can target `apps/www` in local development without changing router contracts.
 - Expo tRPC clients resolve their endpoint from `apps/expo-app/src/lib/base-url.ts`; prefer `EXPO_PUBLIC_TRPC_URL` or `EXPO_PUBLIC_TRPC_PORT` for local routing instead of overloading unrelated web/app env values.
+- `book.getBooks` returns each book with at most one fetched `pages` entry, ordered by lowest `shamelaPageNo`, so mobile list surfaces can open the first reader page directly while falling back to book detail when no fetched page exists.
+- Blog media is source-aware. `blog.createBlog` accepts optional `mediaUploads` from Vercel Blob and persists them as `File` + `Media` rows with `source = "vercel_blob"`; existing Telegram media keeps using Telegram `fileId` values and the web proxy.
+- Expo uploads user-selected blog media through the Next.js `/api/blob/upload` client-upload token endpoint, then sends the resulting Blob metadata to tRPC with the blog create/update payload.
 
 ### TODO
 - Record contract notes per router as features are implemented or refactored.

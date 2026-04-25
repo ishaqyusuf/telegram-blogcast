@@ -3,11 +3,14 @@ import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { Text, View } from "react-native";
 
 import { _trpc } from "@/components/static-trpc";
+import { useColors } from "@/hooks/use-color";
+import { withAlpha } from "@/lib/theme";
 
 const EMOJIS = ["❤️", "👍", "😂", "😮", "🔥"] as const;
 
 export function ReactionBar({ blogId }: { blogId: number }) {
   const queryClient = useQueryClient();
+  const colors = useColors();
   const { data: reactions = [] } = useQuery(
     _trpc.blog.getReactions.queryOptions({ blogId })
   );
@@ -35,8 +38,8 @@ export function ReactionBar({ blogId }: { blogId: number }) {
             className="flex-row items-center gap-0.5 px-2 py-0.5 rounded-full active:opacity-70"
             style={{
               backgroundColor: active
-                ? "rgba(29,185,84,0.18)"
-                : "rgba(255,255,255,0.06)",
+                ? withAlpha(colors.primary, 0.18)
+                : withAlpha(colors.muted, 0.6),
             }}
           >
             <Text style={{ fontSize: 13 }}>{emoji}</Text>

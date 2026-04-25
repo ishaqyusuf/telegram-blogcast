@@ -70,8 +70,10 @@ export const useAudioStore = create<AudioState>()(
       isSeeking: false,
       blog: null!,
       loadAudio: async (blog) => {
-        const uri = (await getTelegramFileUrl(blog?.audio?.telegramFileId))
-          ?.url!;
+        const directUrl = (blog?.audio as any)?.url as string | undefined;
+        const uri =
+          directUrl ||
+          (await getTelegramFileUrl(blog?.audio?.telegramFileId))?.url!;
         const fileName = blog?.audio?.fileName!;
         console.log("LOADING>>>");
         try {

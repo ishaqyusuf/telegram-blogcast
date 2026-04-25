@@ -28,6 +28,7 @@ Summarizes where the database schema lives and which major data domains exist.
 
 ### Working Notes
 - Books, blogs, channels, media, transcripts, and interactions are first-class modeled domains.
+- `File` records are source-aware. Existing imported Telegram media uses `source = "telegram"` and Telegram file IDs; new compose uploads use `source = "vercel_blob"` with Blob URL, download URL, pathname, content type, ETag, and metadata fields.
 - Update `brain/database/relationships.md` when cross-model ownership changes.
 - Books schema now also owns import/audit records:
   - `BookImportHistory` for book-level imports from source links

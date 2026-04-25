@@ -17,13 +17,15 @@ Tracks the current scope, architecture, and roadmap for the books experience acr
 
 ### Current Surfaces
 - Screens:
-  - `/books` via `books-screen.tsx`: library grid and shelf filter.
+  - `/books` via `books-screen.tsx`: library grid and shelf filter; tapping a book opens its first fetched page when available, otherwise falls back to book detail.
   - `/books/[bookId]` via `book-detail-screen.tsx`: book metadata and chapter tree.
   - `/books/[bookId]/reader/[pageId]` via `book-reader-screen.tsx`: page reader.
   - `/books/[bookId]/search` via `book-search-screen.tsx`: search within book.
   - `/book-fetch` via `book-fetch-screen.tsx`: add book from Shamela URL via AI, browse recent import history, re-import a previous source URL, and paste manual page content into an existing or newly created book.
 - Visual system:
   - Active books screens use the same semantic theme tokens as the home/feed surfaces (`bg-background`, `bg-card`, `text-foreground`, `text-muted-foreground`, `bg-primary`) instead of page-local hard-coded dark colors.
+- Navigation:
+  - Book list queries include the first fetched page ID so library and home book taps can deep-link directly to `/books/[bookId]/reader/[pageId]`.
 - Components:
   - `book/book-card.tsx`
   - `book/book-page-view.tsx`

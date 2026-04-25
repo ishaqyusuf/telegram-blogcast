@@ -1,18 +1,13 @@
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useThemeConfig } from "@/hooks/use-theme-color";
-import {
-  DarkTheme,
-  DefaultTheme,
-  ThemeProvider,
-} from "@react-navigation/native";
+import { ThemeProvider } from "@react-navigation/native";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { initLocalDb } from "@/db/local-db";
 import "react-native-reanimated";
 import "@/styles/global.css";
-import { useColorScheme } from "@/example/components/useColorScheme";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import {
   AuthProvider,
@@ -32,6 +27,8 @@ import { View } from "react-native";
 import { StaticRouter } from "@/components/static-router";
 import { GlobalAudioBar } from "@/components/global-audio-bar";
 import { KeyboardProvider } from "react-native-keyboard-controller";
+import { useColorScheme } from "@/hooks/use-color";
+import { initSentry, Sentry } from "@/lib/sentry";
 export {
   // Catch any errors thrown by the Layout component.
   ErrorBoundary,
@@ -44,8 +41,9 @@ export const unstable_settings = {
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
+initSentry();
 
-export default function RootLayout() {
+function RootLayout() {
   const [loaded, error] = useFonts({
     SpaceMono: require("../../assets/fonts/SpaceMono-Regular.ttf"),
     ...FontAwesome.font,
@@ -101,6 +99,7 @@ const InitialLayout = () => {
           <Stack.Screen name="channels/[channelId]" />
           <Stack.Screen name="play-history" />
           <Stack.Screen name="search" />
+          <Stack.Screen name="settings" />
           <Stack.Screen name="albums" />
           <Stack.Screen name="albums/[albumId]" />
           <Stack.Screen name="book-fetch" />
@@ -158,19 +157,25 @@ const InitialLayout = () => {
   );
 };
 function RootLayoutNav() {
-  const colorScheme = useColorScheme();
+  const { colorScheme, setColorScheme } = useColorScheme();
   const theme = useThemeConfig();
+  const didSetDefaultTheme = useRef(false);
+  const rootClassName =
+    colorScheme === "dark"
+      ? "dark flex-1 bg-background"
+      : "flex-1 bg-background";
+
+  useEffect(() => {
+    if (didSetDefaultTheme.current) return;
+    didSetDefaultTheme.current = true;
+    setColorScheme("light");
+  }, [setColorScheme]);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      {/* 
-        using  <View className={cn(theme.dark ? "dark" : "", "flex-1")}></View> somehow freezes scroll. the issue is mainly the dark className.
-      */}
       <KeyboardProvider>
-        <View className="flex-1">
-          <ThemeProvider
-            value={theme}
-          >
+        <View className={rootClassName}>
+          <ThemeProvider value={theme}>
             <AuthProvider value={useCreateAuthContext()}>
               <ToastProviderWithViewport>
                 <BottomSheetModalProvider>
@@ -180,9 +185,10 @@ function RootLayoutNav() {
               </ToastProviderWithViewport>
             </AuthProvider>
           </ThemeProvider>
-          {/* </View> */}
         </View>
       </KeyboardProvider>
     </GestureHandlerRootView>
   );
 }
+
+export default Sentry.wrap(RootLayout);

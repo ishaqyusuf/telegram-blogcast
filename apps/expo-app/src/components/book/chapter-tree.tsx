@@ -2,17 +2,14 @@ import { Pressable } from "@/components/ui/pressable";
 import { Icon } from "@/components/ui/icon";
 import { useState, useCallback } from "react";
 import { ActivityIndicator, LayoutAnimation, Platform, Text, UIManager, View } from "react-native";
+import { useTranslation } from "@/lib/i18n";
+import { useColors } from "@/hooks/use-color";
+import { withAlpha } from "@/lib/theme";
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
-
-const STATUS_COLORS: Record<string, string> = {
-  fetched: "#1DB954",
-  pending: "#4b5563",
-  error:   "#ef4444",
-};
 
 type Page = {
   id: number;
@@ -52,6 +49,7 @@ type VolumeSection = {
 };
 
 function groupPages(pages: Page[], volumes: Volume[]): VolumeSection[] {
+  const fallbackChapter = "__no_chapter__";
   const volumeMap = new Map<number, Volume>(volumes.map((v) => [v.id, v]));
 
   // Group pages by volumeId
@@ -78,7 +76,7 @@ function groupPages(pages: Page[], volumes: Volume[]): VolumeSection[] {
     // Group by chapterTitle within this volume
     const byChapter = new Map<string, Page[]>();
     for (const page of volumePages) {
-      const key = page.chapterTitle ?? "(بلا فصل)";
+      const key = page.chapterTitle ?? fallbackChapter;
       if (!byChapter.has(key)) byChapter.set(key, []);
       byChapter.get(key)!.push(page);
     }
@@ -108,8 +106,15 @@ function TopicRow({
   fetchingPageId: number | null;
   onPress: () => void;
 }) {
+  const { t } = useTranslation();
+  const colors = useColors();
   const isLoadingThis = fetchingPageId === page.id;
-  const label = page.topicTitle ?? page.chapterTitle ?? "صفحة";
+  const label = page.topicTitle ?? page.chapterTitle ?? t("page");
+  const statusColors: Record<string, string> = {
+    fetched: colors.primary,
+    pending: colors.mutedForeground,
+    error: colors.destructive,
+  };
 
   return (
     <Pressable
@@ -121,20 +126,20 @@ function TopicRow({
         paddingHorizontal: 14,
         gap: 10,
         borderBottomWidth: 1,
-        borderBottomColor: "rgba(255,255,255,0.04)",
-        backgroundColor: isLoadingThis ? "rgba(29,185,84,0.07)" : "transparent",
+        borderBottomColor: withAlpha(colors.border, 0.6),
+        backgroundColor: isLoadingThis ? withAlpha(colors.primary, 0.08) : "transparent",
       }}
     >
       {/* Status dot / spinner */}
       {isLoadingThis ? (
-        <ActivityIndicator size="small" color="#1DB954" style={{ width: 16 }} />
+        <ActivityIndicator size="small" color={colors.primary} style={{ width: 16 }} />
       ) : (
         <View
           style={{
             width: 7,
             height: 7,
             borderRadius: 4,
-            backgroundColor: STATUS_COLORS[page.status] ?? "#4b5563",
+            backgroundColor: statusColors[page.status] ?? colors.mutedForeground,
             flexShrink: 0,
           }}
         />
@@ -145,7 +150,7 @@ function TopicRow({
         style={{
           flex: 1,
           fontSize: 13,
-          color: page.status === "fetched" ? "#e8e8e8" : "#6b7280",
+          color: page.status === "fetched" ? colors.foreground : colors.mutedForeground,
           writingDirection: "rtl",
           textAlign: "right",
           lineHeight: 20,
@@ -157,8 +162,10 @@ function TopicRow({
 
       {/* Page number / download icon */}
       {page.status === "fetched" ? (
-        <Text style={{ fontSize: 11, color: "#4b5563", flexShrink: 0 }}>
-          {page.printedPageNo != null ? `ص ${page.printedPageNo}` : `#${page.shamelaPageNo}`}
+        <Text style={{ fontSize: 11, color: colors.mutedForeground, flexShrink: 0 }}>
+          {page.printedPageNo != null
+            ? t("pageShort", { number: page.printedPageNo })
+            : `#${page.shamelaPageNo}`}
         </Text>
       ) : (
         <Icon name="Download" size={13} className="text-muted-foreground" />
@@ -180,6 +187,7 @@ function ChapterGroupRow({
   onPagePress: (page: Page) => void;
 }) {
   const [expanded, setExpanded] = useState(true);
+  const colors = useColors();
 
   const fetchedCount = group.pages.filter((p) => p.status === "fetched").length;
   const allFetched = fetchedCount === group.pages.length;
@@ -196,12 +204,12 @@ function ChapterGroupRow({
   }, []);
 
   const badgeColor = allFetched
-    ? "rgba(29,185,84,0.15)"
+    ? withAlpha(colors.primary, 0.15)
     : noneFetched
-    ? "rgba(75,85,99,0.3)"
-    : "rgba(255,165,0,0.15)";
+    ? withAlpha(colors.mutedForeground, 0.18)
+    : withAlpha(colors.warn, 0.15);
 
-  const badgeTextColor = allFetched ? "#1DB954" : noneFetched ? "#6b7280" : "#f59e0b";
+  const badgeTextColor = allFetched ? colors.primary : noneFetched ? colors.mutedForeground : colors.warn;
 
   return (
     <View>
@@ -213,9 +221,9 @@ function ChapterGroupRow({
           paddingVertical: 9,
           paddingHorizontal: 12,
           gap: 8,
-          backgroundColor: "rgba(255,255,255,0.03)",
+          backgroundColor: withAlpha(colors.muted, 0.45),
           borderBottomWidth: 1,
-          borderBottomColor: "rgba(255,255,255,0.05)",
+          borderBottomColor: withAlpha(colors.border, 0.6),
         }}
       >
         {/* Chevron */}
@@ -231,7 +239,7 @@ function ChapterGroupRow({
             flex: 1,
             fontSize: 13,
             fontWeight: "600",
-            color: "#c0c0c0",
+            color: colors.foreground,
             writingDirection: "rtl",
             textAlign: "right",
           }}
@@ -283,7 +291,9 @@ function VolumeSectionRow({
   onPagePress: (page: Page) => void;
   isOnly: boolean;
 }) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(true);
+  const colors = useColors();
 
   const toggle = useCallback(() => {
     LayoutAnimation.configureNext({
@@ -313,8 +323,8 @@ function VolumeSectionRow({
   }
 
   const label = section.volume
-    ? `الجزء ${section.volume.number}${section.volume.title ? " — " + section.volume.title : ""}`
-    : "بدون جزء";
+    ? `${t("volume", { number: section.volume.number })}${section.volume.title ? " - " + section.volume.title : ""}`
+    : t("withoutVolume");
 
   return (
     <View style={{ marginBottom: 6 }}>
@@ -326,11 +336,11 @@ function VolumeSectionRow({
           alignItems: "center",
           paddingVertical: 11,
           paddingHorizontal: 14,
-          backgroundColor: "#1E1E1E",
+          backgroundColor: colors.card,
           gap: 10,
           borderRadius: 10,
           borderWidth: 1,
-          borderColor: "rgba(255,255,255,0.07)",
+          borderColor: colors.border,
         }}
       >
         <Icon
@@ -344,7 +354,7 @@ function VolumeSectionRow({
             flex: 1,
             fontSize: 14,
             fontWeight: "700",
-            color: "#fff",
+            color: colors.foreground,
             writingDirection: "rtl",
             textAlign: "right",
           }}
@@ -358,8 +368,8 @@ function VolumeSectionRow({
           style={{
             backgroundColor:
               section.fetchedCount === section.totalCount
-                ? "rgba(29,185,84,0.18)"
-                : "rgba(255,255,255,0.08)",
+                ? withAlpha(colors.primary, 0.18)
+                : withAlpha(colors.muted, 0.65),
             borderRadius: 8,
             paddingHorizontal: 8,
             paddingVertical: 3,
@@ -370,7 +380,7 @@ function VolumeSectionRow({
               fontSize: 11,
               fontWeight: "700",
               color:
-                section.fetchedCount === section.totalCount ? "#1DB954" : "#9ca3af",
+                section.fetchedCount === section.totalCount ? colors.primary : colors.mutedForeground,
             }}
           >
             {section.fetchedCount}/{section.totalCount}
@@ -386,7 +396,7 @@ function VolumeSectionRow({
             borderRadius: 8,
             overflow: "hidden",
             borderWidth: 1,
-            borderColor: "rgba(255,255,255,0.05)",
+            borderColor: colors.border,
           }}
         >
           {section.chapters.map((group) => (
@@ -406,12 +416,14 @@ function VolumeSectionRow({
 
 // ─── Main Export ───────────────────────────────────────────────────────────────
 export function ChapterTree({ pages, volumes, fetchingPageId, onPagePress }: Props) {
+  const { t } = useTranslation();
+  const colors = useColors();
   const sections = groupPages(pages, volumes);
 
   if (sections.length === 0) {
     return (
       <View style={{ paddingVertical: 32, alignItems: "center" }}>
-        <Text style={{ color: "#4b5563", fontSize: 14 }}>لا توجد فصول</Text>
+        <Text style={{ color: colors.mutedForeground, fontSize: 14 }}>{t("noChapters")}</Text>
       </View>
     );
   }

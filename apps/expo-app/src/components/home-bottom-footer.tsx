@@ -4,17 +4,19 @@ import { Text, View } from "react-native";
 
 import { Icon } from "./ui/icon";
 import { _router } from "./static-router";
+import { useTranslation, type TranslationKey } from "@/lib/i18n";
 
 const NAV_ITEMS = [
-  { key: "home", label: "Home", icon: "Home" as const },
-  { key: "search", label: "Search", icon: "Search" as const, route: "/search" },
-  { key: "channels", label: "Channels", icon: "Radio" as const, route: "/channels" },
-  { key: "history", label: "History", icon: "History" as const, route: "/play-history" },
-  { key: "profile", label: "Profile", icon: "User" as const },
+  { key: "home", labelKey: "home", icon: "Home" as const },
+  { key: "search", labelKey: "search", icon: "Search" as const, route: "/search" },
+  { key: "channels", labelKey: "channels", icon: "Radio" as const, route: "/channels" },
+  { key: "history", labelKey: "history", icon: "History" as const, route: "/play-history" },
+  { key: "profile", labelKey: "profile", icon: "User" as const },
 ] as const;
 
 export const HomeBottomNav = () => {
   const [active, setActive] = useState<string>("home");
+  const { t } = useTranslation();
 
   return (
     <View className="absolute bottom-0 w-full bg-card border-t border-border pb-6 pt-1">
@@ -27,7 +29,7 @@ export const HomeBottomNav = () => {
               className="items-center gap-1 w-16 active:opacity-70"
               onPress={() => {
                 setActive(item.key);
-                if (item.route) _router.push(item.route);
+                if ("route" in item) _router.push(item.route);
               }}
             >
               <Icon
@@ -42,7 +44,7 @@ export const HomeBottomNav = () => {
                     : "text-muted-foreground font-medium"
                 }`}
               >
-                {item.label}
+                {t(item.labelKey as TranslationKey)}
               </Text>
             </Pressable>
           );

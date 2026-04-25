@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator, Alert, KeyboardAvoidingView,
+  InteractionManager,
   Platform, ScrollView, Text, TextInput, View,
 } from "react-native";
 
@@ -11,17 +12,35 @@ import { _trpc } from "@/components/static-trpc";
 import { SafeArea } from "@/components/safe-area";
 import { Icon } from "@/components/ui/icon";
 import { BookPageView } from "@/components/book/book-page-view";
+import { BookEditorFooter } from "@/components/book/book-editor-footer";
+import {
+  BookRichEditor,
+  type BookRichEditorCommand,
+  type BookRichEditorHandle,
+} from "@/components/book/book-rich-editor";
 import { FootnotesSheet } from "@/components/book/footnotes-sheet";
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
 
 import { useHighlightsSync, pullServerHighlights, syncPendingHighlights } from "@/hooks/use-highlights-sync";
 import { useCommentsSync, pullServerComments, syncPendingComments } from "@/hooks/use-comments-sync";
+import { useBookPageDraft } from "@/hooks/use-book-page-draft";
 import { useBookOfflineStore } from "@/store/book-offline-store";
+import { useTranslation } from "@/lib/i18n";
+import { useColors } from "@/hooks/use-color";
+import {
+  createDocumentFromHtml,
+  createDocumentFromPlainText,
+  getDocumentPlainText,
+  serializeDocumentToHtml,
+  type RichDocument,
+} from "@acme/document/core";
 
 export default function BookReaderScreen() {
   const { bookId, pageId } = useLocalSearchParams<{ bookId: string; pageId: string }>();
   const router = useRouter();
   const qc = useQueryClient();
+  const { t } = useTranslation();
+  const colors = useColors();
   const bookIdNum = Number(bookId);
   const pageIdNum = Number(pageId);
 
@@ -37,11 +56,21 @@ export default function BookReaderScreen() {
   const [showToolbarForParagraphId, setShowToolbarForParagraphId] = useState<number | null>(null);
   const [commentText, setCommentText] = useState("");
   const [showCommentInput, setShowCommentInput] = useState(false);
+  const [mode, setMode] = useState<"read" | "edit">("read");
+  const [editorText, setEditorText] = useState("");
+  const [editorHtml, setEditorHtml] = useState("");
+  const [baseVersion, setBaseVersion] = useState<number>(0);
+  const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const editorRef = useRef<BookRichEditorHandle>(null);
 
   // ── Server data ────────────────────────────────────────────────────────────
   const { data: page, isLoading } = useQuery(
     _trpc.book.getPage.queryOptions({ pageId: pageIdNum })
   );
+  const { data: pageDocument } = useQuery(
+    _trpc.book.getPageDocument.queryOptions({ pageId: pageIdNum })
+  );
+  const { draft, parsedDocument, saveDraft, clearDraft } = useBookPageDraft(bookIdNum, pageIdNum);
 
   // ── Offline-first highlights ───────────────────────────────────────────────
   const { highlights, addHighlight, deleteHighlight, reload: reloadHighlights } =
@@ -58,11 +87,19 @@ export default function BookReaderScreen() {
 
   // Pull from server on mount (merge into SQLite)
   useEffect(() => {
-    pullServerHighlights(bookIdNum).catch(() => {}).then(reloadHighlights);
-    pullServerComments(bookIdNum).catch(() => {});
-    // Background sync of any pending items
-    syncPendingHighlights(bookIdNum).catch(() => {});
-    syncPendingComments(bookIdNum).catch(() => {});
+    const task = InteractionManager.runAfterInteractions(() => {
+      pullServerHighlights(bookIdNum)
+        .catch(() => {})
+        .then(reloadHighlights)
+        .catch(() => {});
+      pullServerComments(bookIdNum).catch(() => {});
+      syncPendingHighlights(bookIdNum).catch(() => {});
+      syncPendingComments(bookIdNum).catch(() => {});
+    });
+
+    return () => {
+      task.cancel();
+    };
   }, [bookIdNum]);
 
   // ── Next page ──────────────────────────────────────────────────────────────
@@ -72,23 +109,130 @@ export default function BookReaderScreen() {
         qc.invalidateQueries({ queryKey: _trpc.book.getBook.queryKey({ id: bookIdNum }) });
         router.replace(`/books/${bookId}/reader/${newPage.id}` as any);
       },
-      onError: (e) => Alert.alert("خطأ", e.message),
+      onError: (e) => Alert.alert(t("error"), e.message),
+    })
+  );
+  const { mutateAsync: savePageDocument, isPending: isSavingDocument } = useMutation(
+    _trpc.book.savePageDocument.mutationOptions({
+      onSuccess: async () => {
+        await clearDraft();
+        qc.invalidateQueries({ queryKey: _trpc.book.getPage.queryKey({ pageId: pageIdNum }) });
+        qc.invalidateQueries({ queryKey: _trpc.book.getPageDocument.queryKey({ pageId: pageIdNum }) });
+        setMode("read");
+      },
+      onError: (e) => Alert.alert(t("error"), e.message),
     })
   );
 
-  if (isLoading) {
-    return (
-      <View className="flex-1 items-center justify-center bg-background">
-        <ActivityIndicator color="rgb(29, 185, 84)" />
-      </View>
+  const serverPlainText =
+    pageDocument?.plainText ??
+    (page?.paragraphs ?? []).map((paragraph) => paragraph.text).join("\n\n");
+  const serverHtml =
+    pageDocument?.contentHtml ??
+    serializeDocumentToHtml(
+      (pageDocument?.document as RichDocument | undefined) ??
+        createDocumentFromPlainText(serverPlainText),
     );
-  }
-
-  if (!page) return null;
+  const isDirty =
+    mode === "edit" &&
+    (editorText.trim() !== serverPlainText.trim() ||
+      editorHtml.trim() !== serverHtml.trim());
 
   const openFootnotes = (marker: string) => {
     setHighlightedMarker(marker);
     footnotesRef.current?.present();
+  };
+
+  useEffect(() => {
+    if (mode !== "edit") return;
+    const draftText = draft?.plainText;
+    if (draftText) {
+      setEditorText(draftText);
+      setEditorHtml(draft?.contentHtml ?? serverHtml);
+      setBaseVersion(draft.baseVersion ?? pageDocument?.contentVersion ?? 0);
+      return;
+    }
+    if (pageDocument?.plainText != null) {
+      setEditorText(pageDocument.plainText);
+      setEditorHtml(pageDocument.contentHtml ?? serverHtml);
+      setBaseVersion(pageDocument.contentVersion ?? 0);
+    }
+  }, [mode, draft?.plainText, draft?.contentHtml, draft?.baseVersion, pageDocument?.plainText, pageDocument?.contentHtml, pageDocument?.contentVersion, serverHtml]);
+
+  useEffect(() => {
+    if (mode !== "edit") return;
+    if (draftTimerRef.current) {
+      clearTimeout(draftTimerRef.current);
+    }
+    draftTimerRef.current = setTimeout(() => {
+      const document = editorHtml.trim()
+        ? createDocumentFromHtml(editorHtml)
+        : createDocumentFromPlainText(editorText);
+      saveDraft({
+        document,
+        contentHtml: editorHtml || serializeDocumentToHtml(document),
+        plainText: getDocumentPlainText(document),
+        baseVersion,
+      }).catch((error) => console.warn("[BookDraft] save failed", error));
+    }, 500);
+
+    return () => {
+      if (draftTimerRef.current) {
+        clearTimeout(draftTimerRef.current);
+      }
+    };
+  }, [mode, editorText, editorHtml, baseVersion, saveDraft]);
+
+  const enterEditMode = () => {
+    const initialDocument = parsedDocument ?? (pageDocument?.document as RichDocument | undefined) ?? createDocumentFromPlainText(serverPlainText);
+    setEditorText(getDocumentPlainText(initialDocument));
+    setEditorHtml(
+      draft?.contentHtml ??
+        pageDocument?.contentHtml ??
+        serializeDocumentToHtml(initialDocument),
+    );
+    setBaseVersion(draft?.baseVersion ?? pageDocument?.contentVersion ?? 0);
+    setMode("edit");
+  };
+
+  const cancelEditMode = async () => {
+    if (isDirty) {
+      Alert.alert(
+        t("cancel"),
+        "Discard your local draft changes?",
+        [
+          { text: t("cancel"), style: "cancel" },
+          {
+            text: "Discard",
+            style: "destructive",
+            onPress: () => {
+              setMode("read");
+              setEditorText(serverPlainText);
+              setEditorHtml(serverHtml);
+            },
+          },
+        ],
+      );
+      return;
+    }
+    setMode("read");
+  };
+
+  const handleSaveDocument = async () => {
+    const document = editorHtml.trim()
+      ? createDocumentFromHtml(editorHtml)
+      : createDocumentFromPlainText(editorText);
+    await savePageDocument({
+      pageId: pageIdNum,
+      document,
+      contentHtml: editorHtml || serializeDocumentToHtml(document),
+      plainText: getDocumentPlainText(document),
+      baseVersion,
+    });
+  };
+
+  const runEditorCommand = (command: BookRichEditorCommand) => {
+    editorRef.current?.exec(command);
   };
 
   const handleLongPress = (para: { id: number }) => {
@@ -119,6 +263,7 @@ export default function BookReaderScreen() {
 
   const bookmarked = isBookmarked(bookIdNum, pageIdNum);
   const toggleBookmark = () => {
+    if (!page) return;
     if (bookmarked) {
       removeBookmark(bookIdNum, pageIdNum);
     } else {
@@ -131,6 +276,16 @@ export default function BookReaderScreen() {
       });
     }
   };
+
+  if (isLoading) {
+    return (
+      <View className="flex-1 items-center justify-center bg-background">
+        <ActivityIndicator color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (!page) return null;
 
   return (
     <View className="flex-1 bg-background">
@@ -154,8 +309,10 @@ export default function BookReaderScreen() {
               </Text>
             )}
             <Text className="text-xs text-muted-foreground">
-              {page.printedPageNo != null ? `ص ${page.printedPageNo}` : `#${page.shamelaPageNo}`}
-              {page.volume ? `  •  ج ${page.volume.number}` : ""}
+              {page.printedPageNo != null
+                ? t("pageShort", { number: page.printedPageNo })
+                : `#${page.shamelaPageNo}`}
+              {page.volume ? `  -  ${t("volumeShort", { number: page.volume.number })}` : ""}
             </Text>
           </View>
 
@@ -175,6 +332,19 @@ export default function BookReaderScreen() {
             className="size-[34px] items-center justify-center rounded-full bg-card"
           >
             <Icon name="BookMarked" size={18} className="text-foreground" />
+          </Pressable>
+
+          <Pressable
+            onPress={() => {
+              if (mode === "edit") {
+                void handleSaveDocument();
+              } else {
+                enterEditMode();
+              }
+            }}
+            className="size-[34px] items-center justify-center rounded-full bg-card"
+          >
+            <Icon name={mode === "edit" ? "Check" : "Edit3"} size={18} className="text-foreground" />
           </Pressable>
         </View>
 
@@ -197,30 +367,44 @@ export default function BookReaderScreen() {
               </Text>
             )}
 
-            <BookPageView
-              paragraphs={page.paragraphs}
-              highlights={highlights.map((h) => ({
-                localId: h.localId,
-                paragraphId: h.paragraphId,
-                color: h.color,
-              }))}
-              onFootnotePress={openFootnotes}
-              onLongPress={handleLongPress}
-              selectedParagraphId={selectedParagraphId}
-              showToolbarForParagraphId={showToolbarForParagraphId}
-              onHighlightColor={handleHighlightColor}
-              onHighlightDelete={handleHighlightDelete}
-              onDismissHighlight={() => {
-                setShowToolbarForParagraphId(null);
-                setSelectedParagraphId(null);
-              }}
-            />
+            {mode === "edit" ? (
+              <BookRichEditor
+                ref={editorRef}
+                initialHtml={editorHtml}
+                onChange={({ html, plainText }) => {
+                  setEditorHtml(html);
+                  setEditorText(plainText);
+                }}
+              />
+            ) : (
+              <BookPageView
+                paragraphs={page.paragraphs}
+                highlights={highlights.map((h) => ({
+                  localId: h.localId,
+                  paragraphId: h.paragraphId,
+                  color: h.color,
+                  startOffset: h.startOffset,
+                  endOffset: h.endOffset,
+                  quoteText: h.quoteText,
+                }))}
+                onFootnotePress={openFootnotes}
+                onLongPress={handleLongPress}
+                selectedParagraphId={selectedParagraphId}
+                showToolbarForParagraphId={showToolbarForParagraphId}
+                onHighlightColor={handleHighlightColor}
+                onHighlightDelete={handleHighlightDelete}
+                onDismissHighlight={() => {
+                  setShowToolbarForParagraphId(null);
+                  setSelectedParagraphId(null);
+                }}
+              />
+            )}
 
             {/* Comments list */}
-            {comments.length > 0 && (
+            {mode === "read" && comments.length > 0 && (
               <View style={{ marginTop: 24, gap: 8 }}>
                 <Text className="text-right text-sm font-bold text-foreground" style={{ writingDirection: "rtl" }}>
-                  التعليقات ({comments.length})
+                  {t("comments", { count: comments.length })}
                 </Text>
                 {comments.map((comment) => (
                   <View
@@ -245,13 +429,33 @@ export default function BookReaderScreen() {
             )}
           </ScrollView>
 
+          {mode === "edit" ? (
+            <BookEditorFooter
+              isSaving={isSavingDocument}
+              dirty={isDirty}
+              onBold={() => runEditorCommand("bold")}
+              onItalic={() => runEditorCommand("italic")}
+              onUnderline={() => runEditorCommand("underline")}
+              onHighlight={() => runEditorCommand("highlight")}
+              onBullets={() => runEditorCommand("bullets")}
+              onQuote={() => runEditorCommand("blockquote")}
+              onUndo={() => runEditorCommand("undo")}
+              onRedo={() => runEditorCommand("redo")}
+              onCancel={() => {
+                void cancelEditMode();
+              }}
+              onSave={() => {
+                void handleSaveDocument();
+              }}
+            />
+          ) : (
           <View className="flex-row items-center gap-2 border-t border-border bg-background px-4 py-3">
             <Pressable
               onPress={() => setShowCommentInput(!showCommentInput)}
               className="flex-1 flex-row items-center justify-center gap-1.5 rounded-xl bg-card py-2.5"
             >
               <Icon name="MessageSquare" size={16} className="text-foreground" />
-              <Text className="text-[13px] font-semibold text-foreground">تعليق</Text>
+              <Text className="text-[13px] font-semibold text-foreground">{t("comment")}</Text>
             </Pressable>
 
             <Pressable
@@ -259,7 +463,7 @@ export default function BookReaderScreen() {
               className="flex-row items-center justify-center gap-1.5 rounded-xl bg-card px-4 py-2.5"
             >
               <Icon name="ChevronRight" size={18} className="text-foreground" />
-              <Text className="text-[13px] text-foreground">السابقة</Text>
+              <Text className="text-[13px] text-foreground">{t("previous")}</Text>
             </Pressable>
 
             <Pressable
@@ -269,27 +473,28 @@ export default function BookReaderScreen() {
               className="flex-row items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2.5"
             >
               {isFetchingNext ? (
-                <ActivityIndicator size="small" color="#000" />
+                <ActivityIndicator size="small" color={colors.primaryForeground} />
               ) : (
                 <>
-                  <Text className="text-[13px] font-bold text-primary-foreground">التالية</Text>
+                  <Text className="text-[13px] font-bold text-primary-foreground">{t("next")}</Text>
                   <Icon name="ChevronLeft" size={18} className="text-background" />
                 </>
               )}
             </Pressable>
           </View>
+          )}
 
-          {showCommentInput && (
+          {mode === "read" && showCommentInput && (
             <View className="flex-row items-center gap-2 border-t border-border bg-card px-3 py-3">
               <TextInput
                 value={commentText}
                 onChangeText={setCommentText}
                 placeholder={
                   selectedParagraphId
-                    ? "تعليق على الفقرة المحددة..."
-                    : "أضف تعليقاً..."
+                    ? t("addParagraphComment")
+                    : t("addComment")
                 }
-                placeholderTextColor="#666"
+                placeholderTextColor={colors.mutedForeground}
                 className="flex-1 text-right text-sm text-foreground"
                 style={{ writingDirection: "rtl", maxHeight: 80 }}
                 multiline

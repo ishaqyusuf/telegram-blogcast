@@ -14,8 +14,14 @@ import { useInfiniteLoader } from "@/components/infinite-loader";
 import { minuteToString } from "@/lib/utils";
 import { AddToAlbumModal } from "@/components/channel-chat/add-to-album-modal";
 import type { BlogItem } from "@/components/blog-card";
+import { useColors } from "@/hooks/use-color";
+import { withAlpha } from "@/lib/theme";
 
 const isRTL = I18nManager.isRTL;
+
+function compactTags(tags?: (string | undefined)[] | null): string[] {
+  return tags?.filter((tag): tag is string => Boolean(tag)) ?? [];
+}
 
 // ── Date divider ─────────────────────────────────────────────────────────────
 
@@ -35,6 +41,7 @@ function DateDivider({ date }: { date: string | null | undefined }) {
 // ── Tag row helper ────────────────────────────────────────────────────────────
 
 function TagRow({ tags, activeTag, onTagPress }: { tags: string[]; activeTag: string | null; onTagPress: (tag: string) => void }) {
+  const colors = useColors();
   if (!tags || tags.length === 0) return null;
   return (
     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 4 }}>
@@ -43,8 +50,8 @@ function TagRow({ tags, activeTag, onTagPress }: { tags: string[]; activeTag: st
           <Text
             style={{
               fontSize: 10,
-              color: activeTag === tag ? "#fff" : "#1DB954",
-              backgroundColor: activeTag === tag ? "#1DB954" : "transparent",
+              color: activeTag === tag ? colors.primaryForeground : colors.primary,
+              backgroundColor: activeTag === tag ? colors.primary : "transparent",
               paddingHorizontal: activeTag === tag ? 5 : 0,
               paddingVertical: activeTag === tag ? 1 : 0,
               borderRadius: 4,
@@ -72,6 +79,7 @@ function TextBubble({
   activeTag: string | null;
   onTagPress: (tag: string) => void;
 }) {
+  const colors = useColors();
   return (
     <View
       style={{
@@ -79,15 +87,15 @@ function TextBubble({
         borderBottomRightRadius: 4,
         paddingHorizontal: 16,
         paddingVertical: 12,
-        backgroundColor: selected ? "rgba(29,185,84,0.18)" : "#1e1e1e",
+        backgroundColor: selected ? withAlpha(colors.primary, 0.18) : colors.card,
       }}
     >
       <Text
-        style={{ fontSize: 14, color: "#ffffff", lineHeight: 21, textAlign: "right", writingDirection: "rtl" }}
+        style={{ fontSize: 14, color: colors.foreground, lineHeight: 21, textAlign: "right", writingDirection: "rtl" }}
       >
         {post.content}
       </Text>
-      <TagRow tags={post.tags ?? []} activeTag={activeTag} onTagPress={onTagPress} />
+      <TagRow tags={compactTags(post.tags)} activeTag={activeTag} onTagPress={onTagPress} />
       <View className="flex-row items-center justify-end gap-2 mt-1">
         {(post._count as any)?.comments > 0 && (
           <View className="flex-row items-center gap-0.5">
@@ -118,13 +126,14 @@ function AudioBubble({
 }) {
   const title = post.caption || post.audio?.title || "Audio";
   const router = useRouter();
+  const colors = useColors();
   return (
     <View
       style={{
         borderRadius: 16,
         borderBottomRightRadius: 4,
         padding: 12,
-        backgroundColor: selected ? "rgba(29,185,84,0.18)" : "#1e1e1e",
+        backgroundColor: selected ? withAlpha(colors.primary, 0.18) : colors.card,
       }}
     >
       <Text
@@ -144,7 +153,7 @@ function AudioBubble({
           {[4, 8, 5, 12, 6, 10, 3, 9, 7, 11, 4, 8, 6, 10, 5].map((h, i) => (
             <View
               key={i}
-              style={{ flex: 1, borderRadius: 9999, backgroundColor: "#282828", height: h * 2 }}
+              style={{ flex: 1, borderRadius: 9999, backgroundColor: colors.border, height: h * 2 }}
             />
           ))}
         </View>
@@ -152,7 +161,7 @@ function AudioBubble({
           {minuteToString(post.audio?.duration)}
         </Text>
       </View>
-      <TagRow tags={post.tags ?? []} activeTag={activeTag} onTagPress={onTagPress} />
+      <TagRow tags={compactTags(post.tags)} activeTag={activeTag} onTagPress={onTagPress} />
       <View className="flex-row items-center justify-end gap-2 mt-1.5">
         {(post._count as any)?.comments > 0 && (
           <View className="flex-row items-center gap-0.5">
@@ -181,13 +190,14 @@ function ImageBubble({
   activeTag: string | null;
   onTagPress: (tag: string) => void;
 }) {
+  const colors = useColors();
   return (
     <View
       style={{
         borderRadius: 16,
         borderBottomRightRadius: 4,
         overflow: "hidden",
-        backgroundColor: selected ? "rgba(29,185,84,0.18)" : undefined,
+        backgroundColor: selected ? withAlpha(colors.primary, 0.18) : undefined,
       }}
     >
       <View className="h-40 bg-muted items-center justify-center">
@@ -201,7 +211,7 @@ function ImageBubble({
         </View>
       )}
       <View className="px-3 pb-2 mt-1">
-        <TagRow tags={post.tags ?? []} activeTag={activeTag} onTagPress={onTagPress} />
+        <TagRow tags={compactTags(post.tags)} activeTag={activeTag} onTagPress={onTagPress} />
         <View className="flex-row items-center justify-end gap-2 mt-1">
           {(post._count as any)?.comments > 0 && (
             <View className="flex-row items-center gap-0.5">
@@ -282,6 +292,7 @@ function BubbleRow({
   onTagPress,
 }: BubbleRowProps) {
   const router = useRouter();
+  const colors = useColors();
 
   const renderRightActions = useCallback(() => {
     return (
@@ -336,8 +347,8 @@ function BubbleRow({
                   borderWidth: 2,
                   alignItems: "center",
                   justifyContent: "center",
-                  borderColor: selected ? "#1DB954" : "#888",
-                  backgroundColor: selected ? "#1DB954" : "transparent",
+                  borderColor: selected ? colors.primary : colors.mutedForeground,
+                  backgroundColor: selected ? colors.primary : "transparent",
                 }}
               >
                 {selected && <Icon name="Check" size={11} className="text-white" />}
@@ -368,6 +379,7 @@ function TagScrollBar({
   onNext: () => void;
   onClear: () => void;
 }) {
+  const colors = useColors();
   return (
     <View
       style={{
@@ -375,9 +387,9 @@ function TagScrollBar({
         alignItems: "center",
         paddingHorizontal: 16,
         paddingVertical: 8,
-        backgroundColor: "#0d1f0d",
+        backgroundColor: withAlpha(colors.primary, 0.12),
         borderBottomWidth: 1,
-        borderBottomColor: "#1DB954",
+        borderBottomColor: colors.primary,
         gap: 8,
       }}
     >
@@ -388,10 +400,10 @@ function TagScrollBar({
         <Icon name="ChevronDown" size={18} className="text-primary" />
       </Pressable>
       <View style={{ flex: 1, alignItems: "center" }}>
-        <Text style={{ fontSize: 13, fontWeight: "700", color: "#1DB954" }}>
+        <Text style={{ fontSize: 13, fontWeight: "700", color: colors.primary }}>
           #{tag}
         </Text>
-        <Text style={{ fontSize: 10, color: "#6b7280" }}>
+        <Text style={{ fontSize: 10, color: colors.mutedForeground }}>
           {matchCount === 0
             ? "لا توجد نتائج"
             : `${currentMatchIdx + 1} / ${matchCount}`}

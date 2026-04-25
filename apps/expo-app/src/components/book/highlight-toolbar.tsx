@@ -1,12 +1,14 @@
 import { Pressable } from "@/components/ui/pressable";
 import { Icon } from "@/components/ui/icon";
-import { Text, View } from "react-native";
+import { View } from "react-native";
+import { useColors } from "@/hooks/use-color";
+import { withAlpha } from "@/lib/theme";
 
 const COLORS = [
-  { hex: "#FFD700", label: "ذهبي" },
-  { hex: "#1DB954", label: "أخضر" },
-  { hex: "#4A9EFF", label: "أزرق" },
-  { hex: "#FF6B6B", label: "أحمر" },
+  { hex: "#d97706" },
+  { hex: "#0d9488" },
+  { hex: "#2563eb" },
+  { hex: "#e11d48" },
 ];
 
 type Props = {
@@ -17,6 +19,8 @@ type Props = {
 };
 
 export function HighlightToolbar({ existingColor, onSelectColor, onDelete, onDismiss }: Props) {
+  const colors = useColors();
+
   return (
     <View
       style={{
@@ -26,12 +30,12 @@ export function HighlightToolbar({ existingColor, onSelectColor, onDelete, onDis
         flexDirection: "row",
         alignItems: "center",
         gap: 6,
-        backgroundColor: "#1E1E1E",
+        backgroundColor: colors.card,
         borderRadius: 28,
         paddingHorizontal: 12,
         paddingVertical: 8,
         borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.1)",
+        borderColor: colors.border,
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.5,
@@ -50,7 +54,7 @@ export function HighlightToolbar({ existingColor, onSelectColor, onDelete, onDis
             borderRadius: 13,
             backgroundColor: c.hex,
             borderWidth: existingColor === c.hex ? 2 : 0,
-            borderColor: "#fff",
+            borderColor: colors.foreground,
             alignItems: "center",
             justifyContent: "center",
           }}
@@ -61,7 +65,7 @@ export function HighlightToolbar({ existingColor, onSelectColor, onDelete, onDis
                 width: 8,
                 height: 8,
                 borderRadius: 4,
-                backgroundColor: "rgba(0,0,0,0.4)",
+                backgroundColor: withAlpha(colors.background, 0.6),
               }}
             />
           )}
@@ -70,7 +74,7 @@ export function HighlightToolbar({ existingColor, onSelectColor, onDelete, onDis
 
       {/* Separator */}
       {onDelete && (
-        <View style={{ width: 1, height: 18, backgroundColor: "rgba(255,255,255,0.15)", marginHorizontal: 2 }} />
+        <View style={{ width: 1, height: 18, backgroundColor: colors.border, marginHorizontal: 2 }} />
       )}
 
       {/* Delete */}
@@ -81,7 +85,7 @@ export function HighlightToolbar({ existingColor, onSelectColor, onDelete, onDis
             width: 26,
             height: 26,
             borderRadius: 13,
-            backgroundColor: "rgba(239,68,68,0.15)",
+            backgroundColor: withAlpha(colors.destructive, 0.15),
             alignItems: "center",
             justifyContent: "center",
           }}
@@ -91,7 +95,7 @@ export function HighlightToolbar({ existingColor, onSelectColor, onDelete, onDis
       )}
 
       {/* Separator */}
-      <View style={{ width: 1, height: 18, backgroundColor: "rgba(255,255,255,0.15)", marginHorizontal: 2 }} />
+      <View style={{ width: 1, height: 18, backgroundColor: colors.border, marginHorizontal: 2 }} />
 
       {/* Dismiss */}
       <Pressable
@@ -100,7 +104,7 @@ export function HighlightToolbar({ existingColor, onSelectColor, onDelete, onDis
           width: 26,
           height: 26,
           borderRadius: 13,
-          backgroundColor: "rgba(255,255,255,0.07)",
+          backgroundColor: withAlpha(colors.muted, 0.7),
           alignItems: "center",
           justifyContent: "center",
         }}

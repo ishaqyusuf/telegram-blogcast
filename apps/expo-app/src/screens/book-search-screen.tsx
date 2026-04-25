@@ -8,9 +8,11 @@ import { _trpc } from "@/components/static-trpc";
 import { SafeArea } from "@/components/safe-area";
 import { Icon } from "@/components/ui/icon";
 import { useBookOfflineStore } from "@/store/book-offline-store";
-import { localDb } from "@/db/local-db";
+import { localDb, withLocalDb } from "@/db/local-db";
 import { localParagraphs, localPages } from "@/db/local-schema";
 import { eq, sql } from "drizzle-orm";
+import { useTranslation } from "@/lib/i18n";
+import { useColors } from "@/hooks/use-color";
 
 type SearchResult = {
   pageId: number;
@@ -26,6 +28,8 @@ type SearchResult = {
 export default function BookSearchScreen() {
   const { bookId } = useLocalSearchParams<{ bookId: string }>();
   const router = useRouter();
+  const { t } = useTranslation();
+  const colors = useColors();
   const bookIdNum = Number(bookId);
 
   const [query, setQuery] = useState("");
@@ -52,67 +56,70 @@ export default function BookSearchScreen() {
     if (q.length < 2) { setOfflineResults(null); return; }
     setIsOfflineSearching(true);
     try {
-      // FTS5 search on paragraphs — use all() to get named-column rows
-      const paraRows = await localDb.all<{ id: number; page_id: number; text: string }>(
-        sql`SELECT p.id, p.page_id, p.text FROM local_paragraphs_fts f JOIN local_paragraphs p ON p.id = f.rowid WHERE local_paragraphs_fts MATCH ${q + "*"} LIMIT 30`
-      );
+      const results = await withLocalDb(async () => {
+        // FTS5 search on paragraphs — use all() to get named-column rows
+        const paraRows = await localDb.all<{ id: number; page_id: number; text: string }>(
+          sql`SELECT p.id, p.page_id, p.text FROM local_paragraphs_fts f JOIN local_paragraphs p ON p.id = f.rowid WHERE local_paragraphs_fts MATCH ${q + "*"} LIMIT 30`
+        );
 
-      // Title search on pages
-      const pageRows = await localDb
-        .select()
-        .from(localPages)
-        .where(eq(localPages.bookId, bookIdNum))
-        .limit(30);
+        // Title search on pages
+        const pageRows = await localDb
+          .select()
+          .from(localPages)
+          .where(eq(localPages.bookId, bookIdNum))
+          .limit(30);
 
-      const titleMatches = pageRows.filter(
-        (p) =>
-          p.chapterTitle?.includes(q) ||
-          p.topicTitle?.includes(q)
-      );
+        const titleMatches = pageRows.filter(
+          (p) =>
+            p.chapterTitle?.includes(q) ||
+            p.topicTitle?.includes(q)
+        );
 
-      const seen = new Set<number>();
-      const results: SearchResult[] = [];
+        const seen = new Set<number>();
+        const nextResults: SearchResult[] = [];
 
-      for (const p of titleMatches) {
-        if (!seen.has(p.id)) {
-          seen.add(p.id);
-          results.push({
-            pageId: p.id,
-            chapterTitle: p.chapterTitle,
-            topicTitle: p.topicTitle,
-            printedPageNo: p.printedPageNo,
-            shamelaPageNo: p.shamelaPageNo,
-            volumeId: p.volumeId,
-            snippet: null,
-            matchType: "title",
-          });
-        }
-      }
-
-      // For FTS matches, fetch the page info
-      for (const row of paraRows) {
-        const pageId = row.page_id;
-        if (!seen.has(pageId)) {
-          seen.add(pageId);
-          const [pg] = await localDb
-            .select()
-            .from(localPages)
-            .where(eq(localPages.id, pageId));
-          if (pg) {
-            results.push({
-              pageId: pg.id,
-              chapterTitle: pg.chapterTitle,
-              topicTitle: pg.topicTitle,
-              printedPageNo: pg.printedPageNo,
-              shamelaPageNo: pg.shamelaPageNo,
-              volumeId: pg.volumeId,
-              snippet: row.text.slice(0, 200),
-              matchType: "paragraph",
+        for (const p of titleMatches) {
+          if (!seen.has(p.id)) {
+            seen.add(p.id);
+            nextResults.push({
+              pageId: p.id,
+              chapterTitle: p.chapterTitle,
+              topicTitle: p.topicTitle,
+              printedPageNo: p.printedPageNo,
+              shamelaPageNo: p.shamelaPageNo,
+              volumeId: p.volumeId,
+              snippet: null,
+              matchType: "title",
             });
           }
         }
-      }
 
+        // For FTS matches, fetch the page info
+        for (const row of paraRows) {
+          const pageId = row.page_id;
+          if (!seen.has(pageId)) {
+            seen.add(pageId);
+            const [pg] = await localDb
+              .select()
+              .from(localPages)
+              .where(eq(localPages.id, pageId));
+            if (pg) {
+              nextResults.push({
+                pageId: pg.id,
+                chapterTitle: pg.chapterTitle,
+                topicTitle: pg.topicTitle,
+                printedPageNo: pg.printedPageNo,
+                shamelaPageNo: pg.shamelaPageNo,
+                volumeId: pg.volumeId,
+                snippet: row.text.slice(0, 200),
+                matchType: "paragraph",
+              });
+            }
+          }
+        }
+
+        return nextResults;
+      });
       setOfflineResults(results);
     } catch (e) {
       console.error("[BookSearch] offline search error", e);
@@ -144,7 +151,7 @@ export default function BookSearchScreen() {
         style={{ writingDirection: "rtl" }}
         numberOfLines={1}
       >
-        {item.chapterTitle ?? item.topicTitle ?? "صفحة"}
+        {item.chapterTitle ?? item.topicTitle ?? t("page")}
       </Text>
 
       {item.snippet && (
@@ -159,7 +166,9 @@ export default function BookSearchScreen() {
 
       <View className="mt-0.5 flex-row-reverse items-center gap-2">
         <Text className="text-[11px] text-muted-foreground">
-          {item.printedPageNo != null ? `ص ${item.printedPageNo}` : `#${item.shamelaPageNo}`}
+          {item.printedPageNo != null
+            ? t("pageShort", { number: item.printedPageNo })
+            : `#${item.shamelaPageNo}`}
         </Text>
         <View
           className={
@@ -171,7 +180,7 @@ export default function BookSearchScreen() {
           <Text
             className={item.matchType === "title" ? "text-[10px] font-semibold text-primary" : "text-[10px] font-semibold text-sky-400"}
           >
-            {item.matchType === "title" ? "عنوان" : "نص"}
+            {item.matchType === "title" ? t("title") : t("paragraph")}
           </Text>
         </View>
       </View>
@@ -194,8 +203,8 @@ export default function BookSearchScreen() {
             <TextInput
               value={query}
               onChangeText={setQuery}
-              placeholder="ابحث في الكتاب..."
-              placeholderTextColor="#666"
+              placeholder={t("searchBook")}
+              placeholderTextColor={colors.mutedForeground}
               className="flex-1 text-right text-[15px] text-foreground"
               style={{ writingDirection: "rtl" }}
               autoFocus
@@ -210,24 +219,26 @@ export default function BookSearchScreen() {
 
           {isDownloaded && (
             <View className="rounded-lg bg-primary/12 px-2 py-1">
-              <Text className="text-[11px] text-primary">محلي</Text>
+              <Text className="text-[11px] text-primary">{t("local")}</Text>
             </View>
           )}
         </View>
 
         {isSearching && debouncedQuery.length >= 2 ? (
           <View className="flex-1 items-center justify-center">
-            <ActivityIndicator color="rgb(29, 185, 84)" />
+            <ActivityIndicator color={colors.primary} />
           </View>
         ) : debouncedQuery.length < 2 ? (
           <View className="flex-1 items-center justify-center gap-2">
             <Icon name="Search" size={40} className="text-muted-foreground" />
-            <Text className="text-sm text-muted-foreground">اكتب للبحث في العناوين والنصوص</Text>
+            <Text className="text-sm text-muted-foreground">{t("searchHint")}</Text>
           </View>
         ) : results.length === 0 ? (
           <View className="flex-1 items-center justify-center gap-2">
             <Icon name="SearchX" size={40} className="text-muted-foreground" />
-            <Text className="text-sm text-muted-foreground">لا توجد نتائج لـ "{debouncedQuery}"</Text>
+            <Text className="text-sm text-muted-foreground">
+              {t("noResultsFor", { query: debouncedQuery })}
+            </Text>
           </View>
         ) : (
           <FlatList
@@ -238,7 +249,7 @@ export default function BookSearchScreen() {
             ListHeaderComponent={
               <View className="flex-row-reverse items-center px-4 py-2">
                 <Text className="text-xs text-muted-foreground">
-                  {results.length} نتيجة
+                  {t("resultsCount", { count: results.length })}
                 </Text>
               </View>
             }

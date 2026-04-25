@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 type Action = "build:preview" | "update:preview";
@@ -239,13 +239,32 @@ async function resolveEasCliRoot(): Promise<string> {
   }
 
   const wrapper = await readFile(easBinary, "utf8");
-  const match = wrapper.match(/["']([^"']*node_modules\/eas-cli)\/bin\/run["']/);
+  const basedir = path.dirname(easBinary);
+  const candidates = [
+    ...wrapper.matchAll(/["']([^"']*node_modules\/eas-cli)\/bin\/run["']/g),
+    ...wrapper.matchAll(/["']([^"']*node_modules\/eas-cli)\/bin\/node_modules/g),
+    ...wrapper.matchAll(/["']([^"']*node_modules\/eas-cli)\/node_modules/g),
+  ]
+    .map((match) => normalizeWrapperPath(match[1], basedir))
+    .filter((candidate, index, all) => all.indexOf(candidate) === index);
 
-  if (!match) {
-    throw new Error("Unable to resolve the installed eas-cli package path.");
+  for (const candidate of candidates) {
+    try {
+      await access(path.join(candidate, "package.json"));
+      return candidate;
+    } catch {
+      // Keep trying the next detected wrapper path.
+    }
   }
 
-  return match[1];
+  throw new Error(
+    `Unable to resolve the installed eas-cli package path from ${easBinary}.`,
+  );
+}
+
+function normalizeWrapperPath(candidate: string, basedir: string): string {
+  const resolved = candidate.replaceAll("$basedir", basedir);
+  return path.isAbsolute(resolved) ? resolved : path.resolve(basedir, resolved);
 }
 
 function pathToFileUrl(filePath: string): URL {

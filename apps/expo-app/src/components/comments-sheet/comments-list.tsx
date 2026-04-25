@@ -6,6 +6,8 @@ import { LegendList } from "@legendapp/list";
 
 import { Icon } from "@/components/ui/icon";
 import type { CommentsSheetState } from "./index";
+import { useColors } from "@/hooks/use-color";
+import { withAlpha } from "@/lib/theme";
 
 // ── Timestamp badge helper ─────────────────────────────────────────────────
 
@@ -45,10 +47,12 @@ function CommentItem({
   isDeletePending: boolean;
 }) {
   const comment = item.comment;
-  if (!comment) return null;
+  const colors = useColors();
 
   const [editing, setEditing] = useState(false);
-  const [editText, setEditText] = useState(comment.content ?? "");
+  const [editText, setEditText] = useState(comment?.content ?? "");
+
+  if (!comment) return null;
 
   const timestamp = parseTimestamp(comment.content ?? "");
   const displayContent = timestamp
@@ -92,14 +96,14 @@ function CommentItem({
           width: 36,
           height: 36,
           borderRadius: 18,
-          backgroundColor: "#282828",
+          backgroundColor: colors.muted,
           alignItems: "center",
           justifyContent: "center",
           flexShrink: 0,
           marginTop: 2,
         }}
       >
-        <Text style={{ fontSize: 12, fontWeight: "700", color: "#9ca3af" }}>U</Text>
+        <Text style={{ fontSize: 12, fontWeight: "700", color: colors.mutedForeground }}>U</Text>
       </View>
 
       {/* Body */}
@@ -107,9 +111,9 @@ function CommentItem({
         {/* Header row */}
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
           <View style={{ flexDirection: "row", alignItems: "baseline", gap: 6 }}>
-            <Text style={{ fontSize: 13, fontWeight: "700", color: "#e8e8e8" }}>User</Text>
-            <Text style={{ fontSize: 10, color: "#6b7280" }}>·</Text>
-            <Text style={{ fontSize: 11, color: "#6b7280" }}>
+            <Text style={{ fontSize: 13, fontWeight: "700", color: colors.foreground }}>User</Text>
+            <Text style={{ fontSize: 10, color: colors.mutedForeground }}>·</Text>
+            <Text style={{ fontSize: 11, color: colors.mutedForeground }}>
               {comment.createdAt
                 ? formatDate(comment.createdAt, "MMM D, h:mm A")
                 : "—"}
@@ -147,24 +151,24 @@ function CommentItem({
               autoFocus
               style={{
                 fontSize: 14,
-                color: "#e8e8e8",
-                backgroundColor: "#1e1e1e",
+                color: colors.foreground,
+                backgroundColor: colors.background,
                 borderRadius: 10,
                 padding: 10,
                 minHeight: 60,
                 textAlign: "right",
                 writingDirection: "rtl",
                 borderWidth: 1,
-                borderColor: "#1DB954",
+                borderColor: colors.primary,
                 textAlignVertical: "top",
               }}
             />
             <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 8 }}>
               <Pressable
                 onPress={() => setEditing(false)}
-                style={{ paddingHorizontal: 12, paddingVertical: 6, backgroundColor: "#282828", borderRadius: 8 }}
+                style={{ paddingHorizontal: 12, paddingVertical: 6, backgroundColor: colors.muted, borderRadius: 8 }}
               >
-                <Text style={{ fontSize: 12, color: "#9ca3af" }}>إلغاء</Text>
+                <Text style={{ fontSize: 12, color: colors.mutedForeground }}>إلغاء</Text>
               </Pressable>
               <Pressable
                 onPress={handleSave}
@@ -172,15 +176,15 @@ function CommentItem({
                 style={{
                   paddingHorizontal: 14,
                   paddingVertical: 6,
-                  backgroundColor: "#1DB954",
+                  backgroundColor: colors.primary,
                   borderRadius: 8,
                   opacity: isEditPending || !editText.trim() ? 0.6 : 1,
                 }}
               >
                 {isEditPending ? (
-                  <ActivityIndicator size="small" color="#000" />
+                  <ActivityIndicator size="small" color={colors.primaryForeground} />
                 ) : (
-                  <Text style={{ fontSize: 12, fontWeight: "700", color: "#000" }}>حفظ</Text>
+                  <Text style={{ fontSize: 12, fontWeight: "700", color: colors.primaryForeground }}>حفظ</Text>
                 )}
               </Pressable>
             </View>
@@ -198,14 +202,14 @@ function CommentItem({
                     alignSelf: "flex-start",
                     paddingHorizontal: 10,
                     paddingVertical: 4,
-                    backgroundColor: "rgba(29,185,84,0.12)",
+                    backgroundColor: withAlpha(colors.primary, 0.12),
                     borderRadius: 99,
                     borderWidth: 1,
-                    borderColor: "rgba(29,185,84,0.2)",
+                    borderColor: withAlpha(colors.primary, 0.2),
                   }}
                 >
                   <Icon name="Play" size={12} className="text-primary" />
-                  <Text style={{ fontSize: 11, fontWeight: "700", color: "#1DB954" }}>
+                  <Text style={{ fontSize: 11, fontWeight: "700", color: colors.primary }}>
                     {timestamp}
                   </Text>
                 </View>
@@ -215,7 +219,7 @@ function CommentItem({
             <Text
               style={{
                 fontSize: 14,
-                color: "#e8e8e8",
+                color: colors.foreground,
                 lineHeight: 22,
                 textAlign: "right",
                 writingDirection: "rtl",
@@ -233,11 +237,11 @@ function CommentItem({
                     style={{
                       paddingHorizontal: 8,
                       paddingVertical: 2,
-                      backgroundColor: "#1e1e1e",
+                      backgroundColor: colors.muted,
                       borderRadius: 99,
                     }}
                   >
-                    <Text style={{ fontSize: 11, color: "#1DB954" }}>#{tag}</Text>
+                    <Text style={{ fontSize: 11, color: colors.primary }}>#{tag}</Text>
                   </View>
                 ))}
               </View>
@@ -252,6 +256,7 @@ function CommentItem({
 // ── Main list ─────────────────────────────────────────────────────────────────
 
 export function CommentsList({ state }: { state: CommentsSheetState }) {
+  const colors = useColors();
   const {
     comments,
     availableTags,
@@ -319,9 +324,9 @@ export function CommentsList({ state }: { state: CommentsSheetState }) {
             gap: 8,
             paddingHorizontal: 16,
             paddingVertical: 8,
-            backgroundColor: "#1a1a1a",
+            backgroundColor: colors.background,
             borderBottomWidth: 1,
-            borderBottomColor: "#1e1e1e",
+            borderBottomColor: colors.border,
           }}
         >
           <Icon name="Search" size={16} className="text-muted-foreground" />
@@ -329,12 +334,12 @@ export function CommentsList({ state }: { state: CommentsSheetState }) {
             value={search}
             onChangeText={setSearch}
             placeholder="بحث في التعليقات..."
-            placeholderTextColor="#4a4a4a"
+            placeholderTextColor={colors.mutedForeground}
             autoFocus
             style={{
               flex: 1,
               fontSize: 14,
-              color: "#e8e8e8",
+              color: colors.foreground,
               textAlign: "right",
               writingDirection: "rtl",
             }}
@@ -358,7 +363,7 @@ export function CommentsList({ state }: { state: CommentsSheetState }) {
             gap: 8,
             flexDirection: "row",
           }}
-          style={{ flexShrink: 0, borderBottomWidth: 1, borderBottomColor: "#1e1e1e" }}
+          style={{ flexShrink: 0, borderBottomWidth: 1, borderBottomColor: colors.border }}
         >
           {availableTags.map((tag) => {
             const active = activeTagId === tag.id;
@@ -370,16 +375,16 @@ export function CommentsList({ state }: { state: CommentsSheetState }) {
                   paddingHorizontal: 12,
                   paddingVertical: 5,
                   borderRadius: 99,
-                  backgroundColor: active ? "#1DB954" : "#1e1e1e",
+                  backgroundColor: active ? colors.primary : colors.muted,
                   borderWidth: 1,
-                  borderColor: active ? "#1DB954" : "#2a2a2a",
+                  borderColor: active ? colors.primary : colors.border,
                 }}
               >
                 <Text
                   style={{
                     fontSize: 12,
                     fontWeight: active ? "700" : "500",
-                    color: active ? "#000" : "#9ca3af",
+                    color: active ? colors.primaryForeground : colors.mutedForeground,
                   }}
                 >
                   #{tag.title}
@@ -398,16 +403,16 @@ export function CommentsList({ state }: { state: CommentsSheetState }) {
             gap: 8,
             paddingHorizontal: 16,
             paddingVertical: 10,
-            backgroundColor: "#1a2e1a",
+            backgroundColor: withAlpha(colors.primary, 0.12),
             borderBottomWidth: 1,
-            borderBottomColor: "#1DB954",
+            borderBottomColor: colors.primary,
           }}
         >
           <Pressable
             onPress={cancelReorder}
-            style={{ paddingHorizontal: 12, paddingVertical: 6, backgroundColor: "#282828", borderRadius: 8 }}
+            style={{ paddingHorizontal: 12, paddingVertical: 6, backgroundColor: colors.muted, borderRadius: 8 }}
           >
-            <Text style={{ fontSize: 12, color: "#9ca3af" }}>إلغاء</Text>
+            <Text style={{ fontSize: 12, color: colors.mutedForeground }}>إلغاء</Text>
           </Pressable>
           <Pressable
             onPress={commitReorder}
@@ -415,16 +420,16 @@ export function CommentsList({ state }: { state: CommentsSheetState }) {
             style={{
               flex: 1,
               paddingVertical: 6,
-              backgroundColor: "#1DB954",
+              backgroundColor: colors.primary,
               borderRadius: 8,
               alignItems: "center",
               opacity: isReorderPending ? 0.6 : 1,
             }}
           >
             {isReorderPending ? (
-              <ActivityIndicator size="small" color="#000" />
+              <ActivityIndicator size="small" color={colors.primaryForeground} />
             ) : (
-              <Text style={{ fontSize: 12, fontWeight: "700", color: "#000" }}>حفظ الترتيب</Text>
+              <Text style={{ fontSize: 12, fontWeight: "700", color: colors.primaryForeground }}>حفظ الترتيب</Text>
             )}
           </Pressable>
         </View>
@@ -433,12 +438,12 @@ export function CommentsList({ state }: { state: CommentsSheetState }) {
       {/* Comment list */}
       {isLoading ? (
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-          <ActivityIndicator color="#1DB954" />
+          <ActivityIndicator color={colors.primary} />
         </View>
       ) : displayComments.length === 0 ? (
         <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 8 }}>
           <Icon name="MessageCircle" size={36} className="text-muted-foreground" />
-          <Text style={{ color: "#6b7280", fontSize: 14 }}>
+          <Text style={{ color: colors.mutedForeground, fontSize: 14 }}>
             {search || activeTagId ? "لا توجد نتائج" : "لا توجد تعليقات بعد"}
           </Text>
         </View>

@@ -1,5 +1,5 @@
 import { Pressable } from "@/components/ui/pressable";
-import { useQuery } from "@/lib/react-query";
+import { useQuery, useQueryClient } from "@/lib/react-query";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { FlatList, ScrollView, Text, View } from "react-native";
@@ -8,9 +8,12 @@ import { _trpc } from "@/components/static-trpc";
 import { SafeArea } from "@/components/safe-area";
 import { Icon } from "@/components/ui/icon";
 import { BookCard } from "@/components/book/book-card";
+import { useTranslation } from "@/lib/i18n";
 
 export default function BooksScreen() {
   const router = useRouter();
+  const qc = useQueryClient();
+  const { t } = useTranslation();
   const [selectedShelfId, setSelectedShelfId] = useState<number | undefined>(undefined);
 
   const { data: shelves = [] } = useQuery(_trpc.book.getShelves.queryOptions());
@@ -19,6 +22,24 @@ export default function BooksScreen() {
   );
 
   const books = data?.data ?? [];
+
+  const getBookHref = (book: (typeof books)[number]) => {
+    const firstPageId = book.pages?.[0]?.id;
+    return firstPageId
+      ? `/books/${book.id}/reader/${firstPageId}`
+      : `/books/${book.id}`;
+  };
+
+  const openBook = (book: (typeof books)[number]) => {
+    const firstPageId = book.pages?.[0]?.id;
+    if (firstPageId) {
+      void qc.prefetchQuery(_trpc.book.getPage.queryOptions({ pageId: firstPageId }));
+    }
+
+    requestAnimationFrame(() => {
+      router.push(getBookHref(book) as any);
+    });
+  };
 
   return (
     <View className="flex-1 bg-background">
@@ -31,7 +52,7 @@ export default function BooksScreen() {
             <Icon name="ChevronLeft" size={22} className="text-foreground" />
           </Pressable>
           <Text className="flex-1 text-lg font-bold text-foreground">
-            المكتبة
+            {t("library")}
           </Text>
           <Pressable
             onPress={() => router.push("/book-fetch" as any)}
@@ -56,7 +77,7 @@ export default function BooksScreen() {
               }
             >
               <Text className={selectedShelfId === undefined ? "text-sm font-semibold text-primary-foreground" : "text-sm font-semibold text-foreground"}>
-                الكل
+                {t("all")}
               </Text>
             </Pressable>
             {shelves.map((shelf) => (
@@ -82,12 +103,12 @@ export default function BooksScreen() {
 
         {isLoading ? (
           <View className="flex-1 items-center justify-center">
-            <Text className="text-muted-foreground">جاري التحميل…</Text>
+            <Text className="text-muted-foreground">{t("loading")}</Text>
           </View>
         ) : books.length === 0 ? (
           <View className="flex-1 items-center justify-center gap-3">
             <Icon name="BookOpen" size={48} className="text-muted-foreground" />
-            <Text className="text-muted-foreground">لا توجد كتب</Text>
+            <Text className="text-muted-foreground">{t("noBooks")}</Text>
           </View>
         ) : (
           <FlatList
@@ -100,7 +121,7 @@ export default function BooksScreen() {
               <BookCard
                 book={item}
                 index={index}
-                onPress={() => router.push(`/books/${item.id}` as any)}
+                onPress={() => openBook(item)}
               />
             )}
           />

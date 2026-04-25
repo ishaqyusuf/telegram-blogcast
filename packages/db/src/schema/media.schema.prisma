@@ -26,6 +26,7 @@ model File {
     createdAt    DateTime?   @default(now()) @db.Timestamp(0)
     updatedAt    DateTime?   @updatedAt
     deletedAt    DateTime?
+    source       String      @default("telegram")
     fileType     String
     fileId       String
     fileUniqueId String?     @unique
@@ -36,6 +37,12 @@ model File {
     width        Float?
     height       Float?
     duration     Float?
+    blobUrl      String?
+    blobDownloadUrl String?
+    blobPathname String?
+    blobContentType String?
+    blobEtag     String?
+    storageMetadata Json?
     medias       Media[]
     thumbnail    Thumbnail[]
 }

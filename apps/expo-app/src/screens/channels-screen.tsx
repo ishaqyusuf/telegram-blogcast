@@ -6,10 +6,11 @@ import { FlatList, Text, View } from "react-native";
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";
+import { useTranslation } from "@/lib/i18n";
 
 const CHANNEL_COLORS = [
-  "#4c1d95", "#7c2d12", "#14532d", "#1e3a5f",
-  "#3b0764", "#7f1d1d", "#064e3b", "#1e40af",
+  "#1e40af", "#0f766e", "#b45309", "#4f46e5",
+  "#be123c", "#0369a1", "#7c3aed", "#334155",
 ];
 
 function getInitials(value?: string | null) {
@@ -24,6 +25,7 @@ function getInitials(value?: string | null) {
 
 export default function ChannelsScreen() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { data: channels = [], isFetching } = useQuery(
     _trpc.channel.getChannels.queryOptions()
   );
@@ -40,7 +42,7 @@ export default function ChannelsScreen() {
             <Icon name="ArrowLeft" className="text-foreground" />
           </Pressable>
           <Text className="text-xl font-bold text-foreground flex-1">
-            Channels
+            {t("channels")}
           </Text>
           <View className="px-2 py-0.5 rounded-full bg-muted">
             <Text className="text-xs font-medium text-muted-foreground">
@@ -113,7 +115,7 @@ export default function ChannelsScreen() {
             <View className="items-center justify-center py-20">
               <Icon name="Radio" size={48} className="text-muted-foreground mb-3" />
               <Text className="text-sm text-muted-foreground">
-                {isFetching ? "Loading channels…" : "No channels yet"}
+                {isFetching ? t("loading") : t("noChannels")}
               </Text>
             </View>
           }

@@ -6,6 +6,7 @@ import { ScrollView, Text, View } from "react-native";
 import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";
 import { minuteToString } from "@/lib/utils";
+import { useColors } from "@/hooks/use-color";
 
 function formatProgress(progressMs: number, durationSec?: number | null) {
   const posMin = Math.floor(progressMs / 60000);
@@ -18,6 +19,7 @@ function formatProgress(progressMs: number, durationSec?: number | null) {
 
 export function BlogHomeRecentlyPlayed() {
   const router = useRouter();
+  const colors = useColors();
   const { data: history = [] } = useQuery(
     _trpc.blog.getRecentlyPlayed.queryOptions({ limit: 10 })
   );
@@ -64,7 +66,7 @@ export function BlogHomeRecentlyPlayed() {
                 {/* Progress bar at bottom */}
                 <View className="absolute bottom-0 left-0 right-0 h-1 bg-muted">
                   <View
-                    style={{ height: "100%", backgroundColor: "#1DB954", width: `${progressPct}%` }}
+                    style={{ height: "100%", backgroundColor: colors.primary, width: `${progressPct}%` }}
                   />
                 </View>
               </View>

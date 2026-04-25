@@ -30,17 +30,18 @@ import { useColors } from "@/hooks/use-color";
 import { usePlayHistorySync } from "@/hooks/use-play-history-sync";
 import { useAudioStore } from "@/store/audio-store";
 import { useRecentlyViewedStore } from "@/store/recently-viewed-store";
+import { getMediaFileUrl } from "@/lib/media-source";
 import { minuteToString } from "@/lib/utils";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const ALBUM_COLORS = [
-  "#4c1d95",
-  "#7c2d12",
-  "#14532d",
-  "#1e3a5f",
-  "#3b0764",
-  "#064e3b",
+  "#1e40af",
+  "#0f766e",
+  "#b45309",
+  "#4f46e5",
+  "#be123c",
+  "#0369a1",
 ];
 
 function getInitials(name?: string | null) {
@@ -1054,7 +1055,9 @@ export default function AudioBlogScreen() {
 
   const media = blog?.medias?.[0];
   const mediaId = media?.id;
-  const telegramFileId = media?.file?.fileId;
+  const telegramFileId =
+    media?.file?.source === "vercel_blob" ? undefined : media?.file?.fileId;
+  const mediaUrl = getMediaFileUrl(media?.file as any);
   const duration = media?.file?.duration;
 
   usePlayHistorySync(mediaId);
@@ -1062,11 +1065,12 @@ export default function AudioBlogScreen() {
   const markViewed = useRecentlyViewedStore((s) => s.markViewed);
   useEffect(() => {
     if (blog) {
+      const blogRecord = blog as any;
       markViewed({
         id: blog.id,
-        title: blog.caption || (blog.medias as any)?.[0]?.title || "Untitled",
+        title: blogRecord.caption || blog.medias?.[0]?.title || "Untitled",
         type: blog.type ?? "audio",
-        date: blog.date ?? null,
+        date: blogRecord.date ?? blog.blogDate ?? null,
       });
     }
   }, [blog?.id]);
@@ -1076,7 +1080,7 @@ export default function AudioBlogScreen() {
 
     const media = blog.medias?.[0];
     const file = media?.file;
-    if (!media?.id || !file?.fileId || !file?.fileName) return;
+    if (!media?.id || !file?.fileName) return;
     if (loadedBlog?.id === blog.id) return;
 
     loadAudio({
@@ -1088,12 +1092,13 @@ export default function AudioBlogScreen() {
       audio: {
         mediaId: media.id,
         telegramFileId: file.fileId,
+        url: mediaUrl,
         fileName: file.fileName,
         title: media.title,
         duration: file.duration,
       },
     } as any).catch(() => undefined);
-  }, [blog?.id, loadedBlog?.id, loadAudio]);
+  }, [blog?.id, loadedBlog?.id, loadAudio, mediaUrl]);
 
   const { mutate: addToAlbum, isPending: isAdding } = useMutation(
     _trpc.album.addMediaToAlbum.mutationOptions({
@@ -1125,7 +1130,7 @@ export default function AudioBlogScreen() {
 
   return (
     <View className="flex-1 bg-background">
-      <SafeArea className="flex-1">
+      <SafeArea style={{ flex: 1 }}>
         {/* ── Comments inline view (YouTube-style) ───────────────── */}
         {showComments ? (
           <KeyboardAvoidingView
