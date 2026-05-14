@@ -1,24 +1,18 @@
 import { Pressable } from "@/components/ui/pressable";
-import { View, Text, ImageBackground, I18nManager } from "react-native";
-import { Link, useRouter } from "expo-router";
+import { View, Text, Image, ImageBackground } from "react-native";
+import { useRouter } from "expo-router";
 import { HomeFeedPostAuthorHeader } from "./home-feed-post-author-header";
 import { HomeFeedPostFooter } from "./home-feed-post-footer";
 import { HomeFeedAudioPlayer } from "./home-feed-audio-player";
 import { RouterOutputs } from "@api/trpc/routers/_app";
 import { formatDate } from "@acme/utils/dayjs";
 import { minuteToString } from "@/lib/utils";
-import { useCallback } from "react";
-import { useAudioStore } from "@/store/audio-store";
-import { getTelegramFileUrl } from "@/lib/get-telegram-file";
-import { getBlogHref } from "@/components/blog-card/utils";
+import { getBlogHref, getPrimaryImageUrl } from "@/components/blog-card/utils";
 import { Icon } from "@/components/ui/icon";
 
-const isRTL = I18nManager.isRTL;
 export type ItemProps = RouterOutputs["podcasts"]["posts"]["data"][number];
 
 function AudioPost({ post }: { post: ItemProps }) {
-  const store = useAudioStore();
-
   return (
     <>
       <View className="mb-4">
@@ -38,6 +32,8 @@ function AudioPost({ post }: { post: ItemProps }) {
 }
 
 function VideoPost({ post }: { post: ItemProps }) {
+  const imageUrl = getPrimaryImageUrl(post as any);
+
   return (
     <>
       <View className="mb-4">
@@ -49,8 +45,8 @@ function VideoPost({ post }: { post: ItemProps }) {
         </Text>
       </View>
       <ImageBackground
-        source={{ uri: post.coverImageUrl! }}
-        className="h-32 rounded-xl mb-4 relative overflow-hidden justify-center items-center"
+        source={imageUrl ? { uri: imageUrl } : undefined}
+        className="h-32 rounded-xl mb-4 relative overflow-hidden justify-center items-center bg-black"
         imageStyle={{ borderRadius: 12 }}
       >
         <View className="absolute inset-0 bg-black/30" />
@@ -63,6 +59,29 @@ function VideoPost({ post }: { post: ItemProps }) {
           </Text>
         </View>
       </ImageBackground>
+    </>
+  );
+}
+
+function ImagePost({ post }: { post: ItemProps }) {
+  const imageUrl = getPrimaryImageUrl(post as any);
+
+  return (
+    <>
+      {post.caption ? (
+        <Text className="mb-3 text-right text-base leading-relaxed text-muted-foreground">
+          {post.caption}
+        </Text>
+      ) : null}
+      {imageUrl ? (
+        <View className="mb-4 overflow-hidden rounded-xl border border-border bg-black">
+          <Image
+            source={{ uri: imageUrl }}
+            className="h-56 w-full"
+            resizeMode="cover"
+          />
+        </View>
+      ) : null}
     </>
   );
 }
@@ -91,6 +110,7 @@ export function HomeFeedPostCard({ post }: { post: ItemProps }) {
         />
         {post.type === "audio" && <AudioPost post={post} />}
         {post.type === "video" && <VideoPost post={post} />}
+        {post.type === "image" && <ImagePost post={post} />}
         {post.type === "text" && <TextPost post={post} />}
         <HomeFeedPostFooter
           tags={post.tags}

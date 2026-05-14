@@ -10,6 +10,7 @@ import { useQuery, useMutation } from "@acme/ui/tanstack";
 import { _trpc } from "@/components/static-trpc";
 import { invalidateQueries } from "@/lib/invalidate-query";
 import type { RouterOutputs } from "@api/trpc/routers/_app";
+import type { FetcherEvent, FetchedMessage } from "@telegram/message-fetcher";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -17,7 +18,7 @@ type Channel = RouterOutputs["channel"]["getChannels"][number];
 type FetcherState = RouterOutputs["channel"]["getFetcherState"];
 
 interface LogLine {
-    kind: "system" | "info" | "success" | "error" | "cmd";
+    kind: "system" | "info" | "success" | "error" | "cmd" | "msg";
     text: string;
     time: string;
 }
@@ -58,6 +59,7 @@ function LogEntry({ line }: { line: LogLine }) {
         success: "text-emerald-400",
         error: "text-red-400",
         cmd: "text-amber-400",
+        msg: "text-zinc-200",
     };
     const prefixes: Record<LogLine["kind"], string> = {
         system: "SYS",
@@ -65,6 +67,7 @@ function LogEntry({ line }: { line: LogLine }) {
         success: "OK ",
         error: "ERR",
         cmd: "CMD",
+        msg: "MSG",
     };
     return (
         <div className="flex gap-3 font-mono text-xs leading-5">
@@ -184,6 +187,10 @@ export default function DashboardPage() {
     const [historyIdx, setHistoryIdx] = useState(-1);
     const [isTogglingId, setIsTogglingId] = useState<number | null>(null);
     const [isClearingId, setIsClearingId] = useState<number | null>(null);
+    const [streamConnected, setStreamConnected] = useState(false);
+    const [liveFetcherState, setLiveFetcherState] = useState<FetcherState | null>(
+        null,
+    );
     const logEndRef = useRef<HTMLDivElement>(null);
 
     // ── tRPC queries ────────────────────────────────────────────────────────────
@@ -223,13 +230,18 @@ export default function DashboardPage() {
 
     const { mutate: toggleFetchable } = useMutation(
         _trpc.channel.toggleFetchable.mutationOptions({
-            onMutate(vars) {
+            onMutate(vars?: { channelId: number }) {
+                if (!vars) return;
                 setIsTogglingId(vars.channelId);
             },
-            onSuccess(_, v) {
+            onSuccess(
+                data,
+                v: { channelId: number; isFetchable: boolean },
+            ) {
+                const nextState = data?.isFetchable ?? v.isFetchable;
                 addLog(
                     "info",
-                    `channel ${v.channelId} fetchable → ${v.isFetchable}`,
+                    `channel ${v.channelId} fetchable → ${nextState}`,
                 );
                 invalidateQueries("channel.getChannels");
             },
@@ -265,13 +277,16 @@ export default function DashboardPage() {
 
     const { mutate: clearChannelRecords } = useMutation(
         _trpc.channel.clearChannelRecords.mutationOptions({
-            onMutate(vars) {
+            onMutate(vars?: { channelId: number }) {
+                if (!vars) return;
                 setIsClearingId(vars.channelId);
             },
-            onSuccess(data) {
+            onSuccess(data, vars: { channelId: number }) {
+                const channelId = data?.channelId ?? vars.channelId;
+                const clearedBlogs = data?.clearedBlogs ?? 0;
                 addLog(
                     "success",
-                    `cleared channel ${data.channelId} · removed ${data.clearedBlogs} records`,
+                    `cleared channel ${channelId} · removed ${clearedBlogs} records`,
                 );
                 invalidateQueries("channel.getChannels");
                 invalidateQueries("channel.getFetcherState");
@@ -291,6 +306,17 @@ export default function DashboardPage() {
         setLog((prev) => [...prev.slice(-500), { kind, text, time: ts() }]);
     }, []);
 
+    const logFetchedMessage = useCallback(
+        (message: FetchedMessage, phase: FetcherState["phase"]) => {
+            const preview = message.text?.replace(/\s+/g, " ").trim() || "(media)";
+            addLog(
+                "msg",
+                `[${phase}] #${message.id} ${preview.slice(0, 140)}${preview.length > 140 ? "…" : ""}`,
+            );
+        },
+        [addLog],
+    );
+
     // Auto-scroll
     useEffect(() => {
         logEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -302,17 +328,74 @@ export default function DashboardPage() {
         addLog("system", "channels loaded from Prisma");
     }, []); // eslint-disable-line
 
+    // Live fetcher event stream for terminal-style updates
+    useEffect(() => {
+        const es = new EventSource("/api/telegram/fetcher/stream");
+
+        es.onopen = () => {
+            setStreamConnected(true);
+            addLog("success", "event stream connected");
+        };
+
+        es.onmessage = (event) => {
+            const payload = JSON.parse(event.data) as FetcherEvent;
+
+            if (payload.type === "state") {
+                setLiveFetcherState(payload.state);
+                return;
+            }
+
+            if (payload.type === "messages") {
+                const count = payload.messages.length;
+                const latestId = payload.messages[payload.messages.length - 1]?.id;
+                addLog(
+                    "info",
+                    `${payload.phase} batch received · ${count} message${count === 1 ? "" : "s"}${latestId ? ` · latest #${latestId}` : ""}`,
+                );
+                payload.messages.forEach((message) =>
+                    logFetchedMessage(message, payload.phase),
+                );
+                return;
+            }
+
+            if (payload.type === "error") {
+                addLog(
+                    "error",
+                    `${payload.error} · retrying in ${Math.ceil(payload.retryIn / 1000)}s`,
+                );
+                return;
+            }
+
+            if (payload.type === "allFetched") {
+                addLog("success", "historical backfill complete");
+            }
+        };
+
+        es.onerror = () => {
+            setStreamConnected(false);
+        };
+
+        return () => {
+            es.close();
+            setStreamConnected(false);
+        };
+    }, [addLog, logFetchedMessage]);
+
     // Reflect fetcher errors from polled state
     const prevError = useRef<string | null>(null);
     useEffect(() => {
-        if (fetcherState?.error && fetcherState.error !== prevError.current) {
+        const currentError = liveFetcherState?.error ?? fetcherState?.error;
+        const retryCount =
+            liveFetcherState?.retryCount ?? fetcherState?.retryCount ?? 0;
+
+        if (currentError && currentError !== prevError.current) {
             addLog(
                 "error",
-                `${fetcherState.error} (retry #${fetcherState.retryCount})`,
+                `${currentError} (retry #${retryCount})`,
             );
-            prevError.current = fetcherState.error;
+            prevError.current = currentError;
         }
-    }, [fetcherState?.error]); // eslint-disable-line
+    }, [addLog, fetcherState?.error, fetcherState?.retryCount, liveFetcherState?.error, liveFetcherState?.retryCount]);
 
     // ── Actions ─────────────────────────────────────────────────────────────────
     const [maxTotalFetch, setMaxTotalFetch] = useState<number | undefined>(5);
@@ -379,7 +462,7 @@ export default function DashboardPage() {
                 setLog([]);
                 break;
             case "status":
-                addLog("info", JSON.stringify(fetcherState));
+                addLog("info", JSON.stringify(currentFetcherState));
                 break;
             case "logout":
                 await handleLogout();
@@ -412,9 +495,11 @@ export default function DashboardPage() {
         }
     }
 
+    const currentFetcherState = liveFetcherState ?? fetcherState ?? null;
+
     const fetcherRunning =
-        fetcherState?.status === "running" ||
-        fetcherState?.status === "retrying";
+        currentFetcherState?.status === "running" ||
+        currentFetcherState?.status === "retrying";
 
     // ── Render ────────────────────────────────────────────────────────────────
 
@@ -446,6 +531,12 @@ export default function DashboardPage() {
                         >
                             /blog
                         </Link>
+                        <Link
+                            href="/books/import"
+                            className="font-mono text-[11px] text-zinc-500 hover:text-amber-300 transition-colors"
+                        >
+                            /books/import
+                        </Link>
                         {activeChannel && (
                             <>
                                 <span className="text-zinc-700">/</span>
@@ -457,15 +548,26 @@ export default function DashboardPage() {
                         )}
                     </div>
 
-                    <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-2 font-mono text-xs text-zinc-500">
-                            <StatusDot
-                                status={fetcherState?.status ?? "idle"}
-                            />
-                            <span>{fetcherState?.status ?? "idle"}</span>
-                            {fetcherState && fetcherState.totalFetched > 0 && (
+                        <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-2 font-mono text-xs text-zinc-500">
+                                <StatusDot
+                                    status={currentFetcherState?.status ?? "idle"}
+                                />
+                                <span>{currentFetcherState?.status ?? "idle"}</span>
+                                <span
+                                    className={cn(
+                                        "text-[10px]",
+                                        streamConnected
+                                            ? "text-emerald-500"
+                                            : "text-zinc-700",
+                                    )}
+                                >
+                                    sse
+                                </span>
+                            {currentFetcherState &&
+                                currentFetcherState.totalFetched > 0 && (
                                 <span className="text-zinc-600">
-                                    · {fetcherState.totalFetched} fetched
+                                        · {currentFetcherState.totalFetched} fetched
                                 </span>
                             )}
                         </div>

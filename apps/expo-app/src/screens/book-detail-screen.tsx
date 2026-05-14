@@ -11,7 +11,6 @@ import { _trpc } from "@/components/static-trpc";
 import { SafeArea } from "@/components/safe-area";
 import { Icon } from "@/components/ui/icon";
 import { ChapterTree } from "@/components/book/chapter-tree";
-import { useBookOffline } from "@/hooks/use-book-offline";
 import { useBookOfflineStore } from "@/store/book-offline-store";
 import { vanillaTrpc } from "@/trpc/vanilla-client";
 import { useTranslation } from "@/lib/i18n";
@@ -51,16 +50,6 @@ export default function BookDetailScreen() {
   );
 
   // Offline features
-  const {
-    isDownloaded,
-    isDownloading,
-    hasUpdate,
-    isOnline,
-    progress,
-    download,
-    removeOffline,
-  } = useBookOffline(bookIdNum);
-
   const { mutate: fetchPage, isPending: isFetching } = useMutation(
     _trpc.book.fetchPage.mutationOptions({
       onSuccess: () => {
@@ -88,8 +77,9 @@ export default function BookDetailScreen() {
 
   const { mutate: fetchNext, isPending: isFetchingNext } = useMutation(
     _trpc.book.fetchNextPage.mutationOptions({
-      onSuccess: () => {
+      onSuccess: (page) => {
         qc.invalidateQueries({ queryKey: _trpc.book.getBook.queryKey({ id: bookIdNum }) });
+        router.push(`/books/${bookId}/reader/${page.id}` as any);
       },
       onError: (e) => Alert.alert(t("error"), e.message),
     })
@@ -140,6 +130,11 @@ export default function BookDetailScreen() {
   const lastFetchedPage = [...(book.pages ?? [])]
     .filter((p) => p.status === "fetched")
     .sort((a, b) => b.shamelaPageNo - a.shamelaPageNo)[0];
+  const nextPageCandidate = lastFetchedPage
+    ? [...(book.pages ?? [])]
+        .filter((p) => p.shamelaPageNo > lastFetchedPage.shamelaPageNo)
+        .sort((a, b) => a.shamelaPageNo - b.shamelaPageNo)[0]
+    : [...(book.pages ?? [])].sort((a, b) => a.shamelaPageNo - b.shamelaPageNo)[0];
 
   const fetchedCount = book.pages.filter((p) => p.status === "fetched").length;
   const totalCount = book.pages.length;
@@ -148,10 +143,7 @@ export default function BookDetailScreen() {
   const bookmarks = getBookmarks(bookIdNum);
 
   const openReader = (targetPageId: number) => {
-    void qc.prefetchQuery(_trpc.book.getPage.queryOptions({ pageId: targetPageId }));
-    requestAnimationFrame(() => {
-      router.push(`/books/${bookId}/reader/${targetPageId}` as any);
-    });
+    router.push(`/books/${bookId}/reader/${targetPageId}` as any);
   };
 
   return (
@@ -189,27 +181,6 @@ export default function BookDetailScreen() {
             <Icon name="Search" size={18} className="text-foreground" />
           </Pressable>
         </View>
-
-        {hasUpdate && (
-          <Pressable
-            onPress={download}
-            className="mx-4 mb-2 flex-row-reverse items-center gap-2 rounded-xl border border-primary/30 bg-primary/12 px-3.5 py-2.5"
-          >
-            <Icon name="RefreshCw" size={15} className="text-primary" />
-            <Text className="flex-1 text-right text-[13px] text-primary" style={{ writingDirection: "rtl" }}>
-              {t("newContentAvailable")}
-            </Text>
-          </Pressable>
-        )}
-
-        {!isOnline && (
-          <View className="mx-4 mb-2 flex-row-reverse items-center gap-1.5 rounded-lg bg-card px-3 py-1.5">
-            <Icon name="WifiOff" size={13} className="text-muted-foreground" />
-            <Text className="text-xs text-muted-foreground">
-              {isDownloaded ? t("offlineReading") : t("noInternet")}
-            </Text>
-          </View>
-        )}
 
         <ScrollView contentContainerStyle={{ paddingBottom: 120 }}>
           <View style={{ flexDirection: "row", gap: 14, paddingHorizontal: 16, marginBottom: 20 }}>
@@ -254,55 +225,6 @@ export default function BookDetailScreen() {
                 </Text>
               )}
 
-              <View style={{ flexDirection: "row-reverse", gap: 6, marginTop: 4 }}>
-                {isDownloaded ? (
-                  <Pressable
-                    onPress={() =>
-                      Alert.alert(
-                        t("removeOffline"),
-                        t("removeOfflinePrompt"),
-                        [
-                          { text: t("cancel"), style: "cancel" },
-                          { text: t("delete"), style: "destructive", onPress: removeOffline },
-                        ]
-                      )
-                    }
-                    className="flex-row-reverse items-center gap-1 rounded-lg bg-primary/12 px-2.5 py-1.5"
-                  >
-                    <Icon name="HardDrive" size={13} className="text-primary" />
-                    <Text className="text-xs text-primary">{t("savedOffline")}</Text>
-                  </Pressable>
-                ) : (
-                  <Pressable
-                    onPress={download}
-                    disabled={isDownloading || !isOnline}
-                    className="flex-row-reverse items-center gap-1 rounded-lg bg-card px-2.5 py-1.5"
-                    style={{ opacity: !isOnline ? 0.5 : 1 }}
-                  >
-                    {isDownloading ? (
-                      <ActivityIndicator size="small" color={colors.primary} />
-                    ) : (
-                      <Icon name="Download" size={13} className="text-muted-foreground" />
-                    )}
-                    <Text className="text-xs text-muted-foreground">
-                      {isDownloading ? `${Math.round(progress * 100)}%` : t("downloadOffline")}
-                    </Text>
-                  </Pressable>
-                )}
-              </View>
-
-              {isDownloading && (
-                <View className="mt-1 h-[3px] overflow-hidden rounded-full bg-card">
-                  <View
-                    style={{
-                      height: "100%",
-                      width: `${Math.round(progress * 100)}%`,
-                      backgroundColor: colors.primary,
-                      borderRadius: 2,
-                    }}
-                  />
-                </View>
-              )}
             </View>
           </View>
 
@@ -416,9 +338,16 @@ export default function BookDetailScreen() {
 
                   {lastFetchedPage && (
                     <Pressable
-                      onPress={() =>
-                        fetchNext({ bookId: bookIdNum, currentShamelaPageNo: lastFetchedPage.shamelaPageNo })
-                      }
+                      onPress={() => {
+                        if (nextPageCandidate?.status === "fetched") {
+                          openReader(nextPageCandidate.id);
+                          return;
+                        }
+                        fetchNext({
+                          bookId: bookIdNum,
+                          currentShamelaPageNo: lastFetchedPage.shamelaPageNo,
+                        });
+                      }}
                       className="flex-1 flex-row items-center justify-center gap-1.5 rounded-xl bg-card py-2.5"
                     >
                       {isFetchingNext ? (
@@ -426,7 +355,13 @@ export default function BookDetailScreen() {
                       ) : (
                         <>
                           <Icon name="ChevronRight" size={16} className="text-primary" />
-                          <Text className="text-sm font-semibold text-primary">{t("next")}</Text>
+                          <Text className="text-sm font-semibold text-primary">
+                            {nextPageCandidate?.status === "fetched"
+                              ? t("next")
+                              : nextPageCandidate
+                                ? `Import #${nextPageCandidate.shamelaPageNo}`
+                                : t("next")}
+                          </Text>
                         </>
                       )}
                     </Pressable>

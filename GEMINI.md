@@ -4,8 +4,9 @@
 This file is only a redirect. The canonical project memory now lives in the Brain under [`brain/`](./brain/).
 
 ## Required Rule
-- Do not store project context, feature plans, architecture notes, or task state in `CLAUDE.md`.
+- Do not store project context, feature plans, architecture notes, or task state in `GEMINI.md` or `CLAUDE.md`.
 - Always read and update Brain docs instead.
+- **CRITICAL:** You must ALWAYS read and work with the files in the `brain/` path for project context, instructions, and rules before starting any task.
 
 ## Start Here
 - [`brain/BRAIN.md`](./brain/BRAIN.md)

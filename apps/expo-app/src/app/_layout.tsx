@@ -1,3 +1,4 @@
+import "react-native-gesture-handler";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useThemeConfig } from "@/hooks/use-theme-color";
 import { ThemeProvider } from "@react-navigation/native";
@@ -5,7 +6,6 @@ import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect, useRef } from "react";
-import { initLocalDb } from "@/db/local-db";
 import "react-native-reanimated";
 import "@/styles/global.css";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -57,8 +57,6 @@ function RootLayout() {
   useEffect(() => {
     if (loaded) {
       SplashScreen.hideAsync();
-      // Initialise local SQLite DB (creates tables if they don't exist)
-      initLocalDb().catch((e) => console.warn("[DB] initLocalDb error", e));
     }
   }, [loaded]);
 
@@ -91,10 +89,7 @@ const InitialLayout = () => {
           <Stack.Screen name="blog-search" />
           <Stack.Screen name="blog-view/[blogId]/index" />
           <Stack.Screen name="blog-view-text/[blogId]/index" />
-          <Stack.Screen
-            name="blog-form"
-            options={{ presentation: "modal" }}
-          />
+          <Stack.Screen name="blog-form" options={{ presentation: "modal" }} />
           <Stack.Screen name="channels" />
           <Stack.Screen name="channels/[channelId]" />
           <Stack.Screen name="play-history" />
@@ -103,6 +98,11 @@ const InitialLayout = () => {
           <Stack.Screen name="albums" />
           <Stack.Screen name="albums/[albumId]" />
           <Stack.Screen name="book-fetch" />
+          <Stack.Screen
+            name="book-fetch-browser"
+            options={{ presentation: "fullScreenModal" }}
+          />
+          <Stack.Screen name="book-fetch-preview" />
           <Stack.Screen name="books" />
           <Stack.Screen name="books/[bookId]" />
           <Stack.Screen name="books/[bookId]/reader/[pageId]" />
@@ -157,13 +157,9 @@ const InitialLayout = () => {
   );
 };
 function RootLayoutNav() {
-  const { colorScheme, setColorScheme } = useColorScheme();
+  const { setColorScheme } = useColorScheme();
   const theme = useThemeConfig();
   const didSetDefaultTheme = useRef(false);
-  const rootClassName =
-    colorScheme === "dark"
-      ? "dark flex-1 bg-background"
-      : "flex-1 bg-background";
 
   useEffect(() => {
     if (didSetDefaultTheme.current) return;
@@ -174,7 +170,7 @@ function RootLayoutNav() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <KeyboardProvider>
-        <View className={rootClassName}>
+        <View className="flex-1 bg-background">
           <ThemeProvider value={theme}>
             <AuthProvider value={useCreateAuthContext()}>
               <ToastProviderWithViewport>

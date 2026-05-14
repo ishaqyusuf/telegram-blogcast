@@ -1,4 +1,4 @@
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 type Action = "build:preview" | "update:preview";
@@ -238,20 +238,24 @@ async function resolveEasCliRoot(): Promise<string> {
     throw new Error("The `eas` command was not found in PATH.");
   }
 
-  const wrapper = await readFile(easBinary, "utf8");
   const basedir = path.dirname(easBinary);
+  const resolvedBinary = await resolveRealpathSafe(easBinary);
+  const resolvedBasedir = path.dirname(resolvedBinary);
+  const wrapperCandidates = [
+    ...(await collectWrapperCandidates(easBinary, basedir)),
+    ...(await collectWrapperCandidates(resolvedBinary, resolvedBasedir)),
+  ];
   const candidates = [
-    ...wrapper.matchAll(/["']([^"']*node_modules\/eas-cli)\/bin\/run["']/g),
-    ...wrapper.matchAll(/["']([^"']*node_modules\/eas-cli)\/bin\/node_modules/g),
-    ...wrapper.matchAll(/["']([^"']*node_modules\/eas-cli)\/node_modules/g),
-  ]
-    .map((match) => normalizeWrapperPath(match[1], basedir))
-    .filter((candidate, index, all) => all.indexOf(candidate) === index);
+    ...collectAncestorCandidates(easBinary),
+    ...collectAncestorCandidates(resolvedBinary),
+    ...wrapperCandidates,
+  ].filter((candidate, index, all) => all.indexOf(candidate) === index);
 
   for (const candidate of candidates) {
     try {
-      await access(path.join(candidate, "package.json"));
-      return candidate;
+      if (await isEasCliRoot(candidate)) {
+        return candidate;
+      }
     } catch {
       // Keep trying the next detected wrapper path.
     }
@@ -265,6 +269,71 @@ async function resolveEasCliRoot(): Promise<string> {
 function normalizeWrapperPath(candidate: string, basedir: string): string {
   const resolved = candidate.replaceAll("$basedir", basedir);
   return path.isAbsolute(resolved) ? resolved : path.resolve(basedir, resolved);
+}
+
+function collectAncestorCandidates(binaryPath: string): string[] {
+  const candidates: string[] = [];
+  let currentDir = path.dirname(binaryPath);
+
+  while (true) {
+    candidates.push(currentDir);
+
+    const parentDir = path.dirname(currentDir);
+    if (parentDir === currentDir) {
+      break;
+    }
+
+    currentDir = parentDir;
+  }
+
+  return candidates;
+}
+
+async function collectWrapperCandidates(
+  binaryPath: string,
+  basedir: string,
+): Promise<string[]> {
+  try {
+    const wrapper = await readFile(binaryPath, "utf8");
+    return [
+      ...wrapper.matchAll(/["']([^"']*node_modules\/eas-cli)\/bin\/run["']/g),
+      ...wrapper.matchAll(/["']([^"']*node_modules\/eas-cli)\/bin\/node_modules/g),
+      ...wrapper.matchAll(/["']([^"']*node_modules\/eas-cli)\/node_modules/g),
+    ].map((match) => normalizeWrapperPath(match[1], basedir));
+  } catch {
+    return [];
+  }
+}
+
+async function isEasCliRoot(candidate: string): Promise<boolean> {
+  const packageJsonPath = path.join(candidate, "package.json");
+  const runPath = path.join(candidate, "bin", "run");
+  const buildPath = path.join(candidate, "build");
+
+  try {
+    await access(runPath);
+    await access(buildPath);
+  } catch {
+    return false;
+  }
+
+  try {
+    const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8")) as {
+      name?: string;
+    };
+
+    return packageJson.name === "eas-cli";
+  } catch {
+    return false;
+  }
+}
+
+async function resolveRealpathSafe(filePath: string): Promise<string> {
+  try {
+    return await realpath(filePath);
+  } catch {
+    return filePath;
+  }
 }
 
 function pathToFileUrl(filePath: string): URL {

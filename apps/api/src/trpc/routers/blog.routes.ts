@@ -185,6 +185,15 @@ export const blogRoutes = createTRPCRouter({
       });
     }),
 
+  restoreBlog: publicProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      return ctx.db.blog.update({
+        where: { id: input.id },
+        data: { deletedAt: null },
+      });
+    }),
+
   // ── Tags ────────────────────────────────────────────────────────────────────
 
   getTags: publicProcedure.query(async ({ ctx }) => {

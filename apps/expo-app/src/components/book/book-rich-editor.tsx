@@ -1,6 +1,13 @@
-import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from "react";
+import {
+  CoreBridge,
+  PlaceholderBridge,
+  RichText,
+  TenTapStartKit,
+  useBridgeState,
+  useEditorBridge,
+} from "@10play/tentap-editor";
+import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import { View } from "react-native";
-import { WebView, type WebViewMessageEvent } from "react-native-webview";
 
 export type BookRichEditorCommand =
   | "bold"
@@ -21,145 +28,153 @@ type Props = {
   onChange: (payload: { html: string; plainText: string }) => void;
 };
 
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
+const HIGHLIGHT_COLOR = "rgba(245, 158, 11, 0.35)";
+const BOOK_EDITOR_CSS = `
+  * {
+    direction: rtl;
+    text-align: right;
+    color: #111827;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 18px;
+    line-height: 1.8;
+  }
 
-function buildEditorHtml(initialHtml: string) {
-  const safeHtml = initialHtml || "<p><br/></p>";
-  return `<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-    <style>
-      html, body {
-        margin: 0;
-        padding: 0;
-        background: transparent;
-        color: #111827;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        font-size: 18px;
-        line-height: 1.8;
-        direction: rtl;
-      }
-      #editor {
-        min-height: 100vh;
-        padding: 16px;
-        outline: none;
-        white-space: pre-wrap;
-      }
-      #editor a { color: #2563eb; text-decoration: underline; }
-      #editor mark { background: rgba(245, 158, 11, 0.35); }
-      blockquote {
-        border-right: 3px solid #d1d5db;
-        margin: 0;
-        padding: 0 12px 0 0;
-        color: #374151;
-      }
-      ul {
-        padding-right: 24px;
-      }
-    </style>
-  </head>
-  <body>
-    <div id="editor" contenteditable="true">${safeHtml}</div>
-    <script>
-      const editor = document.getElementById("editor");
-      const postState = () => {
-        window.ReactNativeWebView.postMessage(JSON.stringify({
-          type: "change",
-          html: editor.innerHTML,
-          plainText: editor.innerText || ""
-        }));
-      };
+  html, body {
+    min-height: 100%;
+    margin: 0;
+    padding: 0;
+    background: transparent;
+  }
 
-      const ensureParagraph = () => {
-        if (!editor.innerHTML.trim()) {
-          editor.innerHTML = "<p><br/></p>";
-        }
-      };
+  .ProseMirror {
+    min-height: 100%;
+    box-sizing: border-box;
+    padding: 12px 14px 16px;
+    outline: none;
+    white-space: pre-wrap;
+  }
 
-      editor.addEventListener("input", () => {
-        ensureParagraph();
-        postState();
-      });
+  .ProseMirror a {
+    color: #2563eb;
+    text-decoration: underline;
+  }
 
-      document.addEventListener("selectionchange", () => {
-        window.ReactNativeWebView.postMessage(JSON.stringify({
-          type: "selection"
-        }));
-      });
+  .ProseMirror mark {
+    background: ${HIGHLIGHT_COLOR};
+  }
 
-      window.__BOOK_EDITOR__ = {
-        exec(command) {
-          editor.focus();
-          if (command === "bold") document.execCommand("bold");
-          if (command === "italic") document.execCommand("italic");
-          if (command === "underline") document.execCommand("underline");
-          if (command === "undo") document.execCommand("undo");
-          if (command === "redo") document.execCommand("redo");
-          if (command === "bullets") document.execCommand("insertUnorderedList");
-          if (command === "blockquote") {
-            document.execCommand("formatBlock", false, "blockquote");
-          }
-          if (command === "highlight") {
-            document.execCommand("styleWithCSS", false, true);
-            document.execCommand("hiliteColor", false, "rgba(245, 158, 11, 0.35)");
-          }
-          postState();
-        }
-      };
+  .ProseMirror blockquote {
+    border-right: 3px solid #d1d5db;
+    margin: 0;
+    padding: 0 12px 0 0;
+    color: #374151;
+  }
 
-      ensureParagraph();
-      setTimeout(postState, 0);
-    </script>
-  </body>
-</html>`;
-}
+  .ProseMirror ul {
+    padding-right: 24px;
+    padding-left: 0;
+  }
+`;
 
 export const BookRichEditor = forwardRef<BookRichEditorHandle, Props>(
   function BookRichEditor({ initialHtml, onChange }, ref) {
-    const webViewRef = useRef<WebView>(null);
-    const html = useMemo(() => buildEditorHtml(initialHtml ?? ""), [initialHtml]);
+    const hasInjectedCss = useRef(false);
+    const onChangeRef = useRef(onChange);
+    const changeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const requestIdRef = useRef(0);
+    const editor = useEditorBridge({
+      autofocus: true,
+      avoidIosKeyboard: true,
+      initialContent: initialHtml?.trim() ? initialHtml : "<p></p>",
+      onChange: () => {
+        if (changeTimerRef.current) {
+          clearTimeout(changeTimerRef.current);
+        }
+
+        changeTimerRef.current = setTimeout(async () => {
+          const requestId = ++requestIdRef.current;
+
+          try {
+            const [html, plainText] = await Promise.all([
+              editor.getHTML(),
+              editor.getText(),
+            ]);
+
+            if (requestId !== requestIdRef.current) return;
+
+            onChangeRef.current({ html, plainText });
+          } catch {}
+        }, 220);
+      },
+      bridgeExtensions: [
+        ...TenTapStartKit,
+        CoreBridge.configureCSS(BOOK_EDITOR_CSS),
+        PlaceholderBridge.configureExtension({
+          placeholder: "ابدأ الكتابة...",
+        }),
+      ],
+    });
+    const editorState = useBridgeState(editor);
 
     useImperativeHandle(ref, () => ({
       exec(command) {
-        const js = `window.__BOOK_EDITOR__ && window.__BOOK_EDITOR__.exec(${JSON.stringify(command)}); true;`;
-        webViewRef.current?.injectJavaScript(js);
+        editor.focus();
+        if (command === "bold") editor.toggleBold();
+        if (command === "italic") editor.toggleItalic();
+        if (command === "underline") editor.toggleUnderline();
+        if (command === "highlight") editor.toggleHighlight(HIGHLIGHT_COLOR);
+        if (command === "blockquote") editor.toggleBlockquote();
+        if (command === "bullets") editor.toggleBulletList();
+        if (command === "undo") editor.undo();
+        if (command === "redo") editor.redo();
       },
-    }), []);
+    }), [editor]);
 
     useEffect(() => {
-      // no-op to keep ref stable for future runtime extensions
+      onChangeRef.current = onChange;
+    }, [onChange]);
+
+    useEffect(() => {
+      if (!editorState.isReady || hasInjectedCss.current) return;
+      editor.injectCSS(BOOK_EDITOR_CSS, "book-editor-theme");
+      hasInjectedCss.current = true;
+    }, [editor, editorState.isReady]);
+
+    useEffect(() => {
+      if (!editorState.isReady) return;
+
+      let cancelled = false;
+
+      const syncInitialContent = async () => {
+        try {
+          const [html, plainText] = await Promise.all([
+            editor.getHTML(),
+            editor.getText(),
+          ]);
+
+          if (cancelled) return;
+          onChangeRef.current({ html, plainText });
+        } catch {}
+      };
+
+      void syncInitialContent();
+
+      return () => {
+        cancelled = true;
+      };
+    }, [editor, editorState.isReady]);
+
+    useEffect(() => {
+      return () => {
+        if (changeTimerRef.current) {
+          clearTimeout(changeTimerRef.current);
+        }
+      };
     }, []);
 
-    const handleMessage = (event: WebViewMessageEvent) => {
-      try {
-        const data = JSON.parse(event.nativeEvent.data);
-        if (data.type === "change") {
-          onChange({
-            html: typeof data.html === "string" ? data.html : "",
-            plainText: typeof data.plainText === "string" ? data.plainText : "",
-          });
-        }
-      } catch {}
-    };
-
     return (
-      <View className="min-h-[320px] overflow-hidden rounded-2xl bg-card">
-        <WebView
-          ref={webViewRef}
-          originWhitelist={["*"]}
-          source={{ html }}
-          onMessage={handleMessage}
-          hideKeyboardAccessoryView
-          keyboardDisplayRequiresUserAction={false}
-          style={{ backgroundColor: "transparent", minHeight: 320 }}
-        />
+      <View style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+        <RichText editor={editor} />
       </View>
     );
   },

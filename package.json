@@ -3,7 +3,8 @@
   "devDependencies": {
     "@types/node": "^24.0.4",
     "check-dependency-version-consistency": "5.0.1",
-    "knip": "^5.61.2"
+    "knip": "^5.61.2",
+    "portless": "^0.11.1"
   },
   "engines": {
     "node": ">=18"
@@ -22,6 +23,8 @@
     "db:generate": "turbo -F @acme/db prisma-generate",
     "db:push-reset": "turbo -F @acme/db push-reset",
     "dev": "turbo dev --parallel --filter !@acme/api",
+    "terminal": "bash ./scripts/open-bun-script-terminal.sh",
+    "dev:terminal": "bun run terminal dev",
     "build:preview": "bun ./scripts/eas-account-runner.ts build:preview",
     "update:preview": "bun ./scripts/eas-account-runner.ts update:preview",
     "format": "biome format --write .",
@@ -37,7 +40,8 @@
     "knip": "knip"
   },
   "overrides": {
-    "lightningcss": "1.30.1"
+    "lightningcss": "1.30.1",
+    "react-dom": "19.1.0"
   },
   "workspaces": [
     "apps/*",

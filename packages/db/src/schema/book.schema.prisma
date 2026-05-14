@@ -41,6 +41,8 @@ model Book {
   pages          BookPage[]
   importHistory  BookImportHistory[]
   pageImports    BookPageImportHistory[]
+  rawPages       ShamelaRawPage[]
+  stagedParses   ShamelaStagedPageParse[]
   authors        BookAuthor[]
   // Offline sync fields — updated whenever a page is fetched
   contentHash    String?
@@ -82,12 +84,14 @@ model BookPage {
   topicTitle    String?
   topicUrl      String?
   rawJson       Json?
+  documentJson  Json?
   status        String              @default("pending")
   paragraphs    BookPageParagraph[]
   footnotes     BookPageFootnote[]
   highlights    BookPageHighlight[]
   comments      BookPageComment[]
   importHistory BookPageImportHistory[]
+  stagedParses  ShamelaStagedPageParse[]
 
   @@unique([bookId, shamelaPageNo])
   @@index([bookId])
@@ -223,4 +227,61 @@ model AiTokenUsage {
   @@index([createdAt])
   @@index([provider])
   @@index([bookId])
+}
+
+model ShamelaRawPage {
+  id            Int       @id @default(autoincrement())
+  createdAt     DateTime  @default(now()) @db.Timestamp(0)
+  updatedAt     DateTime? @updatedAt
+  bookId        Int?
+  book          Book?     @relation(fields: [bookId], references: [id])
+  requestedUrl  String
+  finalUrl      String
+  normalizedUrl String?
+  title         String?
+  html          String
+  htmlHash      String
+  source        String    @default("mobile-webview")
+  captureStatus String    @default("captured")
+  shamelaPageNo Int?
+  metadataJson  Json?
+  stagedParses  ShamelaStagedPageParse[]
+
+  @@index([bookId, createdAt])
+  @@index([htmlHash])
+  @@index([normalizedUrl])
+  @@index([shamelaPageNo])
+}
+
+model ShamelaStagedPageParse {
+  id              Int       @id @default(autoincrement())
+  createdAt       DateTime  @default(now()) @db.Timestamp(0)
+  updatedAt       DateTime? @updatedAt
+  rawPageId       Int
+  rawPage         ShamelaRawPage @relation(fields: [rawPageId], references: [id])
+  bookId          Int?
+  book            Book?     @relation(fields: [bookId], references: [id])
+  promotedPageId  Int?
+  promotedPage    BookPage? @relation(fields: [promotedPageId], references: [id])
+  status          String    @default("parsed")
+  parserVersion   String
+  shamelaPageNo   Int?
+  printedPageNo   Int?
+  volumeNumber    Int?
+  chapterTitle    String?
+  chapterUrl      String?
+  topicTitle      String?
+  topicUrl        String?
+  paragraphsJson  Json
+  footnotesJson   Json
+  factsJson       Json?
+  documentJson    Json?
+  diagnosticsJson Json?
+  renderModelJson Json?
+  linkGraphJson   Json?
+
+  @@index([rawPageId, createdAt])
+  @@index([bookId, createdAt])
+  @@index([promotedPageId])
+  @@index([status, createdAt])
 }

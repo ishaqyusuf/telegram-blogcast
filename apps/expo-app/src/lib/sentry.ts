@@ -3,6 +3,7 @@ import * as Updates from "expo-updates";
 
 const dsn = process.env.EXPO_PUBLIC_SENTRY_DSN;
 const sentryEnabled = process.env.EXPO_PUBLIC_SENTRY_ENABLED !== "false";
+const sentryDebug = process.env.EXPO_PUBLIC_SENTRY_DEBUG === "true";
 const environment =
   process.env.EXPO_PUBLIC_APP_VARIANT ??
   process.env.NODE_ENV ??
@@ -18,7 +19,7 @@ export const initSentry = () => {
   Sentry.init({
     dsn,
     enabled: sentryEnabled,
-    debug: __DEV__,
+    debug: sentryDebug,
     environment,
     tracesSampleRate: 1,
   });

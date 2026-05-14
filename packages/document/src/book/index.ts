@@ -8,3 +8,11 @@ export {
   createBookHighlightAnnotation,
   createBookHighlightAnnotations,
 } from "./highlights";
+export { parseShamelaOpenPage } from "./shamela";
+export type {
+  ParseDiagnostic,
+  ShamelaOpenPageFacts,
+  ShamelaOpenPageParseResult,
+  TenTapPageDocumentV1,
+  TenTapBreadcrumbItem,
+} from "./shamela";

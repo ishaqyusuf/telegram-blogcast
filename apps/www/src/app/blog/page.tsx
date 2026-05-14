@@ -34,35 +34,54 @@ type BlogCardItem = {
     mimeType: string | null;
 };
 
+type BlogMediaFile = {
+    source: string | null;
+    fileId: string | null;
+    blobUrl: string | null;
+    blobDownloadUrl: string | null;
+};
+
 function buildTelegramFileProxy(fileId: string | null | undefined) {
     if (!fileId) return null;
     return `/api/telegram/file/${encodeURIComponent(fileId)}`;
 }
 
+function getMediaFileUrl(file: BlogMediaFile | null | undefined) {
+    if (!file) return null;
+    if (file.source === "vercel_blob") {
+        return file.blobDownloadUrl || file.blobUrl;
+    }
+    return buildTelegramFileProxy(file.fileId);
+}
+
 function pickAudioMedia(
     medias: Array<{
         mimeType: string;
-        file: { fileId: string } | null;
+        file: BlogMediaFile | null;
     }>,
 ) {
     const media = medias.find(
-        (m) => m.file?.fileId && m.mimeType?.toLowerCase().startsWith("audio/"),
+        (m) =>
+            getMediaFileUrl(m.file) &&
+            m.mimeType?.toLowerCase().startsWith("audio/"),
     );
-    return buildTelegramFileProxy(media?.file?.fileId);
+    return getMediaFileUrl(media?.file);
 }
 
 function pickImageMedia(
     medias: Array<{
         mimeType: string;
         title: string | null;
-        file: { fileId: string } | null;
+        file: BlogMediaFile | null;
     }>,
 ) {
     const media = medias.find(
-        (m) => m.file?.fileId && m.mimeType?.toLowerCase().startsWith("image/"),
+        (m) =>
+            getMediaFileUrl(m.file) &&
+            m.mimeType?.toLowerCase().startsWith("image/"),
     );
     return {
-        src: buildTelegramFileProxy(media?.file?.fileId),
+        src: getMediaFileUrl(media?.file),
         alt: media?.title ?? "Blog image",
         mimeType: media?.mimeType ?? null,
     };
@@ -73,6 +92,15 @@ function formatPostTime(date: Date | null) {
     return formatDistanceToNow(date, { addSuffix: true });
 }
 
+function hasBlogPayload(row: {
+    content?: string | null;
+    medias?: { fileId?: number | null }[];
+}) {
+    return Boolean(
+        row.content?.trim() || row.medias?.some((media) => media.fileId),
+    );
+}
+
 async function getBlogFeed(input: {
     query: string;
     filterType: BlogFilterType;
@@ -80,6 +108,27 @@ async function getBlogFeed(input: {
     const where: any = {
         deletedAt: null,
         published: true,
+        AND: [
+            {
+                OR: [
+                    {
+                        AND: [
+                            { content: { not: null } },
+                            { content: { not: "" } },
+                        ],
+                    },
+                    {
+                        medias: {
+                            some: {
+                                fileId: {
+                                    not: null,
+                                },
+                            },
+                        },
+                    },
+                ],
+            },
+        ],
     };
 
     if (input.filterType !== "all") {
@@ -139,7 +188,10 @@ async function getBlogFeed(input: {
                 include: {
                     file: {
                         select: {
+                            source: true,
                             fileId: true,
+                            blobUrl: true,
+                            blobDownloadUrl: true,
                         },
                     },
                 },
@@ -149,7 +201,7 @@ async function getBlogFeed(input: {
         take: 80,
     });
 
-    return rows.map((row) => {
+    return rows.filter(hasBlogPayload).map((row) => {
         const image = pickImageMedia(row.medias);
         return {
             id: row.id,

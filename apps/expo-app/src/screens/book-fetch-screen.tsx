@@ -1,12 +1,15 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import { Pressable } from "@/components/ui/pressable";
 import { _trpc } from "@/components/static-trpc";
 import { SafeArea } from "@/components/safe-area";
 import { Icon } from "@/components/ui/icon";
+import { Modal, useModal } from "@/components/ui/modal";
 import { useTranslation } from "@/lib/i18n";
 import { useColors } from "@/hooks/use-color";
 import { withAlpha } from "@/lib/theme";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
+import { useBookFetchBrowserStore } from "@/store/book-fetch-browser-store";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -36,6 +39,14 @@ type SyncResult = {
   created: boolean;
   chaptersImported: number;
   historyId: number;
+  importedPage: {
+    id: number;
+    shamelaPageNo: number;
+    printedPageNo?: number | null;
+    chapterTitle?: string | null;
+    topicTitle?: string | null;
+    importHistoryId: number;
+  } | null;
 };
 
 type ManualResult = {
@@ -50,17 +61,44 @@ type ManualResult = {
   historyId: number;
 };
 
+type PreviewResult = {
+  sourceUrl: string;
+  normalizedUrl: string;
+  shamelaId: number;
+  bookIndexUrl: string;
+  linkedPageUrl: string | null;
+  aiProvider: "openai" | "gemini";
+  aiModel: AiModel;
+  previewJson: {
+    metadata: Record<string, unknown>;
+    toc: {
+      volumes: { number: number; title: string | null }[];
+      chapterCount: number;
+      chapters: {
+        shamelaPageNo: number;
+        shamelaUrl: string;
+        chapterTitle: string | null;
+        topicTitle: string | null;
+        volumeNumber: number;
+      }[];
+      truncated: boolean;
+    };
+    linkedPage: Record<string, unknown> | null;
+  };
+};
+
 type Step = "idle" | "fetching" | "done" | "error";
 type ManualStep = "idle" | "saving" | "done" | "error";
-type AiProvider = "anthropic" | "openai" | "gemini";
+type AiModel = "gpt-5" | "gpt-4o" | "gemini";
 
-const AI_PROVIDERS: { value: AiProvider; label: string }[] = [
-  { value: "anthropic", label: "Claude" },
-  { value: "openai", label: "GPT-4o" },
+const AI_PROVIDERS: { value: AiModel; label: string }[] = [
+  { value: "gpt-5", label: "GPT-5" },
+  { value: "gpt-4o", label: "GPT-4o" },
   { value: "gemini", label: "Gemini" },
 ];
 
 const BOOK_URL_KEY = "book-fetch:pending-url";
+const AI_PROVIDER_KEY = "book-fetch:ai-provider";
 
 function HistoryBadge({
   status,
@@ -93,14 +131,19 @@ export default function BookFetchScreen() {
   const router = useRouter();
   const qc = useQueryClient();
   const inputRef = useRef<TextInput>(null);
+  const previewModal = useModal();
+  const failureModal = useModal();
   const { t, textAlign, writingDirection, isRtl } = useTranslation();
   const colors = useColors();
+  const browserCapture = useBookFetchBrowserStore((state) => state.capture);
+  const clearBrowserCapture = useBookFetchBrowserStore((state) => state.clear);
 
   const [url, setUrl] = useState("");
   const [step, setStep] = useState<Step>("idle");
-  const [aiProvider, setAiProvider] = useState<AiProvider>("anthropic");
+  const [aiProvider, setAiProvider] = useState<AiModel>("gpt-5");
   const [result, setResult] = useState<SyncResult | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
+  const [failureDetails, setFailureDetails] = useState("");
 
   const [selectedBookId, setSelectedBookId] = useState<number | null>(null);
   const [createBookInline, setCreateBookInline] = useState(false);
@@ -114,6 +157,10 @@ export default function BookFetchScreen() {
   const [manualStep, setManualStep] = useState<ManualStep>("idle");
   const [manualResult, setManualResult] = useState<ManualResult | null>(null);
   const [manualError, setManualError] = useState("");
+  const [expandedHistoryErrorId, setExpandedHistoryErrorId] = useState<
+    number | null
+  >(null);
+  const [previewResult, setPreviewResult] = useState<PreviewResult | null>(null);
 
   const { data: importHistory } = useQuery(
     _trpc.book.getBookImportHistory.queryOptions({ limit: 10 }),
@@ -131,6 +178,11 @@ export default function BookFetchScreen() {
     AsyncStorage.getItem(BOOK_URL_KEY).then((saved) => {
       if (saved) setUrl(saved);
     });
+    AsyncStorage.getItem(AI_PROVIDER_KEY).then((saved) => {
+      if (saved && AI_PROVIDERS.some((provider) => provider.value === saved)) {
+        setAiProvider(saved as AiModel);
+      }
+    });
   }, []);
 
   useEffect(() => {
@@ -138,6 +190,16 @@ export default function BookFetchScreen() {
       setSelectedBookId(selectableBooks[0]?.id ?? null);
     }
   }, [createBookInline, selectableBooks, selectedBookId]);
+
+  useEffect(() => {
+    if (!browserCapture) return;
+    if (browserCapture.requestedUrl !== url.trim()) {
+      handleSetUrl(browserCapture.requestedUrl);
+    }
+    setErrorMsg("");
+    setFailureDetails("");
+    setStep("idle");
+  }, [browserCapture]);
 
   const handleSetUrl = (value: string) => {
     setUrl(value);
@@ -148,9 +210,19 @@ export default function BookFetchScreen() {
     }
   };
 
+  const handleSetAiProvider = (value: AiModel) => {
+    setAiProvider(value);
+    AsyncStorage.setItem(AI_PROVIDER_KEY, value);
+  };
+
   const invalidateBooks = () => {
     qc.invalidateQueries({ queryKey: _trpc.book.getBooks.queryKey() });
     qc.invalidateQueries({ queryKey: _trpc.book.getBookImportHistory.queryKey({ limit: 10 }) });
+  };
+
+  const showFailureDetails = (message: string) => {
+    setFailureDetails(message);
+    failureModal.present();
   };
 
   const { mutate: syncBook } = useMutation(
@@ -159,18 +231,44 @@ export default function BookFetchScreen() {
         setStep("fetching");
         setResult(null);
         setErrorMsg("");
+        setFailureDetails("");
       },
       onSuccess: (data) => {
         setResult(data as SyncResult);
         setStep("done");
+        setFailureDetails("");
         AsyncStorage.removeItem(BOOK_URL_KEY);
         setUrl("");
       },
       onError: (error) => {
+        console.error("book import failed", {
+          shamelaUrl: url.trim(),
+          aiProvider,
+          error,
+        });
         setErrorMsg(error.message);
         setStep("error");
+        showFailureDetails(error.message);
       },
       onSettled: invalidateBooks,
+    }),
+  );
+
+  const { mutate: previewBookImport, isPending: isPreviewing } = useMutation(
+    _trpc.book.previewBookImportFromShamela.mutationOptions({
+      onMutate: () => {
+        setFailureDetails("");
+      },
+      onSuccess: (data) => {
+        setPreviewResult(data as PreviewResult);
+        setFailureDetails("");
+        previewModal.present();
+      },
+      onError: (error) => {
+        setErrorMsg(error.message);
+        setStep("error");
+        showFailureDetails(error.message);
+      },
     }),
   );
 
@@ -187,6 +285,17 @@ export default function BookFetchScreen() {
         qc.invalidateQueries({ queryKey: _trpc.book.getBooks.queryKey() });
       },
       onError: (error) => {
+        console.error("manual book page import failed", {
+          bookId: createBookInline ? undefined : selectedBookId ?? undefined,
+          createBookInline,
+          manualBookName: manualBookName.trim() || undefined,
+          sourceUrl: manualLink.trim() || undefined,
+          shamelaPageNo: manualPageNo.trim() || undefined,
+          printedPageNo: manualPrintedPageNo.trim() || undefined,
+          chapterTitle: manualChapterTitle.trim() || undefined,
+          topicTitle: manualTopicTitle.trim() || undefined,
+          error,
+        });
         setManualError(error.message);
         setManualStep("error");
       },
@@ -204,13 +313,27 @@ export default function BookFetchScreen() {
     const trimmed = (sourceUrl ?? url).trim();
     if (!trimmed) return;
     handleSetUrl(trimmed);
-    syncBook({ shamelaUrl: trimmed, aiProvider });
+    setErrorMsg("");
+    setFailureDetails("");
+    setStep("idle");
+    clearBrowserCapture();
+    router.push({
+      pathname: "/book-fetch-browser",
+      params: { url: trimmed },
+    } as any);
+  };
+
+  const handleApproveImport = () => {
+    if (!previewResult?.sourceUrl) return;
+    previewModal.dismiss();
+    syncBook({ shamelaUrl: previewResult.sourceUrl, aiModel: aiProvider });
   };
 
   const reset = () => {
     setStep("idle");
     setResult(null);
     setErrorMsg("");
+    setFailureDetails("");
     setTimeout(() => inputRef.current?.focus(), 100);
   };
 
@@ -363,7 +486,9 @@ export default function BookFetchScreen() {
                 {AI_PROVIDERS.map((provider) => (
                   <Pressable
                     key={provider.value}
-                    onPress={() => step !== "fetching" && setAiProvider(provider.value)}
+                    onPress={() =>
+                      step !== "fetching" && handleSetAiProvider(provider.value)
+                    }
                     className={
                       aiProvider === provider.value
                         ? "flex-1 items-center rounded-lg bg-primary py-2.5"
@@ -409,7 +534,7 @@ export default function BookFetchScreen() {
                   keyboardType="url"
                   returnKeyType="done"
                   onSubmitEditing={() => handleFetch()}
-                  editable={step !== "fetching"}
+                  editable={step !== "fetching" && !isPreviewing}
                 />
                 {url ? (
                   <Pressable onPress={() => handleSetUrl("")}>
@@ -429,18 +554,18 @@ export default function BookFetchScreen() {
 
               <Pressable
                 onPress={() => handleFetch()}
-                disabled={!url.trim() || step === "fetching"}
+                disabled={!url.trim() || step === "fetching" || isPreviewing}
                 className={
-                  !url.trim() || step === "fetching"
+                  !url.trim() || step === "fetching" || isPreviewing
                     ? "flex-row items-center justify-center gap-2 rounded-xl bg-secondary py-3"
                     : "flex-row items-center justify-center gap-2 rounded-xl bg-primary py-3"
                 }
               >
-                {step === "fetching" ? (
+                {step === "fetching" || isPreviewing ? (
                   <>
                     <ActivityIndicator size="small" color={colors.primaryForeground} />
                     <Text className="text-[15px] font-bold text-primary-foreground">
-                      {t("fetchingBook")}
+                      {step === "fetching" ? t("fetchingBook") : "Generating preview"}
                     </Text>
                   </>
                 ) : (
@@ -457,12 +582,50 @@ export default function BookFetchScreen() {
                           : "text-[15px] font-bold text-primary-foreground"
                       }
                     >
-                      {t("fetchBook")}
+                      Open protected page
                     </Text>
                   </>
                 )}
               </Pressable>
             </View>
+
+            {browserCapture && browserCapture.requestedUrl === url.trim() ? (
+              <View className="gap-2 rounded-xl border border-primary/25 bg-primary/10 p-3.5">
+                <View className="flex-row items-center gap-2">
+                  <Icon name="CheckCircle2" size={18} className="text-primary" />
+                  <Text className="text-sm font-bold text-primary">
+                    Browser page captured
+                  </Text>
+                </View>
+                <Text className="text-[13px] leading-5 text-muted-foreground">
+                  {`Captured ${browserCapture.html.length.toLocaleString()} HTML chars from the in-app browser after manual verification.`}
+                </Text>
+                <Text className="text-[12px] leading-5 text-muted-foreground">
+                  {browserCapture.finalUrl}
+                </Text>
+                <Text className="text-[12px] leading-5 text-muted-foreground">
+                  The mobile browser assist flow is ready. The next step is passing this captured HTML into the backend import parser.
+                </Text>
+                <View className="flex-row gap-2">
+                  <Pressable
+                    onPress={() => handleFetch(browserCapture.requestedUrl)}
+                    className="rounded-lg bg-secondary px-3 py-2"
+                  >
+                    <Text className="text-[13px] font-semibold text-foreground">
+                      Reopen browser
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={clearBrowserCapture}
+                    className="rounded-lg bg-card px-3 py-2"
+                  >
+                    <Text className="text-[13px] font-semibold text-foreground">
+                      Clear capture
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
 
             {step === "fetching" && (
               <View className="items-center gap-3 rounded-xl bg-card p-6">
@@ -484,6 +647,13 @@ export default function BookFetchScreen() {
                 <Text className="text-[13px] leading-5 text-muted-foreground">
                   {errorMsg}
                 </Text>
+                {failureDetails ? (
+                  <Pressable onPress={() => failureModal.present()}>
+                    <Text className="text-[13px] font-semibold text-primary">
+                      View failure details
+                    </Text>
+                  </Pressable>
+                ) : null}
                 <Pressable onPress={reset}>
                   <Text className="text-[13px] font-semibold text-primary">
                     {t("tryAgain")}
@@ -591,10 +761,30 @@ export default function BookFetchScreen() {
                     <Text className="text-[12px] text-muted-foreground">
                       {t("syncedChapters", { count: result.chaptersImported })}
                     </Text>
+                    {result.importedPage ? (
+                      <Text className="text-[12px] text-muted-foreground">
+                        Imported linked page {result.importedPage.shamelaPageNo}
+                      </Text>
+                    ) : null}
                   </View>
                 </View>
 
                 <View className="flex-row gap-2 px-3.5 pb-3.5">
+                  {result.importedPage ? (
+                    <Pressable
+                      onPress={() =>
+                        router.push(
+                          `/books/${result.book.id}/reader/${result.importedPage?.id}` as any,
+                        )
+                      }
+                      className="flex-1 flex-row items-center justify-center gap-1.5 rounded-xl bg-card py-3"
+                    >
+                      <Icon name="FileText" size={16} className="text-foreground" />
+                      <Text className="text-sm font-semibold text-foreground">
+                        Open Page
+                      </Text>
+                    </Pressable>
+                  ) : null}
                   <Pressable
                     onPress={() => router.push(`/books/${result.book.id}` as any)}
                     className="flex-1 flex-row items-center justify-center gap-1.5 rounded-xl bg-primary py-3"
@@ -659,16 +849,40 @@ export default function BookFetchScreen() {
                       {entry.sourceUrl}
                     </Text>
                     {entry.errorMessage ? (
-                      <Text
-                        style={{
-                          textAlign: "right",
-                          fontSize: 12,
-                          color: "#ef4444",
-                          writingDirection: "rtl",
-                        }}
+                      <Pressable
+                        onPress={() =>
+                          setExpandedHistoryErrorId((current) =>
+                            current === entry.id ? null : entry.id,
+                          )
+                        }
+                        className="gap-1"
                       >
-                        {entry.errorMessage}
-                      </Text>
+                        <Text
+                          numberOfLines={
+                            expandedHistoryErrorId === entry.id ? undefined : 2
+                          }
+                          style={{
+                            textAlign: "right",
+                            fontSize: 12,
+                            color: "#ef4444",
+                            writingDirection: "rtl",
+                          }}
+                        >
+                          {entry.errorMessage}
+                        </Text>
+                        <Text
+                          style={{
+                            textAlign: "right",
+                            fontSize: 11,
+                            color: colors.mutedForeground,
+                            writingDirection: "rtl",
+                          }}
+                        >
+                          {expandedHistoryErrorId === entry.id
+                            ? "Tap to collapse"
+                            : "Tap to show full error"}
+                        </Text>
+                      </Pressable>
                     ) : (
                       <Text
                         style={{
@@ -1018,6 +1232,105 @@ export default function BookFetchScreen() {
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeArea>
+      <Modal
+        ref={previewModal.ref}
+        title="Import Preview"
+        snapPoints={["85%"]}
+      >
+        <View className="flex-1 bg-background px-4 pb-6">
+          <BottomSheetScrollView
+            contentContainerStyle={{ gap: 12, paddingBottom: 24 }}
+            showsVerticalScrollIndicator={false}
+            nestedScrollEnabled
+          >
+            <View className="gap-1 rounded-xl bg-card p-3">
+              <Text className="text-sm font-semibold text-foreground">
+                Source URL
+              </Text>
+              <Text className="text-xs text-muted-foreground">
+                {previewResult?.sourceUrl ?? ""}
+              </Text>
+            </View>
+
+            <View className="gap-1 rounded-xl bg-card p-3">
+              <Text className="text-sm font-semibold text-foreground">
+                AI JSON Preview
+              </Text>
+              <Text
+                style={{
+                  fontSize: 12,
+                  lineHeight: 18,
+                  color: colors.foreground,
+                  fontFamily: Platform.select({ ios: "Menlo", android: "monospace", default: "monospace" }),
+                }}
+              >
+                {previewResult
+                  ? JSON.stringify(previewResult.previewJson, null, 2)
+                  : ""}
+              </Text>
+            </View>
+          </BottomSheetScrollView>
+
+          <View className="flex-row gap-2">
+            <Pressable
+              onPress={() => previewModal.dismiss()}
+              className="flex-1 items-center rounded-xl bg-secondary py-3"
+            >
+              <Text className="text-sm font-semibold text-foreground">
+                Cancel
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={handleApproveImport}
+              className="flex-1 items-center rounded-xl bg-primary py-3"
+            >
+              <Text className="text-sm font-bold text-primary-foreground">
+                Approve Import
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+      <Modal
+        ref={failureModal.ref}
+        title="Import Failure"
+        snapPoints={["88%"]}
+      >
+        <View className="flex-1 bg-background px-4 pb-6">
+          <BottomSheetScrollView
+            contentContainerStyle={{ gap: 12, paddingBottom: 24 }}
+            showsVerticalScrollIndicator={false}
+            nestedScrollEnabled
+          >
+            <View className="gap-1 rounded-xl bg-card p-3">
+              <Text className="text-sm font-semibold text-foreground">
+                Full failure response
+              </Text>
+              <Text
+                style={{
+                  fontSize: 12,
+                  lineHeight: 18,
+                  color: colors.foreground,
+                  fontFamily: Platform.select({
+                    ios: "Menlo",
+                    android: "monospace",
+                    default: "monospace",
+                  }),
+                }}
+              >
+                {failureDetails}
+              </Text>
+            </View>
+          </BottomSheetScrollView>
+
+          <Pressable
+            onPress={() => failureModal.dismiss()}
+            className="items-center rounded-xl bg-secondary py-3"
+          >
+            <Text className="text-sm font-semibold text-foreground">Close</Text>
+          </Pressable>
+        </View>
+      </Modal>
     </View>
   );
 }

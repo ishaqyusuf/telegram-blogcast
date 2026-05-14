@@ -4,6 +4,7 @@ const PREVIEW_OR_FORCED_BASE_URL =
   process.env.EXPO_PUBLIC_APP_VARIANT === "preview" ||
   process.env.EXPO_PUBLIC_FORCE_BASE_URL === "true";
 const IS_DEV = typeof __DEV__ !== "undefined" && __DEV__;
+const TRPC_PATH = "/api/trpc";
 
 const getLocalHost = () => {
   const debuggerHost = Constants.expoConfig?.hostUri;
@@ -20,6 +21,16 @@ const getLocalHost = () => {
 
 const getLocalUrl = (port: string) => {
   return `http://${getLocalHost()}:${port}`;
+};
+
+const appendPath = (baseUrl: string, path: string) => {
+  return `${baseUrl.trim().replace(/\/+$/, "")}${path}`;
+};
+
+const normalizeTrpcUrl = (url: string) => {
+  const trimmedUrl = url.trim().replace(/\/+$/, "");
+  if (trimmedUrl.endsWith(TRPC_PATH)) return trimmedUrl;
+  return appendPath(trimmedUrl, TRPC_PATH);
 };
 
 const logResolvedUrl = (label: string, value: string) => {
@@ -49,8 +60,8 @@ export const getTrpcUrl = () => {
   const envTrpcUrl = process.env.EXPO_PUBLIC_TRPC_URL;
 
   if (PREVIEW_OR_FORCED_BASE_URL) {
-    if (envTrpcUrl) return envTrpcUrl;
-    return logResolvedUrl("trpcUrl", `${getBaseUrl()}/api/trpc`);
+    if (envTrpcUrl) return logResolvedUrl("trpcUrl", normalizeTrpcUrl(envTrpcUrl));
+    return logResolvedUrl("trpcUrl", appendPath(getBaseUrl(), TRPC_PATH));
   }
 
   const trpcPort =
@@ -67,12 +78,12 @@ export const getTrpcUrl = () => {
       );
     }
 
-    return logResolvedUrl("trpcUrl", `${getLocalUrl(trpcPort)}/api/trpc`);
+    return logResolvedUrl("trpcUrl", appendPath(getLocalUrl(trpcPort), TRPC_PATH));
   }
 
-  if (envTrpcUrl) return logResolvedUrl("trpcUrl", envTrpcUrl);
+  if (envTrpcUrl) return logResolvedUrl("trpcUrl", normalizeTrpcUrl(envTrpcUrl));
 
-  return logResolvedUrl("trpcUrl", `${getBaseUrl()}/api/trpc`);
+  return logResolvedUrl("trpcUrl", appendPath(getBaseUrl(), TRPC_PATH));
 };
 
 export const getWebUrl = () => {

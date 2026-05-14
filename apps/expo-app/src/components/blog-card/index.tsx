@@ -1,6 +1,6 @@
 import { Pressable } from "@/components/ui/pressable";
 import { useRouter } from "expo-router";
-import { Alert, Text, View } from "react-native";
+import { View } from "react-native";
 import { useRef } from "react";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 
@@ -11,7 +11,6 @@ import { CardHeader } from "./card-header";
 import { CardMedia } from "./card-media";
 import type { BlogItem } from "./types";
 import { getBlogHref, resolveVariant } from "./utils";
-import { Icon } from "@/components/ui/icon";
 
 export type { BlogItem } from "./types";
 
@@ -25,6 +24,7 @@ export function BlogCard({
   const router = useRouter();
   const markViewed = useRecentlyViewedStore((state) => state.markViewed);
   const swipeRef = useRef<any>(null);
+  const isDeletingRef = useRef(false);
   const variant = resolveVariant(post);
   const href = getBlogHref(post);
 
@@ -38,36 +38,26 @@ export function BlogCard({
     router.push(href as any);
   };
 
-  const confirmDelete = () => {
-    Alert.alert("Delete post?", "This will remove the post from your feed.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          swipeRef.current?.close();
-          await onDelete?.(post);
-        },
-      },
-    ]);
+  const handleSwipeWillOpen = async (direction: "left" | "right") => {
+    if (direction !== "left" || isDeletingRef.current) return;
+
+    isDeletingRef.current = true;
+    swipeRef.current?.close();
+
+    try {
+      await onDelete?.(post);
+    } finally {
+      isDeletingRef.current = false;
+    }
   };
 
   return (
     <ReanimatedSwipeable
       ref={swipeRef}
       overshootRight={false}
-      rightThreshold={40}
-      renderRightActions={() => (
-        <Pressable
-          onPress={confirmDelete}
-          className="ml-2 h-full w-20 items-center justify-center rounded-2xl bg-destructive"
-        >
-          <Icon name="Trash2" className="text-destructive-foreground" />
-          <Text className="mt-1 text-xs font-semibold text-destructive-foreground">
-            Delete
-          </Text>
-        </Pressable>
-      )}
+      rightThreshold={72}
+      onSwipeableWillOpen={handleSwipeWillOpen}
+      renderRightActions={() => <View className="ml-2 h-full w-1" />}
     >
       <View className="overflow-hidden rounded-2xl">
         <Pressable

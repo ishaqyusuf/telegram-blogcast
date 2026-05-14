@@ -1,9 +1,9 @@
 import { Pressable } from "@/components/ui/pressable";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator, Alert, KeyboardAvoidingView,
+  ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, type KeyboardEvent,
   InteractionManager,
   Platform, ScrollView, Text, TextInput, View,
 } from "react-native";
@@ -57,6 +57,7 @@ export default function BookReaderScreen() {
   const [commentText, setCommentText] = useState("");
   const [showCommentInput, setShowCommentInput] = useState(false);
   const [mode, setMode] = useState<"read" | "edit">("read");
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [editorText, setEditorText] = useState("");
   const [editorHtml, setEditorHtml] = useState("");
   const [baseVersion, setBaseVersion] = useState<number>(0);
@@ -68,9 +69,16 @@ export default function BookReaderScreen() {
     _trpc.book.getPage.queryOptions({ pageId: pageIdNum })
   );
   const { data: pageDocument } = useQuery(
-    _trpc.book.getPageDocument.queryOptions({ pageId: pageIdNum })
+    _trpc.book.getPageDocument.queryOptions(
+      { pageId: pageIdNum },
+      { enabled: mode === "edit" },
+    )
   );
-  const { draft, parsedDocument, saveDraft, clearDraft } = useBookPageDraft(bookIdNum, pageIdNum);
+  const { draft, parsedDocument, saveDraft, clearDraft } = useBookPageDraft(
+    bookIdNum,
+    pageIdNum,
+    mode === "edit",
+  );
 
   // ── Offline-first highlights ───────────────────────────────────────────────
   const { highlights, addHighlight, deleteHighlight, reload: reloadHighlights } =
@@ -84,6 +92,25 @@ export default function BookReaderScreen() {
   useEffect(() => {
     setLastPage(bookIdNum, pageIdNum);
   }, [bookIdNum, pageIdNum]);
+
+  useEffect(() => {
+    const showEvent =
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const hideEvent =
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+
+    const onShow = Keyboard.addListener(showEvent, (event: KeyboardEvent) => {
+      setKeyboardHeight(event.endCoordinates?.height || 0);
+    });
+    const onHide = Keyboard.addListener(hideEvent, () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      onShow.remove();
+      onHide.remove();
+    };
+  }, []);
 
   // Pull from server on mount (merge into SQLite)
   useEffect(() => {
@@ -124,15 +151,20 @@ export default function BookReaderScreen() {
     })
   );
 
-  const serverPlainText =
-    pageDocument?.plainText ??
-    (page?.paragraphs ?? []).map((paragraph) => paragraph.text).join("\n\n");
-  const serverHtml =
-    pageDocument?.contentHtml ??
-    serializeDocumentToHtml(
+  const serverPlainText = useMemo(
+    () =>
+      pageDocument?.plainText ??
+      (page?.paragraphs ?? []).map((paragraph) => paragraph.text).join("\n\n"),
+    [page?.paragraphs, pageDocument?.plainText],
+  );
+  const serverHtml = useMemo(() => {
+    if (mode !== "edit") return "";
+    if (pageDocument?.contentHtml) return pageDocument.contentHtml;
+    return serializeDocumentToHtml(
       (pageDocument?.document as RichDocument | undefined) ??
         createDocumentFromPlainText(serverPlainText),
     );
+  }, [mode, pageDocument?.contentHtml, pageDocument?.document, serverPlainText]);
   const isDirty =
     mode === "edit" &&
     (editorText.trim() !== serverPlainText.trim() ||
@@ -184,7 +216,10 @@ export default function BookReaderScreen() {
   }, [mode, editorText, editorHtml, baseVersion, saveDraft]);
 
   const enterEditMode = () => {
-    const initialDocument = parsedDocument ?? (pageDocument?.document as RichDocument | undefined) ?? createDocumentFromPlainText(serverPlainText);
+    const initialDocument =
+      parsedDocument ??
+      (pageDocument?.document as RichDocument | undefined) ??
+      createDocumentFromPlainText(serverPlainText);
     setEditorText(getDocumentPlainText(initialDocument));
     setEditorHtml(
       draft?.contentHtml ??
@@ -262,6 +297,13 @@ export default function BookReaderScreen() {
   };
 
   const bookmarked = isBookmarked(bookIdNum, pageIdNum);
+  const editorFooterInset =
+    keyboardHeight > 0
+      ? Platform.OS === "ios"
+        ? 12
+        : keyboardHeight + 12
+      : 0;
+
   const toggleBookmark = () => {
     if (!page) return;
     if (bookmarked) {
@@ -354,20 +396,8 @@ export default function BookReaderScreen() {
           behavior={Platform.OS === "ios" ? "padding" : undefined}
           keyboardVerticalOffset={0}
         >
-          <ScrollView
-            contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 20, paddingBottom: 120 }}
-            keyboardShouldPersistTaps="handled"
-          >
-            {page.topicTitle && (
-              <Text
-                className="mb-4 text-center text-[15px] font-semibold text-primary"
-                style={{ writingDirection: "rtl" }}
-              >
-                {page.topicTitle}
-              </Text>
-            )}
-
-            {mode === "edit" ? (
+          {mode === "edit" ? (
+            <View style={{ flex: 1 }}>
               <BookRichEditor
                 ref={editorRef}
                 initialHtml={editorHtml}
@@ -376,7 +406,21 @@ export default function BookReaderScreen() {
                   setEditorText(plainText);
                 }}
               />
-            ) : (
+            </View>
+          ) : (
+            <ScrollView
+              contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 20, paddingBottom: 120 }}
+              keyboardShouldPersistTaps="handled"
+            >
+              {page.topicTitle && (
+                <Text
+                  className="mb-4 text-center text-[15px] font-semibold text-primary"
+                  style={{ writingDirection: "rtl" }}
+                >
+                  {page.topicTitle}
+                </Text>
+              )}
+
               <BookPageView
                 paragraphs={page.paragraphs}
                 highlights={highlights.map((h) => ({
@@ -398,7 +442,6 @@ export default function BookReaderScreen() {
                   setSelectedParagraphId(null);
                 }}
               />
-            )}
 
             {/* Comments list */}
             {mode === "read" && comments.length > 0 && (
@@ -427,12 +470,14 @@ export default function BookReaderScreen() {
                 ))}
               </View>
             )}
-          </ScrollView>
+            </ScrollView>
+          )}
 
           {mode === "edit" ? (
             <BookEditorFooter
               isSaving={isSavingDocument}
               dirty={isDirty}
+              bottomInset={editorFooterInset}
               onBold={() => runEditorCommand("bold")}
               onItalic={() => runEditorCommand("italic")}
               onUnderline={() => runEditorCommand("underline")}
@@ -449,39 +494,39 @@ export default function BookReaderScreen() {
               }}
             />
           ) : (
-          <View className="flex-row items-center gap-2 border-t border-border bg-background px-4 py-3">
-            <Pressable
-              onPress={() => setShowCommentInput(!showCommentInput)}
-              className="flex-1 flex-row items-center justify-center gap-1.5 rounded-xl bg-card py-2.5"
-            >
-              <Icon name="MessageSquare" size={16} className="text-foreground" />
-              <Text className="text-[13px] font-semibold text-foreground">{t("comment")}</Text>
-            </Pressable>
+            <View className="flex-row items-center gap-2 border-t border-border bg-background px-4 py-3">
+              <Pressable
+                onPress={() => setShowCommentInput(!showCommentInput)}
+                className="flex-1 flex-row items-center justify-center gap-1.5 rounded-xl bg-card py-2.5"
+              >
+                <Icon name="MessageSquare" size={16} className="text-foreground" />
+                <Text className="text-[13px] font-semibold text-foreground">{t("comment")}</Text>
+              </Pressable>
 
-            <Pressable
-              onPress={() => router.back()}
-              className="flex-row items-center justify-center gap-1.5 rounded-xl bg-card px-4 py-2.5"
-            >
-              <Icon name="ChevronRight" size={18} className="text-foreground" />
-              <Text className="text-[13px] text-foreground">{t("previous")}</Text>
-            </Pressable>
+              <Pressable
+                onPress={() => router.back()}
+                className="flex-row items-center justify-center gap-1.5 rounded-xl bg-card px-4 py-2.5"
+              >
+                <Icon name="ChevronRight" size={18} className="text-foreground" />
+                <Text className="text-[13px] text-foreground">{t("previous")}</Text>
+              </Pressable>
 
-            <Pressable
-              onPress={() =>
-                fetchNext({ bookId: bookIdNum, currentShamelaPageNo: page.shamelaPageNo })
-              }
-              className="flex-row items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2.5"
-            >
-              {isFetchingNext ? (
-                <ActivityIndicator size="small" color={colors.primaryForeground} />
-              ) : (
-                <>
-                  <Text className="text-[13px] font-bold text-primary-foreground">{t("next")}</Text>
-                  <Icon name="ChevronLeft" size={18} className="text-background" />
-                </>
-              )}
-            </Pressable>
-          </View>
+              <Pressable
+                onPress={() =>
+                  fetchNext({ bookId: bookIdNum, currentShamelaPageNo: page.shamelaPageNo })
+                }
+                className="flex-row items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2.5"
+              >
+                {isFetchingNext ? (
+                  <ActivityIndicator size="small" color={colors.primaryForeground} />
+                ) : (
+                  <>
+                    <Text className="text-[13px] font-bold text-primary-foreground">{t("next")}</Text>
+                    <Icon name="ChevronLeft" size={18} className="text-background" />
+                  </>
+                )}
+              </Pressable>
+            </View>
           )}
 
           {mode === "read" && showCommentInput && (

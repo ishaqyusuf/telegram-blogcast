@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, Pressable, Text, View } from "react-native";
+import { Alert, Text, View } from "react-native";
 import { LegendList } from "@legendapp/list";
 import { useMutation } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -16,17 +16,14 @@ import {
 } from "@/components/blog-home/blog-home-category-tabs";
 import { BlogHomeChannels } from "@/components/blog-home/blog-home-channels";
 import { BlogHomeFab } from "@/components/blog-home/blog-home-fab";
-import { BlogHomeFeatured } from "@/components/blog-home/blog-home-featured";
 import { BlogHomeHeader } from "@/components/blog-home/blog-home-header";
-import { BlogHomeMiniPlayer } from "@/components/blog-home/blog-home-mini-player";
 import { BlogHomeRecentlyPlayed } from "@/components/blog-home/blog-home-recently-played";
 import { BlogHomeRecentlyViewed } from "@/components/blog-home/blog-home-recently-viewed";
-import { HomeBottomNav } from "@/components/home-bottom-footer";
 import { useInfiniteLoader } from "@/components/infinite-loader";
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Sentry } from "@/lib/sentry";
+import { Toast } from "@/components/ui/toast";
 import { invalidateQueries } from "@/lib/trpc";
 import { useTranslation } from "@/lib/i18n";
 
@@ -61,10 +58,8 @@ export function BlogHomeSkeleton() {
             ))}
           </View>
           <BlogHomeFab />
-          <BlogHomeMiniPlayer />
         </View>
       </SafeArea>
-      <HomeBottomNav />
     </View>
   );
 }
@@ -141,6 +136,13 @@ export default function BlogHomeScreen() {
       },
     }),
   );
+  const restoreBlogMutation = useMutation(
+    _trpc.blog.restoreBlog.mutationOptions({
+      onSettled: () => {
+        invalidateQueries("infinite", ["blog.posts"]);
+      },
+    }),
+  );
   const visiblePosts = useMemo(
     () => posts.filter((post) => !hiddenPostIds.has(post.id)),
     [posts, hiddenPostIds],
@@ -148,9 +150,61 @@ export default function BlogHomeScreen() {
   const handleDeletePost = useCallback(
     async (post: BlogItem) => {
       setHiddenPostIds((prev) => new Set(prev).add(post.id));
+      let deleteFailed = false;
+      const deletePromise = deleteBlogMutation
+        .mutateAsync({ id: post.id })
+        .catch((error) => {
+          deleteFailed = true;
+          throw error;
+        });
+      let didRestore = false;
+
+      const restorePost = async () => {
+        if (didRestore) return;
+
+        didRestore = true;
+        setHiddenPostIds((prev) => {
+          const next = new Set(prev);
+          next.delete(post.id);
+          return next;
+        });
+
+        try {
+          await deletePromise;
+          await restoreBlogMutation.mutateAsync({ id: post.id });
+        } catch {
+          if (deleteFailed) {
+            setHiddenPostIds((prev) => {
+              const next = new Set(prev);
+              next.delete(post.id);
+              return next;
+            });
+            return;
+          }
+
+          setHiddenPostIds((prev) => new Set(prev).add(post.id));
+          Alert.alert("Undo failed", "Could not restore this post. Try again.");
+        }
+      };
+
+      const toastId = Toast.show("Post deleted", {
+        action: {
+          label: "Undo",
+          onPress: () => {
+            void restorePost();
+          },
+        },
+        duration: 5000,
+        position: "bottom",
+        type: "default",
+      });
+
       try {
-        await deleteBlogMutation.mutateAsync({ id: post.id });
+        await deletePromise;
       } catch {
+        if (toastId) {
+          Toast.dismiss(toastId);
+        }
         setHiddenPostIds((prev) => {
           const next = new Set(prev);
           next.delete(post.id);
@@ -159,7 +213,7 @@ export default function BlogHomeScreen() {
         Alert.alert("Delete failed", "Could not delete this post. Try again.");
       }
     },
-    [deleteBlogMutation],
+    [deleteBlogMutation, restoreBlogMutation],
   );
 
   useEffect(() => {
@@ -176,19 +230,6 @@ export default function BlogHomeScreen() {
       setIsPullRefreshing(false);
     }
   }, [refetch]);
-
-  const handleSentryTestError = useCallback(async () => {
-    const error = new Error("Sentry home screen test error");
-    Sentry.captureException(error);
-    const didFlush = await Sentry.flush(2000);
-
-    Alert.alert(
-      didFlush ? "Sentry event sent" : "Sentry flush timed out",
-      didFlush
-        ? "The test error was queued for Sentry. Check the Sentry project now."
-        : "The test error may not have reached Sentry before timeout.",
-    );
-  }, []);
 
   return (
     <View className="flex-1 bg-background">
@@ -207,7 +248,6 @@ export default function BlogHomeScreen() {
               <>
                 <BlogHomeAnalytics />
                 <BlogHomeBooksCta />
-                <BlogHomeFeatured />
                 <BlogHomeChannels />
                 <BlogHomeRecentlyViewed />
                 <BlogHomeRecentlyPlayed />
@@ -217,14 +257,6 @@ export default function BlogHomeScreen() {
                   selected={selectedCategory}
                   onSelect={onSelectCategory}
                 />
-                <Pressable
-                  className="mx-4 mt-4 rounded-xl border border-red-300 bg-red-50 px-4 py-3"
-                  onPress={handleSentryTestError}
-                >
-                  <Text className="text-sm font-semibold text-red-700">
-                    Send Sentry Test Error
-                  </Text>
-                </Pressable>
                 <Text className="px-4 pt-4 pb-2 text-base font-bold text-foreground">
                   {t("latestPosts")}
                 </Text>
@@ -243,10 +275,8 @@ export default function BlogHomeScreen() {
             onEndReachedThreshold={0.4}
           />
           <BlogHomeFab />
-          <BlogHomeMiniPlayer />
         </View>
       </SafeArea>
-      <HomeBottomNav />
     </View>
   );
 }

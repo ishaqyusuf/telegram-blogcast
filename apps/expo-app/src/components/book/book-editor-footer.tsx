@@ -5,6 +5,7 @@ import { ScrollView, Text, View } from "react-native";
 type Props = {
   isSaving?: boolean;
   dirty?: boolean;
+  bottomInset?: number;
   onBold: () => void;
   onItalic: () => void;
   onUnderline: () => void;
@@ -44,6 +45,7 @@ function FooterAction({
 export function BookEditorFooter({
   isSaving,
   dirty,
+  bottomInset = 0,
   onBold,
   onItalic,
   onUnderline,
@@ -56,7 +58,10 @@ export function BookEditorFooter({
   onSave,
 }: Props) {
   return (
-    <View className="border-t border-border bg-background px-3 py-3">
+    <View
+      className="border-t border-border bg-background px-3 pt-3"
+      style={{ paddingBottom: 12 + bottomInset }}
+    >
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
         <FooterAction icon="PenLine" label="Bold" onPress={onBold} />
         <FooterAction icon="Edit2" label="Italic" onPress={onItalic} />

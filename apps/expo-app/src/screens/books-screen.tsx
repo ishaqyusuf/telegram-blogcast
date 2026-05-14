@@ -1,5 +1,5 @@
 import { Pressable } from "@/components/ui/pressable";
-import { useQuery, useQueryClient } from "@/lib/react-query";
+import { useQuery } from "@/lib/react-query";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { FlatList, ScrollView, Text, View } from "react-native";
@@ -12,7 +12,6 @@ import { useTranslation } from "@/lib/i18n";
 
 export default function BooksScreen() {
   const router = useRouter();
-  const qc = useQueryClient();
   const { t } = useTranslation();
   const [selectedShelfId, setSelectedShelfId] = useState<number | undefined>(undefined);
 
@@ -23,22 +22,8 @@ export default function BooksScreen() {
 
   const books = data?.data ?? [];
 
-  const getBookHref = (book: (typeof books)[number]) => {
-    const firstPageId = book.pages?.[0]?.id;
-    return firstPageId
-      ? `/books/${book.id}/reader/${firstPageId}`
-      : `/books/${book.id}`;
-  };
-
   const openBook = (book: (typeof books)[number]) => {
-    const firstPageId = book.pages?.[0]?.id;
-    if (firstPageId) {
-      void qc.prefetchQuery(_trpc.book.getPage.queryOptions({ pageId: firstPageId }));
-    }
-
-    requestAnimationFrame(() => {
-      router.push(getBookHref(book) as any);
-    });
+    router.push(`/books/${book.id}` as any);
   };
 
   return (

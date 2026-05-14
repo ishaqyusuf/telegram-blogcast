@@ -1,16 +1,12 @@
 import { Pressable } from "@/components/ui/pressable";
 import { useQuery } from "@/lib/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { ActivityIndicator, FlatList, Text, TextInput, View } from "react-native";
 
 import { _trpc } from "@/components/static-trpc";
 import { SafeArea } from "@/components/safe-area";
 import { Icon } from "@/components/ui/icon";
-import { useBookOfflineStore } from "@/store/book-offline-store";
-import { localDb, withLocalDb } from "@/db/local-db";
-import { localParagraphs, localPages } from "@/db/local-schema";
-import { eq, sql } from "drizzle-orm";
 import { useTranslation } from "@/lib/i18n";
 import { useColors } from "@/hooks/use-color";
 
@@ -34,10 +30,6 @@ export default function BookSearchScreen() {
 
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
-  const [offlineResults, setOfflineResults] = useState<SearchResult[] | null>(null);
-  const [isOfflineSearching, setIsOfflineSearching] = useState(false);
-
-  const isDownloaded = useBookOfflineStore((s) => s.isDownloaded(bookIdNum));
 
   // Debounce
   useEffect(() => {
@@ -45,101 +37,12 @@ export default function BookSearchScreen() {
     return () => clearTimeout(t);
   }, [query]);
 
-  // Server search (when not downloaded, or when online)
   const { data: serverResults, isFetching: isServerSearching } = useQuery({
     ...(_trpc.book.searchBookContent.queryOptions({ bookId: bookIdNum, query: debouncedQuery })),
-    enabled: debouncedQuery.length >= 2 && !isDownloaded,
+    enabled: debouncedQuery.length >= 2,
   });
-
-  // Offline SQLite search (when downloaded)
-  const searchOffline = useCallback(async (q: string) => {
-    if (q.length < 2) { setOfflineResults(null); return; }
-    setIsOfflineSearching(true);
-    try {
-      const results = await withLocalDb(async () => {
-        // FTS5 search on paragraphs — use all() to get named-column rows
-        const paraRows = await localDb.all<{ id: number; page_id: number; text: string }>(
-          sql`SELECT p.id, p.page_id, p.text FROM local_paragraphs_fts f JOIN local_paragraphs p ON p.id = f.rowid WHERE local_paragraphs_fts MATCH ${q + "*"} LIMIT 30`
-        );
-
-        // Title search on pages
-        const pageRows = await localDb
-          .select()
-          .from(localPages)
-          .where(eq(localPages.bookId, bookIdNum))
-          .limit(30);
-
-        const titleMatches = pageRows.filter(
-          (p) =>
-            p.chapterTitle?.includes(q) ||
-            p.topicTitle?.includes(q)
-        );
-
-        const seen = new Set<number>();
-        const nextResults: SearchResult[] = [];
-
-        for (const p of titleMatches) {
-          if (!seen.has(p.id)) {
-            seen.add(p.id);
-            nextResults.push({
-              pageId: p.id,
-              chapterTitle: p.chapterTitle,
-              topicTitle: p.topicTitle,
-              printedPageNo: p.printedPageNo,
-              shamelaPageNo: p.shamelaPageNo,
-              volumeId: p.volumeId,
-              snippet: null,
-              matchType: "title",
-            });
-          }
-        }
-
-        // For FTS matches, fetch the page info
-        for (const row of paraRows) {
-          const pageId = row.page_id;
-          if (!seen.has(pageId)) {
-            seen.add(pageId);
-            const [pg] = await localDb
-              .select()
-              .from(localPages)
-              .where(eq(localPages.id, pageId));
-            if (pg) {
-              nextResults.push({
-                pageId: pg.id,
-                chapterTitle: pg.chapterTitle,
-                topicTitle: pg.topicTitle,
-                printedPageNo: pg.printedPageNo,
-                shamelaPageNo: pg.shamelaPageNo,
-                volumeId: pg.volumeId,
-                snippet: row.text.slice(0, 200),
-                matchType: "paragraph",
-              });
-            }
-          }
-        }
-
-        return nextResults;
-      });
-      setOfflineResults(results);
-    } catch (e) {
-      console.error("[BookSearch] offline search error", e);
-      setOfflineResults([]);
-    } finally {
-      setIsOfflineSearching(false);
-    }
-  }, [bookIdNum]);
-
-  useEffect(() => {
-    if (isDownloaded) {
-      searchOffline(debouncedQuery);
-    }
-  }, [debouncedQuery, isDownloaded, searchOffline]);
-
-  const results: SearchResult[] = isDownloaded
-    ? (offlineResults ?? [])
-    : (serverResults ?? []);
-
-  const isSearching = isDownloaded ? isOfflineSearching : isServerSearching;
+  const results: SearchResult[] = serverResults ?? [];
+  const isSearching = isServerSearching;
 
   const renderItem = ({ item }: { item: SearchResult }) => (
     <Pressable
@@ -211,17 +114,11 @@ export default function BookSearchScreen() {
               returnKeyType="search"
             />
             {query.length > 0 && (
-              <Pressable onPress={() => { setQuery(""); setOfflineResults(null); }}>
+              <Pressable onPress={() => { setQuery(""); }}>
                 <Icon name="X" size={16} className="text-muted-foreground" />
               </Pressable>
             )}
           </View>
-
-          {isDownloaded && (
-            <View className="rounded-lg bg-primary/12 px-2 py-1">
-              <Text className="text-[11px] text-primary">{t("local")}</Text>
-            </View>
-          )}
         </View>
 
         {isSearching && debouncedQuery.length >= 2 ? (

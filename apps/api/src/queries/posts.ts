@@ -22,6 +22,32 @@ export const postsSchema = z.object({
 });
 export type PostsSchema = z.infer<typeof postsSchema>;
 
+const hasContentOrMediaWhere = {
+  OR: [
+    {
+      AND: [{ content: { not: null } }, { content: { not: "" } }],
+    },
+    {
+      medias: {
+        some: {
+          fileId: {
+            not: null,
+          },
+        },
+      },
+    },
+  ],
+};
+
+function hasBlogPayload(blog: {
+  content?: string | null;
+  medias?: { fileId?: number | null }[];
+}) {
+  return Boolean(
+    blog.content?.trim() || blog.medias?.some((media) => media.fileId),
+  );
+}
+
 export async function posts(ctx: TRPCContext, query: PostsSchema) {
   const { db } = ctx;
   const { response, searchMeta, where } = await composeQueryData(
@@ -32,6 +58,7 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
   const data = await db.blog.findMany({
     where,
     ...searchMeta,
+    orderBy: [{ blogDate: "desc" }, { createdAt: "desc" }],
     include: {
       medias: {
         include: {
@@ -55,7 +82,7 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
     },
   });
   return await response(
-    data.map((blog) => {
+    data.filter(hasBlogPayload).map((blog) => {
       const type: BlogType = blog.type as any;
       const serializeFile = (file: any) =>
         file
@@ -158,6 +185,7 @@ function wherePosts(query: PostsSchema) {
   const category = query?.category;
   const where = {
     deletedAt: null,
+    AND: [hasContentOrMediaWhere],
     ...(query.channelId ? { channelId: query.channelId } : {}),
   } as any;
 
