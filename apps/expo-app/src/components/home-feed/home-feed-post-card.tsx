@@ -13,15 +13,21 @@ import { Icon } from "@/components/ui/icon";
 export type ItemProps = RouterOutputs["podcasts"]["posts"]["data"][number];
 
 function AudioPost({ post }: { post: ItemProps }) {
+  const audioTitle = post.audio?.title?.trim();
+  const caption = post.caption?.trim();
+  const shouldShowCaption = Boolean(caption && caption !== audioTitle);
+
   return (
     <>
       <View className="mb-4">
         <Text className="text-xl font-bold text-foreground mb-2 leading-tight text-right">
-          {post.caption || post?.audio?.title}
+          {audioTitle || caption || "Audio"}
         </Text>
-        <Text className="text-muted-foreground text-base leading-relaxed text-right">
-          {post.content}
-        </Text>
+        {shouldShowCaption ? (
+          <Text className="text-muted-foreground text-base leading-relaxed text-right">
+            {caption}
+          </Text>
+        ) : null}
       </View>
       <HomeFeedAudioPlayer
         post={post}

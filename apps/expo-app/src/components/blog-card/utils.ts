@@ -15,6 +15,10 @@ export function getInitials(value?: string | null) {
 }
 
 export function getCardTitle(post: BlogItem) {
+  if (post.type === "audio") {
+    return post.audio?.title || post.caption || "Alghurobaa";
+  }
+
   return post.caption || post.audio?.title || "Alghurobaa";
 }
 
@@ -37,7 +41,7 @@ export function getPrimaryImageUrl(post: BlogItem) {
 export function resolveVariant(post: BlogItem): BlogCardVariant {
   const hasAudio = !!(post.audio?.telegramFileId || (post.audio as any)?.url);
   const hasImage = !!getPrimaryImageUrl(post);
-  const hasText = !!post.content?.trim();
+  const hasText = !!(post.content?.trim() || post.caption?.trim());
 
   if (post.type === "video") return "video";
   if (hasAudio) return "audio";

@@ -56,12 +56,13 @@ function LinkifiedText({
 }
 
 function CardText({ post }: { post: BlogItem }) {
-  if (!post.content?.trim()) return null;
+  const content = post.content?.trim() || post.caption?.trim();
+  if (!content) return null;
 
   return (
     <View className="mb-3" style={{ direction: isRTL ? "rtl" : "ltr" }}>
       <LinkifiedText
-        content={post.content}
+        content={content}
         className="text-base leading-relaxed text-muted-foreground text-right"
       />
     </View>

@@ -12,9 +12,12 @@ import { getSessionFromRequest } from "@/lib/auth";
 
 // Paths that never require authentication
 const PUBLIC_PATHS = [
+    "/",
+    "/blog",
     "/login",
     "/api/auth/send-code",
     "/api/auth/verify-code",
+    "/api/telegram/file",
     "/api/trpc",
 ];
 

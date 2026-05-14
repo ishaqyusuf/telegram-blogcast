@@ -255,10 +255,10 @@ export default async function BlogPage({
                             </h1>
                             <div className="mt-2">
                                 <Link
-                                    href="/dashboard"
+                                    href="/login"
                                     className="inline-flex items-center rounded-full border border-zinc-700 bg-zinc-900/70 px-3 py-1 text-[11px] font-medium tracking-wide text-zinc-200 transition-colors hover:border-emerald-700 hover:text-emerald-300"
                                 >
-                                    Open Dashboard
+                                    Telegram Login
                                 </Link>
                             </div>
                         </div>

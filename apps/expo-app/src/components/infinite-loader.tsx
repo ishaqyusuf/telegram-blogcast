@@ -1,22 +1,23 @@
-import { useInView } from "react-intersection-observer";
-import { useDeferredValue, useEffect, useMemo } from "react";
+import { useCallback, useDeferredValue, useMemo } from "react";
 import { useSuspenseInfiniteQuery } from "@tanstack/react-query";
 import { consoleLog } from "@acme/utils";
 interface Props<T> {
   filter?;
+  input?;
   route: T;
   queryOptions?: { staleTime?: number; gcTime?: number };
 }
 export function useInfiniteLoader<
   T extends { infiniteQueryOptions: any; "~types": { output: any } },
->({ filter, route, queryOptions }: Props<T>) {
+>({ filter, input, route, queryOptions }: Props<T>) {
   // const trpc = useTRPC();
-  const { ref, inView } = useInView();
+  const ref = useCallback(() => {}, []);
 
   const deferredSearch = useDeferredValue(filter?.q);
 
   const infiniteQueryOptions = route.infiniteQueryOptions(
     {
+      ...(input || {}),
       ...(filter || {}),
       q: deferredSearch,
     },
@@ -61,11 +62,6 @@ export function useInfiniteLoader<
     };
   }, [data]);
 
-  useEffect(() => {
-    if (inView) {
-      fetchNextPage();
-    }
-  }, [inView]);
   return {
     ref,
     // data: tableData,
