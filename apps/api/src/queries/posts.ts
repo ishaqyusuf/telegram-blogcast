@@ -39,12 +39,70 @@ const hasContentOrMediaWhere = {
   ],
 };
 
+function hasUsableFile(file?: {
+  source?: string | null;
+  fileId?: string | null;
+  blobUrl?: string | null;
+  blobDownloadUrl?: string | null;
+} | null) {
+  if (!file) return false;
+
+  if (file.source === "vercel_blob") {
+    return Boolean(file.blobDownloadUrl || file.blobUrl || file.fileId);
+  }
+
+  return Boolean(file.fileId);
+}
+
+function hasMediaPayload(
+  blog: {
+    medias?: {
+      mimeType?: string | null;
+      file?: {
+        source?: string | null;
+        fileId?: string | null;
+        blobUrl?: string | null;
+        blobDownloadUrl?: string | null;
+      } | null;
+    }[];
+  },
+  mediaType: "audio" | "image" | "video" | "document",
+) {
+  return blog.medias?.some((media) => {
+    const mimeType = media.mimeType?.toLowerCase() ?? "";
+    const matchesType =
+      mediaType === "document"
+        ? mimeType === "application/pdf" || mimeType.startsWith("document/")
+        : mimeType.startsWith(`${mediaType}/`);
+
+    return matchesType && hasUsableFile(media.file);
+  });
+}
+
 function hasBlogPayload(blog: {
+  type?: string | null;
   content?: string | null;
-  medias?: { fileId?: number | null }[];
+  medias?: {
+    mimeType?: string | null;
+    file?: {
+      source?: string | null;
+      fileId?: string | null;
+      blobUrl?: string | null;
+      blobDownloadUrl?: string | null;
+    } | null;
+  }[];
 }) {
+  if (blog.type === "text") return Boolean(blog.content?.trim());
+  if (blog.type === "audio") return Boolean(hasMediaPayload(blog, "audio"));
+  if (blog.type === "image") return Boolean(hasMediaPayload(blog, "image"));
+  if (blog.type === "video") return Boolean(hasMediaPayload(blog, "video"));
+  if (blog.type === "pdf" || blog.type === "document") {
+    return Boolean(hasMediaPayload(blog, "document"));
+  }
+
   return Boolean(
-    blog.content?.trim() || blog.medias?.some((media) => media.fileId),
+    blog.content?.trim() ||
+      blog.medias?.some((media) => hasUsableFile(media.file)),
   );
 }
 
@@ -78,6 +136,13 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
       blogTags: {
         include: { tags: { select: { id: true, title: true } } },
         where: { deletedAt: null },
+      },
+      channel: {
+        select: {
+          id: true,
+          title: true,
+          username: true,
+        },
       },
     },
   });
@@ -170,6 +235,7 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
           url: getMediaUrl(media.file),
         })),
         tags: blog.blogTags?.map((bt) => bt.tags?.title).filter(Boolean) ?? [],
+        channel: blog.channel,
         isBookmarked: false,
         likes: 0,
         coverImageUrl: null,

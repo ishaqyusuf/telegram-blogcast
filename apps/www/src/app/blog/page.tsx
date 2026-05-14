@@ -92,12 +92,54 @@ function formatPostTime(date: Date | null) {
     return formatDistanceToNow(date, { addSuffix: true });
 }
 
+function hasUsableFile(file?: BlogMediaFile | null) {
+    if (!file) return false;
+    if (file.source === "vercel_blob") {
+        return Boolean(file.blobDownloadUrl || file.blobUrl || file.fileId);
+    }
+    return Boolean(file.fileId);
+}
+
+function hasMediaPayload(
+    row: {
+        medias?: Array<{
+            mimeType?: string | null;
+            file?: BlogMediaFile | null;
+        }>;
+    },
+    mediaType: "audio" | "image" | "video" | "document",
+) {
+    return row.medias?.some((media) => {
+        const mimeType = media.mimeType?.toLowerCase() ?? "";
+        const matchesType =
+            mediaType === "document"
+                ? mimeType === "application/pdf" ||
+                  mimeType.startsWith("document/")
+                : mimeType.startsWith(`${mediaType}/`);
+
+        return matchesType && hasUsableFile(media.file);
+    });
+}
+
 function hasBlogPayload(row: {
+    type?: string | null;
     content?: string | null;
-    medias?: { fileId?: number | null }[];
+    medias?: Array<{
+        mimeType?: string | null;
+        file?: BlogMediaFile | null;
+    }>;
 }) {
+    if (row.type === "text") return Boolean(row.content?.trim());
+    if (row.type === "audio") return Boolean(hasMediaPayload(row, "audio"));
+    if (row.type === "image") return Boolean(hasMediaPayload(row, "image"));
+    if (row.type === "video") return Boolean(hasMediaPayload(row, "video"));
+    if (row.type === "pdf" || row.type === "document") {
+        return Boolean(hasMediaPayload(row, "document"));
+    }
+
     return Boolean(
-        row.content?.trim() || row.medias?.some((media) => media.fileId),
+        row.content?.trim() ||
+            row.medias?.some((media) => hasUsableFile(media.file)),
     );
 }
 

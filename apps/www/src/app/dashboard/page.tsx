@@ -4,7 +4,7 @@
 // 🧩 Updated: fetcher fully moved to tRPC API — no SSE hook, no local fetcher
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useQuery, useMutation } from "@acme/ui/tanstack";
 import { _trpc } from "@/components/static-trpc";
@@ -31,6 +31,10 @@ function cn(...classes: (string | false | undefined)[]) {
 
 function ts() {
     return new Date().toTimeString().slice(0, 8);
+}
+
+function channelHref(channel: Channel) {
+    return `/dashboard/${encodeURIComponent(channel.username)}`;
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -178,6 +182,10 @@ function ChannelRow({
 
 export default function DashboardPage() {
     const router = useRouter();
+    const params = useParams<{ channelSlug?: string }>();
+    const channelSlug = params.channelSlug
+        ? decodeURIComponent(params.channelSlug)
+        : null;
 
     const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
     const [log, setLog] = useState<LogLine[]>([]);
@@ -230,7 +238,7 @@ export default function DashboardPage() {
 
     const { mutate: toggleFetchable } = useMutation(
         _trpc.channel.toggleFetchable.mutationOptions({
-            onMutate(vars?: { channelId: number }) {
+            onMutate(vars?: { channelId: number; isFetchable: boolean }) {
                 if (!vars) return;
                 setIsTogglingId(vars.channelId);
             },
@@ -309,9 +317,10 @@ export default function DashboardPage() {
     const logFetchedMessage = useCallback(
         (message: FetchedMessage, phase: FetcherState["phase"]) => {
             const preview = message.text?.replace(/\s+/g, " ").trim() || "(media)";
+            const messageDate = new Date(message.date).toLocaleString();
             addLog(
                 "msg",
-                `[${phase}] #${message.id} ${preview.slice(0, 140)}${preview.length > 140 ? "…" : ""}`,
+                `[${phase}] #${message.id} · ${messageDate} · ${preview.slice(0, 140)}${preview.length > 140 ? "…" : ""}`,
             );
         },
         [addLog],
@@ -327,6 +336,15 @@ export default function DashboardPage() {
         addLog("system", "tg-blogcast dashboard initialized");
         addLog("system", "channels loaded from Prisma");
     }, []); // eslint-disable-line
+
+    useEffect(() => {
+        if (!channelSlug || channels.length === 0) return;
+
+        const channel = channels.find((ch) => ch.username === channelSlug);
+        if (!channel || activeChannel?.id === channel.id) return;
+
+        setActiveChannel(channel);
+    }, [activeChannel?.id, channelSlug, channels]);
 
     // Live fetcher event stream for terminal-style updates
     useEffect(() => {
@@ -398,7 +416,7 @@ export default function DashboardPage() {
     }, [addLog, fetcherState?.error, fetcherState?.retryCount, liveFetcherState?.error, liveFetcherState?.retryCount]);
 
     // ── Actions ─────────────────────────────────────────────────────────────────
-    const [maxTotalFetch, setMaxTotalFetch] = useState<number | undefined>(5);
+    const [maxTotalFetch, setMaxTotalFetch] = useState<number | undefined>();
     function handleStartFetch() {
         const fetchable = channels.filter((c) => c.isFetchable);
         if (fetchable.length === 0) {
@@ -409,8 +427,14 @@ export default function DashboardPage() {
             ? activeChannel
             : fetchable[0];
         setActiveChannel(target);
+        router.push(channelHref(target));
         addLog("cmd", `startFetch · channel=${target.username}`);
         startFetch({ channelId: target.id, maxTotalFetch });
+    }
+
+    function handleSelectChannel(channel: Channel) {
+        setActiveChannel(channel);
+        router.push(channelHref(channel));
     }
 
     function handleStopFetch() {
@@ -540,10 +564,13 @@ export default function DashboardPage() {
                         {activeChannel && (
                             <>
                                 <span className="text-zinc-700">/</span>
-                                <span className="font-mono text-xs text-emerald-400 truncate max-w-[180px]">
+                                <Link
+                                    href={channelHref(activeChannel)}
+                                    className="font-mono text-xs text-emerald-400 hover:text-emerald-300 truncate max-w-[180px]"
+                                >
                                     {activeChannel.title ??
                                         activeChannel.username}
-                                </span>
+                                </Link>
                             </>
                         )}
                     </div>
@@ -643,7 +670,7 @@ export default function DashboardPage() {
                                         key={ch.id}
                                         channel={ch}
                                         active={activeChannel?.id === ch.id}
-                                        onSelect={() => setActiveChannel(ch)}
+                                        onSelect={() => handleSelectChannel(ch)}
                                         onToggleFetchable={(id, val) =>
                                             toggleFetchable({
                                                 channelId: id,

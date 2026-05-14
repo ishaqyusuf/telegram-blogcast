@@ -473,18 +473,32 @@ function InfoTab({
   const colors = useColors();
   const tags =
     blog.blogTags?.map((bt: any) => bt.tags?.title).filter(Boolean) ?? [];
+  const channelName =
+    blog.channel?.title || blog.channel?.username || "Unknown channel";
+  const channelHandle = blog.channel?.username
+    ? `@${blog.channel.username}`
+    : null;
 
   return (
     <View className="gap-4 pb-8">
       <View className="flex-row items-center gap-3 py-4 border-b border-border">
         <View className="size-10 rounded-full bg-muted items-center justify-center">
-          <Text className="text-sm font-bold text-muted-foreground">AG</Text>
+          <Text className="text-sm font-bold text-muted-foreground">
+            {getInitials(channelName)}
+          </Text>
         </View>
         <View className="flex-1">
           <Text className="text-xs text-muted-foreground font-medium">
-            Author
+            Channel
           </Text>
-          <Text className="text-sm font-bold text-foreground">Alghurobaa</Text>
+          <Text className="text-sm font-bold text-foreground" numberOfLines={1}>
+            {channelName}
+          </Text>
+          {channelHandle ? (
+            <Text className="text-xs text-muted-foreground" numberOfLines={1}>
+              {channelHandle}
+            </Text>
+          ) : null}
         </View>
         <Pressable className="px-4 py-1.5 rounded-full border border-border active:bg-muted">
           <Text className="text-xs font-bold text-muted-foreground">

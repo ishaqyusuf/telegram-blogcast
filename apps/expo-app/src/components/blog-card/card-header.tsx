@@ -4,7 +4,12 @@ import { Text, View } from "react-native";
 import { Icon } from "@/components/ui/icon";
 
 import type { BlogCardVariant, BlogItem } from "./types";
-import { getCardTitle, getInitials, getPostDateLabel } from "./utils";
+import {
+  getChannelHandle,
+  getChannelName,
+  getInitials,
+  getPostDateLabel,
+} from "./utils";
 
 export function CardHeader({
   post,
@@ -15,22 +20,26 @@ export function CardHeader({
   variant: BlogCardVariant;
   onOpenOptions?: () => void;
 }) {
-  const title = getCardTitle(post);
+  const channelName = getChannelName(post);
+  const channelHandle = getChannelHandle(post);
+  const subtitle = [channelHandle, getPostDateLabel(post)]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <View className="mb-3 flex-row items-center justify-between">
       <View className="flex-row items-center gap-3">
         <View className="size-10 items-center justify-center rounded-full bg-muted">
           <Text className="text-sm font-bold text-foreground">
-            {getInitials(title)}
+            {getInitials(channelName)}
           </Text>
         </View>
         <View className="max-w-[180px]">
           <Text className="text-sm font-bold text-foreground" numberOfLines={1}>
-            {title}
+            {channelName}
           </Text>
-          <Text className="text-xs text-muted-foreground">
-            {getPostDateLabel(post)}
+          <Text className="text-xs text-muted-foreground" numberOfLines={1}>
+            {subtitle}
           </Text>
         </View>
       </View>

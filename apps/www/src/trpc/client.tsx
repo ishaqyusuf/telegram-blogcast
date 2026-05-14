@@ -14,6 +14,14 @@ export const { TRPCProvider, useTRPC } = createTRPCContext<AppRouter>();
 
 let browserQueryClient: QueryClient;
 
+function getTrpcUrl() {
+    if (typeof window !== "undefined") {
+        return "/api/trpc";
+    }
+
+    return `${process.env.NEXT_PUBLIC_APP_URL}/api/trpc`;
+}
+
 function getQueryClient() {
     if (isServer) {
         // Server: always make a new query client
@@ -39,7 +47,7 @@ export function TRPCReactProvider(
         createTRPCClient<AppRouter>({
             links: [
                 httpBatchLink({
-                    url: `${process.env.NEXT_PUBLIC_APP_URL}/api/trpc`,
+                    url: getTrpcUrl(),
                     // url:
                     //     process.env.NODE_ENV === "production"
                     //         ? `${process.env.NEXT_PUBLIC_APP_URL}/api/trpc`

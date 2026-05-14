@@ -14,14 +14,22 @@ export function HomeFeedPostAuthorHeader({
   return (
     <View className="flex-row items-center justify-between mb-3">
       <View className="flex-row items-center gap-3">
-        <Image
-          source={{ uri: author?.avatarUrl }}
-          className="w-10 h-10 rounded-full bg-muted"
-        />
+        {author?.avatarUrl ? (
+          <Image
+            source={{ uri: author.avatarUrl }}
+            className="w-10 h-10 rounded-full bg-muted"
+          />
+        ) : (
+          <View className="h-10 w-10 items-center justify-center rounded-full bg-muted">
+            <Text className="text-sm font-bold text-foreground">
+              {author?.name?.slice(0, 2).toUpperCase() || "CH"}
+            </Text>
+          </View>
+        )}
         <View>
           <View className="flex-row items-center gap-1">
             <Text className="text-sm font-bold text-foreground">
-              {author?.name || "Admin"}
+              {author?.name || "Unknown channel"}
             </Text>
             {author?.isVerified && <Icon name="BadgeCheck" size={14} className="text-primary" />}
           </View>

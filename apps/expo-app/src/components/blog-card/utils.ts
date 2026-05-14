@@ -14,12 +14,14 @@ export function getInitials(value?: string | null) {
     .join("");
 }
 
-export function getCardTitle(post: BlogItem) {
-  if (post.type === "audio") {
-    return post.audio?.title || post.caption || "Alghurobaa";
-  }
+export function getChannelName(post: BlogItem) {
+  const channel = (post as any).channel;
+  return channel?.title || channel?.username || "Unknown channel";
+}
 
-  return post.caption || post.audio?.title || "Alghurobaa";
+export function getChannelHandle(post: BlogItem) {
+  const username = (post as any).channel?.username;
+  return username ? `@${username}` : null;
 }
 
 export function getPostDateLabel(post: BlogItem) {

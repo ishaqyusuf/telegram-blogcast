@@ -164,6 +164,13 @@ export const blogRoutes = createTRPCRouter({
           blogTags: {
             include: { tags: true },
           },
+          channel: {
+            select: {
+              id: true,
+              title: true,
+              username: true,
+            },
+          },
           // comments = BlogComments where blog is parent, include the comment blog
           blogs: {
             include: {

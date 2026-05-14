@@ -145,6 +145,24 @@ export async function saveBatch(ctx: TRPCContext, input: SaveBatchSchema) {
   consoleLog(
     `[saveBatch] channelId=${channelId} created=${created} skipped=${skipped}`,
   );
+
+  const oldestMessageId = Math.min(...newMessages.map((msg) => msg.id));
+  const channel = await db.channel.findUnique({
+    where: { id: channelId },
+    select: { lastMessageId: true },
+  });
+
+  await db.channel.update({
+    where: { id: channelId },
+    data: {
+      allFetched: false,
+      lastMessageId:
+        channel?.lastMessageId == null
+          ? oldestMessageId
+          : Math.min(channel.lastMessageId, oldestMessageId),
+    },
+  });
+
   return { created, skipped };
 }
 

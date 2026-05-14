@@ -104,6 +104,10 @@ function TextPost({ post }: { post: ItemProps }) {
 
 export function HomeFeedPostCard({ post }: { post: ItemProps }) {
   const router = useRouter();
+  const channel = (post as any).channel;
+  const channelName = channel?.title || channel?.username || "Unknown channel";
+  const tags = post.tags.filter((tag): tag is string => Boolean(tag));
+
   return (
     <Pressable
       onPress={() => {
@@ -112,6 +116,7 @@ export function HomeFeedPostCard({ post }: { post: ItemProps }) {
     >
       <View className="bg-card rounded-2xl p-4 shadow-sm border border-border">
         <HomeFeedPostAuthorHeader
+          author={{ name: channelName, avatarUrl: "" }}
           createdAt={formatDate(post.date, "MMM D, YYYY")}
         />
         {post.type === "audio" && <AudioPost post={post} />}
@@ -119,7 +124,7 @@ export function HomeFeedPostCard({ post }: { post: ItemProps }) {
         {post.type === "image" && <ImagePost post={post} />}
         {post.type === "text" && <TextPost post={post} />}
         <HomeFeedPostFooter
-          tags={post.tags}
+          tags={tags}
           likes={post.likes}
           isBookmarked={post.isBookmarked}
         />

@@ -84,17 +84,28 @@ class MessageFetcher extends EventEmitter {
 
   private abortController: AbortController | null = null;
   private channelMessageIds: Set<number> = new Set();
+  private newestKnownMessageId: number | null = null;
   private resolveFiles: boolean = false;
   private maxTotalFetch: number | null | undefined;
 
   // ── Public API ──────────────────────────────────────────────────────────────
   public addKnownIds(ids: number[]): void {
     ids.forEach((id) => this.channelMessageIds.add(id));
+    const newestId = Math.max(...ids);
+    if (!Number.isFinite(newestId)) return;
+    this.newestKnownMessageId =
+      this.newestKnownMessageId === null
+        ? newestId
+        : Math.max(this.newestKnownMessageId, newestId);
   }
   start(input: StartFetcherInput): void {
     this.stop();
 
     this.channelMessageIds = new Set(input.channelMessageIds);
+    this.newestKnownMessageId =
+      input.channelMessageIds.length > 0
+        ? Math.max(...input.channelMessageIds)
+        : null;
     this.resolveFiles = input.resolveFiles ?? false;
     this.maxTotalFetch = input.maxTotalFetch;
     // consoleLog("Channel Message IDs", Array.from(this.channelMessageIds));
@@ -104,8 +115,7 @@ class MessageFetcher extends EventEmitter {
       channelId: input.channelId,
       phase: "recent",
       lastMessageId: input.lastMessageId,
-      allFetched: false,
-      // allFetched: input.allFetched,
+      allFetched: input.allFetched,
       totalFetched: 0,
       error: null,
       retryCount: 0,
@@ -183,64 +193,33 @@ class MessageFetcher extends EventEmitter {
   }
 
   // ── Phase 1: Recent sweep ────────────────────────────────────────────────────
-  // Fetch latest messages (no cursor). Walk backwards via offsetId until we hit
-  // a message already in DB. Emit each new batch as we go.
+  // Fetch messages newer than the highest known Telegram id. Older history is
+  // handled by backfill, so recent mode always prioritizes newest channel posts.
 
   private async recentSweep(signal: AbortSignal): Promise<void> {
     this.setState({ phase: "recent" });
 
-    let offsetId: number | undefined = undefined; // undefined = fetch
-    while (!signal.aborted) {
-      const limit = this.limit;
-      if (limit === null || limit === 0) {
-        this.stop();
-        return;
-      }
-
-      const { messages } = await fetchMessages(this.state.channelUsername, {
-        limit,
-        startId: offsetId, // undefined on first call = latest; then walk backwards
-        resolveFiles: this.resolveFiles,
-      });
-
-      if (signal.aborted) return;
-
-      // No messages at all — channel is empty or private
-      if (messages.length === 0) return;
-
-      // Check how many of this batch already exist in DB
-      const newMessages = messages.filter(
-        (m) => !this.channelMessageIds.has(m.id),
-      );
-      const hasKnown = messages.some((m) => this.channelMessageIds.has(m.id));
-
-      // Emit only the genuinely new ones
-      if (newMessages.length > 0) {
-        await this.emitBatch(newMessages, "recent");
-        if (signal.aborted) return;
-        // Add to local set so we don't re-emit on next sweep
-        newMessages.forEach((m) => this.channelMessageIds.add(m.id));
-      }
-
-      // If we hit a known message — we've caught up to existing territory
-      if (hasKnown) return;
-
-      // All messages in this batch are new — there might be more newer ones
-      // Walk backwards: use the oldest id in this batch as next offsetId
-      const oldestInBatch = messages[0]?.id!; // sorted ascending by message-service
-      offsetId = oldestInBatch;
-
-      // Safety: if we've reached or passed the DB cursor, stop Phase 1
-      if (
-        this.state.lastMessageId !== null &&
-        oldestInBatch <= this.state.lastMessageId
-      )
-        return;
-      if (this.shouldStopForLimit()) {
-        this.stop();
-        return;
-      }
+    const limit = this.limit;
+    if (limit === null || limit === 0) {
+      this.stop();
+      return;
     }
+
+    const { messages } = await fetchMessages(this.state.channelUsername, {
+      limit,
+      minId: this.newestKnownMessageId ?? undefined,
+      resolveFiles: this.resolveFiles,
+    });
+
+    if (signal.aborted || messages.length === 0) return;
+
+    const newMessages = messages.filter(
+      (m) => !this.channelMessageIds.has(m.id),
+    );
+    if (newMessages.length === 0) return;
+
+    await this.emitBatch(newMessages, "recent");
+    newMessages.forEach((m) => this.addKnownIds([m.id]));
   }
 
   // ── Phase 2: Historical backfill ─────────────────────────────────────────────

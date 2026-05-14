@@ -2,11 +2,19 @@
 import type { TRPCContext } from "@api/trpc/init";
 import { z } from "zod";
 import { getClient } from "@telegram/telegram-client";
-import { messageFetcher, type FetchedMessage } from "@telegram/message-fetcher";
+import {
+  messageFetcher,
+  type FetchedMessage,
+  type FetcherEvent,
+} from "@telegram/message-fetcher";
 import { Api } from "telegram";
 import { saveBatch, type IncomingMessage } from "./blog";
 import { consoleLog } from "@acme/utils";
 import { type BlogMeta } from "../type";
+
+let persistFetcherEventHandler:
+  | ((event: FetcherEvent) => void | Promise<void>)
+  | null = null;
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
 export const syncChannelsSchema = z.object({}).optional();
@@ -343,6 +351,7 @@ export async function startFetch(ctx: TRPCContext, input: StartFetchSchema) {
       id: true,
       username: true,
       lastMessageId: true,
+      allFetched: true,
       blogs: {
         select: {
           meta: true,
@@ -359,13 +368,23 @@ export async function startFetch(ctx: TRPCContext, input: StartFetchSchema) {
     .sort((a, b) => a - b); // asc
 
   // Resolve cursor — channel.lastMessageId first, Blog.meta as fallback
-  let lastMessageId = channelMessageIds?.[0] ?? null;
+  let lastMessageId = channel.lastMessageId ?? channelMessageIds?.[0] ?? null;
 
-  // Re-wire listener on every start to avoid duplicates
-  // @ts-ignore
-  messageFetcher.removeAllListeners("event");
-  // @ts-ignore
-  messageFetcher.on("event", async (event) => {
+  // Re-wire only the persistence listener on every start. Other listeners,
+  // like the dashboard SSE stream, must stay attached so live logs keep flowing.
+  if (persistFetcherEventHandler) {
+    messageFetcher.off("event", persistFetcherEventHandler);
+  }
+
+  persistFetcherEventHandler = async (event) => {
+    if (event.type === "allFetched") {
+      await db.channel.update({
+        where: { id: channel.id },
+        data: { allFetched: true },
+      });
+      return;
+    }
+
     if (event.type !== "messages") return;
 
     const mapped: IncomingMessage[] = event.messages.map(
@@ -392,13 +411,15 @@ export async function startFetch(ctx: TRPCContext, input: StartFetchSchema) {
       channelId: channel.id,
       messages: mapped,
     }).catch((err) => consoleLog("[startFetch] saveBatch failed:", err));
-    if (result?.created) {
+    if (result && "created" in result && result.created) {
       mapped.forEach((m) => {
         // messageFetcher exposes addKnownIds for this purpose
         messageFetcher.addKnownIds([m.id]);
       });
     }
-  });
+  };
+
+  messageFetcher.on("event", persistFetcherEventHandler);
 
   messageFetcher.start({
     channelId: channel.id,
@@ -407,9 +428,7 @@ export async function startFetch(ctx: TRPCContext, input: StartFetchSchema) {
     resolveFiles: true,
     maxTotalFetch: input.maxTotalFetch, // 🧩 added
     channelMessageIds: channelMessageIds,
-    allFetched: false,
-
-    // allFetched: channel.allFetched ?? false,
+    allFetched: channel.allFetched ?? false,
   });
 
   return {
