@@ -4,9 +4,24 @@ import { Icon } from "@/components/ui/icon";
 import { Pressable } from "@/components/ui/pressable";
 import { useColors } from "@/hooks/use-color";
 import { useTranslation } from "@/lib/i18n";
-import { useQuery } from "@/lib/react-query";
+import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Alert, ScrollView, Text, View } from "react-native";
+
+type StagedPreviewDocument = {
+  context?: {
+    currentTopic?: { label?: string | null } | null;
+    breadcrumb?: Array<{ role?: string | null; label?: string | null }>;
+  } | null;
+  content?: Array<Record<string, any>>;
+};
+
+function asJsonObject(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return value as Record<string, any>;
+}
 
 function normalizeDiagnostic(item: unknown) {
   if (typeof item === "string") {
@@ -44,6 +59,7 @@ function normalizeDiagnostic(item: unknown) {
 export default function BookFetchPreviewScreen() {
   const { stagedParseId } = useLocalSearchParams<{ stagedParseId: string }>();
   const router = useRouter();
+  const qc = useQueryClient();
   const colors = useColors();
   const { textAlign, writingDirection, isRtl } = useTranslation();
 
@@ -57,6 +73,19 @@ export default function BookFetchPreviewScreen() {
   const diagnostics = Array.isArray(data?.diagnostics)
     ? data.diagnostics.map(normalizeDiagnostic)
     : [];
+  const document = asJsonObject(data?.document) as StagedPreviewDocument | null;
+  const linkGraph = asJsonObject(data?.linkGraph);
+  const isPromoted = data?.status === "promoted";
+  const { mutate: promotePage, isPending: isPromoting } = useMutation(
+    _trpc.book.promoteStagedShamelaPageParse.mutationOptions({
+      onSuccess: (result) => {
+        qc.invalidateQueries({ queryKey: _trpc.book.getBooks.queryKey() });
+        qc.invalidateQueries({ queryKey: _trpc.book.getBook.queryKey({ id: result.bookId }) });
+        router.replace(`/books/${result.bookId}/reader/${result.page.id}` as any);
+      },
+      onError: (error) => Alert.alert("Import failed", error.message),
+    }),
+  );
 
   return (
     <View className="flex-1 bg-background">
@@ -94,7 +123,7 @@ export default function BookFetchPreviewScreen() {
             <>
               <View className="gap-2 rounded-xl bg-card p-4">
                 <Text className="text-base font-bold text-foreground">
-                  {data.document?.context?.currentTopic?.label ||
+                  {document?.context?.currentTopic?.label ||
                     data.chapterTitle ||
                     data.rawPage.title ||
                     "Untitled page"}
@@ -110,13 +139,34 @@ export default function BookFetchPreviewScreen() {
                 <Text className="text-xs text-muted-foreground">
                   {data.rawPage.finalUrl}
                 </Text>
+                <Pressable
+                  disabled={isPromoting}
+                  onPress={() => promotePage({ stagedParseId: stagedId })}
+                  className="mt-2 flex-row items-center justify-center gap-2 rounded-xl bg-primary py-3"
+                  style={{ opacity: isPromoting ? 0.65 : 1 }}
+                >
+                  {isPromoting ? (
+                    <ActivityIndicator size="small" color={colors.primaryForeground} />
+                  ) : (
+                    <Icon name="Download" size={17} className="text-primary-foreground" />
+                  )}
+                  <Text className="text-[14px] font-bold text-primary-foreground">
+                    {isPromoting
+                      ? isPromoted
+                        ? "Opening..."
+                        : "Importing..."
+                      : isPromoted
+                        ? "Open imported page"
+                        : "Import to database"}
+                  </Text>
+                </Pressable>
               </View>
 
-              {Array.isArray(data.document?.context?.breadcrumb) &&
-              data.document.context.breadcrumb.length > 0 ? (
+              {Array.isArray(document?.context?.breadcrumb) &&
+              document.context.breadcrumb.length > 0 ? (
                 <View className="gap-3 rounded-xl bg-card p-4">
                   <Text className="text-sm font-bold text-foreground">Breadcrumb</Text>
-                  {data.document.context.breadcrumb.map((item: any, index: number) => (
+                  {document.context.breadcrumb.map((item: any, index: number) => (
                     <Text key={`${item.label}-${index}`} className="text-xs text-muted-foreground">
                       {item.role} · {item.label}
                     </Text>
@@ -124,11 +174,11 @@ export default function BookFetchPreviewScreen() {
                 </View>
               ) : null}
 
-              {data.linkGraph ? (
+              {linkGraph ? (
                 <View className="gap-2 rounded-xl bg-card p-4">
                   <Text className="text-sm font-bold text-foreground">Link graph</Text>
                   <Text className="text-xs text-muted-foreground">
-                    {data.linkGraph.knownTopicGraph
+                    {linkGraph.knownTopicGraph
                       ? "Topic graph already exists in database. No topic refetch required."
                       : "Topic graph not fully known yet. Opened-page staging still proceeds without refetch."}
                   </Text>
@@ -137,7 +187,7 @@ export default function BookFetchPreviewScreen() {
 
               <View className="gap-3 rounded-xl bg-card p-4">
                 <Text className="text-sm font-bold text-foreground">Document</Text>
-                {(data.document?.content ?? []).map((block: any) => {
+                {(document?.content ?? []).map((block: any) => {
                   if (block.type === "heading") {
                     return (
                       <View key={block.id} className="rounded-lg bg-background p-3">

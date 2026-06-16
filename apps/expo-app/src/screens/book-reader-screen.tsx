@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, type KeyboardEvent,
   InteractionManager,
-  Platform, ScrollView, Text, TextInput, View,
+  PanResponder, Platform, ScrollView, Text, TextInput, View,
 } from "react-native";
 
 import { _trpc } from "@/components/static-trpc";
@@ -34,6 +34,14 @@ import {
   serializeDocumentToHtml,
   type RichDocument,
 } from "@acme/document/core";
+
+function formatAudioReferenceTime(sec?: number | null) {
+  if (sec == null) return "";
+  const totalSec = Math.max(0, Math.floor(sec));
+  const minutes = Math.floor(totalSec / 60);
+  const seconds = totalSec % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
 
 export default function BookReaderScreen() {
   const { bookId, pageId } = useLocalSearchParams<{ bookId: string; pageId: string }>();
@@ -129,8 +137,8 @@ export default function BookReaderScreen() {
     };
   }, [bookIdNum]);
 
-  // ── Next page ──────────────────────────────────────────────────────────────
-  const { mutate: fetchNext, isPending: isFetchingNext } = useMutation(
+  // ── Adjacent page navigation ───────────────────────────────────────────────
+  const { mutate: fetchAdjacentPage, isPending: isFetchingAdjacentPage } = useMutation(
     _trpc.book.fetchNextPage.mutationOptions({
       onSuccess: (newPage) => {
         qc.invalidateQueries({ queryKey: _trpc.book.getBook.queryKey({ id: bookIdNum }) });
@@ -319,6 +327,32 @@ export default function BookReaderScreen() {
     }
   };
 
+  const pageSwipeResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, gesture) =>
+          Math.abs(gesture.dx) > 42 &&
+          Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.4,
+        onPanResponderRelease: (_, gesture) => {
+          if (!page || isFetchingAdjacentPage || mode !== "read") return;
+          if (gesture.dx < -60) {
+            fetchAdjacentPage({
+              bookId: bookIdNum,
+              currentShamelaPageNo: page.shamelaPageNo,
+              direction: "next",
+            });
+          } else if (gesture.dx > 60) {
+            fetchAdjacentPage({
+              bookId: bookIdNum,
+              currentShamelaPageNo: page.shamelaPageNo,
+              direction: "previous",
+            });
+          }
+        },
+      }),
+    [bookIdNum, fetchAdjacentPage, isFetchingAdjacentPage, mode, page],
+  );
+
   if (isLoading) {
     return (
       <View className="flex-1 items-center justify-center bg-background">
@@ -328,6 +362,16 @@ export default function BookReaderScreen() {
   }
 
   if (!page) return null;
+
+  const pageBook = (page as any).book;
+  const canEditPage =
+    pageBook?.editable !== false &&
+    ((pageBook?.sourceType ?? "user") === "user") &&
+    !pageBook?.shamelaId &&
+    !pageBook?.shamelaUrl;
+  const audioReferences = Array.isArray((page as any).audioReferences)
+    ? (page as any).audioReferences
+    : [];
 
   return (
     <View className="flex-1 bg-background">
@@ -376,18 +420,20 @@ export default function BookReaderScreen() {
             <Icon name="BookMarked" size={18} className="text-foreground" />
           </Pressable>
 
-          <Pressable
-            onPress={() => {
-              if (mode === "edit") {
-                void handleSaveDocument();
-              } else {
-                enterEditMode();
-              }
-            }}
-            className="size-[34px] items-center justify-center rounded-full bg-card"
-          >
-            <Icon name={mode === "edit" ? "Check" : "Edit3"} size={18} className="text-foreground" />
-          </Pressable>
+          {canEditPage && (
+            <Pressable
+              onPress={() => {
+                if (mode === "edit") {
+                  void handleSaveDocument();
+                } else {
+                  enterEditMode();
+                }
+              }}
+              className="size-[34px] items-center justify-center rounded-full bg-card"
+            >
+              <Icon name={mode === "edit" ? "Check" : "Edit3"} size={18} className="text-foreground" />
+            </Pressable>
+          )}
         </View>
 
         {/* Content + keyboard */}
@@ -409,6 +455,7 @@ export default function BookReaderScreen() {
             </View>
           ) : (
             <ScrollView
+              {...pageSwipeResponder.panHandlers}
               contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 20, paddingBottom: 120 }}
               keyboardShouldPersistTaps="handled"
             >
@@ -470,6 +517,62 @@ export default function BookReaderScreen() {
                 ))}
               </View>
             )}
+
+            {mode === "read" && audioReferences.length > 0 && (
+              <View style={{ marginTop: 24, gap: 8 }}>
+                <Text className="text-right text-sm font-bold text-foreground" style={{ writingDirection: "rtl" }}>
+                  Audio references
+                </Text>
+                {audioReferences.map((reference: any) => {
+                  const media = reference.media;
+                  const label =
+                    media?.title ||
+                    media?.file?.fileName ||
+                    media?.album?.name ||
+                    "Referenced audio";
+                  return (
+                    <Pressable
+                      key={reference.id}
+                      onPress={() => {
+                        const blogId = media?.blog?.id;
+                        if (blogId) {
+                          const suffix =
+                            reference.startSec != null
+                              ? `?seekSec=${reference.startSec}`
+                              : "";
+                          router.push(`/blog-view-2/${blogId}${suffix}` as any);
+                          return;
+                        }
+                        Alert.alert(
+                          "Audio unavailable",
+                          "This reference is linked to media that does not have an audio screen yet.",
+                        );
+                      }}
+                      className="flex-row-reverse items-center gap-2 rounded-lg bg-card p-2.5"
+                    >
+                      <Icon name="Headphones" size={16} className="text-primary" />
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          className="text-right text-sm font-semibold text-foreground"
+                          style={{ writingDirection: "rtl" }}
+                          numberOfLines={1}
+                        >
+                          {label}
+                        </Text>
+                        <Text className="text-right text-[11px] text-muted-foreground">
+                          {reference.startSec != null
+                            ? formatAudioReferenceTime(reference.startSec)
+                            : ""}
+                          {reference.endSec != null
+                            ? ` - ${formatAudioReferenceTime(reference.endSec)}`
+                            : ""}
+                        </Text>
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
             </ScrollView>
           )}
 
@@ -504,20 +607,36 @@ export default function BookReaderScreen() {
               </Pressable>
 
               <Pressable
-                onPress={() => router.back()}
+                onPress={() =>
+                  fetchAdjacentPage({
+                    bookId: bookIdNum,
+                    currentShamelaPageNo: page.shamelaPageNo,
+                    direction: "previous",
+                  })
+                }
                 className="flex-row items-center justify-center gap-1.5 rounded-xl bg-card px-4 py-2.5"
               >
-                <Icon name="ChevronRight" size={18} className="text-foreground" />
-                <Text className="text-[13px] text-foreground">{t("previous")}</Text>
+                {isFetchingAdjacentPage ? (
+                  <ActivityIndicator size="small" color={colors.primary} />
+                ) : (
+                  <>
+                    <Icon name="ChevronRight" size={18} className="text-foreground" />
+                    <Text className="text-[13px] text-foreground">{t("previous")}</Text>
+                  </>
+                )}
               </Pressable>
 
               <Pressable
                 onPress={() =>
-                  fetchNext({ bookId: bookIdNum, currentShamelaPageNo: page.shamelaPageNo })
+                  fetchAdjacentPage({
+                    bookId: bookIdNum,
+                    currentShamelaPageNo: page.shamelaPageNo,
+                    direction: "next",
+                  })
                 }
                 className="flex-row items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2.5"
               >
-                {isFetchingNext ? (
+                {isFetchingAdjacentPage ? (
                   <ActivityIndicator size="small" color={colors.primaryForeground} />
                 ) : (
                   <>

@@ -1,88 +1,154 @@
-import { ExpoConfig } from "expo/config";
+import type { ExpoConfig } from "expo/config";
+
+export const UPDATE_VERSION = "2026.06.16.01";
+
+const appVariant =
+	process.env.APP_VARIANT ??
+	process.env.EXPO_PUBLIC_APP_VARIANT ??
+	(process.env.EAS_BUILD_PROFILE === "development" ? "development" : undefined);
+
+const normalizedAppVariant = (appVariant ?? "production").toLowerCase();
+const isDevelopmentBuild =
+	normalizedAppVariant === "development" || normalizedAppVariant === "dev";
+const isPreviewBuild = normalizedAppVariant === "preview";
+
+const variantConfig = isDevelopmentBuild
+	? {
+			name: "Al-Ghurobaa Dev",
+			scheme: "alghurobaa-dev",
+			iosBundleIdentifier: "com.alghurobaa.podcast.dev",
+			androidPackage: "com.alghurobaa.podcast.dev",
+			iconBackgroundColor: "#DFF7EC",
+			splashBackgroundColor: "#F4FFF8",
+			splashDarkBackgroundColor: "#042116",
+			icons: {
+				app: "./assets/icons/dev-loading-icon.png",
+				adaptive: "./assets/icons/dev-adaptive-icon.png",
+				iosDark: "./assets/icons/dev-ios-dark.png",
+				iosLight: "./assets/icons/dev-ios-light.png",
+				splashLight: "./assets/icons/dev-splash-logo-light.png",
+				splashDark: "./assets/icons/dev-splash-logo-dark.png",
+			},
+		}
+	: isPreviewBuild
+		? {
+				name: "Al-Ghurobaa Preview",
+				scheme: "alghurobaa-preview",
+				iosBundleIdentifier: "com.alghurobaa.podcast.preview",
+				androidPackage: "com.alghurobaa.podcast.preview",
+				iconBackgroundColor: "#E6F4FE",
+				splashBackgroundColor: "#ffffff",
+				splashDarkBackgroundColor: "#000000",
+				icons: {
+					app: "./assets/icons/loading-icon.png",
+					adaptive: "./assets/icons/adaptive-icon.png",
+					iosDark: "./assets/icons/ios-dark.png",
+					iosLight: "./assets/icons/ios-light.png",
+					splashLight: "./assets/icons/splash-logo-light.png",
+					splashDark: "./assets/icons/splash-logo-dark.png",
+				},
+			}
+		: {
+				name: "Al-Ghurobaa",
+				scheme: "alghurobaa",
+				iosBundleIdentifier: "com.alghurobaa.podcast",
+				androidPackage: "com.alghurobaa.podcast",
+				iconBackgroundColor: "#E6F4FE",
+				splashBackgroundColor: "#ffffff",
+				splashDarkBackgroundColor: "#000000",
+				icons: {
+					app: "./assets/icons/loading-icon.png",
+					adaptive: "./assets/icons/adaptive-icon.png",
+					iosDark: "./assets/icons/ios-dark.png",
+					iosLight: "./assets/icons/ios-light.png",
+					splashLight: "./assets/icons/splash-logo-light.png",
+					splashDark: "./assets/icons/splash-logo-dark.png",
+				},
+			};
 
 const config: ExpoConfig = {
-  name: "Al-Ghurobaa",
-  slug: "alghurobaa",
-  // slug: "prodesk",
-  version: "1.0.108",
-  orientation: "portrait",
-  icon: "./assets/icons/adaptive-icon.png",
-  scheme: "alghurobaa",
-  userInterfaceStyle: "automatic",
-  newArchEnabled: true,
-  ios: {
-    supportsTablet: true,
-    bundleIdentifier: "com.alghurobaa.podcast",
-    icon: {
-      dark: "./assets/icons/ios-dark.png",
-      light: "./assets/icons/ios-light.png",
-    },
-  },
+	name: variantConfig.name,
+	slug: "alghurobaa",
+	// slug: "prodesk",
+	version: "1.0.108",
+	orientation: "portrait",
+	icon: variantConfig.icons.app,
+	scheme: variantConfig.scheme,
+	userInterfaceStyle: "automatic",
+	newArchEnabled: true,
+	ios: {
+		supportsTablet: true,
+		bundleIdentifier: variantConfig.iosBundleIdentifier,
+		icon: {
+			dark: variantConfig.icons.iosDark,
+			light: variantConfig.icons.iosLight,
+		},
+	},
 
-  android: {
-    // buildType: "apk",
-    // gradleCommand: ":app:assembleRelease",
-    adaptiveIcon: {
-      // backgroundColor: "#ffffff",
-      backgroundColor: "#E6F4FE",
-      foregroundImage: "./assets/icons/adaptive-icon.png",
-      backgroundImage: "./assets/icons/adaptive-icon.png",
-      monochromeImage: "./assets/icons/adaptive-icon.png",
-    },
-    edgeToEdgeEnabled: true,
-    predictiveBackGestureEnabled: false,
-    usesCleartextTraffic: true,
-    package: "com.alghurobaa.podcast",
-  },
+	android: {
+		// buildType: "apk",
+		// gradleCommand: ":app:assembleRelease",
+		adaptiveIcon: {
+			backgroundColor: variantConfig.iconBackgroundColor,
+			foregroundImage: variantConfig.icons.adaptive,
+		},
+		edgeToEdgeEnabled: true,
+		predictiveBackGestureEnabled: false,
+		usesCleartextTraffic: true,
+		package: variantConfig.androidPackage,
+	},
 
-  web: {
-    output: "static",
-    favicon: "./assets/images/favicon.png",
-  },
+	web: {
+		output: "static",
+		favicon: "./assets/images/favicon.png",
+	},
 
-  plugins: [
-    "expo-router",
-    [
-      "@sentry/react-native/expo",
-      {
-        url: "https://sentry.io/",
-        organization: process.env.SENTRY_ORG,
-        project: process.env.SENTRY_PROJECT_MOBILE ?? process.env.SENTRY_PROJECT,
-      },
-    ],
-    [
-      "expo-splash-screen",
-      {
-        image: "./assets/icons/splash-icon-light.png",
-        imageWidth: 200,
-        resizeMode: "contain",
-        backgroundColor: "#ffffff",
-        dark: {
-          backgroundColor: "#000000",
-          image: "./assets/icons/splash-icon-dark.png",
-        },
-      },
-    ],
-  ],
+	plugins: [
+		"expo-router",
+		[
+			"@sentry/react-native/expo",
+			{
+				url: "https://sentry.io/",
+				organization: process.env.SENTRY_ORG,
+				project:
+					process.env.SENTRY_PROJECT_MOBILE ?? process.env.SENTRY_PROJECT,
+			},
+		],
+		[
+			"expo-splash-screen",
+			{
+				image: variantConfig.icons.splashLight,
+				imageWidth: 200,
+				resizeMode: "contain",
+				backgroundColor: variantConfig.splashBackgroundColor,
+				dark: {
+					backgroundColor: variantConfig.splashDarkBackgroundColor,
+					image: variantConfig.icons.splashDark,
+				},
+			},
+		],
+	],
 
-  experiments: {
-    typedRoutes: true,
-    reactCompiler: true,
-  },
+	experiments: {
+		typedRoutes: true,
+		reactCompiler: true,
+	},
 
-  extra: {
-    router: {},
-    eas: {
-      projectId: "9d8a8cd8-d310-4724-8a61-db39e6b56c9a", //ishaqyusuf
-    },
-  },
-  owner: "ishaqyusuf",
-  updates: {
-    url: "https://u.expo.dev/9d8a8cd8-d310-4724-8a61-db39e6b56c9a", //ishaqyusuf
-  },
-  runtimeVersion: {
-    policy: "appVersion",
-  },
+	extra: {
+		appVariant: normalizedAppVariant,
+		updateVersion: UPDATE_VERSION,
+		router: {},
+		eas: {
+			projectId: "9d8a8cd8-d310-4724-8a61-db39e6b56c9a", //ishaqyusuf
+		},
+	},
+	owner: "ishaqyusuf",
+	updates: {
+		url: "https://u.expo.dev/9d8a8cd8-d310-4724-8a61-db39e6b56c9a", //ishaqyusuf
+	},
+	runtimeVersion: {
+		policy: "appVersion",
+	},
 };
 
 export default config;

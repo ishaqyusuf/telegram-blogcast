@@ -96,6 +96,14 @@ app.get("/", (c) => {
   return c.json({ message: "Congrats! You've deployed Hono to Vercel" });
 });
 
+app.get("/health", (c) => {
+  return c.json({
+    ok: true,
+    service: "al-ghurobaa-api",
+    port: process.env.PORT ? Number.parseInt(process.env.PORT) : 3000,
+  });
+});
+
 export { app };
 export default {
   port: process.env.PORT ? Number.parseInt(process.env.PORT) : 3000,

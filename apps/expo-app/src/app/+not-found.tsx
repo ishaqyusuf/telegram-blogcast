@@ -1,12 +1,18 @@
-import { Stack, usePathname } from "expo-router";
-import { StyleSheet } from "react-native";
+import { router, Stack } from "expo-router";
+import { useEffect } from "react";
+import { Platform } from "react-native";
 
-import { useAuthContext } from "@/hooks/use-auth";
 import NotFound from "@/screens/not-found";
 
 export default function NotFoundScreen() {
-  const { token } = useAuthContext();
-  const path = usePathname();
+  useEffect(() => {
+    if (Platform.OS !== "web") {
+      router.replace("/home");
+    }
+  }, []);
+
+  if (Platform.OS !== "web") return null;
+
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
@@ -14,24 +20,3 @@ export default function NotFoundScreen() {
     </>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 20,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: "bold",
-  },
-  link: {
-    marginTop: 15,
-    paddingVertical: 15,
-  },
-  linkText: {
-    fontSize: 14,
-    color: "#2e78b7",
-  },
-});

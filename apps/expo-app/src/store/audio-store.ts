@@ -4,6 +4,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Audio } from "expo-av";
 // import { File, Directory, Paths, getInfoAsync } from "expo-file-system";
 import * as FileSystem from "expo-file-system";
+import * as LegacyFileSystem from "expo-file-system/legacy";
 import { Directory, File } from "expo-file-system";
 import { ItemProps } from "@/components/home-feed/home-feed-post-card";
 import { getTelegramFileUrl } from "@/lib/get-telegram-file";
@@ -12,6 +13,21 @@ const Paths = {
   document: FileSystem.Paths.document,
 };
 let positionInterval: ReturnType<typeof setInterval> | null = null;
+
+function joinDocumentPath(...parts: string[]) {
+  return parts
+    .map((part) => part.replace(/^\/+|\/+$/g, ""))
+    .filter(Boolean)
+    .join("/");
+}
+
+function uniqueUrls(urls: (string | null | undefined)[]) {
+  return urls.filter(
+    (url, index): url is string =>
+      Boolean(url) && urls.findIndex((candidate) => candidate === url) === index,
+  );
+}
+
 interface AudioState {
   sound: Audio.Sound | null;
   isPlaying: boolean;
@@ -71,23 +87,24 @@ export const useAudioStore = create<AudioState>()(
       blog: null!,
       loadAudio: async (blog) => {
         const directUrl = (blog?.audio as any)?.url as string | undefined;
-        const uri =
-          directUrl ||
-          (await getTelegramFileUrl(blog?.audio?.telegramFileId))?.url!;
         const fileName = blog?.audio?.fileName!;
-        console.log("LOADING>>>");
         try {
+          if (!fileName) {
+            throw new Error("Audio file name is not available");
+          }
+
           set({ isLoading: true, error: null });
 
           // Unload any existing sound
-          const { sound: existingSound } = get();
+          const { sound: existingSound, stopPositionTracking } = get();
           if (existingSound) {
+            stopPositionTracking();
             await existingSound.unloadAsync();
           }
 
           // Setup paths
           const folderPath = `al-ghurobaa/media`;
-          const filePath = `${folderPath}${fileName}`;
+          const filePath = joinDocumentPath(folderPath, fileName);
 
           // Ensure folder exists
           const dir = new Directory(Paths.document, folderPath);
@@ -108,39 +125,19 @@ export const useAudioStore = create<AudioState>()(
             // File exists locally, use it
             console.log("Playing from local file:", filePath);
             audioSource = file.uri;
-            set({ localPath: filePath });
+            set({ localPath: file.uri });
           } else {
-            // File doesn't exist, stream and download
-            console.log("Streaming and downloading:", uri);
-            audioSource = uri;
-            set({ localPath: null, isDownloading: true, downloadProgress: 0 });
-            // Start download in background
-            // const downloadResumable =
-            FileSystem.File.downloadFileAsync(
-              uri,
-              file,
-              {},
-              // (downloadProgress) => {
-              //   const progress =
-              //     downloadProgress.totalBytesWritten /
-              //     downloadProgress.totalBytesExpectedToWrite;
-              //   set({ downloadProgress: progress });
-              // }
-            )
-              .then((result) => {
-                if (result) {
-                  console.log("Download completed:", result.uri);
-                  set({
-                    localPath: result.uri,
-                    isDownloading: false,
-                    downloadProgress: 1,
-                  });
-                }
-              })
-              .catch((err) => {
-                console.error("Download failed:", err);
-                set({ isDownloading: false, downloadProgress: 0 });
-              });
+            const telegramUrl = blog?.audio?.telegramFileId
+              ? (await getTelegramFileUrl(blog.audio.telegramFileId))?.url
+              : null;
+            const sourceUrls = uniqueUrls([directUrl, telegramUrl]);
+
+            if (sourceUrls.length === 0) {
+              throw new Error("Audio URL is not available");
+            }
+
+            audioSource = sourceUrls[0];
+            set({ localPath: null, downloadProgress: 0 });
           }
 
           // Configure audio mode
@@ -149,32 +146,99 @@ export const useAudioStore = create<AudioState>()(
             staysActiveInBackground: true,
           });
 
-          // Load sound (either from local file or stream)
-          const { sound } = await Audio.Sound.createAsync(
-            { uri: audioSource },
-            { shouldPlay: false, volume: get().volume },
-            (status) => {
-              if (status.isLoaded) {
-                set({
-                  isPlaying: status.isPlaying,
-                  duration: status.durationMillis || 0,
-                  position: status.positionMillis || 0,
-                });
-              }
-            },
-          );
+          const onPlaybackStatusUpdate = (status: any) => {
+            if (status.isLoaded) {
+              set({
+                isPlaying: status.isPlaying,
+                duration: status.durationMillis || 0,
+                position: status.positionMillis || 0,
+              });
+            }
+          };
+
+          let sound: Audio.Sound | null = null;
+          let loadedSource = audioSource;
+          let loadError: unknown;
+          const sourceUrls = audioSource === file.uri
+            ? [audioSource]
+            : uniqueUrls([
+                audioSource,
+                blog?.audio?.telegramFileId
+                  ? (await getTelegramFileUrl(blog.audio.telegramFileId))?.url
+                  : null,
+              ]);
+
+          for (const source of sourceUrls) {
+            try {
+              const result = await Audio.Sound.createAsync(
+                { uri: source },
+                { shouldPlay: false, volume: get().volume },
+                onPlaybackStatusUpdate,
+              );
+              sound = result.sound;
+              loadedSource = source;
+              break;
+            } catch (err) {
+              loadError = err;
+              console.warn("[audio] Failed to load source", source, err);
+            }
+          }
+
+          if (!sound) {
+            throw loadError instanceof Error
+              ? loadError
+              : new Error("Failed to load audio");
+          }
 
           const status = await sound.getStatusAsync();
 
           set({
             sound,
-            uri,
+            uri: loadedSource,
             isLoading: false,
             isPlaying: false,
             duration: status.isLoaded ? status.durationMillis || 0 : 0,
             position: 0,
             blog,
           });
+
+          if (loadedSource !== file.uri) {
+            set({ isDownloading: true, downloadProgress: 0 });
+            LegacyFileSystem.createDownloadResumable(
+              loadedSource,
+              file.uri,
+              {},
+              (progress) => {
+                const expected = progress.totalBytesExpectedToWrite;
+                const written = progress.totalBytesWritten;
+                if (expected > 0) {
+                  set({
+                    downloadProgress: Math.max(
+                      0,
+                      Math.min(1, written / expected),
+                    ),
+                  });
+                }
+              },
+            )
+              .downloadAsync()
+              .then((result) => {
+                if (result) {
+                  console.log("Download completed:", result.uri);
+                  set({
+                    localPath: result.uri,
+                    isDownloading: false,
+                    downloadProgress: 1,
+                  });
+                } else {
+                  set({ isDownloading: false, downloadProgress: 0 });
+                }
+              })
+              .catch((err) => {
+                console.warn("[audio] Cache download failed:", err);
+                set({ isDownloading: false, downloadProgress: 0 });
+              });
+          }
         } catch (err) {
           console.log(err);
           set({

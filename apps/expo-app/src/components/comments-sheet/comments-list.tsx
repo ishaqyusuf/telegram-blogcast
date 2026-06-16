@@ -8,10 +8,17 @@ import { Icon } from "@/components/ui/icon";
 import type { CommentsSheetState } from "./index";
 import { useColors } from "@/hooks/use-color";
 import { withAlpha } from "@/lib/theme";
+import { useAudioStore } from "@/store/audio-store";
 
 // ── Timestamp badge helper ─────────────────────────────────────────────────
 
 const TIMESTAMP_RE = /\[(\d{2}:\d{2})\]/;
+
+function formatTimestampSeconds(value: number) {
+  const min = Math.floor(value / 60);
+  const sec = Math.floor(value % 60);
+  return `${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+}
 
 function parseTimestamp(content: string): string | null {
   return content.match(TIMESTAMP_RE)?.[1] ?? null;
@@ -48,15 +55,24 @@ function CommentItem({
 }) {
   const comment = item.comment;
   const colors = useColors();
+  const seek = useAudioStore((s) => s.seek);
 
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(comment?.content ?? "");
 
   if (!comment) return null;
 
-  const timestamp = parseTimestamp(comment.content ?? "");
+  const metaTimestamp = (comment.meta as any)?.audioTimestampSeconds;
+  const timestamp =
+    typeof metaTimestamp === "number"
+      ? formatTimestampSeconds(metaTimestamp)
+      : parseTimestamp(comment.content ?? "");
+  const timestampSeconds =
+    typeof metaTimestamp === "number" ? metaTimestamp : null;
   const displayContent = timestamp
-    ? stripTimestamp(comment.content ?? "")
+    ? typeof metaTimestamp === "number"
+      ? (comment.content ?? "")
+      : stripTimestamp(comment.content ?? "")
     : (comment.content ?? "");
 
   const tags: string[] =
@@ -194,7 +210,10 @@ function CommentItem({
             {/* Timestamp badge */}
             {timestamp && (
               <View style={{ marginBottom: 6 }}>
-                <View
+                <Pressable
+                  onPress={() => {
+                    if (timestampSeconds != null) seek(timestampSeconds * 1000);
+                  }}
                   style={{
                     flexDirection: "row",
                     alignItems: "center",
@@ -212,7 +231,7 @@ function CommentItem({
                   <Text style={{ fontSize: 11, fontWeight: "700", color: colors.primary }}>
                     {timestamp}
                   </Text>
-                </View>
+                </Pressable>
               </View>
             )}
 

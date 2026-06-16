@@ -32,3 +32,14 @@ Central navigation document for the repository Brain. Use it to quickly find the
 - Platforms: Expo mobile app, Next.js web app, Hono/tRPC API, Prisma/PostgreSQL data layer.
 - Repo style: Bun workspaces + Turborepo monorepo with shared packages for auth, db, UI, utils, Telegram integration, and jobs.
 - Canonical source: keep project memory in `brain/`; `CLAUDE.md` is only a pointer to Brain.
+
+
+
+
+
+## Important Project References
+- `midday`: `/Users/M1PRO/Documents/code/_kitchen_sink/midday`
+- `gnd`: `/Users/M1PRO/Documents/code/_turbo/gnd`
+- `school-clerk`: `/Users/M1PRO/Documents/code/school-clerk`
+- `halaal-coperative`: `/Users/M1PRO/Documents/code/halaal-coperative`
+- `plot-keys`: `/Users/M1PRO/Documents/code/plot-keys`

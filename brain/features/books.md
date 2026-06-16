@@ -18,10 +18,11 @@ Tracks the current scope, architecture, and roadmap for the books experience acr
 ### Current Surfaces
 - Screens:
   - `/books` via `books-screen.tsx`: library grid and shelf filter; tapping a book opens its first fetched page when available, otherwise falls back to book detail.
-  - `/books/[bookId]` via `book-detail-screen.tsx`: book metadata and chapter tree.
-  - `/books/[bookId]/reader/[pageId]` via `book-reader-screen.tsx`: page reader.
+  - `/books/[bookId]` via `book-detail-screen.tsx`: book metadata, imported/read-only source status, and chapter tree.
+  - `/books/[bookId]/reader/[pageId]` via `book-reader-screen.tsx`: page reader with offline-first highlights/comments, read-only source enforcement, adjacent Shamela page fetching, and audio reference cards.
   - `/books/[bookId]/search` via `book-search-screen.tsx`: search within book.
   - `/book-fetch` via `book-fetch-screen.tsx`: add book from Shamela URL via AI, browse recent import history, re-import a previous source URL, and paste manual page content into an existing or newly created book.
+  - Shamela browser/preview screens stage a desktop-style Shamela page capture, show the parsed page, and promote the staged parse into the database.
 - Visual system:
   - Active books screens use the same semantic theme tokens as the home/feed surfaces (`bg-background`, `bg-card`, `text-foreground`, `text-muted-foreground`, `bg-primary`) instead of page-local hard-coded dark colors.
 - Navigation:
@@ -42,10 +43,12 @@ Tracks the current scope, architecture, and roadmap for the books experience acr
   - Books: `getBooks`, `getBook`, `createBook`, `updateBook`, `deleteBook`
   - Planned/download-related: `getBookMeta`, `getBookForDownload`
   - Volumes: `createVolume`
-  - Pages: `getPage`, `fetchPage`, `fetchNextPage`, planned `searchBookContent`
-  - Highlights: `addHighlight`, `deleteHighlight`, planned `syncHighlights`
-  - Comments: `addPageComment`, `deletePageComment`, planned `syncComments`
+  - Pages: `getPage`, `fetchPage`, `fetchNextPage`, `searchBookContent`
+  - Highlights: `addHighlight`, `deleteHighlight`, `getHighlightsForBook`, `syncHighlights`
+  - Comments: `addPageComment`, `deletePageComment`, `getCommentsForBook`, `syncComments`
   - Sync: `syncBookFromShamela(shamelaUrl, aiProvider)`
+  - Staging: `captureAndStageShamelaPage`, `getStagedShamelaPageParse`, `promoteStagedShamelaPageParse`
+  - Audio references: `getAudioReferencesForPage`
 
 ### Data Model Snapshot
 - Core relationship:
@@ -53,14 +56,23 @@ Tracks the current scope, architecture, and roadmap for the books experience acr
   - `BookPage -> BookPageFootnote`
   - `BookPage -> BookPageHighlight`
   - `BookPage -> BookPageComment`
+  - `Book -> AlbumBookReference -> Album`
+  - `BookPage -> MediaBookPageReference -> Media`
   - `Book -> BookImportHistory`
   - `Book -> BookPageImportHistory`
   - `BookAuthor <-> Book` many-to-many
   - `AiTokenUsage` — tracks provider, model, operation, inputTokens, outputTokens, bookId?, pageId?
 - Import/annotation notes:
+  - Books have source/editability fields: user-created books are editable; books with a Shamela URL or Shamela ID are imported/read-only and should be refreshed from their source instead of manually edited.
+  - Metadata paths that accept `shamelaUrl` normalize page links to the book URL and reject non-`/book/...` values instead of treating arbitrary URLs as Shamela imports.
+  - Updating a user-created book with `shamelaUrl` or `shamelaId` also converts it to imported/read-only instead of leaving it editable.
+  - Saving any page from a Shamela URL also marks the target book as `sourceType: "shamela"`, `editable: false`, and stores the normalized Shamela book URL, so a custom book cannot stay editable after downloaded Shamela content is attached to it.
+  - Page refreshes for an already imported Shamela book must resolve to the same Shamela book ID; cross-book page URLs are rejected before import.
   - `BookImportHistory` stores each book-level link import attempt with `pending | success | failed`, source URL, provider, summary counts, and any error message.
   - `BookPageImportHistory` stores page-level imports from URL re-imports and manual page paste with counts and diff summary metadata.
   - `BookPageHighlight` and `BookPageComment` now persist extra anchors (`pageShamelaPageNo`, `paragraphPid`, `quoteText`) so page re-import can remap annotations when paragraph row IDs change.
+  - `AlbumBookReference` attaches a book to an audio album/series.
+  - `MediaBookPageReference` attaches an audio track/range to a specific book page for bidirectional navigation.
 
 ### AI Integration
 - Metadata extraction prompt (`SHAMELA_BOOK_META_PROMPT`)
@@ -78,8 +90,9 @@ Tracks the current scope, architecture, and roadmap for the books experience acr
 - Reading progress and last-page tracking
 - Bookmarks
 - Auto-fetch all pages in sequence
-- Better offline support and incremental sync
+- Better offline book-content download and incremental sync
 - Real authenticated user mapping for book annotations/import history instead of the current placeholder user binding in public procedures
+- Richer page selection when attaching audio references can continue improving; current mobile flow supports selecting an album/library book, searching page title/text, manual page ID fallback, and timestamp capture.
 
 ### Planned Implementation Notes
 
@@ -93,14 +106,14 @@ Tracks the current scope, architecture, and roadmap for the books experience acr
   - Trigger inline fetch for pending pages.
 
 #### Highlights UI And Offline Sync
-- Goal: full highlight UX with offline-first persistence.
+- Status: implemented in the reader with offline-first local SQLite persistence and background sync.
 - Reader behavior:
   - Long-press paragraph
   - Show floating toolbar with color swatches and delete action
   - Render tinted paragraph backgrounds
 - Server behavior:
   - When highlights are created or bulk-synced, the API also stores the page Shamela number, paragraph `pid`, and source quote text for later re-import remapping.
-- Local SQLite table plan:
+- Local SQLite table:
   - `local_highlights(localId, serverId, pageId, paragraphId, color, note, createdAt, updatedAt, deletedAt, syncStatus)`
 - Sync pattern:
   - Write locally first
@@ -108,8 +121,8 @@ Tracks the current scope, architecture, and roadmap for the books experience acr
   - Merge server highlights on book open
 
 #### Comments UI And Offline Sync
-- Goal: offline-first comments with the same sync pattern as highlights.
-- Local SQLite table plan:
+- Status: implemented with the same local-first sync pattern as highlights.
+- Local SQLite table:
   - `local_comments(localId, serverId, pageId, paragraphId, content, createdAt, updatedAt, deletedAt, syncStatus)`
 - Sync pattern:
   - Local write first
@@ -135,13 +148,13 @@ Tracks the current scope, architecture, and roadmap for the books experience acr
   - `chapterTitle`
   - `topicTitle`
   - paragraph text
-- Planned server endpoint:
+- Server endpoint:
   - `searchBookContent(bookId, query)` using PostgreSQL `ILIKE`
 - Planned offline search:
   - SQLite FTS5 over local paragraph text
 
 #### Offline Download
-- Proposed stack:
+- Implemented stack:
   - `expo-sqlite`
   - `drizzle-orm`
   - `expo-network`
@@ -153,15 +166,19 @@ Tracks the current scope, architecture, and roadmap for the books experience acr
   - `local_footnotes`
   - `local_highlights`
   - `local_comments`
+- Local persistence:
+  - `saveBookDownloadToLocalDb` stores the `getBookForDownload` payload into SQLite book, volume, page, paragraph, footnote, highlight, and comment tables while preserving pending local annotation changes.
 - Download flow:
   1. User taps Download on book detail.
-  2. App checks connectivity.
+  2. App requests `getBookForDownload(bookId)` through the API client.
   3. `getBookForDownload(bookId)` returns fetched content and user data.
   4. App writes a batch to SQLite with progress reporting.
   5. Zustand `book-offline-store` stores `contentHash`, `downloadedAt`, and `lastSyncedAt`.
+- Current UI:
+  - `book-detail-screen.tsx` exposes a `downloadOffline` action that fetches the download payload, writes it with `saveBookDownloadToLocalDb`, updates download metadata, and shows progress while running.
 - Update detection:
   1. On open, fetch `getBookMeta(bookId)`.
-  2. Compare remote `contentHash` to local.
+  2. Compare remote `contentHash` to local and keep source/editability metadata (`shamelaId`, `shamelaUrl`, `sourceType`, `editable`, `ownerUserId`) available for refresh decisions.
   3. Show new-content banner when mismatched.
   4. Allow incremental re-download.
 

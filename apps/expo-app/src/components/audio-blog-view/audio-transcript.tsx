@@ -6,7 +6,16 @@ import { useEffect, useRef, useState } from "react";
 import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";
 import { useAudioStore } from "@/store/audio-store";
+import { useAppSettingsStore } from "@/store/app-settings-store";
 import { useColors } from "@/hooks/use-color";
+import { TranscriptSegments } from "@/components/audio-blog-view/transcript-segments";
+import {
+  formatTranscriptionCost,
+  getTranscriptionModelOption,
+  TRANSCRIPTION_MODELS,
+  type TranscriptionModel,
+} from "@/lib/transcription-models";
+import { getDefaultTranscriberUrl, isHttpTranscriberUrl } from "@/lib/transcribe";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -21,32 +30,19 @@ function parseMmSs(str: string): number {
   return (mm || 0) * 60 + (ss || 0);
 }
 
-// ── Provider config ───────────────────────────────────────────────────────────
+// ── Model picker sheet ────────────────────────────────────────────────────────
 
-type Provider = "openai" | "groq";
-
-const PROVIDERS: { id: Provider; label: string; costPerMin: number }[] = [
-  { id: "openai", label: "OpenAI Whisper", costPerMin: 0.006 },
-  { id: "groq", label: "Groq Whisper", costPerMin: 0 },
-];
-
-function formatCost(durationSec: number, costPerMin: number) {
-  const cost = (durationSec / 60) * costPerMin;
-  if (cost === 0) return "Free";
-  return `~$${cost.toFixed(4)}`;
-}
-
-// ── Provider picker sheet ─────────────────────────────────────────────────────
-
-function ProviderSheet({
+function ModelSheet({
   visible,
   selected,
+  whisperAvailable,
   onSelect,
   onClose,
 }: {
   visible: boolean;
-  selected: Provider;
-  onSelect: (p: Provider) => void;
+  selected: TranscriptionModel;
+  whisperAvailable: boolean;
+  onSelect: (model: TranscriptionModel) => void;
   onClose: () => void;
 }) {
   const colors = useColors();
@@ -93,13 +89,15 @@ function ProviderSheet({
               marginBottom: 8,
             }}
           >
-            Select AI Provider
+            Switch Transcription Model
           </Text>
-          {PROVIDERS.map((p) => {
+          {TRANSCRIPTION_MODELS.map((p) => {
             const isSelected = p.id === selected;
+            const disabled = p.requiresLocalTranscriber && !whisperAvailable;
             return (
               <Pressable
                 key={p.id}
+                disabled={disabled}
                 onPress={() => {
                   onSelect(p.id);
                   onClose();
@@ -111,6 +109,7 @@ function ProviderSheet({
                   paddingVertical: 14,
                   paddingHorizontal: 12,
                   borderRadius: 12,
+                  opacity: disabled ? 0.45 : 1,
                   backgroundColor: isSelected
                     ? colors.primary + "22"
                     : "transparent",
@@ -127,7 +126,9 @@ function ProviderSheet({
                     {p.label}
                   </Text>
                   <Text style={{ fontSize: 12, color: colors.mutedForeground }}>
-                    {p.costPerMin === 0 ? "Free" : `$${p.costPerMin}/min`}
+                    {disabled
+                      ? "Local Whisper is not reachable"
+                      : p.description}
                   </Text>
                 </View>
                 {isSelected && (
@@ -325,25 +326,35 @@ export function AudioTranscript({
   telegramFileId,
 }: AudioTranscriptProps) {
   const colors = useColors();
-  const positionSec = useAudioStore((s) => s.position) / 1000;
   const durationMs = useAudioStore((s) => s.duration);
-  const seek = useAudioStore((s) => s.seek);
+  const transcriptionModel = useAppSettingsStore((s) => s.transcriptionModel);
+  const setTranscriptionModel = useAppSettingsStore((s) => s.setTranscriptionModel);
+  const localTranscriberBaseUrl = useAppSettingsStore((s) => s.localTranscriberBaseUrl);
 
   const durationSec = Math.floor(durationMs / 1000);
+  const transcriberUrl = getDefaultTranscriberUrl(localTranscriberBaseUrl);
+  const canCheckTranscriber = isHttpTranscriberUrl(transcriberUrl);
 
-  const [provider, setProvider] = useState<Provider>("openai");
-  const [providerSheetVisible, setProviderSheetVisible] = useState(false);
+  const [modelSheetVisible, setModelSheetVisible] = useState(false);
   const [fromStr, setFromStr] = useState("00:00");
   const [toStr, setToStr] = useState(() => formatSec(durationSec || 300));
 
   const fromSec = parseMmSs(fromStr);
   const toSec = parseMmSs(toStr);
   const rangeSec = Math.max(0, toSec - fromSec);
-  const providerConfig = PROVIDERS.find((p) => p.id === provider)!;
+  const modelConfig = getTranscriptionModelOption(transcriptionModel);
 
   const { data: transcript, refetch } = useQuery(
     _trpc.blog.getTranscript.queryOptions({ mediaId }),
   );
+  const { data: localTranscriberHealth } = useQuery({
+    ..._trpc.blog.checkLocalTranscriber.queryOptions({
+      baseUrl: canCheckTranscriber ? transcriberUrl ?? undefined : undefined,
+    }),
+    enabled: canCheckTranscriber,
+    retry: false,
+  });
+  const whisperAvailable = Boolean(localTranscriberHealth?.ok);
 
   const { mutate: startTranscribe, isPending: isTranscribing } = useMutation(
     _trpc.blog.transcribeRange.mutationOptions({
@@ -396,7 +407,7 @@ export function AudioTranscript({
               textAlign: "center",
             }}
           >
-            Select a range and provider, then generate a transcript to read
+            Select a range and model, then generate a transcript to read
             along.
           </Text>
         </View>
@@ -489,9 +500,9 @@ export function AudioTranscript({
           </View>
         </View>
 
-        {/* Provider selector */}
+        {/* Model selector */}
         <Pressable
-          onPress={() => setProviderSheetVisible(true)}
+          onPress={() => setModelSheetVisible(true)}
           style={{
             flexDirection: "row",
             alignItems: "center",
@@ -515,7 +526,7 @@ export function AudioTranscript({
                 color: colors.foreground,
               }}
             >
-              {providerConfig.label}
+              {modelConfig.label}
             </Text>
           </View>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
@@ -534,7 +545,7 @@ export function AudioTranscript({
                   color: colors.primary,
                 }}
               >
-                {formatCost(rangeSec, providerConfig.costPerMin)}
+                {formatTranscriptionCost(rangeSec, modelConfig.costPerMin)}
               </Text>
             </View>
             <Icon
@@ -550,20 +561,35 @@ export function AudioTranscript({
           onPress={() => {
             if (!telegramFileId) return;
             startTranscribe({
+              mediaId,
               fileId: telegramFileId,
               fromSec,
               toSec,
-              provider,
+              model: transcriptionModel,
+              localTranscriberBaseUrl:
+                transcriptionModel === "whisper-local" && canCheckTranscriber
+                  ? transcriberUrl ?? undefined
+                  : undefined,
             });
           }}
-          disabled={isTranscribing || !telegramFileId || rangeSec <= 0}
+          disabled={
+            isTranscribing ||
+            !telegramFileId ||
+            rangeSec <= 0 ||
+            (transcriptionModel === "whisper-local" && !whisperAvailable)
+          }
           style={{
             paddingHorizontal: 24,
             paddingVertical: 12,
             borderRadius: 999,
             backgroundColor: colors.primary,
             opacity:
-              isTranscribing || !telegramFileId || rangeSec <= 0 ? 0.4 : 1,
+              isTranscribing ||
+              !telegramFileId ||
+              rangeSec <= 0 ||
+              (transcriptionModel === "whisper-local" && !whisperAvailable)
+                ? 0.4
+                : 1,
             width: "100%",
             alignItems: "center",
           }}
@@ -579,11 +605,12 @@ export function AudioTranscript({
           </Text>
         </Pressable>
 
-        <ProviderSheet
-          visible={providerSheetVisible}
-          selected={provider}
-          onSelect={setProvider}
-          onClose={() => setProviderSheetVisible(false)}
+        <ModelSheet
+          visible={modelSheetVisible}
+          selected={transcriptionModel}
+          whisperAvailable={whisperAvailable}
+          onSelect={setTranscriptionModel}
+          onClose={() => setModelSheetVisible(false)}
         />
       </View>
     );
@@ -611,77 +638,6 @@ export function AudioTranscript({
 
   // ── Done — show segments ───────────────────────────────────────────────────
   const segments = transcript.segments ?? [];
-  const activeIdx = segments.findIndex(
-    (s) => positionSec >= s.startSec && positionSec < s.endSec,
-  );
 
-  return (
-    <View style={{ gap: 4, paddingHorizontal: 16, paddingVertical: 12 }}>
-      {segments.length ? (
-        segments.map((seg, index) => {
-          const isActive = index === activeIdx;
-          return (
-            <Pressable
-              key={seg.id}
-              onPress={() => seek(seg.startSec * 1000)}
-              style={{
-                flexDirection: "row",
-                gap: 12,
-                paddingHorizontal: 12,
-                paddingVertical: 10,
-                borderRadius: 12,
-                backgroundColor: isActive
-                  ? colors.primary + "26"
-                  : "transparent",
-              }}
-            >
-              {/* Timestamp badge */}
-              <View
-                style={{
-                  flexShrink: 0,
-                  marginTop: 2,
-                  paddingHorizontal: 6,
-                  paddingVertical: 2,
-                  borderRadius: 6,
-                  backgroundColor: isActive ? colors.primary : colors.muted,
-                }}
-              >
-                <Text
-                  style={{
-                    fontSize: 10,
-                    fontWeight: "700",
-                    color: isActive
-                      ? colors.primaryForeground
-                      : colors.mutedForeground,
-                  }}
-                >
-                  {formatSec(seg.startSec)}
-                </Text>
-              </View>
-              {/* Text */}
-              <Text
-                style={{
-                  flex: 1,
-                  fontSize: 14,
-                  lineHeight: 22,
-                  textAlign: "right",
-                  writingDirection: "rtl",
-                  color: isActive ? colors.foreground : colors.mutedForeground,
-                  fontWeight: isActive ? "500" : "400",
-                }}
-              >
-                {seg.text}
-              </Text>
-            </Pressable>
-          );
-        })
-      ) : (
-        <View style={{ alignItems: "center", paddingVertical: 40 }}>
-          <Text style={{ fontSize: 14, color: colors.mutedForeground }}>
-            Transcript is empty
-          </Text>
-        </View>
-      )}
-    </View>
-  );
+  return <TranscriptSegments segments={segments} />;
 }

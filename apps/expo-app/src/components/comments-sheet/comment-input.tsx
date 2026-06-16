@@ -28,6 +28,7 @@ interface CommentInputProps {
   noKeyboardAvoid?: boolean;
   compact?: boolean;
   onClose?: () => void;
+  timestampMode?: boolean;
 }
 
 export function CommentInput({
@@ -37,15 +38,21 @@ export function CommentInput({
   noKeyboardAvoid,
   compact,
   onClose,
+  timestampMode,
 }: CommentInputProps) {
   const colors = useColors();
   const [text, setText] = useState("");
+  const [timestampEnabled, setTimestampEnabled] = useState(Boolean(timestampMode));
+  const [timestampMs, setTimestampMs] = useState(0);
   const position = useAudioStore((s) => s.position);
+  const timestampLabel = formatTimestamp(timestampMs || position);
 
   const { mutate: addComment, isPending } = useMutation(
     _trpc.blog.addComment.mutationOptions({
       onSuccess() {
         setText("");
+        setTimestampMs(0);
+        setTimestampEnabled(Boolean(timestampMode));
         onCommentAdded?.();
         onClose?.();
       },
@@ -53,14 +60,20 @@ export function CommentInput({
   );
 
   function handleTimestampPress() {
-    const ts = formatTimestamp(position);
-    setText((prev) => `[${ts}] ${prev}`);
+    setTimestampMs(position);
+    setTimestampEnabled((value) => !value || timestampMs !== position);
   }
 
   function handleSend() {
     const trimmed = text.trim();
     if (!trimmed || isPending) return;
-    addComment({ blogId, content: trimmed });
+    addComment({
+      blogId,
+      content: trimmed,
+      timestampSeconds: timestampEnabled
+        ? Math.floor((timestampMs || position) / 1000)
+        : undefined,
+    });
   }
 
   function handleSubmitEditing() {
@@ -85,6 +98,18 @@ export function CommentInput({
             size={16}
             className="text-muted-foreground"
           />
+          {timestampMode && timestampEnabled && (
+            <Pressable
+              onPress={handleTimestampPress}
+              className="ml-2 flex-row items-center gap-1 rounded-md bg-muted px-2 py-1 active:opacity-70"
+            >
+              <Icon name="Timer" size={12} className="text-muted-foreground" />
+              <Text className="text-xs font-bold text-muted-foreground">
+                {timestampLabel}
+              </Text>
+              <Icon name="Plus" size={11} className="text-muted-foreground" />
+            </Pressable>
+          )}
           <TextInput
             value={text}
             onChangeText={setText}
@@ -104,6 +129,14 @@ export function CommentInput({
             }}
           />
         </View>
+        {timestampMode && !timestampEnabled && (
+          <Pressable
+            onPress={handleTimestampPress}
+            className="size-10 items-center justify-center rounded-full bg-card active:opacity-70"
+          >
+            <Icon name="Timer" size={16} className="text-muted-foreground" />
+          </Pressable>
+        )}
         <Pressable
           onPress={handleSend}
           disabled={isPending || text.trim().length === 0}
@@ -123,6 +156,18 @@ export function CommentInput({
 
         {/* Input container */}
         <View className="flex-1 flex-row items-end bg-card rounded-2xl border border-border px-3 py-2 gap-2">
+          {timestampMode && timestampEnabled && (
+            <Pressable
+              onPress={handleTimestampPress}
+              className="mb-0.5 flex-row items-center gap-1 rounded-md bg-muted px-2 py-1 active:opacity-70"
+            >
+              <Icon name="Timer" size={13} className="text-muted-foreground" />
+              <Text className="text-xs font-bold text-muted-foreground">
+                {timestampLabel}
+              </Text>
+              <Icon name="Plus" size={11} className="text-muted-foreground" />
+            </Pressable>
+          )}
           <TextInput
             value={text}
             onChangeText={setText}
@@ -139,7 +184,7 @@ export function CommentInput({
             }}
           />
 
-          {/* Timestamp icon — inserts current audio position */}
+          {/* Timestamp icon — toggles current audio position metadata */}
           <Pressable
             onPress={handleTimestampPress}
             className="mb-0.5 active:opacity-60"

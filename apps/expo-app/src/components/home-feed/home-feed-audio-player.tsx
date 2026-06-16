@@ -17,10 +17,15 @@ export function HomeFeedAudioPlayer({
   const isCurrent = store.blog?.id === post?.id;
   const isPlayying = isCurrent && store.isPlaying;
   const playPause = useCallback(async () => {
-    if (isPlayying) store.pause();
-    else if (isCurrent) store.play();
-    else store.loadAudio(post);
-  }, [isPlayying, isCurrent]);
+    if (isPlayying) {
+      await store.pause();
+    } else if (isCurrent) {
+      await store.play();
+    } else {
+      await store.loadAudio(post);
+      await store.play();
+    }
+  }, [isPlayying, isCurrent, post, store]);
   // A fake waveform for display purposes
   const waveform = [4, 5, 4, 2, 3, 5, 2, 4, 3, 2, 5, 3];
   return (

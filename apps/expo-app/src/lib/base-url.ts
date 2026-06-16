@@ -6,7 +6,7 @@ const PREVIEW_OR_FORCED_BASE_URL =
 const IS_DEV = typeof __DEV__ !== "undefined" && __DEV__;
 const TRPC_PATH = "/api/trpc";
 
-const getLocalHost = () => {
+export const getLocalNetworkHost = () => {
   const debuggerHost = Constants.expoConfig?.hostUri;
   const localhost = debuggerHost?.split(":")[0];
 
@@ -19,15 +19,19 @@ const getLocalHost = () => {
   return localhost;
 };
 
-const getLocalUrl = (port: string) => {
-  return `http://${getLocalHost()}:${port}`;
+export const getLocalUrl = (port: string) => {
+  return `http://${getLocalNetworkHost()}:${port}`;
 };
 
-const appendPath = (baseUrl: string, path: string) => {
+export const getLocalTranscriberUrl = () => {
+  return getLocalUrl(process.env.EXPO_PUBLIC_TRANSCRIBER_PORT ?? "8787");
+};
+
+export const appendPath = (baseUrl: string, path: string) => {
   return `${baseUrl.trim().replace(/\/+$/, "")}${path}`;
 };
 
-const normalizeTrpcUrl = (url: string) => {
+export const normalizeTrpcUrl = (url: string) => {
   const trimmedUrl = url.trim().replace(/\/+$/, "");
   if (trimmedUrl.endsWith(TRPC_PATH)) return trimmedUrl;
   return appendPath(trimmedUrl, TRPC_PATH);

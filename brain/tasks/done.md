@@ -11,6 +11,9 @@ Tracks completed work that is still useful as project memory.
 ## Template
 
 ### Completed
+- **Expo development build branding** — made the development Android EAS profile load local env values and switch to `DEV`-badged app icon/adaptive icon/iOS icon/splash assets through `APP_VARIANT=development`.
+- **Expo EAS build scripts** — renamed the preview Android build shortcut to `eas-build:preview` and added `eas-build:dev` for the development Android EAS profile from the repo root while preserving the EAS account helper flow.
+- **Expo Android native shortcut and splash logo polish** — added root `bun run android` to best-effort uninstall `com.alghurobaa.podcast` through the Android SDK `adb` path before delegating to the Expo app Android build via `bun run --cwd apps/expo-app android`, added cropped splash/loading logo assets, and simplified Android adaptive icon layering so the logo is not reused as its own background.
 - Project Brain initialized with core system, product, engineering, database, API, task, and template documents.
 - Legacy `brain/tasks.md` preserved as `brain/tasks/legacy-tasks.md` to unblock the standard task-directory layout.
 - **Books import workflow** — added durable book/page import history, recent-history re-import CTA, and manual page paste into an existing or newly created book.

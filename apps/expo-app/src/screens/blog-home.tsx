@@ -37,12 +37,9 @@ export function BlogHomeSkeleton() {
             <BlogHomeCategoryTabs selected="All" onSelect={() => undefined} />
           </View>
           <View className="h-4" />
-          <View className="flex-1 gap-4 px-4">
+          <View className="flex-1 border-t border-border">
             {[0, 1, 2].map((key) => (
-              <View
-                key={key}
-                className="rounded-2xl border border-border bg-card p-4"
-              >
+              <View key={key} className="border-b border-border bg-background p-4">
                 <View className="mb-3 flex-row items-center gap-3">
                   <Skeleton className="h-10 w-10 rounded-full" />
                   <View className="flex-1 gap-2">
@@ -239,7 +236,7 @@ export default function BlogHomeScreen() {
           <LegendList
             data={visiblePosts}
             renderItem={({ item }) => (
-              <View className="px-4">
+              <View>
                 <BlogCard post={item} onDelete={handleDeletePost} />
               </View>
             )}
@@ -260,11 +257,10 @@ export default function BlogHomeScreen() {
                 <Text className="px-4 pt-4 pb-2 text-base font-bold text-foreground">
                   {t("latestPosts")}
                 </Text>
-                <View className="h-4" />
+                <View className="border-t border-border" />
               </>
             }
             ListFooterComponent={<View className="h-40 px-4" />}
-            ItemSeparatorComponent={() => <View className="h-4" />}
             refreshing={isPullRefreshing || isRefetching}
             onRefresh={onRefresh}
             onEndReached={() => {

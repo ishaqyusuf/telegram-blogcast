@@ -80,3 +80,12 @@ android
 ios
 
 .telegram-session
+
+# Local transcriber service
+services/transcriber/cache/audio/*
+services/transcriber/cache/clips/*
+services/transcriber/cache/transcripts/*
+!services/transcriber/cache/audio/.gitkeep
+!services/transcriber/cache/clips/.gitkeep
+!services/transcriber/cache/transcripts/.gitkeep
+services/transcriber/.venv/

@@ -1,42 +1,54 @@
 import { access, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
-type Action = "build:preview" | "update:preview";
+type Action = "eas-build:dev" | "eas-build:preview" | "update:preview";
 type CurrentIdentity = {
   email: string | null;
   username: string | null;
 };
+type EasAccount = {
+  label: string;
+  login: string;
+  password: string;
+  username: string | null;
+};
 
-const APP_DIR = path.join(import.meta.dir, "..", "apps", "expo-app");
+const REPO_DIR = path.join(import.meta.dir, "..");
+const APP_DIR = path.join(REPO_DIR, "apps", "expo-app");
 
 const ACTION_COMMANDS: Record<Action, string[]> = {
-  "build:preview": ["bun", "run", "build:preview"],
-  "update:preview": ["bun", "run", "update:preview"],
+  "eas-build:dev": [
+    "eas",
+    "build",
+    "--profile",
+    "development",
+    "--platform",
+    "android",
+  ],
+  "eas-build:preview": ["eas", "build", "-p", "android", "--profile", "preview"],
+  "update:preview": ["node", "./scripts/update-preview.mjs"],
 };
 
 const action = process.argv[2] as Action | undefined;
 
 if (!action || !(action in ACTION_COMMANDS)) {
-  console.error(
-    "Usage: bun ./scripts/eas-account-runner.ts <build:preview|update:preview>",
-  );
+  console.error(getUsage());
   process.exit(1);
 }
 
-const env = { ...Bun.env };
+const env = await loadEnvFiles({ ...Bun.env }, [
+  path.join(REPO_DIR, ".env"),
+  path.join(REPO_DIR, ".env.local"),
+  path.join(APP_DIR, ".env"),
+  path.join(APP_DIR, ".env.local"),
+]);
 delete env.EXPO_TOKEN;
 
-const email = env.EAS_EMAIL?.trim();
-const password = env.EAS_PASSWORD?.trim();
-const configuredUsername = env.EAS_USERNAME?.trim().toLowerCase();
-
-if (!email || !password) {
-  console.error("Missing EAS_EMAIL or EAS_PASSWORD in the root environment.");
-  process.exit(1);
-}
+const account = resolveAccount(action, env, process.argv.slice(3));
 
 const desiredIdentifiers = new Set(
-  [email.toLowerCase(), configuredUsername].filter(Boolean),
+  [account.login.toLowerCase(), account.username?.toLowerCase()].filter(Boolean),
 );
 
 const currentIdentity = await getCurrentIdentity();
@@ -44,22 +56,22 @@ const currentUsername = currentIdentity.username;
 const currentEmail = currentIdentity.email?.toLowerCase() ?? null;
 
 if (
-  (currentEmail && currentEmail === email.toLowerCase()) ||
+  (currentEmail && currentEmail === account.login.toLowerCase()) ||
   (currentUsername && desiredIdentifiers.has(currentUsername.toLowerCase()))
 ) {
   console.log(
-    `EAS session already matches ${currentEmail ?? currentUsername ?? email}.`,
+    `EAS session already matches ${currentEmail ?? currentUsername ?? account.login}.`,
   );
 } else {
   if (currentUsername) {
     console.log(
-      `Current EAS session is ${currentUsername}. Re-authenticating with ${email}.`,
+      `Current EAS session is ${currentUsername}. Switching to ${account.label}.`,
     );
   } else {
-    console.log(`No active EAS session found. Logging in with ${email}.`);
+    console.log(`No active EAS session found. Logging in with ${account.label}.`);
   }
 
-  const session = await loginWithEmailAndPassword(email, password);
+  const session = await loginWithEmailAndPassword(account.login, account.password);
   await writeExpoSession(session);
   console.log(`Authenticated EAS session as ${session.username}.`);
 }
@@ -69,6 +81,181 @@ await runOrExit(ACTION_COMMANDS[action], {
   env,
   stdio: "inherit",
 });
+
+function resolveAccount(
+  actionValue: Action,
+  sourceEnv: NodeJS.ProcessEnv,
+  args: string[],
+): EasAccount {
+  const selectedAccount = getAccountSelector(args, sourceEnv);
+  const actionPrefix = toEnvKey(actionValue);
+  const selectedPrefix = selectedAccount ? toEnvKey(selectedAccount) : null;
+  const prefixes = selectedPrefix
+    ? [`EAS_${selectedPrefix}`]
+    : [`EAS_${actionPrefix}`, "EAS_PREVIEW", "EAS"];
+
+  const login =
+    getFirstEnv(
+      sourceEnv,
+      prefixes.flatMap((prefix) => [`${prefix}_EMAIL`, `${prefix}_LOGIN`]),
+    ) ??
+    null;
+  const password = getFirstEnv(
+    sourceEnv,
+    prefixes.map((prefix) => `${prefix}_PASSWORD`),
+  );
+  const username =
+    getFirstEnv(sourceEnv, prefixes.map((prefix) => `${prefix}_USERNAME`)) ?? null;
+
+  if (!login || !password) {
+    console.error(
+      [
+        `Missing EAS credentials for ${selectedAccount ?? actionValue}.`,
+        "",
+        "Set EAS_EMAIL/EAS_PASSWORD, or choose a named account with:",
+        "  EAS_ACCOUNT=work EAS_WORK_EMAIL=... EAS_WORK_PASSWORD=...",
+        "  bun run eas-build:preview -- --account work",
+      ].join("\n"),
+    );
+    process.exit(1);
+  }
+
+  return {
+    label: username ?? login,
+    login,
+    password,
+    username,
+  };
+}
+
+function getAccountSelector(
+  args: string[],
+  sourceEnv: NodeJS.ProcessEnv,
+): string | null {
+  const accountFlagIndex = args.findIndex(
+    (arg) => arg === "--account" || arg === "-a",
+  );
+  const accountEquals = args.find((arg) => arg.startsWith("--account="));
+
+  if (accountFlagIndex >= 0) {
+    return args[accountFlagIndex + 1]?.trim() || null;
+  }
+
+  if (accountEquals) {
+    return accountEquals.split("=").slice(1).join("=").trim() || null;
+  }
+
+  return sourceEnv.EAS_ACCOUNT?.trim() || null;
+}
+
+function getFirstEnv(
+  sourceEnv: NodeJS.ProcessEnv,
+  keys: string[],
+): string | undefined {
+  for (const key of keys) {
+    const value = sourceEnv[key]?.trim();
+
+    if (value) {
+      return value;
+    }
+  }
+}
+
+function toEnvKey(value: string): string {
+  return value
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toUpperCase();
+}
+
+function getUsage(): string {
+  return [
+    "Usage: bun ./scripts/eas-account-runner.ts <eas-build:dev|eas-build:preview|update:preview> [--account <name>]",
+    "",
+    "Default credentials:",
+    "  EAS_EMAIL or EAS_LOGIN",
+    "  EAS_PASSWORD",
+    "  EAS_USERNAME optional",
+    "",
+    "Named account credentials:",
+    "  EAS_ACCOUNT=work",
+    "  EAS_WORK_EMAIL or EAS_WORK_LOGIN",
+    "  EAS_WORK_PASSWORD",
+    "  EAS_WORK_USERNAME optional",
+  ].join("\n");
+}
+
+async function loadEnvFiles(
+  baseEnv: NodeJS.ProcessEnv,
+  envFilePaths: string[],
+): Promise<NodeJS.ProcessEnv> {
+  const env = { ...baseEnv };
+
+  for (const envFilePath of envFilePaths) {
+    let source: string;
+
+    try {
+      source = await readFile(envFilePath, "utf8");
+    } catch (error) {
+      const isMissingFile =
+        error instanceof Error &&
+        "code" in error &&
+        (error as NodeJS.ErrnoException).code === "ENOENT";
+
+      if (isMissingFile) {
+        continue;
+      }
+
+      throw error;
+    }
+
+    Object.assign(env, parseEnvFile(source));
+  }
+
+  return env;
+}
+
+function parseEnvFile(source: string): Record<string, string> {
+  const values: Record<string, string> = {};
+
+  for (const rawLine of source.split(/\r?\n/)) {
+    const line = rawLine.trim();
+
+    if (!line || line.startsWith("#")) {
+      continue;
+    }
+
+    const withoutExport = line.startsWith("export ") ? line.slice(7).trimStart() : line;
+    const separatorIndex = withoutExport.indexOf("=");
+
+    if (separatorIndex <= 0) {
+      continue;
+    }
+
+    const key = withoutExport.slice(0, separatorIndex).trim();
+
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+      continue;
+    }
+
+    values[key] = unquoteEnvValue(withoutExport.slice(separatorIndex + 1).trim());
+  }
+
+  return values;
+}
+
+function unquoteEnvValue(value: string): string {
+  if (value.startsWith('"') && value.endsWith('"')) {
+    return value.slice(1, -1).replace(/\\n/g, "\n").replace(/\\"/g, '"');
+  }
+
+  if (value.startsWith("'") && value.endsWith("'")) {
+    return value.slice(1, -1);
+  }
+
+  const commentIndex = value.search(/\s#/);
+  return commentIndex >= 0 ? value.slice(0, commentIndex).trimEnd() : value;
+}
 
 async function getCurrentIdentity(): Promise<CurrentIdentity> {
   const sessionSecret = await readSessionSecret();
@@ -80,7 +267,7 @@ async function getCurrentIdentity(): Promise<CurrentIdentity> {
   try {
     const easCliRoot = await resolveEasCliRoot();
     const createGraphqlClientModule = (await import(
-      pathToFileUrl(
+      pathToFileURL(
         path.join(
           easCliRoot,
           "build",
@@ -101,7 +288,7 @@ async function getCurrentIdentity(): Promise<CurrentIdentity> {
       };
     };
     const clientModule = (await import(
-      pathToFileUrl(path.join(easCliRoot, "build", "graphql", "client.js")).href
+      pathToFileURL(path.join(easCliRoot, "build", "graphql", "client.js")).href
     )) as {
       withErrorHandlingAsync: <T>(promise: Promise<T>) => Promise<{
         meActor: {
@@ -152,7 +339,7 @@ async function loginWithEmailAndPassword(emailValue: string, passwordValue: stri
   const easCliRoot = await resolveEasCliRoot();
   const modulePath = path.join(easCliRoot, "build", "user", "fetchSessionSecretAndUser.js");
 
-  const module = (await import(pathToFileUrl(modulePath).href)) as {
+  const module = (await import(pathToFileURL(modulePath).href)) as {
     fetchSessionSecretAndUserAsync: (input: {
       username: string;
       password: string;
@@ -334,10 +521,6 @@ async function resolveRealpathSafe(filePath: string): Promise<string> {
   } catch {
     return filePath;
   }
-}
-
-function pathToFileUrl(filePath: string): URL {
-  return new URL(`file://${filePath}`);
 }
 
 async function runOrExit(

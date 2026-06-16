@@ -14,15 +14,22 @@ import {
   Platform,
   ScrollView,
   Text,
+  TextInput,
   View,
 } from "react-native";
 
 import { AudioTranscript } from "@/components/audio-blog-view/audio-transcript";
+import { LocalTranscribe } from "@/components/audio-blog-view/local-transcribe";
 import { useCommentsState } from "@/components/comments-sheet";
 import { CommentsHeader } from "@/components/comments-sheet/comments-header";
 import { CommentsAudioContext } from "@/components/comments-sheet/comments-audio-context";
 import { CommentsList } from "@/components/comments-sheet/comments-list";
 import { CommentInput } from "@/components/comments-sheet/comment-input";
+import { AddToPlaylistModal } from "@/components/channel-chat/add-to-playlist-modal";
+import {
+  SkipBack5Icon,
+  SkipForward5Icon,
+} from "@/components/global-audio-bar/skip-icons";
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";
@@ -65,13 +72,490 @@ function formatMs(ms: number) {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-type Tab = "info" | "transcript";
+function formatPercent(value: number) {
+  return `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`;
+}
+
+type Tab = "info" | "transcript" | "local";
+
+function AudioBookReferences({
+  mediaId,
+  albumId,
+}: {
+  mediaId: number;
+  albumId?: number | null;
+}) {
+  const colors = useColors();
+  const router = useRouter();
+  const qc = useQueryClient();
+  const position = useAudioStore((s) => s.position);
+  const [selectedBookId, setSelectedBookId] = useState<number | null>(null);
+  const [pageSearch, setPageSearch] = useState("");
+  const [pageIdInput, setPageIdInput] = useState("");
+  const [note, setNote] = useState("");
+
+  const { data: references = [] } = useQuery(
+    _trpc.album.getMediaBookPageReferences.queryOptions({ mediaId }),
+  );
+  const { data: album } = useQuery({
+    ..._trpc.album.getAlbum.queryOptions({ id: albumId ?? 0 }),
+    enabled: Number.isFinite(albumId) && Number(albumId) > 0,
+  });
+  const { data: booksData } = useQuery(
+    _trpc.book.getBooks.queryOptions({ limit: 20 }),
+  );
+  const searchText = pageSearch.trim();
+  const { data: pageMatches = [], isFetching: isSearchingPages } = useQuery({
+    ..._trpc.book.searchBookContent.queryOptions({
+      bookId: selectedBookId ?? 0,
+      query: searchText || " ",
+    }),
+    enabled: !!selectedBookId && searchText.length >= 2,
+  });
+  const mediaReferences = Array.isArray(references) ? references : [];
+  const attachedBooks = useMemo(() => {
+    const refs = Array.isArray((album as any)?.bookReferences)
+      ? ((album as any).bookReferences as any[])
+      : [];
+    return refs
+      .map((reference) => reference.book)
+      .filter((book) => book?.id);
+  }, [album]);
+  const libraryBooks = useMemo(
+    () =>
+      Array.isArray((booksData as any)?.data)
+        ? ((booksData as any).data as any[])
+        : [],
+    [booksData],
+  );
+  const candidateBooks = useMemo(
+    () => (attachedBooks.length > 0 ? attachedBooks : libraryBooks.slice(0, 8)),
+    [attachedBooks, libraryBooks],
+  );
+  const searchResults = Array.isArray(pageMatches) ? pageMatches : [];
+
+  useEffect(() => {
+    if (candidateBooks.length === 0) return;
+    if (selectedBookId && candidateBooks.some((book: any) => book.id === selectedBookId)) {
+      return;
+    }
+    setSelectedBookId(candidateBooks[0].id);
+  }, [candidateBooks, selectedBookId]);
+
+  const { mutate: addReference, isPending } = useMutation(
+    _trpc.album.addMediaBookPageReference.mutationOptions({
+      onSuccess: () => {
+        qc.invalidateQueries({
+          queryKey: _trpc.album.getMediaBookPageReferences.queryKey({ mediaId }),
+        });
+        setPageIdInput("");
+        setPageSearch("");
+        setNote("");
+      },
+      onError: (e) => Alert.alert("خطأ", e.message),
+    }),
+  );
+  const { mutate: deleteReference, isPending: isDeletingReference } = useMutation(
+    _trpc.album.deleteMediaBookPageReference.mutationOptions({
+      onSuccess: () => {
+        qc.invalidateQueries({
+          queryKey: _trpc.album.getMediaBookPageReferences.queryKey({ mediaId }),
+        });
+      },
+      onError: (e) => Alert.alert("خطأ", e.message),
+    }),
+  );
+
+  const pageId = Number(pageIdInput.trim());
+  const canAttach = Number.isFinite(pageId) && pageId > 0;
+  const attachPage = (targetPageId: number, targetBookId?: number | null) => {
+    addReference({
+      mediaId,
+      bookId: targetBookId ?? undefined,
+      pageId: targetPageId,
+      startSec: Math.floor(position / 1000),
+      note: note.trim() || undefined,
+    });
+  };
+
+  return (
+    <View style={{ gap: 10, marginHorizontal: 24, marginTop: 14 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+        <Text style={{ fontSize: 14, fontWeight: "700", color: colors.foreground }}>
+          Book pages
+        </Text>
+        <Text style={{ fontSize: 12, color: colors.mutedForeground }}>
+          {mediaReferences.length} refs
+        </Text>
+      </View>
+
+      {mediaReferences.map((reference: any) => (
+        <View
+          key={reference.id}
+          style={{
+            flexDirection: "row-reverse",
+            alignItems: "center",
+            gap: 9,
+            borderRadius: 12,
+            backgroundColor: colors.card,
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+          }}
+        >
+          <Pressable
+            onPress={() => router.push(`/books/${reference.bookId}/reader/${reference.pageId}` as any)}
+            style={{ flex: 1, flexDirection: "row-reverse", alignItems: "center", gap: 9 }}
+          >
+            <Icon name="BookOpen" size={16} className="text-primary" />
+            <View style={{ flex: 1 }}>
+              <Text
+                style={{
+                  fontSize: 13,
+                  fontWeight: "700",
+                  color: colors.foreground,
+                  textAlign: "right",
+                  writingDirection: "rtl",
+                }}
+                numberOfLines={1}
+              >
+                {reference.page?.chapterTitle ??
+                  reference.page?.topicTitle ??
+                  reference.book?.nameAr ??
+                  "Book page"}
+              </Text>
+              <Text style={{ fontSize: 11, color: colors.mutedForeground, textAlign: "right" }}>
+                {reference.startSec != null ? formatMs(reference.startSec * 1000) : "No timestamp"}
+              </Text>
+            </View>
+          </Pressable>
+          <Pressable
+            disabled={isDeletingReference}
+            onPress={() => deleteReference({ id: reference.id })}
+            style={{
+              width: 30,
+              height: 30,
+              borderRadius: 15,
+              alignItems: "center",
+              justifyContent: "center",
+              opacity: isDeletingReference ? 0.45 : 1,
+            }}
+          >
+            <Icon name="Trash2" size={14} className="text-muted-foreground" />
+          </Pressable>
+        </View>
+      ))}
+
+      {mediaReferences.length === 0 ? (
+        <View style={{ borderRadius: 12, backgroundColor: colors.card, padding: 12 }}>
+          <Text style={{ fontSize: 12, color: colors.mutedForeground, textAlign: "center" }}>
+            No book pages referenced yet.
+          </Text>
+        </View>
+      ) : null}
+
+      <View
+        style={{
+          gap: 8,
+          borderRadius: 12,
+          backgroundColor: colors.card,
+          padding: 12,
+        }}
+      >
+        {candidateBooks.length > 0 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+            {candidateBooks.map((book: any) => {
+              const selected = selectedBookId === book.id;
+              return (
+                <Pressable
+                  key={book.id}
+                  onPress={() => setSelectedBookId(book.id)}
+                  style={{
+                    maxWidth: 180,
+                    borderRadius: 999,
+                    backgroundColor: selected ? colors.primary : colors.background,
+                    borderWidth: 1,
+                    borderColor: selected ? colors.primary : colors.border,
+                    paddingHorizontal: 12,
+                    paddingVertical: 8,
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: selected ? colors.primaryForeground : colors.foreground,
+                      fontSize: 12,
+                      fontWeight: "700",
+                      textAlign: "right",
+                      writingDirection: "rtl",
+                    }}
+                    numberOfLines={1}
+                  >
+                    {book.nameAr ?? book.nameEn ?? "Book"}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        )}
+
+        <TextInput
+          value={pageSearch}
+          onChangeText={setPageSearch}
+          placeholder="Search page title or text"
+          placeholderTextColor={colors.mutedForeground}
+          style={{
+            borderRadius: 10,
+            backgroundColor: colors.background,
+            borderWidth: 1,
+            borderColor: colors.border,
+            color: colors.foreground,
+            paddingHorizontal: 12,
+            paddingVertical: 9,
+          }}
+        />
+        {isSearchingPages ? (
+          <ActivityIndicator size="small" color={colors.primary} />
+        ) : null}
+        {searchResults.slice(0, 6).map((result: any) => (
+          <Pressable
+            key={result.pageId}
+            disabled={isPending}
+            onPress={() => attachPage(result.pageId, selectedBookId)}
+            style={{
+              flexDirection: "row-reverse",
+              alignItems: "center",
+              gap: 8,
+              borderRadius: 10,
+              backgroundColor: colors.background,
+              borderWidth: 1,
+              borderColor: colors.border,
+              paddingHorizontal: 10,
+              paddingVertical: 9,
+              opacity: isPending ? 0.55 : 1,
+            }}
+          >
+            <Icon name="Plus" size={14} className="text-primary" />
+            <View style={{ flex: 1 }}>
+              <Text
+                style={{
+                  color: colors.foreground,
+                  fontSize: 12,
+                  fontWeight: "700",
+                  textAlign: "right",
+                  writingDirection: "rtl",
+                }}
+                numberOfLines={1}
+              >
+                {result.chapterTitle ?? result.topicTitle ?? `Page ${result.shamelaPageNo}`}
+              </Text>
+              <Text
+                style={{
+                  color: colors.mutedForeground,
+                  fontSize: 11,
+                  textAlign: "right",
+                  writingDirection: "rtl",
+                }}
+                numberOfLines={1}
+              >
+                {result.snippet ?? `Shamela page ${result.shamelaPageNo}`}
+              </Text>
+            </View>
+          </Pressable>
+        ))}
+
+        <TextInput
+          value={pageIdInput}
+          onChangeText={setPageIdInput}
+          placeholder="Or enter book page id"
+          placeholderTextColor={colors.mutedForeground}
+          keyboardType="number-pad"
+          style={{
+            borderRadius: 10,
+            backgroundColor: colors.background,
+            borderWidth: 1,
+            borderColor: colors.border,
+            color: colors.foreground,
+            paddingHorizontal: 12,
+            paddingVertical: 9,
+          }}
+        />
+        <TextInput
+          value={note}
+          onChangeText={setNote}
+          placeholder="Optional note"
+          placeholderTextColor={colors.mutedForeground}
+          style={{
+            borderRadius: 10,
+            backgroundColor: colors.background,
+            borderWidth: 1,
+            borderColor: colors.border,
+            color: colors.foreground,
+            paddingHorizontal: 12,
+            paddingVertical: 9,
+          }}
+        />
+        <Pressable
+          disabled={!canAttach || isPending}
+          onPress={() => attachPage(pageId)}
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 8,
+            borderRadius: 999,
+            backgroundColor: colors.primary,
+            paddingVertical: 10,
+            opacity: !canAttach || isPending ? 0.45 : 1,
+          }}
+        >
+          {isPending ? (
+            <ActivityIndicator size="small" color={colors.primaryForeground} />
+          ) : (
+            <Icon name="BookOpen" size={15} className="text-primary-foreground" />
+          )}
+          <Text style={{ fontSize: 13, fontWeight: "700", color: colors.primaryForeground }}>
+            Attach current time to page
+          </Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
 
 // ── Player controls ───────────────────────────────────────────────────────────
 
 const SPEED_OPTIONS = [0.75, 1.0, 1.25, 1.5, 2.0] as const;
 const SLEEP_OPTIONS = [5, 10, 15, 30, 45, 60] as const;
 
+function AnimatedPlayButton({
+  isPlaying,
+  isLoading,
+  isDownloading,
+  downloadProgress,
+  onPress,
+  size = 64,
+}: {
+  isPlaying: boolean;
+  isLoading: boolean;
+  isDownloading: boolean;
+  downloadProgress: number;
+  onPress: () => void;
+  size?: number;
+}) {
+  const colors = useColors();
+  const pulse = useRef(new Animated.Value(0)).current;
+  const busy = isLoading || isDownloading;
+
+  useEffect(() => {
+    if (!busy) {
+      pulse.stopAnimation();
+      pulse.setValue(0);
+      return;
+    }
+
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 650,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 0,
+          duration: 650,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [busy, pulse]);
+
+  const scale = pulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.08],
+  });
+  const opacity = pulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.18, 0.36],
+  });
+  const progress = isLoading ? 0 : downloadProgress;
+
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={isLoading}
+      className="items-center justify-center active:opacity-90"
+      style={{
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        backgroundColor: colors.primary,
+        opacity: isLoading ? 0.92 : 1,
+      }}
+    >
+      {busy ? (
+        <Animated.View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            width: size + 12,
+            height: size + 12,
+            borderRadius: (size + 12) / 2,
+            backgroundColor: colors.primary,
+            opacity,
+            transform: [{ scale }],
+          }}
+        />
+      ) : null}
+      {busy ? (
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            top: 4,
+            right: 4,
+            bottom: 4,
+            left: 4,
+            borderRadius: size / 2,
+            borderWidth: 3,
+            borderColor: "rgba(0,0,0,0.18)",
+            overflow: "hidden",
+          }}
+        >
+          <View
+            style={{
+              position: "absolute",
+              left: 0,
+              bottom: 0,
+              width: "100%",
+              height: `${Math.max(8, progress * 100)}%`,
+              backgroundColor: "rgba(0,0,0,0.22)",
+            }}
+          />
+        </View>
+      ) : null}
+      {isLoading ? (
+        <ActivityIndicator color={colors.primaryForeground} />
+      ) : isDownloading ? (
+        <Text
+          style={{
+            color: colors.primaryForeground,
+            fontSize: size >= 60 ? 13 : 10,
+            fontWeight: "800",
+          }}
+        >
+          {formatPercent(downloadProgress)}
+        </Text>
+      ) : (
+        <Icon
+          name={isPlaying ? "Pause" : "Play"}
+          size={size >= 60 ? 28 : 22}
+          className="text-primary-foreground"
+        />
+      )}
+    </Pressable>
+  );
+}
 
 function SleepTimerModal({
   visible,
@@ -200,6 +684,9 @@ function PlayerSection() {
   const isPlaying = useAudioStore((s) => s.isPlaying);
   const position = useAudioStore((s) => s.position);
   const duration = useAudioStore((s) => s.duration);
+  const isLoading = useAudioStore((s) => s.isLoading);
+  const isDownloading = useAudioStore((s) => s.isDownloading);
+  const downloadProgress = useAudioStore((s) => s.downloadProgress);
   const togglePlayPause = useAudioStore((s) => s.togglePlayPause);
   const seek = useAudioStore((s) => s.seek);
   const playbackRate = useAudioStore((s) => s.playbackRate);
@@ -367,25 +854,22 @@ function PlayerSection() {
         <View className="flex-row items-center gap-6">
           <Pressable
             className="p-2 active:opacity-50"
-            onPress={() => seek(Math.max(0, position - 10000))}
+            onPress={() => seek(Math.max(0, position - 5000))}
           >
-            <Icon name="RotateCcw" size={28} className="text-foreground" />
+            <SkipBack5Icon size={32} color={colors.foreground} />
           </Pressable>
-          <Pressable
+          <AnimatedPlayButton
+            isPlaying={isPlaying}
+            isLoading={isLoading}
+            isDownloading={isDownloading}
+            downloadProgress={downloadProgress}
             onPress={() => togglePlayPause()}
-            className="size-16 bg-primary rounded-full items-center justify-center shadow-lg active:opacity-90"
-          >
-            <Icon
-              name={isPlaying ? "Pause" : "Play"}
-              size={28}
-              className="text-primary-foreground"
-            />
-          </Pressable>
+          />
           <Pressable
             className="p-2 active:opacity-50"
-            onPress={() => seek(Math.min(duration, position + 10000))}
+            onPress={() => seek(Math.min(duration, position + 5000))}
           >
-            <Icon name="RotateCw" size={28} className="text-foreground" />
+            <SkipForward5Icon size={32} color={colors.foreground} />
           </Pressable>
         </View>
         <Pressable className="p-2 active:opacity-50">
@@ -401,6 +885,9 @@ function FloatingPlayerWidget({ visible }: { visible: boolean }) {
   const isPlaying = useAudioStore((s) => s.isPlaying);
   const position = useAudioStore((s) => s.position);
   const duration = useAudioStore((s) => s.duration);
+  const isLoading = useAudioStore((s) => s.isLoading);
+  const isDownloading = useAudioStore((s) => s.isDownloading);
+  const downloadProgress = useAudioStore((s) => s.downloadProgress);
   const togglePlayPause = useAudioStore((s) => s.togglePlayPause);
   const seek = useAudioStore((s) => s.seek);
 
@@ -429,29 +916,23 @@ function FloatingPlayerWidget({ visible }: { visible: boolean }) {
         <View className="flex-row items-center justify-between">
           <Pressable
             className="p-2 active:opacity-50"
-            onPress={() => seek(Math.max(0, position - 10000))}
+            onPress={() => seek(Math.max(0, position - 5000))}
           >
-            <Icon
-              name="RotateCcw"
-              size={20}
-              className="text-muted-foreground"
-            />
+            <SkipBack5Icon size={24} color={colors.mutedForeground} />
           </Pressable>
-          <Pressable
+          <AnimatedPlayButton
+            isPlaying={isPlaying}
+            isLoading={isLoading}
+            isDownloading={isDownloading}
+            downloadProgress={downloadProgress}
             onPress={() => togglePlayPause()}
-            className="size-12 items-center justify-center rounded-full bg-primary active:opacity-90"
-          >
-            <Icon
-              name={isPlaying ? "Pause" : "Play"}
-              size={22}
-              className="text-primary-foreground"
-            />
-          </Pressable>
+            size={48}
+          />
           <Pressable
             className="p-2 active:opacity-50"
-            onPress={() => seek(Math.min(duration, position + 10000))}
+            onPress={() => seek(Math.min(duration, position + 5000))}
           >
-            <Icon name="RotateCw" size={20} className="text-muted-foreground" />
+            <SkipForward5Icon size={24} color={colors.mutedForeground} />
           </Pressable>
         </View>
       </View>
@@ -573,6 +1054,7 @@ function MoreMenu({
   albumId,
   onClose,
   onAddToAlbum,
+  onAddToPlaylist,
   onViewAlbum,
   onSleepTimer,
 }: {
@@ -581,6 +1063,7 @@ function MoreMenu({
   albumId?: number | null;
   onClose: () => void;
   onAddToAlbum: () => void;
+  onAddToPlaylist: () => void;
   onViewAlbum: () => void;
   onSleepTimer: () => void;
 }) {
@@ -644,6 +1127,31 @@ function MoreMenu({
               }}
             >
               {hasAlbum ? "تغيير الألبوم" : "إضافة إلى ألبوم"}
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => {
+              onClose();
+              setTimeout(onAddToPlaylist, 250);
+            }}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 14,
+              paddingVertical: 14,
+              paddingHorizontal: 8,
+            }}
+          >
+            <Icon name="ListMusic" size={22} className="text-foreground" />
+            <Text
+              style={{
+                fontSize: 15,
+                color: colors.foreground,
+                fontWeight: "500",
+              }}
+            >
+              إضافة إلى قائمة تشغيل
             </Text>
           </Pressable>
 
@@ -1044,26 +1552,33 @@ export default function AudioBlogScreen() {
   const router = useRouter();
   const qc = useQueryClient();
   const colors = useColors();
-  const { blogId, openComments: openCommentsParam } = useLocalSearchParams<{
+  const { blogId, openComments: openCommentsParam, seekSec: seekSecParam } = useLocalSearchParams<{
     blogId: string;
     openComments?: string;
+    seekSec?: string;
   }>();
   const id = Number(blogId);
+  const seekTargetSec = Number(seekSecParam);
+  const hasSeekTarget = Number.isFinite(seekTargetSec) && seekTargetSec >= 0;
 
   const [activeTab, setActiveTab] = useState<Tab>("info");
   const [showComments, setShowComments] = useState(openCommentsParam === "1");
   const [moreMenuVisible, setMoreMenuVisible] = useState(false);
   const [sleepTimerVisible, setSleepTimerVisible] = useState(false);
   const [albumPickerVisible, setAlbumPickerVisible] = useState(false);
+  const [playlistPickerVisible, setPlaylistPickerVisible] = useState(false);
   const [addingAlbumId, setAddingAlbumId] = useState<number | null>(null);
   const [addedToAlbumName, setAddedToAlbumName] = useState<string | null>(null);
   const [controlsLayout, setControlsLayout] = useState({ y: 0, height: 0 });
   const [showFloatingControls, setShowFloatingControls] = useState(false);
 
   const loadAudio = useAudioStore((s) => s.loadAudio);
+  const seekAudio = useAudioStore((s) => s.seek);
+  const sound = useAudioStore((s) => s.sound);
   const commentsState = useCommentsState(id);
   const loadedBlog = useAudioStore((s) => s.blog);
   const audioError = useAudioStore((s) => s.error);
+  const seekAppliedRef = useRef(false);
 
   const { data: blog } = useQuery(_trpc.blog.getBlog.queryOptions({ id }));
 
@@ -1114,6 +1629,21 @@ export default function AudioBlogScreen() {
     } as any).catch(() => undefined);
   }, [blog?.id, loadedBlog?.id, loadAudio, mediaUrl]);
 
+  useEffect(() => {
+    seekAppliedRef.current = false;
+  }, [id, seekSecParam]);
+
+  useEffect(() => {
+    if (!hasSeekTarget || !blog || loadedBlog?.id !== blog.id || !sound || seekAppliedRef.current) {
+      return;
+    }
+    seekAudio(Math.floor(seekTargetSec * 1000))
+      .then(() => {
+        seekAppliedRef.current = true;
+      })
+      .catch(() => undefined);
+  }, [blog, hasSeekTarget, loadedBlog?.id, seekAudio, seekTargetSec, sound]);
+
   const { mutate: addToAlbum, isPending: isAdding } = useMutation(
     _trpc.album.addMediaToAlbum.mutationOptions({
       onSuccess: (_, vars) => {
@@ -1163,6 +1693,7 @@ export default function AudioBlogScreen() {
               blogId={id}
               autoFocus={openCommentsParam === "1"}
               noKeyboardAvoid
+              timestampMode
               onCommentAdded={commentsState.refetch}
             />
           </KeyboardAvoidingView>
@@ -1309,10 +1840,14 @@ export default function AudioBlogScreen() {
                 ) : null}
               </View>
 
+              {mediaId ? (
+                <AudioBookReferences mediaId={mediaId} albumId={media?.albumId} />
+              ) : null}
+
               {/* Tabs */}
               <View className="mx-6 mt-4">
                 <View className="flex-row rounded-xl bg-muted p-1">
-                  {(["info", "transcript"] as Tab[]).map((tab) => (
+                  {(["info", "transcript", "local"] as Tab[]).map((tab) => (
                     <Pressable
                       key={tab}
                       onPress={() => setActiveTab(tab)}
@@ -1336,7 +1871,13 @@ export default function AudioBlogScreen() {
                     commentsState={commentsState}
                     onCommentsPress={() => setShowComments(true)}
                   />
-                ) : mediaId ? (
+                ) : activeTab === "local" && mediaId ? (
+                  <LocalTranscribe
+                    mediaId={mediaId}
+                    telegramFileId={telegramFileId}
+                    audioUrl={mediaUrl}
+                  />
+                ) : activeTab === "transcript" && mediaId ? (
                   <AudioTranscript
                     mediaId={mediaId}
                     telegramFileId={telegramFileId}
@@ -1363,6 +1904,9 @@ export default function AudioBlogScreen() {
         albumId={media?.albumId}
         onClose={() => setMoreMenuVisible(false)}
         onAddToAlbum={() => setAlbumPickerVisible(true)}
+        onAddToPlaylist={() => {
+          if (mediaId) setPlaylistPickerVisible(true);
+        }}
         onViewAlbum={() => router.push(`/albums/${media?.albumId}` as any)}
         onSleepTimer={() => setSleepTimerVisible(true)}
       />
@@ -1382,6 +1926,12 @@ export default function AudioBlogScreen() {
         isAdding={isAdding}
         addingAlbumId={addingAlbumId}
         onPick={handlePickAlbum}
+      />
+
+      <AddToPlaylistModal
+        visible={playlistPickerVisible}
+        mediaIds={mediaId ? [mediaId] : []}
+        onClose={() => setPlaylistPickerVisible(false)}
       />
     </View>
   );

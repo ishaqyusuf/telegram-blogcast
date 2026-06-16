@@ -49,11 +49,22 @@ type OpenAIVerboseSegment = {
   text?: string;
 };
 
+export const transcriptionModelSchema = z.enum([
+  "gpt-4o-transcribe",
+  "gpt-4o-mini-transcribe",
+  "gemini-2.0-flash",
+  "whisper-local",
+]);
+export type TranscriptionModel = z.infer<typeof transcriptionModelSchema>;
+
 export const transcribeRangeSchema = z.object({
+  mediaId: z.number().optional(),
   fileId: z.string().min(1),
   fromSec: z.number().min(0),
   toSec: z.number().min(0),
-  provider: z.enum(["openai", "gemini"]).default("openai"),
+  provider: z.enum(["openai", "gemini", "whisper-local"]).optional(),
+  model: transcriptionModelSchema.optional(),
+  localTranscriberBaseUrl: z.string().url().optional(),
   language: z.string().min(2).max(8).optional(),
 });
 export type TranscribeRangeSchema = z.infer<typeof transcribeRangeSchema>;
@@ -203,7 +214,7 @@ export async function persistResolvedMedia(
   ctx: TRPCContext,
   resolved: ResolvedMedia,
   blogId: number,
-): Promise<number> {
+): Promise<number | undefined> {
   const { db } = ctx;
   if (!resolved.file) return;
   // ── Author ────────────────────────────────────────────────────────────────
@@ -327,6 +338,7 @@ function overlapsRange(
 
 async function transcribeWithOpenAi(input: {
   fileBlob: Blob;
+  model: "gpt-4o-transcribe" | "gpt-4o-mini-transcribe";
   fromSec: number;
   toSec: number;
   language?: string;
@@ -337,7 +349,7 @@ async function transcribeWithOpenAi(input: {
   }
 
   const formData = new FormData();
-  formData.append("model", "whisper-1");
+  formData.append("model", input.model);
   formData.append("response_format", "verbose_json");
   formData.append("timestamp_granularities[]", "segment");
   if (input.language) formData.append("language", input.language);
@@ -497,53 +509,202 @@ async function transcribeWithGemini(input: {
   };
 }
 
+function resolveTranscriptionModel(input: TranscribeRangeSchema): TranscriptionModel {
+  if (input.model) return input.model;
+  if (input.provider === "gemini") return "gemini-2.0-flash";
+  if (input.provider === "whisper-local") return "whisper-local";
+  return "gpt-4o-transcribe";
+}
+
+function normalizeBaseUrl(value: string) {
+  return value.trim().replace(/\/+$/, "");
+}
+
+function getLocalTranscriberBaseUrl(value?: string) {
+  return normalizeBaseUrl(
+    value ??
+      process.env.LOCAL_TRANSCRIBER_URL ??
+      process.env.TRANSCRIBER_URL ??
+      "http://127.0.0.1:8787",
+  );
+}
+
+export async function checkLocalTranscriber(baseUrl?: string) {
+  const normalizedUrl = getLocalTranscriberBaseUrl(baseUrl);
+  const res = await fetch(`${normalizedUrl}/health`, { cache: "no-store" });
+  if (!res.ok) {
+    throw new Error(`Local transcriber health check failed (${res.status})`);
+  }
+  return (await res.json()) as {
+    ok?: boolean;
+    service?: string;
+    model?: string;
+    device?: string;
+  };
+}
+
+async function transcribeWithLocalWhisper(input: {
+  audioUrl: string;
+  baseUrl?: string;
+  fromSec: number;
+  toSec: number;
+  language?: string;
+}) {
+  const baseUrl = getLocalTranscriberBaseUrl(input.baseUrl);
+  const res = await fetch(`${baseUrl}/transcribe`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      audioUrl: input.audioUrl,
+      from: input.fromSec,
+      to: input.toSec,
+      language: input.language ?? "ar",
+      force: false,
+    }),
+  });
+
+  let json: unknown;
+  try {
+    json = await res.json();
+  } catch {
+    throw new Error(`Local Whisper returned an unreadable response (${res.status})`);
+  }
+
+  if (!res.ok) {
+    const message =
+      typeof json === "object" && json && "detail" in json
+        ? JSON.stringify((json as { detail: unknown }).detail)
+        : `HTTP ${res.status}`;
+    throw new Error(`Local Whisper transcription failed: ${message}`);
+  }
+
+  const parsed = z
+    .object({
+      segments: z.array(
+        z.object({
+          start: z.number(),
+          end: z.number(),
+          text: z.string(),
+        }),
+      ),
+    })
+    .safeParse(json);
+
+  if (!parsed.success) return { segments: [] as Array<{ id: string; from: number; to: number; text: string }> };
+
+  return {
+    segments: parsed.data.segments
+      .map((segment, idx) => ({
+        id: `whisper-${idx}`,
+        from: Math.max(input.fromSec, segment.start),
+        to: Math.min(input.toSec, segment.end),
+        text: segment.text.trim(),
+      }))
+      .filter((segment) => segment.text.length > 0 && segment.to > segment.from),
+  };
+}
+
 export async function transcribeRange(
-  _: TRPCContext,
+  ctx: TRPCContext,
   input: TranscribeRangeSchema,
 ) {
-  const { fileId, fromSec, toSec, language, provider } = input;
+  const { fileId, fromSec, toSec, language } = input;
+  const model = resolveTranscriptionModel(input);
   if (toSec <= fromSec) {
     throw new Error("`toSec` must be greater than `fromSec`");
   }
 
   const { botToken, filePath } = await getTelegramFilePath(fileId);
-  const upstreamRes = await fetch(
-    `https://api.telegram.org/file/bot${botToken}/${filePath}`,
-    { cache: "no-store" },
-  );
-  if (!upstreamRes.ok) {
-    throw new Error(
-      `Failed to fetch media from Telegram (${upstreamRes.status})`,
-    );
-  }
+  const telegramFileUrl = `https://api.telegram.org/file/bot${botToken}/${filePath}`;
 
-  const fileBuffer = await upstreamRes.arrayBuffer();
-  const fileSize = fileBuffer.byteLength;
-  const mimeType = upstreamRes.headers.get("content-type") ?? "audio/mpeg";
-  const fileBlob = new Blob([fileBuffer], {
-    type: mimeType,
-  });
-
-  // Provider upload limits are strict; fail early with a clear message.
-  if (provider === "openai" && fileSize > 24 * 1024 * 1024) {
-    throw new Error(
-      "Audio file is too large for OpenAI transcription (>24MB). Use a shorter source audio.",
-    );
-  }
-  if (provider === "gemini" && fileSize > 19 * 1024 * 1024) {
-    throw new Error(
-      "Audio file is too large for Gemini inline transcription (>19MB). Use a shorter source audio.",
-    );
-  }
-  if (provider === "gemini") {
-    return transcribeWithGemini({
-      fileBase64: Buffer.from(fileBuffer).toString("base64"),
-      mimeType,
+  const result =
+    model === "whisper-local"
+      ? await transcribeWithLocalWhisper({
+      audioUrl: telegramFileUrl,
+      baseUrl: input.localTranscriberBaseUrl,
       fromSec,
       toSec,
       language,
+    })
+      : await (async () => {
+          const upstreamRes = await fetch(telegramFileUrl, {
+            cache: "no-store",
+          });
+          if (!upstreamRes.ok) {
+            throw new Error(
+              `Failed to fetch media from Telegram (${upstreamRes.status})`,
+            );
+          }
+
+          const fileBuffer = await upstreamRes.arrayBuffer();
+          const fileSize = fileBuffer.byteLength;
+          const mimeType = upstreamRes.headers.get("content-type") ?? "audio/mpeg";
+          const fileBlob = new Blob([fileBuffer], {
+            type: mimeType,
+          });
+
+          if (
+            (model === "gpt-4o-transcribe" ||
+              model === "gpt-4o-mini-transcribe") &&
+            fileSize > 24 * 1024 * 1024
+          ) {
+            throw new Error(
+              "Audio file is too large for OpenAI transcription (>24MB). Use a shorter source audio.",
+            );
+          }
+          if (model === "gemini-2.0-flash" && fileSize > 19 * 1024 * 1024) {
+            throw new Error(
+              "Audio file is too large for Gemini inline transcription (>19MB). Use a shorter source audio.",
+            );
+          }
+          if (model === "gemini-2.0-flash") {
+            return transcribeWithGemini({
+              fileBase64: Buffer.from(fileBuffer).toString("base64"),
+              mimeType,
+              fromSec,
+              toSec,
+              language,
+            });
+          }
+
+          const openAiModel =
+            model === "gpt-4o-mini-transcribe"
+              ? "gpt-4o-mini-transcribe"
+              : "gpt-4o-transcribe";
+          return transcribeWithOpenAi({
+            fileBlob,
+            model: openAiModel,
+            fromSec,
+            toSec,
+            language,
+          });
+        })();
+
+  if (input.mediaId) {
+    const transcript = await ctx.db.transcript.upsert({
+      where: { mediaId: input.mediaId },
+      create: { mediaId: input.mediaId, status: "done" },
+      update: { status: "done", updatedAt: new Date() },
     });
+
+    if (result.segments.length > 0) {
+      await ctx.db.transcriptSegment.deleteMany({
+        where: {
+          transcriptId: transcript.id,
+          startSec: { gte: fromSec },
+          endSec: { lte: toSec },
+        },
+      });
+      await ctx.db.transcriptSegment.createMany({
+        data: result.segments.map((segment) => ({
+          transcriptId: transcript.id,
+          startSec: segment.from,
+          endSec: segment.to,
+          text: segment.text,
+        })),
+      });
+    }
   }
 
-  return transcribeWithOpenAi({ fileBlob, fromSec, toSec, language });
+  return result;
 }

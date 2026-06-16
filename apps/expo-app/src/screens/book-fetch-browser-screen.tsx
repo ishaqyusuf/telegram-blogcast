@@ -11,8 +11,26 @@ import {
 } from "@/store/book-fetch-browser-store";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Text, View } from "react-native";
 import { WebView, WebViewMessageEvent } from "react-native-webview";
+
+const DESKTOP_USER_AGENT =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
+
+const DESKTOP_VIEWPORT_SCRIPT = `
+  (function() {
+    var viewport = document.querySelector('meta[name="viewport"]');
+    if (!viewport) {
+      viewport = document.createElement('meta');
+      viewport.setAttribute('name', 'viewport');
+      document.head.appendChild(viewport);
+    }
+    viewport.setAttribute('content', 'width=1280, initial-scale=0.35, maximum-scale=2, user-scalable=yes');
+    document.documentElement.style.minWidth = '1180px';
+    document.body && (document.body.style.minWidth = '1180px');
+  })();
+  true;
+`;
 
 const PROBE_SCRIPT = `
   (function() {
@@ -72,8 +90,9 @@ export default function BookFetchBrowserScreen() {
           `/book-fetch-preview?stagedParseId=${result.stagedParseId}` as any,
         );
       },
-      onError: () => {
+      onError: (error) => {
         setIsCapturing(false);
+        Alert.alert("Import failed", error.message);
       },
     }),
   );
@@ -214,6 +233,9 @@ export default function BookFetchBrowserScreen() {
             <WebView
               ref={webViewRef}
               source={{ uri: url ?? "" }}
+              userAgent={DESKTOP_USER_AGENT}
+              contentMode="desktop"
+              injectedJavaScriptBeforeContentLoaded={DESKTOP_VIEWPORT_SCRIPT}
               javaScriptEnabled
               domStorageEnabled
               sharedCookiesEnabled

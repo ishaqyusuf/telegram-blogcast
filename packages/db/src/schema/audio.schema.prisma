@@ -10,6 +10,8 @@ model Album {
 
     albumAuthorId   Int?
     author          Author?           @relation(fields: [albumAuthorId], references: [id])
+    channelId       Int?
+    channel         Channel?          @relation(fields: [channelId], references: [id])
     thumbnailId     Int?
     thumbnail       Thumbnail?        @relation(fields: [thumbnailId], references: [id])
     audioIndexList  AlbumAudioIndex[]
@@ -17,8 +19,10 @@ model Album {
     albumLocationId Int?
 
     medias Media[]
+    bookReferences AlbumBookReference[]
 
     @@index([albumAuthorId])
+    @@index([channelId])
     @@index([thumbnailId])
 }
 

@@ -21,8 +21,10 @@ Documents the main architectural decisions, runtime boundaries, and integration 
 - Clients consume typed APIs instead of talking to the database directly.
 - Database schema is split into domain-focused Prisma files under `packages/db/src/schema`.
 - Expo media uploads use the Next.js web surface for Vercel Blob client-upload token exchange, then persist media ownership through the shared tRPC API.
+- Local Telegram/channel import runs in the Hono API process. Expo can start, stop, and monitor import through tRPC over the LAN, but the mobile process does not import channel data itself.
 
 ### Architectural Constraints
 - Favor shared workspace packages over duplicated app-local business logic.
 - Preserve typed contracts between API and clients.
 - Keep mobile and web implementations decoupled at the UI layer but aligned on domain contracts.
+- Local-only features that depend on development libraries should stay behind LAN/local API flows so production-hosted web and compiled mobile builds do not need those libraries bundled.

@@ -21,6 +21,9 @@ Tracks the current audio playback experience, supporting components, and future 
   - Global audio mini-player
   - Playback controls including skip and play/pause
   - Footer comment form positioned above the keyboard
+  - Audio-to-book page reference panel on the audio screen
+- Albums screen and album detail for channel-aware audio collections
+- Playlists screen and playlist detail for user-curated audio collections
 
 ### Important Components
 - `apps/expo-app/src/components/global-audio-bar/index.tsx`
@@ -44,9 +47,24 @@ Tracks the current audio playback experience, supporting components, and future 
 - Persistent mini-player is a core interaction pattern.
 - Quick seek controls are part of the intended experience.
 - Custom skip icons exist because the desired transport affordance was not available out of the box.
+- Audio comments default to timestamp metadata on the play screen and render seekable timestamp chips.
+- Album suggestions are same-channel audio candidates, ranked by matching tags.
+- Playlists accept audio media only and skip duplicate additions.
+- Transcripts are persisted after successful server or local LAN transcription and read back through the transcript view.
+- Transcription model preference is selectable globally from Settings and switchable from the audio transcript screen. Local Whisper is only selectable when the LAN transcriber health check succeeds.
+- Local transcription can be queued when the LAN transcriber is unavailable. Queued jobs are stored in local SQLite, require a reachable HTTP(S) audio URL or Telegram file ID, show failures in the local transcription panel, and can be retried later.
+
+### Organization Rules
+- Albums are channel/series-oriented. Adding media to an album enforces audio-only input and one-channel membership; empty albums infer their channel from the first added track.
+- Albums can reference books through `AlbumBookReference`, allowing a series to be connected to its source text.
+- Individual audio media can reference book pages through `MediaBookPageReference`, including timestamp ranges and notes. Album/book and media/page references can be removed from the mobile UI, and book-page reference taps open audio at the referenced timestamp when available.
+- Playlists are user-curated and can mix audio across channels unless future product rules tighten them.
+- Audio menus and channel chat expose add-to-album and add-to-playlist actions for audio media.
+- Local Whisper transcription is routed through the tRPC API with a LAN transcriber URL, keeping the client on the same typed transcription contract as hosted models.
 
 ### Future Improvements
 - Stronger offline download and sync behavior
 - Cross-device playback continuity
 - Richer transcript integration
 - Smarter queueing and playlists
+- Playlist drag/drop reordering UI; API reorder support exists.

@@ -1,7 +1,7 @@
 // apps/api/src/routers/blog.route.ts
 import { createTRPCRouter, publicProcedure } from "../init";
 import { z } from "zod";
-import { transcribeRange, transcribeRangeSchema } from "../../queries/blog";
+import { checkLocalTranscriber, transcribeRange, transcribeRangeSchema } from "../../queries/blog";
 import { posts, postsSchema } from "../../queries/posts";
 import { consoleLog } from "@acme/utils";
 import { TRPCError } from "@trpc/server";
@@ -22,6 +22,11 @@ const blogMediaUploadSchema = z.object({
 });
 
 type BlogMediaUpload = z.infer<typeof blogMediaUploadSchema>;
+const mergeBlogsInputSchema = z.object({
+  primaryBlogId: z.number(),
+  secondaryBlogId: z.number(),
+  contentStrategy: z.enum(["primary-first", "secondary-first"]).optional().default("primary-first"),
+});
 
 function normalizeTagTitle(value: string) {
   const trimmed = value.trim();
@@ -201,6 +206,141 @@ export const blogRoutes = createTRPCRouter({
       });
     }),
 
+  mergeBlogs: publicProcedure
+    .input(mergeBlogsInputSchema)
+    .mutation(async ({ ctx, input }) => {
+      if (input.primaryBlogId === input.secondaryBlogId) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Select two different blogs to merge.",
+        });
+      }
+
+      const { db } = ctx;
+      return db.$transaction(async (tx) => {
+        const blogs = await tx.blog.findMany({
+          where: {
+            id: { in: [input.primaryBlogId, input.secondaryBlogId] },
+            deletedAt: null,
+          },
+          include: {
+            medias: true,
+            blogTags: { where: { deletedAt: null } },
+            blogs: true,
+          },
+        });
+
+        const primary = blogs.find((blog) => blog.id === input.primaryBlogId);
+        const secondary = blogs.find((blog) => blog.id === input.secondaryBlogId);
+
+        if (!primary || !secondary) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "One or both selected blogs were not found.",
+          });
+        }
+
+        if (primary.channelId && secondary.channelId && primary.channelId !== secondary.channelId) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Only blogs from the same channel can be merged.",
+          });
+        }
+
+        const primaryContent = primary.content?.trim();
+        const secondaryContent = secondary.content?.trim();
+        const contentParts =
+          input.contentStrategy === "secondary-first"
+            ? [secondaryContent, primaryContent]
+            : [primaryContent, secondaryContent];
+        const mergedContent = Array.from(new Set(contentParts.filter(Boolean))).join("\n\n");
+
+        const secondaryTagIds = secondary.blogTags
+          .map((blogTag) => blogTag.tagId)
+          .filter((tagId): tagId is number => typeof tagId === "number");
+
+        for (const tagId of secondaryTagIds) {
+          const exists = await tx.blogTags.findFirst({
+            where: {
+              blogId: primary.id,
+              tagId,
+              deletedAt: null,
+            },
+            select: { id: true },
+          });
+          if (!exists) {
+            await tx.blogTags.create({
+              data: {
+                blogId: primary.id,
+                tagId,
+              },
+            });
+          }
+        }
+
+        await tx.media.updateMany({
+          where: { blogId: secondary.id },
+          data: { blogId: primary.id },
+        });
+
+        await tx.blogComments.updateMany({
+          where: { blogId: secondary.id, deletedAt: null },
+          data: { blogId: primary.id },
+        });
+
+        const secondaryMeta = (secondary.meta ?? {}) as Record<string, unknown>;
+        const primaryMeta = (primary.meta ?? {}) as Record<string, unknown>;
+        const previousMergedBlogIds = Array.isArray(primaryMeta.mergedBlogIds)
+          ? primaryMeta.mergedBlogIds.filter(
+              (id): id is number => typeof id === "number" && Number.isFinite(id),
+            )
+          : [];
+        const hasAudioMedia = [...primary.medias, ...secondary.medias].some((media) =>
+          media.mimeType?.toLowerCase().startsWith("audio/"),
+        );
+
+        const merged = await tx.blog.update({
+          where: { id: primary.id },
+          data: {
+            content: mergedContent || primary.content || secondary.content,
+            type: hasAudioMedia ? "audio" : primary.type,
+            channelId: primary.channelId ?? secondary.channelId,
+            meta: {
+              ...primaryMeta,
+              mergedBlogIds: [
+                ...previousMergedBlogIds,
+                secondary.id,
+              ],
+              lastMerge: {
+                secondaryBlogId: secondary.id,
+                secondaryMeta,
+                mergedAt: new Date().toISOString(),
+              },
+            },
+          },
+          include: {
+            medias: { include: { file: true, author: true, album: true, albumAudioIndex: true } },
+            blogTags: { include: { tags: true }, where: { deletedAt: null } },
+            channel: { select: { id: true, title: true, username: true } },
+          },
+        });
+
+        await tx.blog.update({
+          where: { id: secondary.id },
+          data: {
+            deletedAt: new Date(),
+            meta: {
+              ...secondaryMeta,
+              mergedIntoBlogId: primary.id,
+              mergedAt: new Date().toISOString(),
+            },
+          },
+        });
+
+        return merged;
+      });
+    }),
+
   // ── Tags ────────────────────────────────────────────────────────────────────
 
   getTags: publicProcedure.query(async ({ ctx }) => {
@@ -305,6 +445,7 @@ export const blogRoutes = createTRPCRouter({
               content: true,
               deletedAt: true,
               createdAt: true,
+              meta: true,
               blogTags: { include: { tags: true }, where: { deletedAt: null } },
             },
           },
@@ -406,6 +547,18 @@ export const blogRoutes = createTRPCRouter({
     .input(transcribeRangeSchema)
     .mutation(async (props) => {
       return transcribeRange(props.ctx, props.input);
+    }),
+
+  checkLocalTranscriber: publicProcedure
+    .input(z.object({ baseUrl: z.string().url().optional() }).optional())
+    .query(async ({ input }) => {
+      const health = await checkLocalTranscriber(input?.baseUrl);
+      return {
+        ok: health.ok !== false,
+        service: health.service ?? "local-transcriber",
+        model: health.model ?? "unknown",
+        device: health.device ?? "local",
+      };
     }),
 
   // ── Transcript ──────────────────────────────────────────────────────────────

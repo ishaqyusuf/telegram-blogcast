@@ -176,6 +176,31 @@ Audio files are fetched using Bot API `file_id` resolution (MTProto forward → 
 | `bun gen-session` | Generate Telegram string session |
 | `bun test`        | Run all tests                    |
 
+### Expo preview builds
+
+`bun run build:preview` and `bun run update:preview` automatically verify the
+active EAS account before running the Expo app command. Configure the default
+account with:
+
+```env
+EAS_EMAIL=
+EAS_PASSWORD=
+EAS_USERNAME= # optional, used to match an existing Expo session
+```
+
+Named accounts can be selected per run:
+
+```env
+EAS_ACCOUNT=work
+EAS_WORK_EMAIL=
+EAS_WORK_PASSWORD=
+EAS_WORK_USERNAME=
+```
+
+```bash
+bun run build:preview -- --account work
+```
+
 ---
 
 ## Roadmap

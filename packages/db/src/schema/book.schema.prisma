@@ -27,6 +27,9 @@ model Book {
   deletedAt      DateTime?
   blogId         Int          @unique
   blog           Blog         @relation(fields: [blogId], references: [id])
+  ownerUserId    Int?
+  sourceType     String       @default("user")
+  editable       Boolean      @default(true)
   nameAr         String?
   nameEn         String?
   coverUrl       String?
@@ -43,6 +46,8 @@ model Book {
   pageImports    BookPageImportHistory[]
   rawPages       ShamelaRawPage[]
   stagedParses   ShamelaStagedPageParse[]
+  albumReferences AlbumBookReference[]
+  mediaReferences MediaBookPageReference[]
   authors        BookAuthor[]
   // Offline sync fields — updated whenever a page is fetched
   contentHash    String?
@@ -50,6 +55,8 @@ model Book {
 
   @@index([blogId])
   @@index([shelfId])
+  @@index([ownerUserId])
+  @@index([sourceType])
 }
 
 model BookVolume {
@@ -92,10 +99,48 @@ model BookPage {
   comments      BookPageComment[]
   importHistory BookPageImportHistory[]
   stagedParses  ShamelaStagedPageParse[]
+  audioReferences MediaBookPageReference[]
 
   @@unique([bookId, shamelaPageNo])
   @@index([bookId])
   @@index([volumeId])
+}
+
+model AlbumBookReference {
+  id        Int       @id @default(autoincrement())
+  createdAt DateTime? @default(now()) @db.Timestamp(0)
+  updatedAt DateTime? @updatedAt
+  deletedAt DateTime?
+  albumId   Int
+  album     Album     @relation(fields: [albumId], references: [id])
+  bookId    Int
+  book      Book      @relation(fields: [bookId], references: [id])
+  note      String?
+
+  @@unique([albumId, bookId])
+  @@index([albumId])
+  @@index([bookId])
+}
+
+model MediaBookPageReference {
+  id          Int       @id @default(autoincrement())
+  createdAt   DateTime? @default(now()) @db.Timestamp(0)
+  updatedAt   DateTime? @updatedAt
+  deletedAt   DateTime?
+  mediaId     Int
+  media       Media     @relation(fields: [mediaId], references: [id])
+  bookId      Int
+  book        Book      @relation(fields: [bookId], references: [id])
+  pageId      Int
+  page        BookPage  @relation(fields: [pageId], references: [id])
+  startSec    Int?
+  endSec      Int?
+  note        String?
+  quoteText   String?
+
+  @@index([mediaId])
+  @@index([bookId])
+  @@index([pageId])
 }
 
 model BookPageParagraph {

@@ -1,4 +1,4 @@
-import "react-native-gesture-handler";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useThemeConfig } from "@/hooks/use-theme-color";
 import { ThemeProvider } from "@react-navigation/native";
@@ -8,7 +8,6 @@ import * as SplashScreen from "expo-splash-screen";
 import { useEffect, useRef } from "react";
 import "react-native-reanimated";
 import "@/styles/global.css";
-import { GestureHandlerRootView } from "react-native-gesture-handler";
 import {
   AuthProvider,
   useAuthContext,
@@ -29,14 +28,15 @@ import { GlobalAudioBar } from "@/components/global-audio-bar";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { useColorScheme } from "@/hooks/use-color";
 import { initSentry, Sentry } from "@/lib/sentry";
+import { getThemeOverride } from "@/lib/theme-preference";
+import { initLocalDb } from "@/db/local-db";
 export {
   // Catch any errors thrown by the Layout component.
   ErrorBoundary,
 } from "expo-router";
 
 export const unstable_settings = {
-  // Ensure that reloading on `/modal` keeps a back button present.
-  initialRouteName: "(tabs)",
+  initialRouteName: "index",
 };
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
@@ -60,6 +60,12 @@ function RootLayout() {
     }
   }, [loaded]);
 
+  useEffect(() => {
+    initLocalDb().catch((error) => {
+      console.warn("[DB] local init failed", error);
+    });
+  }, []);
+
   if (!loaded) {
     return null;
   }
@@ -78,9 +84,9 @@ const InitialLayout = () => {
         <AppStatusBar />
         {/* <StatusBar style="auto" /> */}
 
-        <Stack initialRouteName="home" screenOptions={{ headerShown: false }}>
+        <Stack initialRouteName="index" screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="index" />
           <Stack.Screen name="home" />
-          <Stack.Screen name="home2" />
           <Stack.Screen name="blog-view-2/[blogId]/index" />
           <Stack.Screen
             name="blog-view-2/[blogId]/transcribe-audio"
@@ -90,13 +96,17 @@ const InitialLayout = () => {
           <Stack.Screen name="blog-view/[blogId]/index" />
           <Stack.Screen name="blog-view-text/[blogId]/index" />
           <Stack.Screen name="blog-form" options={{ presentation: "modal" }} />
+          <Stack.Screen name="blog-import" />
           <Stack.Screen name="channels" />
           <Stack.Screen name="channels/[channelId]" />
           <Stack.Screen name="play-history" />
           <Stack.Screen name="search" />
           <Stack.Screen name="settings" />
+          <Stack.Screen name="updates" />
           <Stack.Screen name="albums" />
           <Stack.Screen name="albums/[albumId]" />
+          <Stack.Screen name="playlists" />
+          <Stack.Screen name="playlists/[playlistId]" />
           <Stack.Screen name="book-fetch" />
           <Stack.Screen
             name="book-fetch-browser"
@@ -123,7 +133,6 @@ const InitialLayout = () => {
               animation: "fade",
             }}
           />
-          <Stack.Screen name="index" />
           <Stack.Screen name="+not-found" />
         </Stack>
         {/* <Stack>
@@ -159,12 +168,17 @@ const InitialLayout = () => {
 function RootLayoutNav() {
   const { setColorScheme } = useColorScheme();
   const theme = useThemeConfig();
-  const didSetDefaultTheme = useRef(false);
 
   useEffect(() => {
-    if (didSetDefaultTheme.current) return;
-    didSetDefaultTheme.current = true;
-    setColorScheme("light");
+    let mounted = true;
+    (async () => {
+      const override = await getThemeOverride();
+      if (!mounted) return;
+      setColorScheme(override);
+    })();
+    return () => {
+      mounted = false;
+    };
   }, [setColorScheme]);
 
   return (

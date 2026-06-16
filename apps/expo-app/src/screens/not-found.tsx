@@ -3,8 +3,11 @@ import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Text } from "@/components/ui/text";
+import config from "@root/app.config";
 import { Link, Stack } from "expo-router";
 import { TouchableOpacity, View } from "react-native";
+
+const updateVersion = String(config.extra?.updateVersion ?? "N/A");
 
 export default function NotFound() {
   return (
@@ -64,17 +67,14 @@ export default function NotFound() {
 
         {/* Home Button */}
         <Link href="/" asChild>
-          <TouchableOpacity className="bg-primary px-8 py-4 rounded-2xl shadow-lg active:opacity-80">
-            <View className="flex-row items-center gap-2">
-              <Icon name="Home" size={20} className="text-primary-foreground" />
-              <Text className="text-primary-foreground text-lg font-bold">Go Back Home</Text>
-            </View>
+          <TouchableOpacity className="size-14 items-center justify-center rounded-full bg-primary shadow-lg active:opacity-80">
+            <Icon name="Home" size={22} className="text-primary-foreground" />
           </TouchableOpacity>
         </Link>
 
         {/* Additional Help Text */}
         <Text className="text-sm text-muted-foreground text-center mt-8">
-          Need help? Contact our support team
+          Update {updateVersion}
         </Text>
       </View>
     </>

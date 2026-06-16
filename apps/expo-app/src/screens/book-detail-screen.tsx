@@ -11,6 +11,7 @@ import { _trpc } from "@/components/static-trpc";
 import { SafeArea } from "@/components/safe-area";
 import { Icon } from "@/components/ui/icon";
 import { ChapterTree } from "@/components/book/chapter-tree";
+import { saveBookDownloadToLocalDb } from "@/lib/book-offline-download";
 import { useBookOfflineStore } from "@/store/book-offline-store";
 import { vanillaTrpc } from "@/trpc/vanilla-client";
 import { useTranslation } from "@/lib/i18n";
@@ -27,6 +28,7 @@ export default function BookDetailScreen() {
   const [fetchUrl, setFetchUrl] = useState("");
   const [showFetchInput, setShowFetchInput] = useState(false);
   const [fetchingPageId, setFetchingPageId] = useState<number | null>(null);
+  const [isDownloadingBook, setIsDownloadingBook] = useState(false);
 
   // ── Auto-fetch all ─────────────────────────────────────────────────────────
   const [isAutoFetching, setIsAutoFetching] = useState(false);
@@ -37,6 +39,10 @@ export default function BookDetailScreen() {
   const getLastPage  = useBookOfflineStore((s) => s.getLastPage);
   const getBookmarks = useBookOfflineStore((s) => s.getBookmarks);
   const removeBookmark = useBookOfflineStore((s) => s.removeBookmark);
+  const setDownloaded = useBookOfflineStore((s) => s.setDownloaded);
+  const setDownloadProgress = useBookOfflineStore((s) => s.setDownloadProgress);
+  const clearDownloadProgress = useBookOfflineStore((s) => s.clearDownloadProgress);
+  const downloadProgress = useBookOfflineStore((s) => s.downloadProgress[bookIdNum] ?? 0);
   const [showBookmarks, setShowBookmarks] = useState(false);
 
   const { data: book, isLoading } = useQuery(
@@ -117,6 +123,28 @@ export default function BookDetailScreen() {
     setIsAutoFetching(false);
   }
 
+  async function downloadBookForOffline() {
+    if (isDownloadingBook || !Number.isFinite(bookIdNum)) return;
+
+    setIsDownloadingBook(true);
+    setDownloadProgress(bookIdNum, 0.08);
+
+    try {
+      const payload = await vanillaTrpc.book.getBookForDownload.query({ bookId: bookIdNum });
+      setDownloadProgress(bookIdNum, 0.55);
+
+      const meta = await saveBookDownloadToLocalDb(payload);
+      setDownloaded(meta);
+      setDownloadProgress(bookIdNum, 1);
+      Alert.alert(t("savedOffline"), t("downloadOffline"));
+    } catch (e) {
+      Alert.alert(t("error"), e instanceof Error ? e.message : String(e));
+    } finally {
+      setIsDownloadingBook(false);
+      clearDownloadProgress(bookIdNum);
+    }
+  }
+
   if (isLoading) {
     return (
       <View className="flex-1 items-center justify-center bg-background">
@@ -138,6 +166,10 @@ export default function BookDetailScreen() {
 
   const fetchedCount = book.pages.filter((p) => p.status === "fetched").length;
   const totalCount = book.pages.length;
+  const isImportedBook =
+    book.editable === false ||
+    book.sourceType === "shamela" ||
+    Boolean(book.shamelaId || book.shamelaUrl);
 
   const continuePageId = getLastPage(bookIdNum);
   const bookmarks = getBookmarks(bookIdNum);
@@ -224,9 +256,36 @@ export default function BookDetailScreen() {
                   {book.category}
                 </Text>
               )}
-
             </View>
           </View>
+
+          {isImportedBook && (
+            <View
+              className="mx-4 mb-3 rounded-xl border border-border bg-card px-4 py-3"
+              style={{ gap: 5 }}
+            >
+              <Text
+                className="text-right text-[13px] font-bold text-foreground"
+                style={{ writingDirection: "rtl" }}
+              >
+                Imported read-only book
+              </Text>
+              <Text
+                className="text-right text-[12px] text-muted-foreground"
+                style={{ writingDirection: "rtl" }}
+              >
+                Pages can be refreshed from the Shamela source. Direct editing stays disabled.
+              </Text>
+              {book.shamelaUrl ? (
+                <Text
+                  className="text-left text-[11px] text-muted-foreground"
+                  numberOfLines={1}
+                >
+                  {book.shamelaUrl}
+                </Text>
+              ) : null}
+            </View>
+          )}
 
           {continuePageId && (
             <Pressable
@@ -402,6 +461,29 @@ export default function BookDetailScreen() {
                     )}
                   </Pressable>
                 )}
+
+                <Pressable
+                  onPress={downloadBookForOffline}
+                  disabled={isDownloadingBook}
+                  className="flex-row items-center justify-center gap-2 rounded-xl bg-card py-2.5"
+                  style={{ opacity: isDownloadingBook ? 0.65 : 1 }}
+                >
+                  {isDownloadingBook ? (
+                    <>
+                      <ActivityIndicator size="small" color={colors.primary} />
+                      <Text className="text-[13px] font-semibold text-primary">
+                        {Math.round(downloadProgress * 100)}%
+                      </Text>
+                    </>
+                  ) : (
+                    <>
+                      <Icon name="Download" size={15} className="text-muted-foreground" />
+                      <Text className="text-[13px] font-semibold text-muted-foreground">
+                        {t("downloadOffline")}
+                      </Text>
+                    </>
+                  )}
+                </Pressable>
               </View>
             )}
           </View>

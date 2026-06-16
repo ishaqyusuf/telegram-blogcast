@@ -231,7 +231,7 @@ export function GlobalAudioBar() {
             }}
           >
             <Animated.View style={{ transform: [{ rotate }] }}>
-              <Disc3 size={ART - 4} color={colors.primary} strokeWidth={1.5} />
+              <Icon name="Disc3" size={ART - 4} color={colors.primary} />
             </Animated.View>
             {/* Center hub dot */}
             <View
@@ -305,9 +305,10 @@ export function GlobalAudioBar() {
               }}
             >
               {isPlaying ? (
-                <Pause size={18} color="#000" fill="#000" />
+                <Icon name="Pause" size={18} color="#000" fill="#000" />
               ) : (
-                <Play
+                <Icon
+                  name="Play"
                   size={18}
                   color="#000"
                   fill="#000"

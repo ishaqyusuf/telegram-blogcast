@@ -8,6 +8,10 @@ export const localBooks = sqliteTable("local_books", {
   nameEn:        text("name_en"),
   coverColor:    text("cover_color"),
   shamelaId:     integer("shamela_id"),
+  shamelaUrl:    text("shamela_url"),
+  sourceType:    text("source_type"),
+  editable:      integer("editable", { mode: "boolean" }),
+  ownerUserId:   integer("owner_user_id"),
   contentHash:   text("content_hash"),
   downloadedAt:  integer("downloaded_at", { mode: "timestamp" }),
   lastSyncedAt:  integer("last_synced_at", { mode: "timestamp" }),
@@ -93,9 +97,27 @@ export const localPageDrafts = sqliteTable("local_page_drafts", {
   syncStatus:   text("sync_status").notNull().default("pending_update"),
 });
 
+export const localTranscriptionJobs = sqliteTable("local_transcription_jobs", {
+  localId:      text("local_id").primaryKey(),
+  mediaId:      integer("media_id").notNull(),
+  telegramFileId: text("telegram_file_id"),
+  audioUrl:     text("audio_url"),
+  fromSec:      integer("from_sec"),
+  toSec:        integer("to_sec"),
+  language:     text("language").notNull().default("ar"),
+  transcriberUrl: text("transcriber_url"),
+  status:       text("status").notNull().default("queued"),
+  retryCount:   integer("retry_count").notNull().default(0),
+  errorMessage: text("error_message"),
+  createdAt:    integer("created_at", { mode: "timestamp" }).notNull(),
+  updatedAt:    integer("updated_at", { mode: "timestamp" }).notNull(),
+  completedAt:  integer("completed_at", { mode: "timestamp" }),
+});
+
 export type LocalHighlight = typeof localHighlights.$inferSelect;
 export type LocalComment   = typeof localComments.$inferSelect;
 export type LocalPageDraft = typeof localPageDrafts.$inferSelect;
 export type LocalPage      = typeof localPages.$inferSelect;
 export type LocalParagraph = typeof localParagraphs.$inferSelect;
 export type LocalFootnote  = typeof localFootnotes.$inferSelect;
+export type LocalTranscriptionJob = typeof localTranscriptionJobs.$inferSelect;

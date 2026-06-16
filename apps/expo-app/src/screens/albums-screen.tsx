@@ -1,12 +1,14 @@
 import { Pressable } from "@/components/ui/pressable";
-import { useQuery } from "@/lib/react-query";
+import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { useRouter } from "expo-router";
-import { FlatList, Text, View } from "react-native";
+import { ActivityIndicator, FlatList, Modal, Text, TextInput, View } from "react-native";
+import { useState } from "react";
 
 import { _trpc } from "@/components/static-trpc";
 import { SafeArea } from "@/components/safe-area";
 import { Icon } from "@/components/ui/icon";
 import { useTranslation } from "@/lib/i18n";
+import { useColors } from "@/hooks/use-color";
 
 const ALBUM_COLORS = ["#1e40af", "#0f766e", "#b45309", "#4f46e5", "#be123c", "#0369a1"];
 
@@ -21,10 +23,30 @@ function getInitials(name?: string | null) {
 
 export default function AlbumsScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const colors = useColors();
   const { t } = useTranslation();
+  const [createVisible, setCreateVisible] = useState(false);
+  const [name, setName] = useState("");
   const { data: albums = [], isLoading } = useQuery(
     _trpc.album.getAlbums.queryOptions()
   );
+  const createAlbum = useMutation(
+    _trpc.album.createAlbum.mutationOptions({
+      onSuccess: (album) => {
+        queryClient.invalidateQueries(_trpc.album.getAlbums.queryOptions());
+        setName("");
+        setCreateVisible(false);
+        router.push(`/albums/${album.id}` as any);
+      },
+    })
+  );
+
+  function handleCreateAlbum() {
+    const trimmed = name.trim();
+    if (!trimmed || createAlbum.isPending) return;
+    createAlbum.mutate({ name: trimmed });
+  }
 
   return (
     <View className="flex-1 bg-background">
@@ -38,6 +60,12 @@ export default function AlbumsScreen() {
             <Icon name="ChevronLeft" size={22} className="text-foreground" />
           </Pressable>
           <Text className="text-lg font-bold text-foreground flex-1">{t("albums")}</Text>
+          <Pressable
+            onPress={() => setCreateVisible(true)}
+            className="size-9 rounded-full bg-primary items-center justify-center active:opacity-80"
+          >
+            <Icon name="Plus" size={18} className="text-primary-foreground" />
+          </Pressable>
         </View>
 
         {isLoading ? (
@@ -90,6 +118,66 @@ export default function AlbumsScreen() {
           />
         )}
       </SafeArea>
+
+      <Modal
+        visible={createVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCreateVisible(false)}
+      >
+        <Pressable
+          onPress={() => setCreateVisible(false)}
+          className="flex-1 justify-center bg-black/60 px-5"
+        >
+          <Pressable
+            onPress={(event) => event.stopPropagation()}
+            className="rounded-2xl bg-card p-4"
+          >
+            <Text className="mb-3 text-base font-bold text-foreground">
+              Create album
+            </Text>
+            <View className="mb-4 flex-row items-center gap-2 rounded-xl border border-border bg-muted px-3">
+              <Icon name="Disc3" size={16} className="text-muted-foreground" />
+              <TextInput
+                value={name}
+                onChangeText={setName}
+                placeholder={t("newAlbumName")}
+                placeholderTextColor={colors.mutedForeground}
+                autoFocus
+                returnKeyType="done"
+                onSubmitEditing={handleCreateAlbum}
+                style={{
+                  flex: 1,
+                  color: colors.foreground,
+                  fontSize: 14,
+                  paddingVertical: 12,
+                }}
+              />
+            </View>
+            <View className="flex-row gap-2">
+              <Pressable
+                onPress={() => setCreateVisible(false)}
+                className="h-11 flex-1 items-center justify-center rounded-xl bg-muted active:opacity-80"
+              >
+                <Text className="text-sm font-semibold text-foreground">Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={handleCreateAlbum}
+                disabled={!name.trim() || createAlbum.isPending}
+                className="h-11 flex-1 items-center justify-center rounded-xl bg-primary active:opacity-80 disabled:opacity-50"
+              >
+                {createAlbum.isPending ? (
+                  <ActivityIndicator size="small" color={colors.primaryForeground} />
+                ) : (
+                  <Text className="text-sm font-bold text-primary-foreground">
+                    {t("create")}
+                  </Text>
+                )}
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }

@@ -12,6 +12,13 @@ import { getPrimaryImageUrl } from "./utils";
 
 const isRTL = I18nManager.isRTL;
 
+function formatMediaSizeMb(size?: number | null) {
+  if (!size || !Number.isFinite(size) || size <= 0) return null;
+
+  const mb = size / (1024 * 1024);
+  return `${mb >= 10 ? Math.round(mb) : mb.toFixed(1)} MB`;
+}
+
 function LinkifiedText({
   content,
   className,
@@ -72,6 +79,8 @@ function CardText({ post }: { post: BlogItem }) {
 function CardAudio({ post }: { post: BlogItem }) {
   if (!post.audio?.telegramFileId && !(post.audio as any)?.url) return null;
 
+  const mediaSize = formatMediaSizeMb(post.audio?.size);
+
   return (
     <View className="mb-1 flex-row items-center gap-3 rounded-xl border border-border bg-background p-3">
       <Pressable className="size-10 items-center justify-center rounded-full bg-accent">
@@ -86,7 +95,9 @@ function CardAudio({ post }: { post: BlogItem }) {
             00:00
           </Text>
           <Text className="text-[10px] font-medium text-muted-foreground">
-            {minuteToString(post.audio?.duration)}
+            {[minuteToString(post.audio?.duration), mediaSize]
+              .filter(Boolean)
+              .join(" • ")}
           </Text>
         </View>
       </View>

@@ -25,5 +25,23 @@ Tracks important request/response expectations and typed boundaries between clie
 - Blog media is source-aware. `blog.createBlog` accepts optional `mediaUploads` from Vercel Blob and persists them as `File` + `Media` rows with `source = "vercel_blob"`; existing Telegram media keeps using Telegram `fileId` values and the web proxy.
 - Expo uploads user-selected blog media through the Next.js `/api/blob/upload` client-upload token endpoint, then sends the resulting Blob metadata to tRPC with the blog create/update payload.
 
+### Blog Contracts
+- `blog.mergeBlogs` accepts `{ primaryBlogId, secondaryBlogId, contentStrategy? }`, requires two different non-deleted blogs, rejects cross-channel merges, moves secondary media/tag/comment links to the primary blog, writes merge metadata, and soft-deletes the secondary blog.
+- `blog.addComment` accepts optional `timestampSeconds`; timestamped comments store `meta.audioTimestampSeconds`.
+- `blog.getComments` includes comment `meta` so clients can render timestamp chips.
+- `blog.transcribeRange` accepts optional `mediaId`, `model`, and `localTranscriberBaseUrl`; when `mediaId` is present, successful transcription segments are persisted to `Transcript` and `TranscriptSegment`.
+- Supported transcription model values are `gpt-4o-transcribe`, `gpt-4o-mini-transcribe`, `gemini-2.0-flash`, and `whisper-local`. The legacy `provider` input is tolerated for older clients.
+- `blog.checkLocalTranscriber` checks a local Whisper service health endpoint and returns availability/model metadata for mobile Settings and audio-screen model switching.
+
+### Audio Organization Contracts
+- `album.addMediaToAlbum` accepts `{ albumId, mediaIds }`, requires audio media, rejects missing media, rejects mixed-channel candidate sets, and rejects cross-channel additions when the album already has a channel. Empty albums infer `channelId` from the first added audio blog.
+- `album.getSuggestedMedia` returns same-channel audio candidates with matching tag metadata and excludes media already in the album.
+- `playlist` router exposes `getPlaylists`, `getPlaylist`, `createPlaylist`, `addMediaToPlaylist`, `removeMediaFromPlaylist`, and `reorderEpisodes`.
+- `playlist.addMediaToPlaylist` accepts audio media only, skips duplicates, and returns `{ added, skipped }`.
+
+### Local API Contracts
+- `GET /health` returns a lightweight API reachability payload for local Expo/APK screens.
+- `/blog-import` mobile flow talks to the local API over LAN using the tRPC channel procedures: `channel.getChannels`, `channel.syncChannels`, `channel.toggleFetchable`, `channel.startFetch`, `channel.stopFetch`, and `channel.getFetcherState`.
+
 ### TODO
 - Record contract notes per router as features are implemented or refactored.

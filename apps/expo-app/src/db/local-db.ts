@@ -83,11 +83,27 @@ export async function initLocalDb() {
       name_en         TEXT,
       cover_color     TEXT,
       shamela_id      INTEGER,
+      shamela_url     TEXT,
+      source_type     TEXT,
+      editable        INTEGER,
+      owner_user_id   INTEGER,
       content_hash    TEXT,
       downloaded_at   INTEGER,
       last_synced_at  INTEGER
     );
   `);
+      try {
+        await localDb.run(sql`ALTER TABLE local_books ADD COLUMN shamela_url TEXT;`);
+      } catch {}
+      try {
+        await localDb.run(sql`ALTER TABLE local_books ADD COLUMN source_type TEXT;`);
+      } catch {}
+      try {
+        await localDb.run(sql`ALTER TABLE local_books ADD COLUMN editable INTEGER;`);
+      } catch {}
+      try {
+        await localDb.run(sql`ALTER TABLE local_books ADD COLUMN owner_user_id INTEGER;`);
+      } catch {}
 
       await localDb.run(sql`
     CREATE TABLE IF NOT EXISTS local_volumes (
@@ -231,6 +247,28 @@ export async function initLocalDb() {
       } catch {}
 
       await localDb.run(sql`CREATE INDEX IF NOT EXISTS idx_local_draft_book ON local_page_drafts(book_id);`);
+
+      await localDb.run(sql`
+    CREATE TABLE IF NOT EXISTS local_transcription_jobs (
+      local_id        TEXT PRIMARY KEY,
+      media_id         INTEGER NOT NULL,
+      telegram_file_id TEXT,
+      audio_url        TEXT,
+      from_sec         INTEGER,
+      to_sec           INTEGER,
+      language         TEXT NOT NULL DEFAULT 'ar',
+      transcriber_url  TEXT,
+      status           TEXT NOT NULL DEFAULT 'queued',
+      retry_count      INTEGER NOT NULL DEFAULT 0,
+      error_message    TEXT,
+      created_at       INTEGER NOT NULL,
+      updated_at       INTEGER NOT NULL,
+      completed_at     INTEGER
+    );
+  `);
+
+      await localDb.run(sql`CREATE INDEX IF NOT EXISTS idx_local_transcription_jobs_media ON local_transcription_jobs(media_id);`);
+      await localDb.run(sql`CREATE INDEX IF NOT EXISTS idx_local_transcription_jobs_status ON local_transcription_jobs(status);`);
     });
   })().catch((error) => {
     localDbInitPromise = null;
