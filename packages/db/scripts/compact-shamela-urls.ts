@@ -1,4 +1,4 @@
-import { db } from "../src/index";
+import { db } from "../src/index.js";
 
 const WRITE_FLAG = "--write";
 

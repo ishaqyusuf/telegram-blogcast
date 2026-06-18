@@ -522,6 +522,9 @@
       },
     },
   },
+  "patchedDependencies": {
+    "react-native-track-player@4.1.2": "patches/react-native-track-player@4.1.2.patch",
+  },
   "overrides": {
     "lightningcss": "1.30.1",
     "react-dom": "19.1.0",

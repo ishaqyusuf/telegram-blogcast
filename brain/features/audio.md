@@ -36,10 +36,11 @@ Tracks the current audio playback experience, supporting components, and future 
 - Store: `apps/expo-app/src/store/audio-store.ts`
 - Android playback engine: `react-native-track-player` for native media-session playback, notification controls, lock-screen controls, and headset/Bluetooth remote events.
 - iOS currently keeps the previous `expo-av` playback path; iOS lock-screen / Control Center support is intentionally deferred.
-- Native service:
+- Android native service:
   - `apps/expo-app/index.js` registers the playback service before Expo Router starts.
   - `apps/expo-app/src/services/audio-player/playback-service.ts` handles remote play, pause, seek, duck/interruption, and 15-second jump events.
   - `apps/expo-app/src/services/audio-player/setup-track-player.ts` configures media notification capabilities and background behavior.
+  - `apps/expo-app/src/store/audio-store.ts` requests Android 13+ notification permission before playback starts so media controls can appear.
 - Known tracked state:
   - URI
   - Local path

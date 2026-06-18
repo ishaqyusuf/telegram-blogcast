@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system";
 import * as LegacyFileSystem from "expo-file-system/legacy";
 import { Directory, File } from "expo-file-system";
-import { Image } from "react-native";
+import { Image, PermissionsAndroid, Platform } from "react-native";
 import TrackPlayer, { Event, State, type Track } from "react-native-track-player";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
@@ -25,6 +25,7 @@ const DEFAULT_ARTWORK = Image.resolveAssetSource(
 
 let positionInterval: ReturnType<typeof setInterval> | null = null;
 let listenerCleanup: (() => void) | null = null;
+let notificationPermissionPromise: Promise<void> | null = null;
 
 function joinDocumentPath(...parts: string[]) {
   return parts
@@ -56,6 +57,34 @@ function getPlaybackStateName(
   state: Awaited<ReturnType<typeof TrackPlayer.getPlaybackState>>,
 ) {
   return state.state;
+}
+
+async function requestAndroidNotificationPermission() {
+  const sdkVersion =
+    typeof Platform.Version === "number"
+      ? Platform.Version
+      : Number.parseInt(String(Platform.Version), 10);
+
+  if (!Number.isFinite(sdkVersion) || sdkVersion < 33) return;
+
+  const permission = PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS;
+  const alreadyGranted = await PermissionsAndroid.check(permission);
+
+  if (!alreadyGranted) {
+    await PermissionsAndroid.request(permission);
+  }
+}
+
+async function ensureNotificationPermission() {
+  if (!notificationPermissionPromise) {
+    notificationPermissionPromise = requestAndroidNotificationPermission().catch(
+      () => {
+        notificationPermissionPromise = null;
+      },
+    );
+  }
+
+  await notificationPermissionPromise;
 }
 
 function getBlogTitle(blog: ItemProps | null | undefined) {
@@ -340,6 +369,7 @@ export const useAudioStore = create<AudioState>()(
 
         try {
           await preparePlayer();
+          await ensureNotificationPermission();
           const progress = await TrackPlayer.getProgress();
           const playSessionStartPosition = secondsToMillis(progress.position);
 
