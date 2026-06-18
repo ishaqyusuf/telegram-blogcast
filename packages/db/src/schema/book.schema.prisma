@@ -36,6 +36,10 @@ model Book {
   coverColor     String?
   shamelaId      Int?
   shamelaUrl     String?
+  firstShamelaPageNo Int?
+  firstShamelaUrl String?
+  lastShamelaPageNo Int?
+  lastShamelaUrl String?
   category       String?
   categoryUrl    String?
   shelfId        Int?
@@ -91,6 +95,10 @@ model BookPage {
   chapterUrl    String?
   topicTitle    String?
   topicUrl      String?
+  previousShamelaPageNo Int?
+  previousShamelaUrl String?
+  nextShamelaPageNo Int?
+  nextShamelaUrl String?
   rawJson       Json?
   documentJson  Json?
   status        String              @default("pending")

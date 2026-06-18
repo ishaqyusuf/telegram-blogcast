@@ -15,6 +15,12 @@ import {
   getFetcherState,
 } from "../../queries/channel";
 import {
+  getRecentUpdateJob,
+  getUpdatePromptSummary,
+  startRecentUpdateJob,
+  startRecentUpdateJobSchema,
+} from "../../queries/channel-recent-update";
+import {
   saveBatch,
   saveBatchSchema,
   getLatestMessageId,
@@ -72,6 +78,24 @@ export const channelRoutes = createTRPCRouter({
 
   getFetcherState: publicProcedure.query(async () => {
     return getFetcherState();
+  }),
+
+  pingFetcher: publicProcedure.query(async () => {
+    return { ok: true, fetcherState: await getFetcherState() };
+  }),
+
+  getUpdatePromptSummary: publicProcedure.query(async (props) => {
+    return getUpdatePromptSummary(props.ctx);
+  }),
+
+  startRecentUpdateJob: publicProcedure
+    .input(startRecentUpdateJobSchema)
+    .mutation(async (props) => {
+      return startRecentUpdateJob(props.ctx, props.input);
+    }),
+
+  getRecentUpdateJob: publicProcedure.query(async () => {
+    return getRecentUpdateJob();
   }),
 
   // ── Blog persistence ───────────────────────────────────────────────────────

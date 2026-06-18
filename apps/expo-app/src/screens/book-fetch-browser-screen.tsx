@@ -4,7 +4,7 @@ import { Icon } from "@/components/ui/icon";
 import { Pressable } from "@/components/ui/pressable";
 import { useColors } from "@/hooks/use-color";
 import { useTranslation } from "@/lib/i18n";
-import { useMutation } from "@/lib/react-query";
+import { useMutation, useQueryClient } from "@/lib/react-query";
 import {
   BookFetchBrowserCapture,
   useBookFetchBrowserStore,
@@ -61,8 +61,13 @@ const CAPTURE_SCRIPT = `
 `;
 
 export default function BookFetchBrowserScreen() {
-  const { url, bookId } = useLocalSearchParams<{ url?: string; bookId?: string }>();
+  const { url, bookId, autoPromote } = useLocalSearchParams<{
+    url?: string;
+    bookId?: string;
+    autoPromote?: string;
+  }>();
   const router = useRouter();
+  const qc = useQueryClient();
   const { textAlign, writingDirection, isRtl } = useTranslation();
   const colors = useColors();
   const webViewRef = useRef<WebView>(null);
@@ -75,15 +80,45 @@ export default function BookFetchBrowserScreen() {
   const [loadProgress, setLoadProgress] = useState(0);
   const [isCapturing, setIsCapturing] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
-  const parsedBookId = bookId && Number.isFinite(Number(bookId)) ? Number(bookId) : undefined;
+  const parsedBookId =
+    bookId && Number.isFinite(Number(bookId)) ? Number(bookId) : undefined;
+  const shouldAutoPromote = autoPromote === "1" || autoPromote === "true";
+  const { mutate: promotePage, isPending: isPromoting } = useMutation(
+    _trpc.book.promoteStagedShamelaPageParse.mutationOptions({
+      onSuccess: (result) => {
+        qc.invalidateQueries({ queryKey: _trpc.book.getBooks.queryKey() });
+        qc.invalidateQueries({
+          queryKey: _trpc.book.getBook.queryKey({ id: result.bookId }),
+        });
+        qc.invalidateQueries({
+          queryKey: _trpc.book.getPage.queryKey({ pageId: result.page.id }),
+        });
+        router.replace(
+          `/books/${result.bookId}/reader/${result.page.id}` as any,
+        );
+      },
+      onError: (error) => {
+        setIsCapturing(false);
+        Alert.alert("Import failed", error.message);
+      },
+    }),
+  );
   const { mutate: captureAndStagePage, isPending: isStaging } = useMutation(
     _trpc.book.captureAndStageShamelaPage.mutationOptions({
       onSuccess: (result) => {
-        setIsCapturing(false);
         if (!result.stagedParseId) {
+          setIsCapturing(false);
           router.back();
           return;
         }
+        if (shouldAutoPromote) {
+          promotePage({
+            stagedParseId: result.stagedParseId,
+            bookId: parsedBookId,
+          });
+          return;
+        }
+        setIsCapturing(false);
         router.replace(
           `/book-fetch-preview?stagedParseId=${result.stagedParseId}` as any,
         );
@@ -97,7 +132,7 @@ export default function BookFetchBrowserScreen() {
 
   const canCapture = useMemo(() => {
     if (!hasLoadedOnce) return false;
-    if (isCapturing || isStaging) return false;
+    if (isCapturing || isStaging || isPromoting) return false;
     if (isCloudflare) return false;
     if (!currentUrl.includes("shamela.ws/book/")) return false;
     return htmlLength > 2000;
@@ -107,6 +142,7 @@ export default function BookFetchBrowserScreen() {
     htmlLength,
     isCapturing,
     isCloudflare,
+    isPromoting,
     isStaging,
   ]);
 
@@ -284,14 +320,18 @@ export default function BookFetchBrowserScreen() {
                   : "flex-row items-center justify-center gap-2 rounded-xl bg-secondary py-3"
               }
             >
-              {isCapturing || isStaging ? (
+              {isCapturing || isStaging || isPromoting ? (
                 <>
                   <ActivityIndicator
                     size="small"
                     color={colors.primaryForeground}
                   />
                   <Text className="text-[15px] font-bold text-primary-foreground">
-                    {isStaging ? "Saving staged parse..." : "Capturing page..."}
+                    {isPromoting
+                      ? "Importing page..."
+                      : isStaging
+                        ? "Saving staged parse..."
+                        : "Capturing page..."}
                   </Text>
                 </>
               ) : (

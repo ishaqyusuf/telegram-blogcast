@@ -5,15 +5,24 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
 export type AppLanguage = "en" | "ar";
+export type ReaderTheme = "default" | "sepia" | "night";
+export type ReaderLineSpacing = "compact" | "normal" | "relaxed";
 
 type AppSettingsState = {
   language: AppLanguage;
+  readerFontSize: number;
+  readerLineSpacing: ReaderLineSpacing;
+  readerTheme: ReaderTheme;
   localApiBaseUrl: string | null;
   localApiLastIp: string | null;
   localApiIpHistory: string[];
   localTranscriberBaseUrl: string | null;
   transcriptionModel: TranscriptionModel;
   setLanguage: (language: AppLanguage) => void;
+  setReaderFontSize: (fontSize: number) => void;
+  setReaderLineSpacing: (lineSpacing: ReaderLineSpacing) => void;
+  setReaderTheme: (theme: ReaderTheme) => void;
+  resetReaderSettings: () => void;
   setLocalApiBaseUrl: (url: string | null) => void;
   rememberLocalApiIp: (ip: string) => void;
   setLocalTranscriberBaseUrl: (url: string | null) => void;
@@ -24,12 +33,25 @@ export const useAppSettingsStore = create<AppSettingsState>()(
   persist(
     (set) => ({
       language: "en",
+      readerFontSize: 18,
+      readerLineSpacing: "normal",
+      readerTheme: "default",
       localApiBaseUrl: null,
       localApiLastIp: null,
       localApiIpHistory: [],
       localTranscriberBaseUrl: null,
       transcriptionModel: "gpt-4o-transcribe",
       setLanguage: (language) => set({ language }),
+      setReaderFontSize: (fontSize) =>
+        set({ readerFontSize: Math.max(14, Math.min(28, fontSize)) }),
+      setReaderLineSpacing: (readerLineSpacing) => set({ readerLineSpacing }),
+      setReaderTheme: (readerTheme) => set({ readerTheme }),
+      resetReaderSettings: () =>
+        set({
+          readerFontSize: 18,
+          readerLineSpacing: "normal",
+          readerTheme: "default",
+        }),
       setLocalApiBaseUrl: (url) => set({ localApiBaseUrl: url }),
       rememberLocalApiIp: (ip) =>
         set((state) => {

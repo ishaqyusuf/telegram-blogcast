@@ -39,6 +39,9 @@ type Props = {
   onHighlightDelete?: (localId: string) => void;
   onDismissHighlight?: () => void;
   showToolbarForParagraphId?: number | null;
+  fontSize?: number;
+  lineHeight?: number;
+  textColor?: string;
 };
 
 function parseFootnoteIds(ids?: string | null): string[] {
@@ -88,6 +91,9 @@ export function BookPageView({
   onHighlightDelete,
   onDismissHighlight,
   showToolbarForParagraphId,
+  fontSize = 18,
+  lineHeight = 32,
+  textColor,
 }: Props) {
   const colors = useColors();
 
@@ -163,9 +169,9 @@ export function BookPageView({
                     selectable
                     onLongPress={() => onLongPress?.(para)}
                     style={{
-                      fontSize: 18,
-                      lineHeight: 32,
-                      color: colors.foreground,
+                      fontSize,
+                      lineHeight,
+                      color: textColor ?? colors.foreground,
                     }}
                     blockContainerStyle={{ gap: 0 }}
                   />

@@ -10,7 +10,9 @@ export const localDb = drizzle(expo, { schema });
 let localDbQueue = Promise.resolve();
 let localDbInitPromise: Promise<void> | null = null;
 
-export function withLocalDb<T>(task: () => T | Promise<T>): Promise<Awaited<T>> {
+export function withLocalDb<T>(
+  task: () => T | Promise<T>,
+): Promise<Awaited<T>> {
   const run = localDbQueue.then(task, task);
   localDbQueue = run.then(
     () => undefined,
@@ -50,12 +52,21 @@ export async function withLocalDbRetry<T>(
   }
 }
 
-async function runStartupStatement(statement: ReturnType<typeof sql>, options?: { ignoreLocked?: boolean }) {
+async function runStartupStatement(
+  statement: ReturnType<typeof sql>,
+  options?: { ignoreLocked?: boolean },
+) {
   try {
-    await withLocalDbRetry(() => localDb.run(statement), { retries: 5, delayMs: 150 });
+    await withLocalDbRetry(() => localDb.run(statement), {
+      retries: 5,
+      delayMs: 150,
+    });
   } catch (error) {
     if (options?.ignoreLocked && isLockedSqliteError(error)) {
-      console.warn("[DB] startup statement skipped because database is locked", error);
+      console.warn(
+        "[DB] startup statement skipped because database is locked",
+        error,
+      );
       return;
     }
     throw error;
@@ -70,11 +81,12 @@ export async function initLocalDb() {
 
   localDbInitPromise = (async () => {
     await runStartupStatement(sql`PRAGMA busy_timeout = 5000;`);
-    await runStartupStatement(sql`PRAGMA journal_mode = WAL;`, { ignoreLocked: true });
+    await runStartupStatement(sql`PRAGMA journal_mode = WAL;`, {
+      ignoreLocked: true,
+    });
     await runStartupStatement(sql`PRAGMA foreign_keys = ON;`);
 
     await withLocalDb(async () => {
-
       // ── Book content tables ────────────────────────────────────────────────────
       await localDb.run(sql`
     CREATE TABLE IF NOT EXISTS local_books (
@@ -84,6 +96,10 @@ export async function initLocalDb() {
       cover_color     TEXT,
       shamela_id      INTEGER,
       shamela_url     TEXT,
+      first_shamela_page_no INTEGER,
+      first_shamela_url TEXT,
+      last_shamela_page_no INTEGER,
+      last_shamela_url TEXT,
       source_type     TEXT,
       editable        INTEGER,
       owner_user_id   INTEGER,
@@ -93,16 +109,44 @@ export async function initLocalDb() {
     );
   `);
       try {
-        await localDb.run(sql`ALTER TABLE local_books ADD COLUMN shamela_url TEXT;`);
+        await localDb.run(
+          sql`ALTER TABLE local_books ADD COLUMN shamela_url TEXT;`,
+        );
       } catch {}
       try {
-        await localDb.run(sql`ALTER TABLE local_books ADD COLUMN source_type TEXT;`);
+        await localDb.run(
+          sql`ALTER TABLE local_books ADD COLUMN first_shamela_page_no INTEGER;`,
+        );
       } catch {}
       try {
-        await localDb.run(sql`ALTER TABLE local_books ADD COLUMN editable INTEGER;`);
+        await localDb.run(
+          sql`ALTER TABLE local_books ADD COLUMN first_shamela_url TEXT;`,
+        );
       } catch {}
       try {
-        await localDb.run(sql`ALTER TABLE local_books ADD COLUMN owner_user_id INTEGER;`);
+        await localDb.run(
+          sql`ALTER TABLE local_books ADD COLUMN last_shamela_page_no INTEGER;`,
+        );
+      } catch {}
+      try {
+        await localDb.run(
+          sql`ALTER TABLE local_books ADD COLUMN last_shamela_url TEXT;`,
+        );
+      } catch {}
+      try {
+        await localDb.run(
+          sql`ALTER TABLE local_books ADD COLUMN source_type TEXT;`,
+        );
+      } catch {}
+      try {
+        await localDb.run(
+          sql`ALTER TABLE local_books ADD COLUMN editable INTEGER;`,
+        );
+      } catch {}
+      try {
+        await localDb.run(
+          sql`ALTER TABLE local_books ADD COLUMN owner_user_id INTEGER;`,
+        );
       } catch {}
 
       await localDb.run(sql`
@@ -124,11 +168,37 @@ export async function initLocalDb() {
       printed_page_no INTEGER,
       chapter_title   TEXT,
       topic_title     TEXT,
+      previous_shamela_page_no INTEGER,
+      previous_shamela_url TEXT,
+      next_shamela_page_no INTEGER,
+      next_shamela_url TEXT,
       status          TEXT NOT NULL DEFAULT 'pending'
     );
   `);
+      try {
+        await localDb.run(
+          sql`ALTER TABLE local_pages ADD COLUMN previous_shamela_page_no INTEGER;`,
+        );
+      } catch {}
+      try {
+        await localDb.run(
+          sql`ALTER TABLE local_pages ADD COLUMN previous_shamela_url TEXT;`,
+        );
+      } catch {}
+      try {
+        await localDb.run(
+          sql`ALTER TABLE local_pages ADD COLUMN next_shamela_page_no INTEGER;`,
+        );
+      } catch {}
+      try {
+        await localDb.run(
+          sql`ALTER TABLE local_pages ADD COLUMN next_shamela_url TEXT;`,
+        );
+      } catch {}
 
-      await localDb.run(sql`CREATE INDEX IF NOT EXISTS idx_local_pages_book ON local_pages(book_id);`);
+      await localDb.run(
+        sql`CREATE INDEX IF NOT EXISTS idx_local_pages_book ON local_pages(book_id);`,
+      );
 
       await localDb.run(sql`
     CREATE TABLE IF NOT EXISTS local_toc_nodes (
@@ -148,9 +218,15 @@ export async function initLocalDb() {
     );
   `);
 
-      await localDb.run(sql`CREATE INDEX IF NOT EXISTS idx_local_toc_book ON local_toc_nodes(book_id);`);
-      await localDb.run(sql`CREATE INDEX IF NOT EXISTS idx_local_toc_parent ON local_toc_nodes(parent_id);`);
-      await localDb.run(sql`CREATE INDEX IF NOT EXISTS idx_local_toc_page ON local_toc_nodes(page_id);`);
+      await localDb.run(
+        sql`CREATE INDEX IF NOT EXISTS idx_local_toc_book ON local_toc_nodes(book_id);`,
+      );
+      await localDb.run(
+        sql`CREATE INDEX IF NOT EXISTS idx_local_toc_parent ON local_toc_nodes(parent_id);`,
+      );
+      await localDb.run(
+        sql`CREATE INDEX IF NOT EXISTS idx_local_toc_page ON local_toc_nodes(page_id);`,
+      );
 
       await localDb.run(sql`
     CREATE TABLE IF NOT EXISTS local_paragraphs (
@@ -162,7 +238,9 @@ export async function initLocalDb() {
     );
   `);
 
-      await localDb.run(sql`CREATE INDEX IF NOT EXISTS idx_local_para_page ON local_paragraphs(page_id);`);
+      await localDb.run(
+        sql`CREATE INDEX IF NOT EXISTS idx_local_para_page ON local_paragraphs(page_id);`,
+      );
 
       // FTS5 virtual table for full-text search
       await localDb.run(sql`
@@ -198,7 +276,9 @@ export async function initLocalDb() {
     );
   `);
 
-      await localDb.run(sql`CREATE INDEX IF NOT EXISTS idx_local_fn_page ON local_footnotes(page_id);`);
+      await localDb.run(
+        sql`CREATE INDEX IF NOT EXISTS idx_local_fn_page ON local_footnotes(page_id);`,
+      );
 
       // ── User data tables ───────────────────────────────────────────────────────
       await localDb.run(sql`
@@ -221,17 +301,27 @@ export async function initLocalDb() {
   `);
 
       try {
-        await localDb.run(sql`ALTER TABLE local_highlights ADD COLUMN start_offset INTEGER;`);
+        await localDb.run(
+          sql`ALTER TABLE local_highlights ADD COLUMN start_offset INTEGER;`,
+        );
       } catch {}
       try {
-        await localDb.run(sql`ALTER TABLE local_highlights ADD COLUMN end_offset INTEGER;`);
+        await localDb.run(
+          sql`ALTER TABLE local_highlights ADD COLUMN end_offset INTEGER;`,
+        );
       } catch {}
       try {
-        await localDb.run(sql`ALTER TABLE local_highlights ADD COLUMN quote_text TEXT;`);
+        await localDb.run(
+          sql`ALTER TABLE local_highlights ADD COLUMN quote_text TEXT;`,
+        );
       } catch {}
 
-      await localDb.run(sql`CREATE INDEX IF NOT EXISTS idx_local_hl_page ON local_highlights(page_id);`);
-      await localDb.run(sql`CREATE INDEX IF NOT EXISTS idx_local_hl_book ON local_highlights(book_id);`);
+      await localDb.run(
+        sql`CREATE INDEX IF NOT EXISTS idx_local_hl_page ON local_highlights(page_id);`,
+      );
+      await localDb.run(
+        sql`CREATE INDEX IF NOT EXISTS idx_local_hl_book ON local_highlights(book_id);`,
+      );
 
       await localDb.run(sql`
     CREATE TABLE IF NOT EXISTS local_comments (
@@ -248,8 +338,12 @@ export async function initLocalDb() {
     );
   `);
 
-      await localDb.run(sql`CREATE INDEX IF NOT EXISTS idx_local_cm_page ON local_comments(page_id);`);
-      await localDb.run(sql`CREATE INDEX IF NOT EXISTS idx_local_cm_book ON local_comments(book_id);`);
+      await localDb.run(
+        sql`CREATE INDEX IF NOT EXISTS idx_local_cm_page ON local_comments(page_id);`,
+      );
+      await localDb.run(
+        sql`CREATE INDEX IF NOT EXISTS idx_local_cm_book ON local_comments(book_id);`,
+      );
 
       await localDb.run(sql`
     CREATE TABLE IF NOT EXISTS local_page_drafts (
@@ -265,10 +359,14 @@ export async function initLocalDb() {
   `);
 
       try {
-        await localDb.run(sql`ALTER TABLE local_page_drafts ADD COLUMN content_html TEXT;`);
+        await localDb.run(
+          sql`ALTER TABLE local_page_drafts ADD COLUMN content_html TEXT;`,
+        );
       } catch {}
 
-      await localDb.run(sql`CREATE INDEX IF NOT EXISTS idx_local_draft_book ON local_page_drafts(book_id);`);
+      await localDb.run(
+        sql`CREATE INDEX IF NOT EXISTS idx_local_draft_book ON local_page_drafts(book_id);`,
+      );
 
       await localDb.run(sql`
     CREATE TABLE IF NOT EXISTS local_transcription_jobs (
@@ -289,8 +387,12 @@ export async function initLocalDb() {
     );
   `);
 
-      await localDb.run(sql`CREATE INDEX IF NOT EXISTS idx_local_transcription_jobs_media ON local_transcription_jobs(media_id);`);
-      await localDb.run(sql`CREATE INDEX IF NOT EXISTS idx_local_transcription_jobs_status ON local_transcription_jobs(status);`);
+      await localDb.run(
+        sql`CREATE INDEX IF NOT EXISTS idx_local_transcription_jobs_media ON local_transcription_jobs(media_id);`,
+      );
+      await localDb.run(
+        sql`CREATE INDEX IF NOT EXISTS idx_local_transcription_jobs_status ON local_transcription_jobs(status);`,
+      );
     });
   })().catch((error) => {
     localDbInitPromise = null;

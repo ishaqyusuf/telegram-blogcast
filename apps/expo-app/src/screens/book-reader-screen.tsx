@@ -1,7 +1,7 @@
 import { Pressable } from "@/components/ui/pressable";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -13,12 +13,14 @@ import {
   PanResponder,
   Platform,
   ScrollView,
+  Share,
   Text,
   TextInput,
   View,
 } from "react-native";
 
 import { _trpc } from "@/components/static-trpc";
+import { Modal, useModal } from "@/components/ui/modal";
 import { SafeArea } from "@/components/safe-area";
 import { Icon } from "@/components/ui/icon";
 import { BookPageView } from "@/components/book/book-page-view";
@@ -43,8 +45,10 @@ import {
 } from "@/hooks/use-comments-sync";
 import { useBookPageDraft } from "@/hooks/use-book-page-draft";
 import { useBookOfflineStore } from "@/store/book-offline-store";
+import { useAppSettingsStore } from "@/store/app-settings-store";
 import { useTranslation } from "@/lib/i18n";
 import { useColors } from "@/hooks/use-color";
+import { toAbsoluteShamelaUrl } from "@/lib/shamela-url";
 import {
   createDocumentFromHtml,
   createDocumentFromPlainText,
@@ -59,6 +63,21 @@ function formatAudioReferenceTime(sec?: number | null) {
   const minutes = Math.floor(totalSec / 60);
   const seconds = totalSec % 60;
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+const HIGHLIGHT_COLORS = [
+  "#8b5cf6",
+  "#facc15",
+  "#22c55e",
+  "#38bdf8",
+  "#fb7185",
+  "#f97316",
+];
+
+function getLineSpacingMultiplier(spacing: "compact" | "normal" | "relaxed") {
+  if (spacing === "compact") return 1.55;
+  if (spacing === "relaxed") return 2;
+  return 1.78;
 }
 
 export default function BookReaderScreen() {
@@ -78,8 +97,20 @@ export default function BookReaderScreen() {
   const isBookmarked = useBookOfflineStore((s) => s.isBookmarked);
   const addBookmark = useBookOfflineStore((s) => s.addBookmark);
   const removeBookmark = useBookOfflineStore((s) => s.removeBookmark);
+  const readerFontSize = useAppSettingsStore((s) => s.readerFontSize);
+  const readerLineSpacing = useAppSettingsStore((s) => s.readerLineSpacing);
+  const readerTheme = useAppSettingsStore((s) => s.readerTheme);
+  const setReaderFontSize = useAppSettingsStore((s) => s.setReaderFontSize);
+  const setReaderLineSpacing = useAppSettingsStore(
+    (s) => s.setReaderLineSpacing,
+  );
+  const setReaderTheme = useAppSettingsStore((s) => s.setReaderTheme);
+  const resetReaderSettings = useAppSettingsStore(
+    (s) => s.resetReaderSettings,
+  );
 
   const footnotesRef = useRef<BottomSheetModal>(null);
+  const readerSettingsModal = useModal();
   const [highlightedMarker, setHighlightedMarker] = useState<string | null>(
     null,
   );
@@ -91,11 +122,17 @@ export default function BookReaderScreen() {
   >(null);
   const [commentText, setCommentText] = useState("");
   const [showCommentInput, setShowCommentInput] = useState(false);
+  const [showHighlightColors, setShowHighlightColors] = useState(false);
+  const [selectedHighlightColor, setSelectedHighlightColor] =
+    useState("#8b5cf6");
   const [mode, setMode] = useState<"read" | "edit">("read");
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [editorText, setEditorText] = useState("");
   const [editorHtml, setEditorHtml] = useState("");
   const [baseVersion, setBaseVersion] = useState<number>(0);
+  const [adjacentLoadingDirection, setAdjacentLoadingDirection] = useState<
+    "previous" | "next" | null
+  >(null);
   const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editorRef = useRef<BookRichEditorHandle>(null);
 
@@ -128,6 +165,39 @@ export default function BookReaderScreen() {
     bookIdNum,
     pageIdNum,
   );
+  const readerLineHeight = Math.round(
+    readerFontSize * getLineSpacingMultiplier(readerLineSpacing),
+  );
+  const readerPalette = useMemo(() => {
+    if (readerTheme === "sepia") {
+      return {
+        background: "#f7f0df",
+        text: "#2f2418",
+        card: "#efe4ca",
+        muted: "#7a6a55",
+      };
+    }
+    if (readerTheme === "night") {
+      return {
+        background: "#111827",
+        text: "#f9fafb",
+        card: "#1f2937",
+        muted: "#cbd5e1",
+      };
+    }
+    return {
+      background: colors.background,
+      text: colors.foreground,
+      card: colors.card,
+      muted: colors.mutedForeground,
+    };
+  }, [
+    colors.background,
+    colors.card,
+    colors.foreground,
+    colors.mutedForeground,
+    readerTheme,
+  ]);
 
   // ── Save reading progress on every page open ───────────────────────────────
   useEffect(() => {
@@ -170,19 +240,6 @@ export default function BookReaderScreen() {
     };
   }, [bookIdNum]);
 
-  // ── Adjacent page navigation ───────────────────────────────────────────────
-  const { mutate: fetchAdjacentPage, isPending: isFetchingAdjacentPage } =
-    useMutation(
-      _trpc.book.fetchNextPage.mutationOptions({
-        onSuccess: (newPage) => {
-          qc.invalidateQueries({
-            queryKey: _trpc.book.getBook.queryKey({ id: bookIdNum }),
-          });
-          router.replace(`/books/${bookId}/reader/${newPage.id}` as any);
-        },
-        onError: (e) => Alert.alert(t("error"), e.message),
-      }),
-    );
   const { mutateAsync: savePageDocument, isPending: isSavingDocument } =
     useMutation(
       _trpc.book.savePageDocument.mutationOptions({
@@ -332,13 +389,21 @@ export default function BookReaderScreen() {
   };
 
   const handleLongPress = (para: { id: number }) => {
-    const newId = para.id === showToolbarForParagraphId ? null : para.id;
-    setShowToolbarForParagraphId(newId);
+    const newId = para.id === selectedParagraphId ? null : para.id;
+    setShowToolbarForParagraphId(null);
     setSelectedParagraphId(newId);
+    setShowHighlightColors(false);
+    setShowCommentInput(false);
   };
 
   const handleHighlightColor = async (paragraphId: number, color: string) => {
     const paragraph = page?.paragraphs.find((item) => item.id === paragraphId);
+    const existingHighlights = highlights.filter(
+      (highlight) => highlight.paragraphId === paragraphId,
+    );
+    for (const highlight of existingHighlights) {
+      await deleteHighlight(highlight.localId);
+    }
     await addHighlight(paragraphId, color, {
       startOffset: 0,
       endOffset: paragraph?.text.length ?? null,
@@ -346,18 +411,44 @@ export default function BookReaderScreen() {
     });
     setShowToolbarForParagraphId(null);
     setSelectedParagraphId(null);
+    setShowHighlightColors(false);
   };
 
   const handleCopyParagraph = (paragraph: { text: string }) => {
     Clipboard.setString(paragraph.text);
     setShowToolbarForParagraphId(null);
     setSelectedParagraphId(null);
+    setShowHighlightColors(false);
   };
 
   const handleHighlightDelete = async (localId: string) => {
     await deleteHighlight(localId);
     setShowToolbarForParagraphId(null);
     setSelectedParagraphId(null);
+    setShowHighlightColors(false);
+  };
+
+  const selectedParagraph = useMemo(
+    () => page?.paragraphs.find((item) => item.id === selectedParagraphId),
+    [page?.paragraphs, selectedParagraphId],
+  );
+
+  const shareSelectedText = async () => {
+    if (!selectedParagraph?.text) return;
+    await Share.share({ message: selectedParagraph.text });
+    setSelectedParagraphId(null);
+    setShowHighlightColors(false);
+  };
+
+  const openSelectedNote = () => {
+    if (!selectedParagraphId) return;
+    setShowCommentInput(true);
+    setShowHighlightColors(false);
+  };
+
+  const highlightSelectedParagraph = (color = selectedHighlightColor) => {
+    if (!selectedParagraphId) return;
+    void handleHighlightColor(selectedParagraphId, color);
   };
 
   const submitComment = async () => {
@@ -387,6 +478,45 @@ export default function BookReaderScreen() {
     }
   };
 
+  const navigateAdjacentPage = useCallback(
+    (direction: "previous" | "next") => {
+      if (!page || adjacentLoadingDirection || mode !== "read") return;
+      const target = (page as any).adjacentPages?.[direction] as
+        | {
+            shamelaPageNo?: number | null;
+            shamelaUrl?: string | null;
+            page?: {
+              id: number;
+              status: string;
+              shamelaUrl?: string | null;
+            } | null;
+          }
+        | undefined;
+
+      if (target?.page?.status === "fetched") {
+        router.replace(`/books/${bookId}/reader/${target.page.id}` as any);
+        return;
+      }
+
+      const targetUrl = target?.shamelaUrl ?? target?.page?.shamelaUrl;
+      if (!targetUrl) {
+        Alert.alert(t("error"), "No Shamela link is available for this page.");
+        return;
+      }
+
+      setAdjacentLoadingDirection(direction);
+      router.push(
+        `/book-fetch-browser?url=${encodeURIComponent(
+          toAbsoluteShamelaUrl(targetUrl),
+        )}&bookId=${bookIdNum}&autoPromote=1` as any,
+      );
+      setTimeout(() => {
+        setAdjacentLoadingDirection(null);
+      }, 600);
+    },
+    [adjacentLoadingDirection, bookId, bookIdNum, mode, page, router, t],
+  );
+
   const pageSwipeResponder = useMemo(
     () =>
       PanResponder.create({
@@ -394,24 +524,20 @@ export default function BookReaderScreen() {
           Math.abs(gesture.dx) > 42 &&
           Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.4,
         onPanResponderRelease: (_, gesture) => {
-          if (!page || isFetchingAdjacentPage || mode !== "read") return;
+          if (!page || adjacentLoadingDirection || mode !== "read") return;
           if (gesture.dx < -60) {
-            fetchAdjacentPage({
-              bookId: bookIdNum,
-              currentShamelaPageNo: page.shamelaPageNo,
-              direction: "next",
-            });
+            navigateAdjacentPage("next");
           } else if (gesture.dx > 60) {
-            fetchAdjacentPage({
-              bookId: bookIdNum,
-              currentShamelaPageNo: page.shamelaPageNo,
-              direction: "previous",
-            });
+            navigateAdjacentPage("previous");
           }
         },
       }),
-    [bookIdNum, fetchAdjacentPage, isFetchingAdjacentPage, mode, page],
+    [adjacentLoadingDirection, mode, navigateAdjacentPage, page],
   );
+
+  useEffect(() => {
+    setAdjacentLoadingDirection(null);
+  }, [pageIdNum]);
 
   if (isLoading) {
     return (
@@ -448,6 +574,13 @@ export default function BookReaderScreen() {
             className="size-[34px] items-center justify-center rounded-full bg-card"
           >
             <Icon name="ChevronLeft" size={20} className="text-foreground" />
+          </Pressable>
+
+          <Pressable
+            onPress={() => readerSettingsModal.present()}
+            className="size-[34px] items-center justify-center rounded-full bg-card"
+          >
+            <Text className="text-[17px] font-semibold text-primary">Aa</Text>
           </Pressable>
 
           <View style={{ flex: 1, alignItems: "flex-end" }}>
@@ -542,7 +675,7 @@ export default function BookReaderScreen() {
           ) : (
             <ScrollView
               {...pageSwipeResponder.panHandlers}
-              style={{ backgroundColor: colors.background }}
+              style={{ backgroundColor: readerPalette.background }}
               contentContainerStyle={{
                 paddingHorizontal: 20,
                 paddingTop: 20,
@@ -574,13 +707,16 @@ export default function BookReaderScreen() {
                 onPressHighlightedParagraph={handleHighlightDelete}
                 onCopyParagraph={handleCopyParagraph}
                 selectedParagraphId={selectedParagraphId}
-                showToolbarForParagraphId={showToolbarForParagraphId}
+                showToolbarForParagraphId={null}
                 onHighlightColor={handleHighlightColor}
                 onHighlightDelete={handleHighlightDelete}
                 onDismissHighlight={() => {
                   setShowToolbarForParagraphId(null);
                   setSelectedParagraphId(null);
                 }}
+                fontSize={readerFontSize}
+                lineHeight={readerLineHeight}
+                textColor={readerPalette.text}
               />
 
               {/* Comments list */}
@@ -709,6 +845,91 @@ export default function BookReaderScreen() {
                 void handleSaveDocument();
               }}
             />
+          ) : selectedParagraphId && selectedParagraph ? (
+            <View className="border-t border-border bg-background px-4 py-3">
+              {showHighlightColors ? (
+                <View className="mb-3 flex-row items-center justify-center gap-3">
+                  {HIGHLIGHT_COLORS.map((color) => (
+                    <Pressable
+                      key={color}
+                      onPress={() => {
+                        setSelectedHighlightColor(color);
+                        highlightSelectedParagraph(color);
+                      }}
+                      className="size-9 items-center justify-center rounded-full bg-card"
+                    >
+                      <View
+                        style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: 12,
+                          backgroundColor: color,
+                          borderWidth: selectedHighlightColor === color ? 3 : 0,
+                          borderColor: colors.foreground,
+                        }}
+                      />
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
+
+              <View className="flex-row items-center justify-around">
+                <Pressable
+                  onPress={() => {
+                    void shareSelectedText();
+                  }}
+                  className="min-h-12 flex-1 items-center justify-center gap-1"
+                >
+                  <Icon name="Share2" size={22} className="text-foreground" />
+                  <Text className="text-[12px] font-medium text-foreground">
+                    Share Text
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={openSelectedNote}
+                  className="min-h-12 flex-1 items-center justify-center gap-1"
+                >
+                  <Icon
+                    name="MessageCircle"
+                    size={22}
+                    className="text-foreground"
+                  />
+                  <Text className="text-[12px] font-medium text-foreground">
+                    Note
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  onPress={() => highlightSelectedParagraph()}
+                  onLongPress={() => setShowHighlightColors((value) => !value)}
+                  delayLongPress={250}
+                  className="min-h-12 flex-1 items-center justify-center gap-1"
+                >
+                  <View>
+                    <Icon
+                      name="PenLine"
+                      size={22}
+                      className="text-foreground"
+                    />
+                    <View
+                      style={{
+                        position: "absolute",
+                        right: -7,
+                        top: -5,
+                        width: 13,
+                        height: 13,
+                        borderRadius: 7,
+                        backgroundColor: selectedHighlightColor,
+                      }}
+                    />
+                  </View>
+                  <Text className="text-[12px] font-medium text-foreground">
+                    Highlight
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
           ) : (
             <View className="flex-row items-center gap-2 border-t border-border bg-background px-4 py-3">
               <Pressable
@@ -726,16 +947,10 @@ export default function BookReaderScreen() {
               </Pressable>
 
               <Pressable
-                onPress={() =>
-                  fetchAdjacentPage({
-                    bookId: bookIdNum,
-                    currentShamelaPageNo: page.shamelaPageNo,
-                    direction: "previous",
-                  })
-                }
+                onPress={() => navigateAdjacentPage("previous")}
                 className="flex-row items-center justify-center gap-1.5 rounded-xl bg-card px-4 py-2.5"
               >
-                {isFetchingAdjacentPage ? (
+                {adjacentLoadingDirection === "previous" ? (
                   <ActivityIndicator size="small" color={colors.primary} />
                 ) : (
                   <>
@@ -752,16 +967,10 @@ export default function BookReaderScreen() {
               </Pressable>
 
               <Pressable
-                onPress={() =>
-                  fetchAdjacentPage({
-                    bookId: bookIdNum,
-                    currentShamelaPageNo: page.shamelaPageNo,
-                    direction: "next",
-                  })
-                }
+                onPress={() => navigateAdjacentPage("next")}
                 className="flex-row items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2.5"
               >
-                {isFetchingAdjacentPage ? (
+                {adjacentLoadingDirection === "next" ? (
                   <ActivityIndicator
                     size="small"
                     color={colors.primaryForeground}
@@ -808,6 +1017,228 @@ export default function BookReaderScreen() {
           )}
         </KeyboardAvoidingView>
       </SafeArea>
+
+      {adjacentLoadingDirection ? (
+        <View
+          pointerEvents="auto"
+          style={{
+            position: "absolute",
+            inset: 0,
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: colors.background,
+          }}
+        >
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      ) : null}
+
+      <Modal
+        ref={readerSettingsModal.ref}
+        title="Text Settings"
+        snapPoints={["52%"]}
+      >
+        <View style={{ paddingHorizontal: 18, paddingBottom: 24, gap: 20 }}>
+          <View style={{ gap: 10 }}>
+            <Text
+              style={{
+                color: colors.foreground,
+                fontSize: 14,
+                fontWeight: "700",
+              }}
+            >
+              Font Size
+            </Text>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 12,
+              }}
+            >
+              <Pressable
+                onPress={() => setReaderFontSize(readerFontSize - 1)}
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 22,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: colors.card,
+                }}
+              >
+                <Text
+                  style={{
+                    color: colors.foreground,
+                    fontSize: 16,
+                    fontWeight: "700",
+                  }}
+                >
+                  A-
+                </Text>
+              </Pressable>
+              <Text
+                style={{
+                  flex: 1,
+                  color: colors.foreground,
+                  textAlign: "center",
+                  fontSize: 16,
+                  fontWeight: "700",
+                }}
+              >
+                {readerFontSize}px
+              </Text>
+              <Pressable
+                onPress={() => setReaderFontSize(readerFontSize + 1)}
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 22,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: colors.card,
+                }}
+              >
+                <Text
+                  style={{
+                    color: colors.foreground,
+                    fontSize: 18,
+                    fontWeight: "700",
+                  }}
+                >
+                  A+
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+
+          <View style={{ gap: 10 }}>
+            <Text
+              style={{
+                color: colors.foreground,
+                fontSize: 14,
+                fontWeight: "700",
+              }}
+            >
+              Line Spacing
+            </Text>
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              {(["compact", "normal", "relaxed"] as const).map((spacing) => {
+                const selected = readerLineSpacing === spacing;
+                return (
+                  <Pressable
+                    key={spacing}
+                    onPress={() => setReaderLineSpacing(spacing)}
+                    style={{
+                      flex: 1,
+                      minHeight: 40,
+                      borderRadius: 12,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      backgroundColor: selected ? colors.primary : colors.card,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: selected
+                          ? colors.primaryForeground
+                          : colors.foreground,
+                        fontSize: 13,
+                        fontWeight: "700",
+                        textTransform: "capitalize",
+                      }}
+                    >
+                      {spacing}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={{ gap: 10 }}>
+            <Text
+              style={{
+                color: colors.foreground,
+                fontSize: 14,
+                fontWeight: "700",
+              }}
+            >
+              Page Color
+            </Text>
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              {(["default", "sepia", "night"] as const).map((theme) => {
+                const selected = readerTheme === theme;
+                const swatch =
+                  theme === "sepia"
+                    ? "#f7f0df"
+                    : theme === "night"
+                      ? "#111827"
+                      : colors.background;
+                return (
+                  <Pressable
+                    key={theme}
+                    onPress={() => setReaderTheme(theme)}
+                    style={{
+                      flex: 1,
+                      minHeight: 46,
+                      borderRadius: 12,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 4,
+                      backgroundColor: selected ? colors.primary : colors.card,
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: 18,
+                        height: 18,
+                        borderRadius: 9,
+                        backgroundColor: swatch,
+                        borderWidth: 1,
+                        borderColor: colors.border,
+                      }}
+                    />
+                    <Text
+                      style={{
+                        color: selected
+                          ? colors.primaryForeground
+                          : colors.foreground,
+                        fontSize: 12,
+                        fontWeight: "700",
+                        textTransform: "capitalize",
+                      }}
+                    >
+                      {theme}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <Pressable
+            onPress={resetReaderSettings}
+            style={{
+              minHeight: 44,
+              borderRadius: 12,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: colors.card,
+            }}
+          >
+            <Text
+              style={{
+                color: colors.foreground,
+                fontSize: 14,
+                fontWeight: "700",
+              }}
+            >
+              Reset Settings
+            </Text>
+          </Pressable>
+        </View>
+      </Modal>
 
       <FootnotesSheet
         ref={footnotesRef}

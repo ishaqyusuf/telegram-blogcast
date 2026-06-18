@@ -21,6 +21,7 @@ import { AppStatusBar } from "@/components/app-status-bar";
 import { View } from "react-native";
 import { StaticRouter } from "@/components/static-router";
 import { GlobalAudioBar } from "@/components/global-audio-bar";
+import { ChannelUpdatePrompt } from "@/components/channel-updates/channel-update-prompt";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { useColorScheme, useColors } from "@/hooks/use-color";
 import { initSentry, Sentry } from "@/lib/sentry";
@@ -90,6 +91,7 @@ const InitialLayout = () => {
         <StaticTrpc />
         <StaticRouter />
         <AudioBootstrap />
+        <ChannelUpdatePrompt />
         <AppStatusBar />
         {/* <StatusBar style="auto" /> */}
 
@@ -114,6 +116,7 @@ const InitialLayout = () => {
           <Stack.Screen name="blog-import" />
           <Stack.Screen name="channels" />
           <Stack.Screen name="channels/[channelId]" />
+          <Stack.Screen name="channel-updates" />
           <Stack.Screen name="play-history" />
           <Stack.Screen name="search" />
           <Stack.Screen name="settings" />

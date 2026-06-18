@@ -63,6 +63,46 @@ export interface FetchMessagesResult {
   lastMessageId: number | null;
 }
 
+export interface ChannelMessageStats {
+  latestKnownCount: number | null;
+  latestKnownMessageId: number | null;
+}
+
+export async function fetchChannelMessageStats(
+  channelUsername: string,
+): Promise<ChannelMessageStats> {
+  const client = await getClient();
+  const channel = await client.getEntity(`t.me/${channelUsername}`);
+  const response = await client.invoke(
+    new Api.messages.GetHistory({
+      peer: channel,
+      offsetId: 0,
+      limit: 1,
+      minId: 0,
+      maxId: 0,
+      addOffset: 0,
+      hash: BigInt(0) as any,
+    }),
+  );
+
+  if (!("messages" in response)) {
+    return { latestKnownCount: null, latestKnownMessageId: null };
+  }
+
+  const rawMessages = response.messages as Api.Message[];
+  const latestKnownMessageId =
+    rawMessages
+      .map((message) => message.id)
+      .filter((id): id is number => typeof id === "number")
+      .sort((a, b) => b - a)[0] ?? null;
+  const rawCount = (response as any).count;
+
+  return {
+    latestKnownCount: typeof rawCount === "number" ? rawCount : null,
+    latestKnownMessageId,
+  };
+}
+
 // ── Core function ─────────────────────────────────────────────────────────────
 type BlogType = "audio" | "image" | "video" | "text" | "document";
 

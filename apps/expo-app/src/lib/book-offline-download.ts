@@ -19,6 +19,10 @@ type DownloadedBookPayload = {
     coverColor?: string | null;
     shamelaId?: number | null;
     shamelaUrl?: string | null;
+    firstShamelaPageNo?: number | null;
+    firstShamelaUrl?: string | null;
+    lastShamelaPageNo?: number | null;
+    lastShamelaUrl?: string | null;
     sourceType?: string | null;
     editable?: boolean | null;
     ownerUserId?: number | null;
@@ -37,6 +41,10 @@ type DownloadedBookPayload = {
     printedPageNo?: number | null;
     chapterTitle?: string | null;
     topicTitle?: string | null;
+    previousShamelaPageNo?: number | null;
+    previousShamelaUrl?: string | null;
+    nextShamelaPageNo?: number | null;
+    nextShamelaUrl?: string | null;
     status: string;
     paragraphs?: Array<{
       id: number;
@@ -88,7 +96,10 @@ type DownloadedBookPayload = {
   }>;
 };
 
-function toDate(value: Date | string | number | null | undefined, fallback: Date) {
+function toDate(
+  value: Date | string | number | null | undefined,
+  fallback: Date,
+) {
   if (value instanceof Date) return value;
   if (typeof value === "string" || typeof value === "number") {
     const date = new Date(value);
@@ -97,7 +108,9 @@ function toDate(value: Date | string | number | null | undefined, fallback: Date
   return fallback;
 }
 
-export async function saveBookDownloadToLocalDb(payload: DownloadedBookPayload) {
+export async function saveBookDownloadToLocalDb(
+  payload: DownloadedBookPayload,
+) {
   await initLocalDb();
   const now = new Date();
   const bookId = payload.book.id;
@@ -142,6 +155,10 @@ export async function saveBookDownloadToLocalDb(payload: DownloadedBookPayload) 
         coverColor: payload.book.coverColor ?? null,
         shamelaId: payload.book.shamelaId ?? null,
         shamelaUrl: payload.book.shamelaUrl ?? null,
+        firstShamelaPageNo: payload.book.firstShamelaPageNo ?? null,
+        firstShamelaUrl: payload.book.firstShamelaUrl ?? null,
+        lastShamelaPageNo: payload.book.lastShamelaPageNo ?? null,
+        lastShamelaUrl: payload.book.lastShamelaUrl ?? null,
         sourceType: payload.book.sourceType ?? "user",
         editable: payload.book.editable ?? true,
         ownerUserId: payload.book.ownerUserId ?? null,
@@ -157,6 +174,10 @@ export async function saveBookDownloadToLocalDb(payload: DownloadedBookPayload) 
           coverColor: payload.book.coverColor ?? null,
           shamelaId: payload.book.shamelaId ?? null,
           shamelaUrl: payload.book.shamelaUrl ?? null,
+          firstShamelaPageNo: payload.book.firstShamelaPageNo ?? null,
+          firstShamelaUrl: payload.book.firstShamelaUrl ?? null,
+          lastShamelaPageNo: payload.book.lastShamelaPageNo ?? null,
+          lastShamelaUrl: payload.book.lastShamelaUrl ?? null,
           sourceType: payload.book.sourceType ?? "user",
           editable: payload.book.editable ?? true,
           ownerUserId: payload.book.ownerUserId ?? null,
@@ -187,6 +208,10 @@ export async function saveBookDownloadToLocalDb(payload: DownloadedBookPayload) 
           printedPageNo: page.printedPageNo ?? null,
           chapterTitle: page.chapterTitle ?? null,
           topicTitle: page.topicTitle ?? null,
+          previousShamelaPageNo: page.previousShamelaPageNo ?? null,
+          previousShamelaUrl: page.previousShamelaUrl ?? null,
+          nextShamelaPageNo: page.nextShamelaPageNo ?? null,
+          nextShamelaUrl: page.nextShamelaUrl ?? null,
           status: page.status,
         })),
       );

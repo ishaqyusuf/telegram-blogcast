@@ -55,6 +55,12 @@ export default function ChannelsScreen() {
           <Text className="text-xl font-bold text-foreground flex-1">
             {t("channels")}
           </Text>
+          <Pressable
+            onPress={() => router.push("/channel-updates" as any)}
+            className="size-10 items-center justify-center rounded-full active:bg-muted"
+          >
+            <Icon name="History" className="size-sm text-foreground" />
+          </Pressable>
           <View className="px-2 py-0.5 rounded-full bg-muted">
             <Text className="text-xs font-medium text-muted-foreground">
               {channels.length}

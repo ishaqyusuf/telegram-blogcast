@@ -24,6 +24,14 @@ Given an HTML page from Shamela, extract the book page content and return it as 
   "chapterUrl": <string | null — the chapter URL if present>,
   "topicTitle": <string | null — the topic/فصل title if present>,
   "topicUrl": <string | null — the topic URL if present>,
+  "previousShamelaPageNo": <number | null — the previous Shamela page ID if present>,
+  "previousShamelaUrl": <string | null — the previous page URL if present>,
+  "nextShamelaPageNo": <number | null — the next Shamela page ID if present>,
+  "nextShamelaUrl": <string | null — the next page URL if present>,
+  "firstShamelaPageNo": <number | null — the first Shamela page ID from the << pagination button if present>,
+  "firstShamelaUrl": <string | null — the first page URL from the << pagination button if present>,
+  "lastShamelaPageNo": <number | null — the last Shamela page ID from the >> pagination button if present>,
+  "lastShamelaUrl": <string | null — the last page URL from the >> pagination button if present>,
   "paragraphs": [
     {
       "pid": <number — sequential 1-based index>,
@@ -45,6 +53,7 @@ Rules:
 - Extract ALL paragraph text. Preserve Arabic diacritics (tashkeel).
 - Footnote markers in paragraph text appear as superscript numbers/letters — record them in footnoteIds.
 - If a paragraph has no footnotes, set footnoteIds to null.
+- Extract first/previous/next/last page links from Shamela page navigation controls. Use absolute https://shamela.ws URLs when present.
 - Clean the text: remove HTML tags, normalize whitespace, but keep Arabic characters intact.
 - If a field is not found on the page, set it to null.
 - Return ONLY the JSON object, no markdown, no explanation.`;
@@ -163,6 +172,14 @@ type ParsedPageData = {
   chapterUrl?: string | null;
   topicTitle?: string | null;
   topicUrl?: string | null;
+  previousShamelaPageNo?: number | null;
+  previousShamelaUrl?: string | null;
+  nextShamelaPageNo?: number | null;
+  nextShamelaUrl?: string | null;
+  firstShamelaPageNo?: number | null;
+  firstShamelaUrl?: string | null;
+  lastShamelaPageNo?: number | null;
+  lastShamelaUrl?: string | null;
   paragraphs?: {
     pid?: number;
     text?: string;
@@ -592,7 +609,9 @@ async function syncToc(
   const pageRows = await db.bookPage.findMany({
     where: {
       bookId,
-      shamelaPageNo: { in: toc.chapters.map((chapter) => chapter.shamelaPageNo) },
+      shamelaPageNo: {
+        in: toc.chapters.map((chapter) => chapter.shamelaPageNo),
+      },
       deletedAt: null,
     },
     select: { id: true, shamelaPageNo: true },
@@ -636,7 +655,10 @@ async function syncToc(
           parentId: parent.id,
           pageId: pageIdByPageNo.get(chapter.shamelaPageNo) ?? null,
           kind: "chapter",
-          title: chapter.topicTitle ?? chapter.chapterTitle ?? `Page ${chapter.shamelaPageNo}`,
+          title:
+            chapter.topicTitle ??
+            chapter.chapterTitle ??
+            `Page ${chapter.shamelaPageNo}`,
           shamelaPath: getShamelaStoragePath(chapter.shamelaUrl),
           shamelaPageNo: chapter.shamelaPageNo,
           volumeNumber,
@@ -648,7 +670,10 @@ async function syncToc(
         update: {
           parentId: parent.id,
           pageId: pageIdByPageNo.get(chapter.shamelaPageNo) ?? null,
-          title: chapter.topicTitle ?? chapter.chapterTitle ?? `Page ${chapter.shamelaPageNo}`,
+          title:
+            chapter.topicTitle ??
+            chapter.chapterTitle ??
+            `Page ${chapter.shamelaPageNo}`,
           shamelaPath: getShamelaStoragePath(chapter.shamelaUrl),
           shamelaPageNo: chapter.shamelaPageNo,
           volumeNumber,
@@ -679,27 +704,26 @@ function isShamelaSource(source: {
   return Boolean(source.shamelaId || source.shamelaUrl);
 }
 
-function canEditBook(book: {
-  editable?: boolean | null;
-  sourceType?: string | null;
-  ownerUserId?: number | null;
-  shamelaId?: number | null;
-  shamelaUrl?: string | null;
-}, userId: number): boolean {
+function canEditBook(
+  book: {
+    editable?: boolean | null;
+    sourceType?: string | null;
+    ownerUserId?: number | null;
+    shamelaId?: number | null;
+    shamelaUrl?: string | null;
+  },
+  userId: number,
+): boolean {
   const sourceType = book.sourceType ?? "user";
   return Boolean(
     book.editable !== false &&
-      sourceType === "user" &&
-      !isShamelaSource(book) &&
-      (book.ownerUserId == null || book.ownerUserId === userId),
+    sourceType === "user" &&
+    !isShamelaSource(book) &&
+    (book.ownerUserId == null || book.ownerUserId === userId),
   );
 }
 
-async function assertBookEditableById(
-  db: any,
-  bookId: number,
-  userId: number,
-) {
+async function assertBookEditableById(db: any, bookId: number, userId: number) {
   const book = await db.book.findFirstOrThrow({
     where: { id: bookId, deletedAt: null },
     select: {
@@ -715,18 +739,15 @@ async function assertBookEditableById(
   if (!canEditBook(book, userId)) {
     throw new TRPCError({
       code: "FORBIDDEN",
-      message: "Imported books are read-only. Re-download from the source URL instead.",
+      message:
+        "Imported books are read-only. Re-download from the source URL instead.",
     });
   }
 
   return book;
 }
 
-async function assertPageBookEditable(
-  db: any,
-  pageId: number,
-  userId: number,
-) {
+async function assertPageBookEditable(db: any, pageId: number, userId: number) {
   const page = await db.bookPage.findFirstOrThrow({
     where: { id: pageId, deletedAt: null },
     select: {
@@ -748,7 +769,8 @@ async function assertPageBookEditable(
   if (!canEditBook(page.book, userId)) {
     throw new TRPCError({
       code: "FORBIDDEN",
-      message: "Imported books are read-only. Re-download from the source URL instead.",
+      message:
+        "Imported books are read-only. Re-download from the source URL instead.",
     });
   }
 
@@ -781,11 +803,15 @@ function getStoredContentMeta(rawJson: unknown) {
     contentHtml:
       typeof rawJson.contentHtml === "string" ? rawJson.contentHtml : null,
     contentPlainText:
-      typeof rawJson.contentPlainText === "string" ? rawJson.contentPlainText : null,
+      typeof rawJson.contentPlainText === "string"
+        ? rawJson.contentPlainText
+        : null,
     contentVersion:
       typeof rawJson.contentVersion === "number" ? rawJson.contentVersion : 0,
     contentUpdatedAt:
-      typeof rawJson.contentUpdatedAt === "string" ? rawJson.contentUpdatedAt : null,
+      typeof rawJson.contentUpdatedAt === "string"
+        ? rawJson.contentUpdatedAt
+        : null,
   };
 }
 
@@ -801,10 +827,16 @@ function buildPageDocument(page: {
     })),
   );
   const document = stored.contentDocument ?? fallbackDocument;
-  const contentHtml = stored.contentHtml ?? serializeDocumentToHtml(document as Parameters<typeof serializeDocumentToHtml>[0]);
+  const contentHtml =
+    stored.contentHtml ??
+    serializeDocumentToHtml(
+      document as Parameters<typeof serializeDocumentToHtml>[0],
+    );
   const plainText =
     stored.contentPlainText ??
-    getDocumentPlainText(document as Parameters<typeof getDocumentPlainText>[0]);
+    getDocumentPlainText(
+      document as Parameters<typeof getDocumentPlainText>[0],
+    );
 
   return {
     document,
@@ -839,7 +871,9 @@ function isShamelaUrlOrPath(rawUrlOrPath: string) {
   }
 }
 
-function getShamelaPath(rawUrlOrPath: string | null | undefined): string | null {
+function getShamelaPath(
+  rawUrlOrPath: string | null | undefined,
+): string | null {
   const value = safeString(rawUrlOrPath);
   if (!value) return null;
   try {
@@ -850,7 +884,9 @@ function getShamelaPath(rawUrlOrPath: string | null | undefined): string | null 
   }
 }
 
-function getShamelaStoragePath(rawUrlOrPath: string | null | undefined): string | null {
+function getShamelaStoragePath(
+  rawUrlOrPath: string | null | undefined,
+): string | null {
   const value = safeString(rawUrlOrPath);
   if (!value) return null;
   try {
@@ -864,7 +900,9 @@ function getShamelaStoragePath(rawUrlOrPath: string | null | undefined): string 
   }
 }
 
-function getShamelaBookStoragePath(rawUrlOrPath: string | null | undefined): string | null {
+function getShamelaBookStoragePath(
+  rawUrlOrPath: string | null | undefined,
+): string | null {
   const path = getShamelaStoragePath(rawUrlOrPath);
   const match = path?.match(/^\/book\/(\d+)(?:\/\d+)?$/);
   return match ? `/book/${match[1]}` : null;
@@ -878,7 +916,8 @@ function buildShamelaPageSourceUrl(pathOrUrl: string): string {
   if (!isShamelaUrlOrPath(pathOrUrl)) {
     throw new TRPCError({
       code: "BAD_REQUEST",
-      message: "Invalid Shamela page link — only shamela.ws links are supported.",
+      message:
+        "Invalid Shamela page link — only shamela.ws links are supported.",
     });
   }
   const sourceUrl = buildShamelaUrlFromPath(pathOrUrl);
@@ -897,7 +936,9 @@ function getShamelaBookUrlFromUrl(rawUrl: string): string | null {
   try {
     if (!isShamelaUrlOrPath(rawUrl)) return null;
     const normalizedUrl = normalizeSourceUrl(rawUrl);
-    const match = normalizedUrl.match(/^(https?:\/\/[^/]+\/book\/\d+)(?:\/\d+)?$/);
+    const match = normalizedUrl.match(
+      /^(https?:\/\/[^/]+\/book\/\d+)(?:\/\d+)?$/,
+    );
     return match?.[1] ?? null;
   } catch {
     return null;
@@ -917,7 +958,9 @@ function normalizeShamelaUrlInput(rawUrl: string | null | undefined) {
   return bookPath;
 }
 
-function getShamelaBookIdFromUrl(rawUrl: string | null | undefined): number | null {
+function getShamelaBookIdFromUrl(
+  rawUrl: string | null | undefined,
+): number | null {
   if (!rawUrl) return null;
   try {
     const normalizedUrl = normalizeSourceUrl(rawUrl);
@@ -973,7 +1016,9 @@ async function dumpShamelaRawArtifact(input: {
   const rootDir = path.join(getRepoRoot(), "shamela-raw", "pages");
   await mkdir(rootDir, { recursive: true });
 
-  const pageSegment = input.shamelaPageNo ? `page-${input.shamelaPageNo}` : "page-unknown";
+  const pageSegment = input.shamelaPageNo
+    ? `page-${input.shamelaPageNo}`
+    : "page-unknown";
   const fileBase = `${pageSegment}-raw-${input.rawPageId}-${slugTimestamp()}`;
   const htmlPath = path.join(rootDir, `${fileBase}.html`);
   const jsonPath = path.join(rootDir, `${fileBase}.json`);
@@ -1023,27 +1068,29 @@ async function resolveBookLinkGraphStatus(
       : null;
 
   const matchedBookId = book?.id ?? null;
-  const volume = matchedBookId && input.volumeNumber != null
-    ? await db.bookVolume.findFirst({
-        where: {
-          bookId: matchedBookId,
-          number: input.volumeNumber,
-          deletedAt: null,
-        },
-        select: { id: true },
-      })
-    : null;
+  const volume =
+    matchedBookId && input.volumeNumber != null
+      ? await db.bookVolume.findFirst({
+          where: {
+            bookId: matchedBookId,
+            number: input.volumeNumber,
+            deletedAt: null,
+          },
+          select: { id: true },
+        })
+      : null;
 
-  const topicPage = matchedBookId && input.currentTopicHref
-    ? await db.bookPage.findFirst({
-        where: {
-          bookId: matchedBookId,
-          shamelaUrl: input.currentTopicHref,
-          deletedAt: null,
-        },
-        select: { id: true },
-      })
-    : null;
+  const topicPage =
+    matchedBookId && input.currentTopicHref
+      ? await db.bookPage.findFirst({
+          where: {
+            bookId: matchedBookId,
+            shamelaUrl: input.currentTopicHref,
+            deletedAt: null,
+          },
+          select: { id: true },
+        })
+      : null;
 
   const currentTopicExists = Boolean(topicPage);
   const knownTopicGraph = Boolean(matchedBookId && currentTopicExists);
@@ -1222,7 +1269,9 @@ function getShamelaBookInfo(rawUrl: string): {
     pathSegments[0] === "book" &&
     pathSegments[1] === String(shamelaId) &&
     pathSegments[2]
-      ? normalizeSourceUrl(`${parsedUrl.origin}/${pathSegments.slice(0, 3).join("/")}`)
+      ? normalizeSourceUrl(
+          `${parsedUrl.origin}/${pathSegments.slice(0, 3).join("/")}`,
+        )
       : null;
 
   return { normalizedUrl, shamelaId, bookIndexUrl, linkedPageUrl };
@@ -1248,6 +1297,34 @@ function sanitizePageData(parsed: ParsedPageData): ParsedPageData {
     chapterUrl: safeString(parsed.chapterUrl),
     topicTitle: safeString(parsed.topicTitle),
     topicUrl: safeString(parsed.topicUrl),
+    previousShamelaPageNo:
+      typeof parsed.previousShamelaPageNo === "number"
+        ? parsed.previousShamelaPageNo
+        : parsed.previousShamelaUrl
+          ? getShamelaPageNoFromUrl(parsed.previousShamelaUrl)
+          : null,
+    previousShamelaUrl: safeString(parsed.previousShamelaUrl),
+    nextShamelaPageNo:
+      typeof parsed.nextShamelaPageNo === "number"
+        ? parsed.nextShamelaPageNo
+        : parsed.nextShamelaUrl
+          ? getShamelaPageNoFromUrl(parsed.nextShamelaUrl)
+          : null,
+    nextShamelaUrl: safeString(parsed.nextShamelaUrl),
+    firstShamelaPageNo:
+      typeof parsed.firstShamelaPageNo === "number"
+        ? parsed.firstShamelaPageNo
+        : parsed.firstShamelaUrl
+          ? getShamelaPageNoFromUrl(parsed.firstShamelaUrl)
+          : null,
+    firstShamelaUrl: safeString(parsed.firstShamelaUrl),
+    lastShamelaPageNo:
+      typeof parsed.lastShamelaPageNo === "number"
+        ? parsed.lastShamelaPageNo
+        : parsed.lastShamelaUrl
+          ? getShamelaPageNoFromUrl(parsed.lastShamelaUrl)
+          : null,
+    lastShamelaUrl: safeString(parsed.lastShamelaUrl),
     paragraphs: (parsed.paragraphs ?? [])
       .map((paragraph, index) => ({
         pid:
@@ -1265,7 +1342,9 @@ function sanitizePageData(parsed: ParsedPageData): ParsedPageData {
         content: safeString(footnote?.content) ?? "",
         linkedParagraphs: safeString(footnote?.linkedParagraphs),
       }))
-      .filter((footnote) => footnote.marker.length > 0 && footnote.content.length > 0),
+      .filter(
+        (footnote) => footnote.marker.length > 0 && footnote.content.length > 0,
+      ),
   };
 }
 
@@ -1293,7 +1372,13 @@ function parseTocData(text: string): ParsedTocData {
 
 async function createBookImportHistory(
   db: any,
-  input: { bookId?: number | null; sourceUrl: string; normalizedUrl?: string | null; provider?: string | null; importMode?: string },
+  input: {
+    bookId?: number | null;
+    sourceUrl: string;
+    normalizedUrl?: string | null;
+    provider?: string | null;
+    importMode?: string;
+  },
 ) {
   return db.bookImportHistory.create({
     data: {
@@ -1425,7 +1510,10 @@ async function upsertShelfAndAuthor(
 }
 
 function flattenShamelaTocNodes(nodes: ShamelaTocNode[]): ShamelaTocNode[] {
-  return nodes.flatMap((node) => [node, ...flattenShamelaTocNodes(node.children)]);
+  return nodes.flatMap((node) => [
+    node,
+    ...flattenShamelaTocNodes(node.children),
+  ]);
 }
 
 async function syncParsedShamelaBookTree(
@@ -1446,11 +1534,21 @@ async function syncParsedShamelaBookTree(
     bookMeta.bookPath ??
     (shamelaId ? `/book/${shamelaId}` : getShamelaPath(input.finalUrl));
   const bookUrl = bookPath ? buildShamelaUrlFromPath(bookPath) : input.finalUrl;
-  const bookStoragePath = getShamelaBookStoragePath(bookPath ?? bookUrl) ?? bookPath ?? bookUrl;
+  const bookStoragePath =
+    getShamelaBookStoragePath(bookPath ?? bookUrl) ?? bookPath ?? bookUrl;
   const title =
     safeString(bookMeta.title) ??
     safeString(input.fallbackTitle) ??
     `Shamela book ${shamelaId ?? "unknown"}`;
+  const pageMeta = input.parsed.facts.pageMeta;
+  const firstShamelaUrl =
+    getShamelaStoragePath(pageMeta.firstShamelaUrl) ??
+    pageMeta.firstShamelaUrl ??
+    null;
+  const lastShamelaUrl =
+    getShamelaStoragePath(pageMeta.lastShamelaUrl) ??
+    pageMeta.lastShamelaUrl ??
+    null;
 
   let book = input.explicitBookId
     ? await db.book.findFirst({
@@ -1484,6 +1582,10 @@ async function syncParsedShamelaBookTree(
         nameAr: title,
         shamelaId: shamelaId ?? undefined,
         shamelaUrl: bookStoragePath,
+        firstShamelaPageNo: pageMeta.firstShamelaPageNo ?? undefined,
+        firstShamelaUrl,
+        lastShamelaPageNo: pageMeta.lastShamelaPageNo ?? undefined,
+        lastShamelaUrl,
         category: bookMeta.category?.name ?? undefined,
         categoryUrl: bookMeta.category?.url ?? undefined,
         coverColor: "#14532d",
@@ -1499,6 +1601,10 @@ async function syncParsedShamelaBookTree(
         editable: false,
         shamelaId: shamelaId ?? book.shamelaId ?? undefined,
         shamelaUrl: bookStoragePath,
+        firstShamelaPageNo: pageMeta.firstShamelaPageNo ?? undefined,
+        firstShamelaUrl,
+        lastShamelaPageNo: pageMeta.lastShamelaPageNo ?? undefined,
+        lastShamelaUrl,
         category: bookMeta.category?.name ?? undefined,
         categoryUrl: bookMeta.category?.url ?? undefined,
       },
@@ -1558,7 +1664,7 @@ async function syncParsedShamelaBookTree(
         bookId: book.id,
         volumeId:
           node.volumeNumber != null
-            ? volumeIdByNumber.get(node.volumeNumber) ?? null
+            ? (volumeIdByNumber.get(node.volumeNumber) ?? null)
             : null,
         shamelaPageNo,
         shamelaUrl,
@@ -1569,7 +1675,7 @@ async function syncParsedShamelaBookTree(
       update: {
         volumeId:
           node.volumeNumber != null
-            ? volumeIdByNumber.get(node.volumeNumber) ?? undefined
+            ? (volumeIdByNumber.get(node.volumeNumber) ?? undefined)
             : undefined,
         shamelaUrl,
         ...(node.kind === "chapter"
@@ -1588,7 +1694,7 @@ async function syncParsedShamelaBookTree(
   async function upsertNode(node: ShamelaTocNode, parentId: number | null) {
     const pageId =
       node.shamelaPageNo != null
-        ? pageIdByPageNo.get(node.shamelaPageNo) ?? null
+        ? (pageIdByPageNo.get(node.shamelaPageNo) ?? null)
         : null;
     const nodeShamelaPath = getShamelaStoragePath(node.path ?? node.url);
     const row = await db.bookTocNode.upsert({
@@ -1659,11 +1765,21 @@ async function rebindPageAnnotations(
   previousParagraphs: { id: number; pid: number; text: string }[],
   nextParagraphs: { id: number; pid: number; text: string }[],
 ) {
-  const nextByPid = new Map(nextParagraphs.map((paragraph) => [paragraph.pid, paragraph]));
-  const nextByText = new Map(nextParagraphs.map((paragraph) => [paragraph.text.trim(), paragraph]));
-  const previousById = new Map(previousParagraphs.map((paragraph) => [paragraph.id, paragraph]));
+  const nextByPid = new Map(
+    nextParagraphs.map((paragraph) => [paragraph.pid, paragraph]),
+  );
+  const nextByText = new Map(
+    nextParagraphs.map((paragraph) => [paragraph.text.trim(), paragraph]),
+  );
+  const previousById = new Map(
+    previousParagraphs.map((paragraph) => [paragraph.id, paragraph]),
+  );
 
-  const rebindParagraph = (paragraphId: number | null | undefined, paragraphPid: number | null | undefined, quoteText: string | null | undefined) => {
+  const rebindParagraph = (
+    paragraphId: number | null | undefined,
+    paragraphPid: number | null | undefined,
+    quoteText: string | null | undefined,
+  ) => {
     if (paragraphPid != null && nextByPid.has(paragraphPid)) {
       return nextByPid.get(paragraphPid) ?? null;
     }
@@ -1766,13 +1882,31 @@ async function saveParsedPageData(
 
   const resolvedShamelaPageNo =
     input.sourceUrl != null
-      ? getShamelaPageNoFromUrl(input.sourceUrl) ?? input.pageData.shamelaPageNo
+      ? (getShamelaPageNoFromUrl(input.sourceUrl) ??
+        input.pageData.shamelaPageNo)
       : input.pageData.shamelaPageNo;
   const pageData = {
     ...input.pageData,
     shamelaPageNo: resolvedShamelaPageNo,
   };
-  const sourceStoragePath = getShamelaStoragePath(input.sourceUrl) ?? input.sourceUrl ?? "";
+  const sourceStoragePath =
+    getShamelaStoragePath(input.sourceUrl) ?? input.sourceUrl ?? "";
+  const previousShamelaUrl =
+    getShamelaStoragePath(pageData.previousShamelaUrl) ??
+    pageData.previousShamelaUrl ??
+    null;
+  const nextShamelaUrl =
+    getShamelaStoragePath(pageData.nextShamelaUrl) ??
+    pageData.nextShamelaUrl ??
+    null;
+  const firstShamelaUrl =
+    getShamelaStoragePath(pageData.firstShamelaUrl) ??
+    pageData.firstShamelaUrl ??
+    null;
+  const lastShamelaUrl =
+    getShamelaStoragePath(pageData.lastShamelaUrl) ??
+    pageData.lastShamelaUrl ??
+    null;
   const existingPage = await db.bookPage.findFirst({
     where: {
       bookId: input.bookId,
@@ -1813,6 +1947,10 @@ async function saveParsedPageData(
         chapterUrl: pageData.chapterUrl ?? null,
         topicTitle: pageData.topicTitle ?? null,
         topicUrl: pageData.topicUrl ?? null,
+        previousShamelaPageNo: pageData.previousShamelaPageNo ?? null,
+        previousShamelaUrl,
+        nextShamelaPageNo: pageData.nextShamelaPageNo ?? null,
+        nextShamelaUrl,
         rawJson: pageData,
         status: "fetched",
       },
@@ -1824,6 +1962,10 @@ async function saveParsedPageData(
         chapterUrl: pageData.chapterUrl ?? null,
         topicTitle: pageData.topicTitle ?? null,
         topicUrl: pageData.topicUrl ?? null,
+        previousShamelaPageNo: pageData.previousShamelaPageNo ?? null,
+        previousShamelaUrl,
+        nextShamelaPageNo: pageData.nextShamelaPageNo ?? null,
+        nextShamelaUrl,
         rawJson: pageData,
         status: "fetched",
         deletedAt: null,
@@ -1869,18 +2011,36 @@ async function saveParsedPageData(
       orderBy: { pid: "asc" },
     });
 
-    await rebindPageAnnotations(db, page.id, previousParagraphs, nextParagraphs);
+    await rebindPageAnnotations(
+      db,
+      page.id,
+      previousParagraphs,
+      nextParagraphs,
+    );
 
     await db.book.update({
       where: { id: input.bookId },
       data: {
         contentHash: `${input.bookId}-${Date.now()}`,
         pagesUpdatedAt: new Date(),
+        ...(pageData.firstShamelaPageNo || firstShamelaUrl
+          ? {
+              firstShamelaPageNo: pageData.firstShamelaPageNo ?? null,
+              firstShamelaUrl,
+            }
+          : {}),
+        ...(pageData.lastShamelaPageNo || lastShamelaUrl
+          ? {
+              lastShamelaPageNo: pageData.lastShamelaPageNo ?? null,
+              lastShamelaUrl,
+            }
+          : {}),
         ...(shamelaBookUrl
           ? {
               sourceType: "shamela",
               editable: false,
-              shamelaUrl: getShamelaBookStoragePath(shamelaBookUrl) ?? shamelaBookUrl,
+              shamelaUrl:
+                getShamelaBookStoragePath(shamelaBookUrl) ?? shamelaBookUrl,
             }
           : {}),
       },
@@ -1911,7 +2071,8 @@ async function saveParsedPageData(
   } catch (error) {
     await completeBookPageImportHistory(db, history.id, {
       status: "failed",
-      errorMessage: error instanceof Error ? error.message : "Page import failed",
+      errorMessage:
+        error instanceof Error ? error.message : "Page import failed",
     });
     throw error;
   }
@@ -1919,12 +2080,16 @@ async function saveParsedPageData(
 
 async function syncBookFromShamelaInternal(
   db: any,
-  input: { shamelaUrl: string; aiProvider: AiProvider; aiModel?: ImportAiModel },
+  input: {
+    shamelaUrl: string;
+    aiProvider: AiProvider;
+    aiModel?: ImportAiModel;
+  },
 ) {
-  const { normalizedUrl, shamelaId, bookIndexUrl, linkedPageUrl } = getShamelaBookInfo(
-    input.shamelaUrl,
-  );
-  const bookStoragePath = getShamelaBookStoragePath(bookIndexUrl) ?? bookIndexUrl;
+  const { normalizedUrl, shamelaId, bookIndexUrl, linkedPageUrl } =
+    getShamelaBookInfo(input.shamelaUrl);
+  const bookStoragePath =
+    getShamelaBookStoragePath(bookIndexUrl) ?? bookIndexUrl;
 
   const existing = await db.book.findFirst({
     where: { shamelaId, deletedAt: null },
@@ -2061,16 +2226,16 @@ async function syncBookFromShamelaInternal(
         { openaiModel: input.aiModel === "gemini" ? undefined : input.aiModel },
       );
       const pageData = parsePageData(pageAiResult.text);
-      const {
-        page,
-        historyId: pageImportHistoryId,
-      } = await saveParsedPageData(db, {
-        bookId: book.id,
-        pageData,
-        sourceUrl: linkedPageUrl,
-        importMethod: existing ? "reimport_url" : "link_url",
-        provider: input.aiProvider,
-      });
+      const { page, historyId: pageImportHistoryId } = await saveParsedPageData(
+        db,
+        {
+          bookId: book.id,
+          pageData,
+          sourceUrl: linkedPageUrl,
+          importMethod: existing ? "reimport_url" : "link_url",
+          provider: input.aiProvider,
+        },
+      );
 
       await recordTokenUsage(
         db,
@@ -2128,23 +2293,24 @@ async function syncBookFromShamelaInternal(
   }
 }
 
-export async function previewBookImportFromShamelaInternal(
-  input: { shamelaUrl: string; aiProvider: AiProvider; aiModel?: ImportAiModel },
-) {
-  const { normalizedUrl, shamelaId, bookIndexUrl, linkedPageUrl } = getShamelaBookInfo(
-    input.shamelaUrl,
-  );
+export async function previewBookImportFromShamelaInternal(input: {
+  shamelaUrl: string;
+  aiProvider: AiProvider;
+  aiModel?: ImportAiModel;
+}) {
+  const { normalizedUrl, shamelaId, bookIndexUrl, linkedPageUrl } =
+    getShamelaBookInfo(input.shamelaUrl);
 
-    const metaResult = await callAI(
-      input.aiProvider,
-      SHAMELA_BOOK_META_PROMPT,
-      1024,
-      {
-        sourceUrl: bookIndexUrl,
-        requestedSourceUrl: input.shamelaUrl,
-      },
-      { openaiModel: input.aiModel === "gemini" ? undefined : input.aiModel },
-    );
+  const metaResult = await callAI(
+    input.aiProvider,
+    SHAMELA_BOOK_META_PROMPT,
+    1024,
+    {
+      sourceUrl: bookIndexUrl,
+      requestedSourceUrl: input.shamelaUrl,
+    },
+    { openaiModel: input.aiModel === "gemini" ? undefined : input.aiModel },
+  );
   const meta = parseBookMeta(metaResult.text);
 
   let toc: ParsedTocData = { volumes: [], chapters: [] };
@@ -2195,7 +2361,8 @@ export async function previewBookImportFromShamelaInternal(
     bookIndexUrl,
     linkedPageUrl,
     aiProvider: input.aiProvider,
-    aiModel: input.aiModel ?? (input.aiProvider === "gemini" ? "gemini" : "gpt-5"),
+    aiModel:
+      input.aiModel ?? (input.aiProvider === "gemini" ? "gemini" : "gpt-5"),
     previewJson: {
       metadata: meta,
       toc: {
@@ -2330,8 +2497,11 @@ async function captureAndStageShamelaPageInternal(
           volumeNumber: parsed.document.meta.volumeNumber,
           chapterTitle:
             parsed.document.content.find((block) => block.type === "heading")
-              ?.text ?? parsed.document.context.currentTopic?.label ?? null,
-          chapterUrl: parsed.document.context.currentTopic?.href ?? input.finalUrl,
+              ?.text ??
+            parsed.document.context.currentTopic?.label ??
+            null,
+          chapterUrl:
+            parsed.document.context.currentTopic?.href ?? input.finalUrl,
           topicTitle: parsed.document.context.currentTopic?.label ?? null,
           topicUrl: parsed.document.context.currentTopic?.href ?? null,
           paragraphsJson: parsed.document.content.filter(
@@ -2416,14 +2586,18 @@ async function promoteStagedShamelaPageParseInternal(
   });
 
   const document = reparsed.document;
-  const meta = isRecord(document?.meta) ? document.meta as any : {};
-  const linkGraph = isRecord(staged.linkGraphJson) ? staged.linkGraphJson as any : {};
+  const meta = isRecord(document?.meta) ? (document.meta as any) : {};
+  const linkGraph = isRecord(staged.linkGraphJson)
+    ? (staged.linkGraphJson as any)
+    : {};
   const shamelaBookId =
     typeof meta.shamelaBookId === "number" ? meta.shamelaBookId : null;
   let bookId =
     input.bookId ??
     staged.bookId ??
-    (typeof linkGraph.matchedBookId === "number" ? linkGraph.matchedBookId : null);
+    (typeof linkGraph.matchedBookId === "number"
+      ? linkGraph.matchedBookId
+      : null);
 
   if (!bookId && shamelaBookId) {
     const existingBook = await db.book.findFirst({
@@ -2446,7 +2620,9 @@ async function promoteStagedShamelaPageParseInternal(
 
   let volumeId: number | null = null;
   const parsedVolumeNumber =
-    typeof meta.volumeNumber === "number" ? meta.volumeNumber : staged.volumeNumber;
+    typeof meta.volumeNumber === "number"
+      ? meta.volumeNumber
+      : staged.volumeNumber;
   if (typeof parsedVolumeNumber === "number") {
     const volume = await db.bookVolume.upsert({
       where: { bookId_number: { bookId, number: parsedVolumeNumber } },
@@ -2456,8 +2632,12 @@ async function promoteStagedShamelaPageParseInternal(
     volumeId = volume.id;
   }
 
-  const paragraphBlocks = document.content.filter((block) => block.type === "paragraph");
-  const footnoteBlocks = document.content.filter((block) => block.type === "footnote");
+  const paragraphBlocks = document.content.filter(
+    (block) => block.type === "paragraph",
+  );
+  const footnoteBlocks = document.content.filter(
+    (block) => block.type === "footnote",
+  );
   const pageData: ParsedPageData = {
     shamelaPageNo:
       (typeof meta.shamelaPageNo === "number" ? meta.shamelaPageNo : null) ??
@@ -2475,16 +2655,36 @@ async function promoteStagedShamelaPageParseInternal(
       document.context.currentTopic?.href ?? staged.chapterUrl ?? null,
     topicTitle:
       document.context.currentTopic?.label ?? staged.topicTitle ?? null,
-    topicUrl:
-      document.context.currentTopic?.href ?? staged.topicUrl ?? null,
+    topicUrl: document.context.currentTopic?.href ?? staged.topicUrl ?? null,
+    previousShamelaPageNo:
+      (typeof meta.previousShamelaPageNo === "number"
+        ? meta.previousShamelaPageNo
+        : null) ??
+      document.context.adjacentPages?.previous?.shamelaPageNo ??
+      null,
+    previousShamelaUrl: document.context.adjacentPages?.previous?.href ?? null,
+    nextShamelaPageNo:
+      (typeof meta.nextShamelaPageNo === "number"
+        ? meta.nextShamelaPageNo
+        : null) ??
+      document.context.adjacentPages?.next?.shamelaPageNo ??
+      null,
+    nextShamelaUrl: document.context.adjacentPages?.next?.href ?? null,
+    firstShamelaPageNo:
+      document.context.adjacentPages?.first?.shamelaPageNo ?? null,
+    firstShamelaUrl: document.context.adjacentPages?.first?.href ?? null,
+    lastShamelaPageNo:
+      document.context.adjacentPages?.last?.shamelaPageNo ?? null,
+    lastShamelaUrl: document.context.adjacentPages?.last?.href ?? null,
     paragraphs: paragraphBlocks
       .filter((block) => block?.type === "paragraph" && safeString(block.text))
       .map((block, index) => ({
         pid: index + 1,
         text: String(block.text),
-        footnoteIds: Array.isArray(block.footnoteRefs) && block.footnoteRefs.length
-          ? block.footnoteRefs.join(",")
-          : null,
+        footnoteIds:
+          Array.isArray(block.footnoteRefs) && block.footnoteRefs.length
+            ? block.footnoteRefs.join(",")
+            : null,
       })),
     footnotes: footnoteBlocks
       .filter((block) => block?.type === "footnote" && safeString(block.text))
@@ -2640,6 +2840,10 @@ export const bookRoutes = createTRPCRouter({
               printedPageNo: true,
               chapterTitle: true,
               topicTitle: true,
+              previousShamelaPageNo: true,
+              previousShamelaUrl: true,
+              nextShamelaPageNo: true,
+              nextShamelaUrl: true,
               status: true,
               volumeId: true,
             },
@@ -2847,7 +3051,7 @@ export const bookRoutes = createTRPCRouter({
   getPage: publicProcedure
     .input(z.object({ pageId: z.number() }))
     .query(async ({ ctx, input }) => {
-      return ctx.db.bookPage.findFirstOrThrow({
+      const page = await ctx.db.bookPage.findFirstOrThrow({
         where: { id: input.pageId, deletedAt: null },
         include: {
           paragraphs: { orderBy: { pid: "asc" } },
@@ -2860,7 +3064,9 @@ export const bookRoutes = createTRPCRouter({
                 select: {
                   id: true,
                   title: true,
-                  file: { select: { id: true, fileName: true, duration: true } },
+                  file: {
+                    select: { id: true, fileName: true, duration: true },
+                  },
                   album: { select: { id: true, name: true } },
                   blog: { select: { id: true, content: true } },
                 },
@@ -2880,10 +3086,59 @@ export const bookRoutes = createTRPCRouter({
               ownerUserId: true,
               shamelaId: true,
               shamelaUrl: true,
-            } as any,
+            },
           },
         },
       });
+      const previousPageNo =
+        page.previousShamelaPageNo ??
+        (page.previousShamelaUrl
+          ? getShamelaPageNoFromUrl(page.previousShamelaUrl)
+          : null);
+      const nextPageNo =
+        page.nextShamelaPageNo ??
+        (page.nextShamelaUrl ? getShamelaPageNoFromUrl(page.nextShamelaUrl) : null);
+      const previousUrl = page.previousShamelaUrl ?? null;
+      const nextUrl =
+        page.nextShamelaUrl ?? null;
+      const adjacentRows = await ctx.db.bookPage.findMany({
+        where: {
+          bookId: page.bookId,
+          shamelaPageNo: {
+            in: [previousPageNo, nextPageNo].filter(
+              (value): value is number => typeof value === "number",
+            ),
+          },
+          deletedAt: null,
+        },
+        select: {
+          id: true,
+          shamelaPageNo: true,
+          shamelaUrl: true,
+          status: true,
+        },
+      });
+      const adjacentByPageNo = new Map(
+        adjacentRows.map((row) => [row.shamelaPageNo, row]),
+      );
+
+      return {
+        ...page,
+        adjacentPages: {
+          previous: {
+            shamelaPageNo: previousPageNo,
+            shamelaUrl: previousUrl,
+            page: previousPageNo
+              ? (adjacentByPageNo.get(previousPageNo) ?? null)
+              : null,
+          },
+          next: {
+            shamelaPageNo: nextPageNo,
+            shamelaUrl: nextUrl,
+            page: nextPageNo ? (adjacentByPageNo.get(nextPageNo) ?? null) : null,
+          },
+        },
+      };
     }),
 
   getPageDocument: publicProcedure
@@ -2909,7 +3164,8 @@ export const bookRoutes = createTRPCRouter({
         contentHtml: content.contentHtml,
         plainText: content.plainText,
         contentVersion: content.contentVersion,
-        contentUpdatedAt: content.contentUpdatedAt ?? page.updatedAt?.toISOString() ?? null,
+        contentUpdatedAt:
+          content.contentUpdatedAt ?? page.updatedAt?.toISOString() ?? null,
       };
     }),
 
@@ -2924,7 +3180,11 @@ export const bookRoutes = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      await assertPageBookEditable(ctx.db, input.pageId, getCurrentBookUserId(ctx));
+      await assertPageBookEditable(
+        ctx.db,
+        input.pageId,
+        getCurrentBookUserId(ctx),
+      );
       const page = await ctx.db.bookPage.findFirstOrThrow({
         where: { id: input.pageId, deletedAt: null },
         select: {
@@ -2949,10 +3209,9 @@ export const bookRoutes = createTRPCRouter({
       const document = input.contentHtml
         ? createDocumentFromHtml(input.contentHtml)
         : (input.document as Parameters<typeof getDocumentPlainText>[0]);
-      const contentHtml = input.contentHtml ?? serializeDocumentToHtml(document);
-      const plainText =
-        input.plainText ??
-        getDocumentPlainText(document);
+      const contentHtml =
+        input.contentHtml ?? serializeDocumentToHtml(document);
+      const plainText = input.plainText ?? getDocumentPlainText(document);
       const nextVersion = currentVersion + 1;
       const contentUpdatedAt = new Date().toISOString();
       const baseRawJson = isRecord(page.rawJson) ? page.rawJson : {};
@@ -2980,7 +3239,9 @@ export const bookRoutes = createTRPCRouter({
         },
       });
 
-      await ctx.db.bookPageParagraph.deleteMany({ where: { pageId: input.pageId } });
+      await ctx.db.bookPageParagraph.deleteMany({
+        where: { pageId: input.pageId },
+      });
       if (paragraphs.length > 0) {
         await ctx.db.bookPageParagraph.createMany({
           data: paragraphs.map((paragraph) => ({
@@ -3023,12 +3284,14 @@ export const bookRoutes = createTRPCRouter({
 
       const seen = new Set<string>();
 
-      return history.filter((entry) => {
-        const key = getBookImportHistoryKey(entry);
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      }).slice(0, input.limit);
+      return history
+        .filter((entry) => {
+          const key = getBookImportHistoryKey(entry);
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        })
+        .slice(0, input.limit);
     }),
 
   getBookPageImportHistory: publicProcedure
@@ -3052,9 +3315,7 @@ export const bookRoutes = createTRPCRouter({
         bookId: z.number(),
         shamelaUrl: z.string().min(1),
         volumeId: z.number().optional(),
-        aiProvider: z
-          .enum(["anthropic", "openai", "gemini"])
-          .default("openai"),
+        aiProvider: z.enum(["anthropic", "openai", "gemini"]).default("openai"),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -3067,14 +3328,17 @@ export const bookRoutes = createTRPCRouter({
         sourceUrl,
       );
       const pageData = parsePageData(aiResult.text);
-      const { page, historyId, diffSummaryJson } = await saveParsedPageData(db, {
-        bookId: input.bookId,
-        pageData,
-        sourceUrl,
-        volumeId: input.volumeId ?? null,
-        importMethod: "reimport_url",
-        provider: input.aiProvider,
-      });
+      const { page, historyId, diffSummaryJson } = await saveParsedPageData(
+        db,
+        {
+          bookId: input.bookId,
+          pageData,
+          sourceUrl,
+          volumeId: input.volumeId ?? null,
+          importMethod: "reimport_url",
+          provider: input.aiProvider,
+        },
+      );
 
       await recordTokenUsage(
         db,
@@ -3094,9 +3358,7 @@ export const bookRoutes = createTRPCRouter({
         bookId: z.number(),
         currentShamelaPageNo: z.number(),
         direction: z.enum(["previous", "next"]).default("next"),
-        aiProvider: z
-          .enum(["anthropic", "openai", "gemini"])
-          .default("openai"),
+        aiProvider: z.enum(["anthropic", "openai", "gemini"]).default("openai"),
       }),
     )
     .mutation(async ({ ctx, input }) => {
@@ -3111,24 +3373,22 @@ export const bookRoutes = createTRPCRouter({
       });
       if (!currentPage) throw new Error("Current page not found");
 
-      const book = await db.book.findFirst({
-        where: { id: input.bookId, deletedAt: null },
-        select: { id: true, shamelaUrl: true },
-      });
-      if (!book) throw new Error("Book not found");
-
-      const nextPageNo =
-        input.currentShamelaPageNo + (input.direction === "previous" ? -1 : 1);
-      if (nextPageNo < 1) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: "There is no previous Shamela page before page 1.",
-        });
-      }
+      const storedAdjacentUrl =
+        input.direction === "previous"
+          ? currentPage.previousShamelaUrl
+          : currentPage.nextShamelaUrl;
+      const targetPageNo =
+        input.direction === "previous"
+          ? (currentPage.previousShamelaPageNo ??
+            (storedAdjacentUrl ? getShamelaPageNoFromUrl(storedAdjacentUrl) : null))
+          : (currentPage.nextShamelaPageNo ??
+            (storedAdjacentUrl ? getShamelaPageNoFromUrl(storedAdjacentUrl) : null));
       const nextExistingPage = await db.bookPage.findFirst({
         where: {
           bookId: input.bookId,
-          shamelaPageNo: nextPageNo,
+          ...(targetPageNo == null
+            ? { id: -1 }
+            : { shamelaPageNo: targetPageNo }),
           deletedAt: null,
         },
         include: {
@@ -3152,12 +3412,8 @@ export const bookRoutes = createTRPCRouter({
       }
 
       const nextUrlCandidate =
-        nextExistingPage?.shamelaUrl ||
-        (currentPage.shamelaUrl
-          ? buildShamelaPageUrl(currentPage.shamelaUrl, nextPageNo)
-          : book.shamelaUrl
-            ? buildShamelaPageUrl(book.shamelaUrl, nextPageNo)
-            : null);
+        storedAdjacentUrl ||
+        nextExistingPage?.shamelaUrl;
 
       if (!nextUrlCandidate) {
         throw new TRPCError({
@@ -3174,14 +3430,17 @@ export const bookRoutes = createTRPCRouter({
         nextUrl,
       );
       const pageData = parsePageData(aiResult.text);
-      const { page, historyId, diffSummaryJson } = await saveParsedPageData(db, {
-        bookId: input.bookId,
-        pageData,
-        sourceUrl: nextUrl,
-        volumeId: currentPage.volumeId ?? null,
-        importMethod: "reimport_url",
-        provider: input.aiProvider,
-      });
+      const { page, historyId, diffSummaryJson } = await saveParsedPageData(
+        db,
+        {
+          bookId: input.bookId,
+          pageData,
+          sourceUrl: nextUrl,
+          volumeId: currentPage.volumeId ?? null,
+          importMethod: "reimport_url",
+          provider: input.aiProvider,
+        },
+      );
 
       await recordTokenUsage(
         db,
@@ -3240,7 +3499,8 @@ export const bookRoutes = createTRPCRouter({
               blog: {
                 create: {
                   type: "book",
-                  content: input.createBook.description ?? input.createBook.nameAr,
+                  content:
+                    input.createBook.description ?? input.createBook.nameAr,
                   published: true,
                   status: "published",
                 },
@@ -3263,10 +3523,12 @@ export const bookRoutes = createTRPCRouter({
 
         const shamelaPageNo =
           input.shamelaPageNo ??
-          ((await db.bookPage.aggregate({
-            where: { bookId },
-            _max: { shamelaPageNo: true },
-          }))._max.shamelaPageNo ?? 0) + 1;
+          ((
+            await db.bookPage.aggregate({
+              where: { bookId },
+              _max: { shamelaPageNo: true },
+            })
+          )._max.shamelaPageNo ?? 0) + 1;
 
         const paragraphs = input.pageText
           .split(/\n\s*\n|\r\n\s*\r\n/g)
@@ -3456,6 +3718,10 @@ export const bookRoutes = createTRPCRouter({
           coverColor: true,
           shamelaId: true,
           shamelaUrl: true,
+          firstShamelaPageNo: true,
+          firstShamelaUrl: true,
+          lastShamelaPageNo: true,
+          lastShamelaUrl: true,
           sourceType: true,
           editable: true,
           ownerUserId: true,
@@ -3478,6 +3744,10 @@ export const bookRoutes = createTRPCRouter({
           printedPageNo: true,
           chapterTitle: true,
           topicTitle: true,
+          previousShamelaPageNo: true,
+          previousShamelaUrl: true,
+          nextShamelaPageNo: true,
+          nextShamelaUrl: true,
           status: true,
           paragraphs: {
             select: { id: true, pid: true, text: true, footnoteIds: true },

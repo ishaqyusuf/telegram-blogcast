@@ -57,6 +57,8 @@ export type TenTapPageDocumentV1 = {
     shamelaPageNo: number | null;
     printedPageNo: number | null;
     volumeNumber: number | null;
+    previousShamelaPageNo: number | null;
+    nextShamelaPageNo: number | null;
   };
   context: {
     breadcrumb: TenTapBreadcrumbItem[];
@@ -64,6 +66,24 @@ export type TenTapPageDocumentV1 = {
       label: string | null;
       href: string | null;
     } | null;
+    adjacentPages: {
+      first: {
+        href: string | null;
+        shamelaPageNo: number | null;
+      };
+      previous: {
+        href: string | null;
+        shamelaPageNo: number | null;
+      };
+      next: {
+        href: string | null;
+        shamelaPageNo: number | null;
+      };
+      last: {
+        href: string | null;
+        shamelaPageNo: number | null;
+      };
+    };
     navigationSections: Array<{
       label: string | null;
       items: Array<{
@@ -110,6 +130,14 @@ export type ShamelaOpenPageFacts = {
     shamelaPageNo: number | null;
     printedPageNo: number | null;
     volumeNumber: number | null;
+    previousShamelaPageNo: number | null;
+    previousShamelaUrl: string | null;
+    nextShamelaPageNo: number | null;
+    nextShamelaUrl: string | null;
+    firstShamelaPageNo: number | null;
+    firstShamelaUrl: string | null;
+    lastShamelaPageNo: number | null;
+    lastShamelaUrl: string | null;
   };
   breadcrumb: {
     items: Array<{
@@ -143,7 +171,13 @@ export type ShamelaOpenPageFacts = {
     classList: string[];
     text: string;
     html: string;
-    kind: "paragraph" | "footnote" | "heading" | "meta" | "navigation" | "unknown";
+    kind:
+      | "paragraph"
+      | "footnote"
+      | "heading"
+      | "meta"
+      | "navigation"
+      | "unknown";
   }>;
   footnotes: Array<{
     index: number;
@@ -248,7 +282,10 @@ function getPageNoFromPath(path: string | null | undefined) {
   return path ? getPageNoFromUrl(path) : null;
 }
 
-function extractBookMetadata(html: string, finalUrl: string): ShamelaBookMetadata {
+function extractBookMetadata(
+  html: string,
+  finalUrl: string,
+): ShamelaBookMetadata {
   const titleMatch = html.match(
     /<h1[^>]*>[\s\S]*?<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/i,
   );
@@ -258,12 +295,15 @@ function extractBookMetadata(html: string, finalUrl: string): ShamelaBookMetadat
   const categoryMatch = html.match(
     /<li>\s*<a\b[^>]*href=["']([^"']*\/category\/\d+)["'][^>]*>([\s\S]*?)<\/a>\s*<\/li>/i,
   );
-  const bookPath = getPathFromHref(titleMatch?.[1]) ?? getPathFromHref(finalUrl);
+  const bookPath =
+    getPathFromHref(titleMatch?.[1]) ?? getPathFromHref(finalUrl);
   const authorPath = getPathFromHref(authorMatch?.[1]);
   const categoryPath = getPathFromHref(categoryMatch?.[1]);
 
   return {
-    shamelaBookId: bookPath ? getBookIdFromUrl(bookPath) : getBookIdFromUrl(finalUrl),
+    shamelaBookId: bookPath
+      ? getBookIdFromUrl(bookPath)
+      : getBookIdFromUrl(finalUrl),
     title: normalizeText(titleMatch?.[2]),
     bookPath,
     bookUrl: getUrlFromPath(bookPath),
@@ -312,9 +352,11 @@ function extractNassMeta(html: string) {
 }
 
 function extractNassContentHtml(html: string) {
-  return html.match(
-    /<div\b[^>]*class=["'][^"']*\bnass\b[^"']*["'][^>]*>([\s\S]*?)<\/div>\s*<div\s+id=["']appended_pages["']/i,
-  )?.[1] ?? html;
+  return (
+    html.match(
+      /<div\b[^>]*class=["'][^"']*\bnass\b[^"']*["'][^>]*>([\s\S]*?)<\/div>\s*<div\s+id=["']appended_pages["']/i,
+    )?.[1] ?? html
+  );
 }
 
 function extractInputValue(html: string, inputId: string) {
@@ -331,13 +373,15 @@ function extractAnchorTrail(html: string) {
     /<div class="heading-title heading-border[\s\S]*?<div class="size-12">([\s\S]*?)<\/div>\s*<\/div>/i,
   );
   const source = sectionMatch?.[1] ?? "";
-  return [...source.matchAll(/<a[^>]*href="([^"]+)"[^>]*>\s*<span[^>]*>([\s\S]*?)<\/span>\s*<\/a>/gi)].map(
-    (match, index) => ({
-      label: normalizeText(match[2]),
-      href: match[1] ?? null,
-      position: index,
-    }),
-  );
+  return [
+    ...source.matchAll(
+      /<a[^>]*href="([^"]+)"[^>]*>\s*<span[^>]*>([\s\S]*?)<\/span>\s*<\/a>/gi,
+    ),
+  ].map((match, index) => ({
+    label: normalizeText(match[2]),
+    href: match[1] ?? null,
+    position: index,
+  }));
 }
 
 function extractCurrentTopicFromInlineLabel(html: string) {
@@ -358,7 +402,9 @@ function extractNavigationSections(html: string) {
   if (!navBlock) return [];
 
   const head = normalizeText(
-    navBlock.match(/<div\b[^>]*class=["'][^"']*\bs-nav-head\b[^"']*["'][^>]*>([\s\S]*?)<\/div>/i)?.[1],
+    navBlock.match(
+      /<div\b[^>]*class=["'][^"']*\bs-nav-head\b[^"']*["'][^>]*>([\s\S]*?)<\/div>/i,
+    )?.[1],
   );
 
   return [
@@ -372,6 +418,74 @@ function extractNavigationSections(html: string) {
         .filter((item) => item.label && item.href !== "javascript:;"),
     },
   ];
+}
+
+function getHrefWithPageNo(html: string, pageNo: number | null): string | null {
+  if (pageNo == null) return null;
+  const escapedPageNo = String(pageNo).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = html.match(
+    new RegExp(
+      `<a\\b([^>]*)href=["']([^"']*/book/\\d+/${escapedPageNo}(?:#[^"']*)?)["'][^>]*>`,
+      "i",
+    ),
+  );
+  return match?.[2] ?? null;
+}
+
+function extractAdjacentPages(html: string) {
+  const pagerLinks = [...html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)]
+    .map((match) => {
+      const href = extractHref(match[1] ?? "");
+      const label = normalizeText(match[2]);
+      return {
+        href,
+        label,
+        shamelaPageNo: href ? getPageNoFromUrl(href) : null,
+      };
+    })
+    .filter(
+      (item) =>
+        Boolean(item.href?.includes("/book/")) && item.shamelaPageNo != null,
+    );
+  const firstLink = pagerLinks.find((item) => item.label === "<<") ?? null;
+  const lastLink = pagerLinks.find((item) => item.label === ">>") ?? null;
+  const previousFromButton = parseArabicDigits(
+    html.match(
+      /\bid=["']bu_load_prev["'][^>]*\bdata-prev-id=["']([^"']+)["']/i,
+    )?.[1] ??
+      html.match(
+        /\bdata-prev-id=["']([^"']+)["'][^>]*\bid=["']bu_load_prev["']/i,
+      )?.[1],
+  );
+  const nextFromButton = parseArabicDigits(
+    html.match(
+      /\bid=["']bu_load_next["'][^>]*\bdata-next-id=["']([^"']+)["']/i,
+    )?.[1] ??
+      html.match(
+        /\bdata-next-id=["']([^"']+)["'][^>]*\bid=["']bu_load_next["']/i,
+      )?.[1],
+  );
+  const previousHref = getHrefWithPageNo(html, previousFromButton);
+  const nextHref = getHrefWithPageNo(html, nextFromButton);
+
+  return {
+    first: {
+      href: firstLink?.href ?? null,
+      shamelaPageNo: firstLink?.shamelaPageNo ?? null,
+    },
+    previous: {
+      href: previousHref,
+      shamelaPageNo: previousFromButton,
+    },
+    next: {
+      href: nextHref,
+      shamelaPageNo: nextFromButton,
+    },
+    last: {
+      href: lastLink?.href ?? null,
+      shamelaPageNo: lastLink?.shamelaPageNo ?? null,
+    },
+  };
 }
 
 function flattenToc(nodes: ShamelaTocNode[]): ShamelaTocNode[] {
@@ -410,7 +524,11 @@ function extractTocTree(html: string): ShamelaTocNode[] {
       children: [],
     };
 
-    volumeNode.children = [...(match[3] ?? "").matchAll(/<li>\s*-?\s*<a\b([^>]*)>([\s\S]*?)<\/a>\s*<\/li>/gi)]
+    volumeNode.children = [
+      ...(match[3] ?? "").matchAll(
+        /<li>\s*-?\s*<a\b([^>]*)>([\s\S]*?)<\/a>\s*<\/li>/gi,
+      ),
+    ]
       .map((childMatch, childIndex) => {
         const childAttrs = childMatch[1] ?? "";
         const childPath = getPathFromHref(extractHref(childAttrs));
@@ -436,15 +554,23 @@ function extractTocTree(html: string): ShamelaTocNode[] {
 }
 
 function extractFootnotes(html: string) {
-  return [...html.matchAll(/<(?:div|p|li)\b[^>]*class="[^"]*\bhamesh\b[^"]*"[^>]*>([\s\S]*?)<\/(?:div|p|li)>/gi)]
+  return [
+    ...html.matchAll(
+      /<(?:div|p|li)\b[^>]*class="[^"]*\bhamesh\b[^"]*"[^>]*>([\s\S]*?)<\/(?:div|p|li)>/gi,
+    ),
+  ]
     .map((match, index) => {
       const rawText = stripTags(match[1] ?? "");
       if (!rawText) return null;
-      const markerMatch = rawText.match(/^([0-9\u0660-\u0669A-Za-z\u0623-\u064A]+)[\s)\].:-]+/);
+      const markerMatch = rawText.match(
+        /^([0-9\u0660-\u0669A-Za-z\u0623-\u064A]+)[\s)\].:-]+/,
+      );
       return {
         index,
         marker: markerMatch?.[1] ?? null,
-        text: markerMatch ? rawText.slice(markerMatch[0].length).trim() : rawText,
+        text: markerMatch
+          ? rawText.slice(markerMatch[0].length).trim()
+          : rawText,
         html: match[1] ?? "",
         sourceClass: "hamesh" as const,
       };
@@ -471,11 +597,17 @@ function extractParagraphMatches(html: string) {
         html: blockHtml,
       };
     })
-    .filter((block) => block.text.length > 20 && !block.classList.includes("hamesh"));
+    .filter(
+      (block) => block.text.length > 20 && !block.classList.includes("hamesh"),
+    );
 }
 
 function extractStyleMarksFromParagraph(html: string, blockIndex: number) {
-  return [...html.matchAll(/<[^>]*class="[^"]*\bc5\b[^"]*"[^>]*>([\s\S]*?)<\/[^>]+>/gi)]
+  return [
+    ...html.matchAll(
+      /<[^>]*class="[^"]*\bc5\b[^"]*"[^>]*>([\s\S]*?)<\/[^>]+>/gi,
+    ),
+  ]
     .map((match) => normalizeText(match[1]))
     .filter(Boolean)
     .map((text) => ({
@@ -485,9 +617,14 @@ function extractStyleMarksFromParagraph(html: string, blockIndex: number) {
     }));
 }
 
-function classifyBreadcrumbRole(label: string, position: number, total: number): TenTapBreadcrumbItem["role"] {
+function classifyBreadcrumbRole(
+  label: string,
+  position: number,
+  total: number,
+): TenTapBreadcrumbItem["role"] {
   if (position === 0 && /فهرس الكتاب/.test(label)) return "book-index";
-  if (/المجلد|الجزء|الجزء|الكتاب/.test(label) && position < total - 1) return "volume";
+  if (/المجلد|الجزء|الجزء|الكتاب/.test(label) && position < total - 1)
+    return "volume";
   if (position === total - 1) return "topic";
   return "unknown";
 }
@@ -503,11 +640,16 @@ export function parseShamelaOpenPage(input: {
   const diagnostics: ParseDiagnostic[] = [];
 
   const nassMeta = extractNassMeta(input.html);
-  const printedPageNoFromInput = parseArabicDigits(extractInputValue(input.html, "fld_goto_top"));
-  const volumeNumber = parseArabicDigits(extractInputValue(input.html, "fld_part_top"));
+  const printedPageNoFromInput = parseArabicDigits(
+    extractInputValue(input.html, "fld_goto_top"),
+  );
+  const volumeNumber = parseArabicDigits(
+    extractInputValue(input.html, "fld_part_top"),
+  );
   const shamelaPageNo = nassMeta.pageId ?? getPageNoFromUrl(input.finalUrl);
   const printedPageNo = nassMeta.pageNum ?? printedPageNoFromInput;
-  const shamelaBookId = getBookIdFromUrl(input.finalUrl) ?? getBookIdFromUrl(input.requestedUrl);
+  const shamelaBookId =
+    getBookIdFromUrl(input.finalUrl) ?? getBookIdFromUrl(input.requestedUrl);
   const book = extractBookMetadata(input.html, input.finalUrl);
 
   if (nassMeta.pageId != null) {
@@ -559,6 +701,7 @@ export function parseShamelaOpenPage(input: {
     label: section.head,
     items: section.items,
   }));
+  const adjacentPages = extractAdjacentPages(input.html);
   const tocNodes = extractTocTree(input.html);
   const flatTocNodes = flattenToc(tocNodes);
   const activeTocNode = flatTocNodes.find((node) => node.active) ?? null;
@@ -627,7 +770,11 @@ export function parseShamelaOpenPage(input: {
       id: `p-${index + 1}`,
       text: block.text,
       marks,
-      footnoteRefs: [...block.html.matchAll(/<span\b[^>]*class=["'][^"']*\bc2\b[^"']*["'][^>]*>\s*\(([^)]+)\)\s*<\/span>/gi)]
+      footnoteRefs: [
+        ...block.html.matchAll(
+          /<span\b[^>]*class=["'][^"']*\bc2\b[^"']*["'][^>]*>\s*\(([^)]+)\)\s*<\/span>/gi,
+        ),
+      ]
         .map((match) => normalizeText(match[1]))
         .filter(Boolean),
     };
@@ -664,6 +811,14 @@ export function parseShamelaOpenPage(input: {
       shamelaPageNo,
       printedPageNo,
       volumeNumber,
+      previousShamelaPageNo: adjacentPages.previous.shamelaPageNo,
+      previousShamelaUrl: adjacentPages.previous.href,
+      nextShamelaPageNo: adjacentPages.next.shamelaPageNo,
+      nextShamelaUrl: adjacentPages.next.href,
+      firstShamelaPageNo: adjacentPages.first.shamelaPageNo,
+      firstShamelaUrl: adjacentPages.first.href,
+      lastShamelaPageNo: adjacentPages.last.shamelaPageNo,
+      lastShamelaUrl: adjacentPages.last.href,
     },
     breadcrumb: {
       items: breadcrumbFacts,
@@ -727,10 +882,13 @@ export function parseShamelaOpenPage(input: {
       shamelaPageNo,
       printedPageNo,
       volumeNumber,
+      previousShamelaPageNo: adjacentPages.previous.shamelaPageNo,
+      nextShamelaPageNo: adjacentPages.next.shamelaPageNo,
     },
     context: {
       breadcrumb,
       currentTopic,
+      adjacentPages,
       navigationSections: documentNavigationSections,
       toc: tocNodes,
     },
