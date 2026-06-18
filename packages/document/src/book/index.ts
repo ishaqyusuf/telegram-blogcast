@@ -11,8 +11,10 @@ export {
 export { parseShamelaOpenPage } from "./shamela";
 export type {
   ParseDiagnostic,
+  ShamelaBookMetadata,
   ShamelaOpenPageFacts,
   ShamelaOpenPageParseResult,
+  ShamelaTocNode,
   TenTapPageDocumentV1,
   TenTapBreadcrumbItem,
 } from "./shamela";

@@ -2,7 +2,13 @@ import { Pressable } from "@/components/ui/pressable";
 import { useQuery } from "@/lib/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, FlatList, Text, TextInput, View } from "react-native";
+import {
+  ActivityIndicator,
+  FlatList,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 
 import { _trpc } from "@/components/static-trpc";
 import { SafeArea } from "@/components/safe-area";
@@ -38,7 +44,10 @@ export default function BookSearchScreen() {
   }, [query]);
 
   const { data: serverResults, isFetching: isServerSearching } = useQuery({
-    ...(_trpc.book.searchBookContent.queryOptions({ bookId: bookIdNum, query: debouncedQuery })),
+    ..._trpc.book.searchBookContent.queryOptions({
+      bookId: bookIdNum,
+      query: debouncedQuery,
+    }),
     enabled: debouncedQuery.length >= 2,
   });
   const results: SearchResult[] = serverResults ?? [];
@@ -46,7 +55,9 @@ export default function BookSearchScreen() {
 
   const renderItem = ({ item }: { item: SearchResult }) => (
     <Pressable
-      onPress={() => router.push(`/books/${bookId}/reader/${item.pageId}` as any)}
+      onPress={() =>
+        router.push(`/books/${bookId}/reader/${item.pageId}` as any)
+      }
       className="gap-1 border-b border-border/40 px-4 py-3"
     >
       <Text
@@ -81,7 +92,11 @@ export default function BookSearchScreen() {
           }
         >
           <Text
-            className={item.matchType === "title" ? "text-[10px] font-semibold text-primary" : "text-[10px] font-semibold text-sky-400"}
+            className={
+              item.matchType === "title"
+                ? "text-[10px] font-semibold text-primary"
+                : "text-[10px] font-semibold text-sky-400"
+            }
           >
             {item.matchType === "title" ? t("title") : t("paragraph")}
           </Text>
@@ -91,7 +106,10 @@ export default function BookSearchScreen() {
   );
 
   return (
-    <View className="flex-1 bg-background">
+    <View
+      className="flex-1 bg-background"
+      style={{ backgroundColor: colors.background }}
+    >
       <SafeArea>
         <View className="flex-row items-center gap-2.5 border-b border-border px-4 py-2.5">
           <Pressable
@@ -114,7 +132,11 @@ export default function BookSearchScreen() {
               returnKeyType="search"
             />
             {query.length > 0 && (
-              <Pressable onPress={() => { setQuery(""); }}>
+              <Pressable
+                onPress={() => {
+                  setQuery("");
+                }}
+              >
                 <Icon name="X" size={16} className="text-muted-foreground" />
               </Pressable>
             )}
@@ -128,7 +150,9 @@ export default function BookSearchScreen() {
         ) : debouncedQuery.length < 2 ? (
           <View className="flex-1 items-center justify-center gap-2">
             <Icon name="Search" size={40} className="text-muted-foreground" />
-            <Text className="text-sm text-muted-foreground">{t("searchHint")}</Text>
+            <Text className="text-sm text-muted-foreground">
+              {t("searchHint")}
+            </Text>
           </View>
         ) : results.length === 0 ? (
           <View className="flex-1 items-center justify-center gap-2">
@@ -139,6 +163,7 @@ export default function BookSearchScreen() {
           </View>
         ) : (
           <FlatList
+            style={{ backgroundColor: colors.background }}
             data={results}
             keyExtractor={(item) => `${item.pageId}-${item.matchType}`}
             renderItem={renderItem}

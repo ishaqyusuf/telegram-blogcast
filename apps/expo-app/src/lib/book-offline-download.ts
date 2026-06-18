@@ -7,6 +7,7 @@ import {
   localHighlights,
   localPages,
   localParagraphs,
+  localTocNodes,
   localVolumes,
 } from "@/db/local-schema";
 
@@ -49,6 +50,21 @@ type DownloadedBookPayload = {
       type?: string | null;
       content: string;
     }>;
+  }>;
+  tocNodes?: Array<{
+    id: number;
+    bookId: number;
+    parentId?: number | null;
+    pageId?: number | null;
+    kind: string;
+    title: string;
+    shamelaPath?: string | null;
+    shamelaPageNo?: number | null;
+    volumeNumber?: number | null;
+    depth: number;
+    sortOrder: number;
+    treePath: string;
+    isCurrent?: boolean | null;
   }>;
   highlights?: Array<{
     id: number;
@@ -98,6 +114,7 @@ export async function saveBookDownloadToLocalDb(payload: DownloadedBookPayload) 
     }
 
     await localDb.delete(localPages).where(eq(localPages.bookId, bookId));
+    await localDb.delete(localTocNodes).where(eq(localTocNodes.bookId, bookId));
     await localDb.delete(localVolumes).where(eq(localVolumes.bookId, bookId));
     await localDb
       .delete(localHighlights)
@@ -171,6 +188,26 @@ export async function saveBookDownloadToLocalDb(payload: DownloadedBookPayload) 
           chapterTitle: page.chapterTitle ?? null,
           topicTitle: page.topicTitle ?? null,
           status: page.status,
+        })),
+      );
+    }
+
+    if (payload.tocNodes?.length) {
+      await localDb.insert(localTocNodes).values(
+        payload.tocNodes.map((node) => ({
+          id: node.id,
+          bookId,
+          parentId: node.parentId ?? null,
+          pageId: node.pageId ?? null,
+          kind: node.kind,
+          title: node.title,
+          shamelaPath: node.shamelaPath ?? null,
+          shamelaPageNo: node.shamelaPageNo ?? null,
+          volumeNumber: node.volumeNumber ?? null,
+          depth: node.depth,
+          sortOrder: node.sortOrder,
+          treePath: node.treePath,
+          isCurrent: node.isCurrent ?? false,
         })),
       );
     }

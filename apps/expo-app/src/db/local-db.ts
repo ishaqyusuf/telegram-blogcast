@@ -131,6 +131,28 @@ export async function initLocalDb() {
       await localDb.run(sql`CREATE INDEX IF NOT EXISTS idx_local_pages_book ON local_pages(book_id);`);
 
       await localDb.run(sql`
+    CREATE TABLE IF NOT EXISTS local_toc_nodes (
+      id              INTEGER PRIMARY KEY,
+      book_id         INTEGER NOT NULL,
+      parent_id       INTEGER,
+      page_id         INTEGER,
+      kind            TEXT NOT NULL,
+      title           TEXT NOT NULL,
+      shamela_path    TEXT,
+      shamela_page_no INTEGER,
+      volume_number   INTEGER,
+      depth           INTEGER NOT NULL DEFAULT 0,
+      sort_order      INTEGER NOT NULL DEFAULT 0,
+      tree_path       TEXT NOT NULL,
+      is_current      INTEGER NOT NULL DEFAULT 0
+    );
+  `);
+
+      await localDb.run(sql`CREATE INDEX IF NOT EXISTS idx_local_toc_book ON local_toc_nodes(book_id);`);
+      await localDb.run(sql`CREATE INDEX IF NOT EXISTS idx_local_toc_parent ON local_toc_nodes(parent_id);`);
+      await localDb.run(sql`CREATE INDEX IF NOT EXISTS idx_local_toc_page ON local_toc_nodes(page_id);`);
+
+      await localDb.run(sql`
     CREATE TABLE IF NOT EXISTS local_paragraphs (
       id           INTEGER PRIMARY KEY,
       page_id      INTEGER NOT NULL,

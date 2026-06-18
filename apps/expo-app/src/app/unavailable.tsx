@@ -1,6 +1,8 @@
 import { Pressable } from "@/components/ui/pressable";
 import { Icon } from "@/components/ui/icon";
 import { useAuthContext } from "@/hooks/use-auth";
+import { useColors } from "@/hooks/use-color";
+import { withAlpha } from "@/lib/theme";
 import React from "react";
 import { View, Text, Animated } from "react-native";
 
@@ -12,21 +14,27 @@ import { View, Text, Animated } from "react-native";
  */
 export default function AccessUnavailableScreen() {
   const auth = useAuthContext();
+  const colors = useColors();
+
   return (
-    <Animated.ScrollView>
-      <View className="flex min-h-screen w-full flex-col items-center justify-center bg-background px-6 py-12 text-center selection:bg-primary/20">
+    <Animated.ScrollView style={{ backgroundColor: colors.background }}>
+      <View
+        className="flex min-h-screen w-full flex-col items-center justify-center bg-background px-6 py-12 text-center selection:bg-primary/20"
+        style={{ backgroundColor: colors.background }}
+      >
         {/* Visual Section: Lock Icon with Glow */}
         <View className="relative mb-8 flex items-center justify-center">
           {/* Glow Effect */}
           <View className="absolute h-32 w-32 rounded-full bg-primary/10 blur-2xl" />
 
           {/* Circle Container */}
-          <View className="relative flex h-24 w-24 items-center justify-center rounded-full bg-[#1a2632] shadow-2xl ring-1 ring-white/5">
+          <View
+            className="relative flex h-24 w-24 items-center justify-center rounded-full shadow-2xl"
+            style={{ backgroundColor: colors.card }}
+          >
             {/* We use the image from the design as a background for authenticity, 
               but overlay the icon for sharpness if the image fails or for semantics */}
-            <View
-              className="absolute inset-0 rounded-full opacity-80"
-            />
+            <View className="absolute inset-0 rounded-full opacity-80" />
             <Icon
               name="Lock"
               className="relative z-10 size-8 text-foreground drop-shadow-md"
@@ -39,17 +47,29 @@ export default function AccessUnavailableScreen() {
         </View>
 
         {/* Main Typography */}
-        <Text className="mb-3 text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+        <Text
+          className="mb-3 text-2xl font-bold tracking-tight text-foreground sm:text-3xl"
+          style={{ color: colors.foreground }}
+        >
           Mobile Access Unavailable
         </Text>
 
-        <Text className="mb-8 max-w-xs text-sm leading-relaxed text-muted-foreground">
+        <Text
+          className="mb-8 max-w-xs text-sm leading-relaxed text-muted-foreground"
+          style={{ color: colors.mutedForeground }}
+        >
           It looks like {"you're"} signed in with an account type that {"isn't"}{" "}
           supported on the mobile app yet.
         </Text>
 
         {/* Info Warning Box */}
-        <View className="mb-8 flex max-w-sm flex-row items-start gap-3 rounded-lg border border-white/5 bg-white/5 p-4 text-left shadow-sm">
+        <View
+          className="mb-8 flex max-w-sm flex-row items-start gap-3 rounded-lg border p-4 text-left shadow-sm"
+          style={{
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+          }}
+        >
           <Icon
             name="Info"
             className="size-4 mt-0.5 h-5 w-5 shrink-0 text-primary"
@@ -58,10 +78,24 @@ export default function AccessUnavailableScreen() {
           className="mt-0.5 h-5 w-5 shrink-0 text-primary"
           strokeWidth={2}
         /> */}
-          <Text className="text-xs leading-relaxed text-muted-foreground">
+          <Text
+            className="text-xs leading-relaxed text-muted-foreground"
+            style={{ color: colors.mutedForeground }}
+          >
             This app is currently designed for{" "}
-            <Text className="font-semibold text-foreground">Installers</Text>{" "}
-            and <Text className="font-semibold text-foreground">Admins</Text>{" "}
+            <Text
+              className="font-semibold text-foreground"
+              style={{ color: colors.foreground }}
+            >
+              Installers
+            </Text>{" "}
+            and{" "}
+            <Text
+              className="font-semibold text-foreground"
+              style={{ color: colors.foreground }}
+            >
+              Admins
+            </Text>{" "}
             only. Please access your dashboard via our website.
           </Text>
         </View>
@@ -74,18 +108,21 @@ export default function AccessUnavailableScreen() {
               auth.onLogout();
             }}
             className="group relative flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-primary px-6 text-sm font-semibold text-primary-foreground transition-all hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2 focus:ring-offset-background flex-row"
+            style={{ backgroundColor: colors.primary }}
           >
             <Icon name="LogOut" className="size-6" />
             {/* <LogOut
             className="h-4 w-4 transition-transform group-hover:-translate-x-0.5"
             strokeWidth={2.5}
           /> */}
-            <Text className="text-foreground"> Log Out</Text>
+            <Text style={{ color: colors.primaryForeground }}> Log Out</Text>
           </Pressable>
 
           {/* Secondary Action */}
           <Pressable className="text-sm font-medium text-muted-foreground transition-colors hover:text-primary hover:underline focus:outline-none">
-            <Text>Contact Support</Text>
+            <Text style={{ color: withAlpha(colors.mutedForeground, 0.95) }}>
+              Contact Support
+            </Text>
           </Pressable>
         </View>
       </View>

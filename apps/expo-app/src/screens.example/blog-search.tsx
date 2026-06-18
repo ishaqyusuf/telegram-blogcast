@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import { View, Text, TextInput, ScrollView } from "react-native";
 import { SafeArea } from "@/components/safe-area";
 import { Icon } from "@/components/ui/icon";
+import { useColors } from "@/hooks/use-color";
 
 interface BlogSearchProps {
   onBackPress: () => void;
@@ -28,17 +29,15 @@ const Tag = ({ text }: { text: string }) => (
 
 export default function BlogSearch({ onBackPress }: BlogSearchProps) {
   const [searchText, setSearchText] = useState("");
+  const colors = useColors();
 
   return (
     <View className="flex-1 bg-background">
       <SafeArea>
         {/* Header with Search Input */}
         <View className="flex-row items-center px-4 py-3 gap-3 border-b border-border">
-          <Pressable
-            onPress={onBackPress}
-            className="p-2 -ml-2 rounded-full"
-          >
-            <Icon name="ArrowLeft" className="size-16 text-foreground" />
+          <Pressable onPress={onBackPress} className="p-2 -ml-2 rounded-full">
+            <Icon name="ArrowLeft" className="size-base text-foreground" />
           </Pressable>
 
           <View className="flex-1 flex-row items-center bg-card h-10 rounded-full px-3 gap-2 border border-border">
@@ -46,7 +45,7 @@ export default function BlogSearch({ onBackPress }: BlogSearchProps) {
             <TextInput
               className="flex-1 text-foreground text-sm h-full"
               placeholder="Search topics, tags..."
-              placeholderTextColor="#9ca3af"
+              placeholderTextColor={colors.mutedForeground}
               value={searchText}
               onChangeText={setSearchText}
               autoFocus

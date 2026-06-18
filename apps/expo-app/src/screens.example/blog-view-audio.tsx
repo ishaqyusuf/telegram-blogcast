@@ -4,6 +4,7 @@ import { Icon } from "@/components/ui/icon";
 import { useLocalSearchParams } from "expo-router";
 import React from "react";
 import { View, Text, ScrollView, Image } from "react-native";
+import { useColors } from "@/hooks/use-color";
 
 // --- Sub-Components ---
 
@@ -168,10 +169,7 @@ const AuthorInfo = () => (
       {/* Tags */}
       <View className="flex-row flex-wrap gap-2 justify-end mt-2">
         {["#تطوير_الذات", "#خواطر_مغترب", "#إسلاميات"].map((tag) => (
-          <Pressable
-            key={tag}
-            className="px-3 py-1 bg-muted rounded-lg"
-          >
+          <Pressable key={tag} className="px-3 py-1 bg-muted rounded-lg">
             <Text className="text-sm font-medium text-accent">{tag}</Text>
           </Pressable>
         ))}
@@ -291,9 +289,7 @@ const CommentsSection = () => {
             </Text>
           </View>
         </View>
-        <Pressable
-          href={`/blog-form?type=audio-comment&audioBlogId=${blogId}`}
-        >
+        <Pressable href={`/blog-form?type=audio-comment&audioBlogId=${blogId}`}>
           <Text className="text-xs font-medium text-muted-foreground">
             Add Comment
           </Text>
@@ -368,13 +364,18 @@ const BottomNav = () => (
 );
 
 export default function BlogViewAudio() {
+  const colors = useColors();
   return (
-    <View className="flex-1 bg-background">
-      <SafeArea className="flex-1">
+    <View
+      className="flex-1 bg-background"
+      style={{ backgroundColor: colors.background }}
+    >
+      <SafeArea>
         <Header />
         <View className="flex-1 relative">
           <ScrollView
             className="flex-1 px-6 pt-4"
+            style={{ backgroundColor: colors.background }}
             contentContainerClassName="pb-32 gap-6"
             showsVerticalScrollIndicator={false}
           >

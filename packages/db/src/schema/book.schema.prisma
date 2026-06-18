@@ -42,6 +42,7 @@ model Book {
   shelf          BookShelf?   @relation(fields: [shelfId], references: [id])
   volumes        BookVolume[]
   pages          BookPage[]
+  tocNodes       BookTocNode[]
   importHistory  BookImportHistory[]
   pageImports    BookPageImportHistory[]
   rawPages       ShamelaRawPage[]
@@ -100,10 +101,41 @@ model BookPage {
   importHistory BookPageImportHistory[]
   stagedParses  ShamelaStagedPageParse[]
   audioReferences MediaBookPageReference[]
+  tocNodes      BookTocNode[]
 
   @@unique([bookId, shamelaPageNo])
   @@index([bookId])
   @@index([volumeId])
+}
+
+model BookTocNode {
+  id            Int          @id @default(autoincrement())
+  createdAt     DateTime?    @default(now()) @db.Timestamp(0)
+  updatedAt     DateTime?    @updatedAt
+  deletedAt     DateTime?
+  bookId        Int
+  book          Book         @relation(fields: [bookId], references: [id])
+  parentId      Int?
+  parent        BookTocNode? @relation("BookTocNodeChildren", fields: [parentId], references: [id])
+  children      BookTocNode[] @relation("BookTocNodeChildren")
+  pageId        Int?
+  page          BookPage?    @relation(fields: [pageId], references: [id])
+  kind          String
+  title         String
+  shamelaPath   String?
+  shamelaPageNo Int?
+  volumeNumber  Int?
+  depth         Int          @default(0)
+  sortOrder     Int          @default(0)
+  treePath      String
+  isCurrent     Boolean      @default(false)
+  metadataJson  Json?
+
+  @@unique([bookId, treePath])
+  @@index([bookId])
+  @@index([parentId])
+  @@index([pageId])
+  @@index([shamelaPageNo])
 }
 
 model AlbumBookReference {

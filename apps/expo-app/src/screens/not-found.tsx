@@ -3,6 +3,8 @@ import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Text } from "@/components/ui/text";
+import { useColors } from "@/hooks/use-color";
+import { withAlpha } from "@/lib/theme";
 import config from "@root/app.config";
 import { Link, Stack } from "expo-router";
 import { TouchableOpacity, View } from "react-native";
@@ -10,10 +12,15 @@ import { TouchableOpacity, View } from "react-native";
 const updateVersion = String(config.extra?.updateVersion ?? "N/A");
 
 export default function NotFound() {
+  const colors = useColors();
+
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <View className="flex-1 bg-background justify-center items-center px-8">
+      <View
+        className="flex-1 bg-background justify-center items-center px-8"
+        style={{ backgroundColor: colors.background }}
+      >
         <View className="grid w-full gap-4">
           <Label>Input</Label>
           <Input placeholder="Type something..." className="w-full" />
@@ -24,31 +31,57 @@ export default function NotFound() {
         {/* 404 Illustration */}
         <View className="mb-10 relative w-full h-64 justify-center items-center">
           {/* Background Circles */}
-          <View className="absolute w-56 h-56 bg-gray-100 rounded-full opacity-30" />
-          <View className="absolute w-40 h-40 bg-blue-100 rounded-full opacity-20" />
+          <View
+            className="absolute w-56 h-56 rounded-full opacity-30"
+            style={{ backgroundColor: colors.muted }}
+          />
+          <View
+            className="absolute w-40 h-40 rounded-full opacity-20"
+            style={{ backgroundColor: colors.accent }}
+          />
 
           {/* Large 404 Text */}
           <View className="absolute">
-            <Text className="text-9xl font-bold text-gray-200">404</Text>
+            <Text
+              className="text-9xl font-bold"
+              style={{ color: withAlpha(colors.foreground, 0.12) }}
+            >
+              404
+            </Text>
           </View>
 
           {/* Floating Icons */}
-          <View className="absolute top-10 left-8 bg-white p-3 rounded-full shadow-md">
-            <Icon name="Info" size={32} color="#F59E0B" />
+          <View
+            className="absolute top-10 left-8 p-3 rounded-full shadow-md"
+            style={{ backgroundColor: colors.card }}
+          >
+            <Icon name="Info" className="size-xl text-warn" />
           </View>
-          <View className="absolute top-16 right-12 bg-white p-3 rounded-full shadow-md">
-            <Icon name="AlertCircle" size={32} color="#EF4444" />
+          <View
+            className="absolute top-16 right-12 p-3 rounded-full shadow-md"
+            style={{ backgroundColor: colors.card }}
+          >
+            <Icon name="AlertCircle" className="size-xl text-destructive" />
           </View>
-          <View className="absolute bottom-20 left-16 bg-white p-3 rounded-full shadow-md">
-            <Icon name="Compass" size={28} color="#3B82F6" />
+          <View
+            className="absolute bottom-20 left-16 p-3 rounded-full shadow-md"
+            style={{ backgroundColor: colors.card }}
+          >
+            <Icon name="Compass" className="size-lg text-primary" />
           </View>
-          <View className="absolute bottom-24 right-8 bg-white p-3 rounded-full shadow-md">
-            <Icon name="SearchX" size={32} color="#8B5CF6" />
+          <View
+            className="absolute bottom-24 right-8 p-3 rounded-full shadow-md"
+            style={{ backgroundColor: colors.card }}
+          >
+            <Icon name="SearchX" className="size-xl text-accent-foreground" />
           </View>
 
           {/* Center Icon */}
-          <View className="absolute bg-white p-6 rounded-full shadow-lg">
-            <Icon name="Compass" size={48} color="#10B981" />
+          <View
+            className="absolute p-6 rounded-full shadow-lg"
+            style={{ backgroundColor: colors.card }}
+          >
+            <Icon name="Compass" className="size-2xl text-success" />
           </View>
         </View>
 
@@ -68,7 +101,7 @@ export default function NotFound() {
         {/* Home Button */}
         <Link href="/" asChild>
           <TouchableOpacity className="size-14 items-center justify-center rounded-full bg-primary shadow-lg active:opacity-80">
-            <Icon name="Home" size={22} className="text-primary-foreground" />
+            <Icon name="Home" className="size-base text-primary-foreground" />
           </TouchableOpacity>
         </Link>
 

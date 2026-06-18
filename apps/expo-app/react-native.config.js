@@ -5,5 +5,10 @@ module.exports = {
         android: null,
       },
     },
+    "react-native-track-player": {
+      platforms: {
+        ios: null,
+      },
+    },
   },
 };

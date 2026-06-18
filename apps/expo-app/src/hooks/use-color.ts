@@ -1,6 +1,7 @@
 import { THEME } from "@/lib/theme";
 import { useCallback } from "react";
 import { Appearance, useColorScheme as useRNColorScheme } from "react-native";
+import { useColorScheme as useNativeWindColorScheme } from "nativewind";
 
 type AppColorScheme = "light" | "dark" | "system";
 
@@ -11,18 +12,30 @@ export function useColors() {
 }
 
 export function useColorScheme() {
-  const colorScheme = useRNColorScheme();
+  const rnColorScheme = useRNColorScheme();
+  const {
+    colorScheme: nativeWindColorScheme,
+    setColorScheme: setNativeWindColorScheme,
+  } = useNativeWindColorScheme();
 
   const resolvedColorScheme: "light" | "dark" =
-    colorScheme === "dark" ? "dark" : "light";
-  const setColorScheme = useCallback((scheme: AppColorScheme) => {
-    Appearance.setColorScheme(scheme === "system" ? null : scheme);
-  }, []);
+    nativeWindColorScheme === "dark" || nativeWindColorScheme === "light"
+      ? nativeWindColorScheme
+      : rnColorScheme === "dark"
+        ? "dark"
+        : "light";
+  const setColorScheme = useCallback(
+    (scheme: AppColorScheme) => {
+      setNativeWindColorScheme(
+        scheme as Parameters<typeof setNativeWindColorScheme>[0],
+      );
+      Appearance.setColorScheme(scheme === "system" ? null : scheme);
+    },
+    [setNativeWindColorScheme],
+  );
   const toggleColorScheme = useCallback(() => {
-    Appearance.setColorScheme(
-      resolvedColorScheme === "dark" ? "light" : "dark",
-    );
-  }, [resolvedColorScheme]);
+    setColorScheme(resolvedColorScheme === "dark" ? "light" : "dark");
+  }, [resolvedColorScheme, setColorScheme]);
 
   return {
     colorScheme: resolvedColorScheme,

@@ -24,11 +24,14 @@ export default function PlayHistoryScreen() {
   const colors = useColors();
   const { t } = useTranslation();
   const { data: history = [], isFetching } = useQuery(
-    _trpc.blog.getRecentlyPlayed.queryOptions({ limit: 50 })
+    _trpc.blog.getRecentlyPlayed.queryOptions({ limit: 50 }),
   );
 
   return (
-    <View className="flex-1 bg-background">
+    <View
+      className="flex-1 bg-background"
+      style={{ backgroundColor: colors.background }}
+    >
       <SafeArea>
         {/* Header */}
         <View className="flex-row items-center px-4 py-3 gap-3">
@@ -49,6 +52,7 @@ export default function PlayHistoryScreen() {
         </View>
 
         <FlatList
+          style={{ backgroundColor: colors.background }}
           data={history}
           keyExtractor={(item) => String(item.id)}
           contentContainerClassName="px-4 pb-8 gap-2"
@@ -74,7 +78,11 @@ export default function PlayHistoryScreen() {
                 <View className="flex-row items-center gap-3">
                   {/* Thumbnail */}
                   <View className="size-14 rounded-lg bg-muted items-center justify-center shrink-0">
-                    <Icon name="Headphones" size={24} className="text-muted-foreground" />
+                    <Icon
+                      name="Headphones"
+                      size={24}
+                      className="text-muted-foreground"
+                    />
                   </View>
 
                   {/* Info */}
@@ -89,13 +97,22 @@ export default function PlayHistoryScreen() {
                     {/* Progress bar */}
                     <View className="h-1 w-full bg-muted rounded-full overflow-hidden">
                       <View
-                        style={{ height: "100%", backgroundColor: colors.primary, borderRadius: 9999, width: `${progressPct}%` }}
+                        style={{
+                          height: "100%",
+                          backgroundColor: colors.primary,
+                          borderRadius: 9999,
+                          width: `${progressPct}%`,
+                        }}
                       />
                     </View>
 
                     <View className="flex-row items-center justify-between">
                       <View className="flex-row items-center gap-1">
-                        <Icon name="Clock" size={10} className="text-muted-foreground" />
+                        <Icon
+                          name="Clock"
+                          size={10}
+                          className="text-muted-foreground"
+                        />
                         <Text className="text-[10px] text-muted-foreground">
                           {formatProgress(item.progress, duration)}
                         </Text>
@@ -108,7 +125,11 @@ export default function PlayHistoryScreen() {
 
                   {/* Resume play button */}
                   <Pressable className="size-9 rounded-full bg-primary items-center justify-center active:opacity-80 shrink-0">
-                    <Icon name="Play" size={16} className="text-primary-foreground ml-0.5" />
+                    <Icon
+                      name="Play"
+                      size={16}
+                      className="text-primary-foreground ml-0.5"
+                    />
                   </Pressable>
                 </View>
               </Pressable>
@@ -116,7 +137,11 @@ export default function PlayHistoryScreen() {
           }}
           ListEmptyComponent={
             <View className="items-center justify-center py-20">
-              <Icon name="History" size={48} className="text-muted-foreground mb-3" />
+              <Icon
+                name="History"
+                size={48}
+                className="text-muted-foreground mb-3"
+              />
               <Text className="text-sm text-muted-foreground">
                 {isFetching ? t("loadingHistory") : t("noRecentlyPlayed")}
               </Text>

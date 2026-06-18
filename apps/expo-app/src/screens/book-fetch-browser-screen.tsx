@@ -14,9 +14,6 @@ import { useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Text, View } from "react-native";
 import { WebView, WebViewMessageEvent } from "react-native-webview";
 
-const DESKTOP_USER_AGENT =
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
-
 const DESKTOP_VIEWPORT_SCRIPT = `
   (function() {
     var viewport = document.querySelector('meta[name="viewport"]');
@@ -64,9 +61,9 @@ const CAPTURE_SCRIPT = `
 `;
 
 export default function BookFetchBrowserScreen() {
-  const { url } = useLocalSearchParams<{ url?: string }>();
+  const { url, bookId } = useLocalSearchParams<{ url?: string; bookId?: string }>();
   const router = useRouter();
-  const { t, textAlign, writingDirection, isRtl } = useTranslation();
+  const { textAlign, writingDirection, isRtl } = useTranslation();
   const colors = useColors();
   const webViewRef = useRef<WebView>(null);
   const { setCaptured, setCancelled } = useBookFetchBrowserStore();
@@ -78,6 +75,7 @@ export default function BookFetchBrowserScreen() {
   const [loadProgress, setLoadProgress] = useState(0);
   const [isCapturing, setIsCapturing] = useState(false);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const parsedBookId = bookId && Number.isFinite(Number(bookId)) ? Number(bookId) : undefined;
   const { mutate: captureAndStagePage, isPending: isStaging } = useMutation(
     _trpc.book.captureAndStageShamelaPage.mutationOptions({
       onSuccess: (result) => {
@@ -103,7 +101,14 @@ export default function BookFetchBrowserScreen() {
     if (isCloudflare) return false;
     if (!currentUrl.includes("shamela.ws/book/")) return false;
     return htmlLength > 2000;
-  }, [currentUrl, hasLoadedOnce, htmlLength, isCapturing, isCloudflare, isStaging]);
+  }, [
+    currentUrl,
+    hasLoadedOnce,
+    htmlLength,
+    isCapturing,
+    isCloudflare,
+    isStaging,
+  ]);
 
   const close = () => {
     if (!useBookFetchBrowserStore.getState().capture) {
@@ -119,7 +124,11 @@ export default function BookFetchBrowserScreen() {
       if (payload.type === "page-state") {
         setCurrentUrl(payload.href || currentUrl);
         setPageTitle(payload.title || "");
-        setIsCloudflare(Boolean(payload.isCloudflare));
+        const nextIsCloudflare = Boolean(payload.isCloudflare);
+        setIsCloudflare(nextIsCloudflare);
+        if (!nextIsCloudflare) {
+          webViewRef.current?.injectJavaScript(DESKTOP_VIEWPORT_SCRIPT);
+        }
         setHtmlLength(
           typeof payload.htmlLength === "number" ? payload.htmlLength : 0,
         );
@@ -142,6 +151,7 @@ export default function BookFetchBrowserScreen() {
           title: capture.title,
           html: capture.html,
           source: "mobile-webview",
+          bookId: parsedBookId,
         });
       }
     } catch {}
@@ -154,9 +164,12 @@ export default function BookFetchBrowserScreen() {
   };
 
   return (
-    <View className="flex-1 bg-background">
+    <View
+      className="flex-1 bg-background"
+      style={{ backgroundColor: colors.background }}
+    >
       <SafeArea>
-        <View className="flex-1">
+        <View className="flex-1" style={{ backgroundColor: colors.background }}>
           <View
             className="items-center gap-3 border-b border-border px-4 py-3"
             style={{ flexDirection: isRtl ? "row-reverse" : "row" }}
@@ -233,9 +246,6 @@ export default function BookFetchBrowserScreen() {
             <WebView
               ref={webViewRef}
               source={{ uri: url ?? "" }}
-              userAgent={DESKTOP_USER_AGENT}
-              contentMode="desktop"
-              injectedJavaScriptBeforeContentLoaded={DESKTOP_VIEWPORT_SCRIPT}
               javaScriptEnabled
               domStorageEnabled
               sharedCookiesEnabled
@@ -254,7 +264,10 @@ export default function BookFetchBrowserScreen() {
               }}
               startInLoadingState
               renderLoading={() => (
-                <View className="flex-1 items-center justify-center bg-background">
+                <View
+                  className="flex-1 items-center justify-center bg-background"
+                  style={{ backgroundColor: colors.background }}
+                >
                   <ActivityIndicator size="large" color={colors.primary} />
                 </View>
               )}
@@ -273,7 +286,10 @@ export default function BookFetchBrowserScreen() {
             >
               {isCapturing || isStaging ? (
                 <>
-                  <ActivityIndicator size="small" color={colors.primaryForeground} />
+                  <ActivityIndicator
+                    size="small"
+                    color={colors.primaryForeground}
+                  />
                   <Text className="text-[15px] font-bold text-primary-foreground">
                     {isStaging ? "Saving staged parse..." : "Capturing page..."}
                   </Text>
@@ -283,7 +299,11 @@ export default function BookFetchBrowserScreen() {
                   <Icon
                     name="Download"
                     size={18}
-                    className={canCapture ? "text-primary-foreground" : "text-muted-foreground"}
+                    className={
+                      canCapture
+                        ? "text-primary-foreground"
+                        : "text-muted-foreground"
+                    }
                   />
                   <Text
                     className={
@@ -292,7 +312,9 @@ export default function BookFetchBrowserScreen() {
                         : "text-[15px] font-bold text-muted-foreground"
                     }
                   >
-                    {isCloudflare ? "Pass Cloudflare to continue" : "Fetch this page"}
+                    {isCloudflare
+                      ? "Pass Cloudflare to continue"
+                      : "Fetch this page"}
                   </Text>
                 </>
               )}

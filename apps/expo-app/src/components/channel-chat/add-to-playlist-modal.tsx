@@ -4,7 +4,14 @@ import { Icon } from "@/components/ui/icon";
 import { useColors } from "@/hooks/use-color";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { useState } from "react";
-import { ActivityIndicator, FlatList, Modal, Text, TextInput, View } from "react-native";
+import {
+  ActivityIndicator,
+  FlatList,
+  Modal,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 
 type Props = {
   visible: boolean;
@@ -25,7 +32,9 @@ export function AddToPlaylistModal({ visible, mediaIds, onClose }: Props) {
   const addMedia = useMutation(
     _trpc.playlist.addMediaToPlaylist.mutationOptions({
       onSuccess: () => {
-        queryClient.invalidateQueries(_trpc.playlist.getPlaylists.queryOptions());
+        queryClient.invalidateQueries(
+          _trpc.playlist.getPlaylists.queryOptions(),
+        );
         onClose();
       },
     }),
@@ -35,7 +44,9 @@ export function AddToPlaylistModal({ visible, mediaIds, onClose }: Props) {
     _trpc.playlist.createPlaylist.mutationOptions({
       onSuccess: (playlist) => {
         setNewPlaylistName("");
-        queryClient.invalidateQueries(_trpc.playlist.getPlaylists.queryOptions());
+        queryClient.invalidateQueries(
+          _trpc.playlist.getPlaylists.queryOptions(),
+        );
         addMedia.mutate({ playlistId: playlist.id, mediaIds });
       },
     }),
@@ -56,19 +67,34 @@ export function AddToPlaylistModal({ visible, mediaIds, onClose }: Props) {
   }
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onClose}
+    >
       <Pressable className="flex-1 justify-end bg-black/60" onPress={onClose}>
         <Pressable
           onPress={(event) => event.stopPropagation()}
           className="max-h-[75%] rounded-t-3xl bg-card px-4 pb-8 pt-4"
+          style={{ backgroundColor: colors.card }}
         >
-          <View className="mb-4 h-1 w-10 self-center rounded-full bg-muted" />
-          <Text className="mb-4 text-base font-bold text-foreground">
+          <View
+            className="mb-4 h-1 w-10 self-center rounded-full bg-muted"
+            style={{ backgroundColor: colors.muted }}
+          />
+          <Text
+            className="mb-4 text-base font-bold text-foreground"
+            style={{ color: colors.foreground }}
+          >
             Add to Playlist
           </Text>
 
           <View className="mb-5 flex-row gap-2">
-            <View className="h-10 flex-1 flex-row items-center gap-2 rounded-xl bg-muted px-3">
+            <View
+              className="h-10 flex-1 flex-row items-center gap-2 rounded-xl bg-muted px-3"
+              style={{ backgroundColor: colors.muted }}
+            >
               <Icon name="Plus" size={16} className="text-muted-foreground" />
               <TextInput
                 value={newPlaylistName}
@@ -77,7 +103,12 @@ export function AddToPlaylistModal({ visible, mediaIds, onClose }: Props) {
                 placeholderTextColor={colors.mutedForeground}
                 returnKeyType="done"
                 onSubmitEditing={handleCreate}
-                style={{ flex: 1, color: colors.foreground, fontSize: 14, paddingVertical: 0 }}
+                style={{
+                  flex: 1,
+                  color: colors.foreground,
+                  fontSize: 14,
+                  paddingVertical: 0,
+                }}
               />
             </View>
             <Pressable
@@ -86,29 +117,46 @@ export function AddToPlaylistModal({ visible, mediaIds, onClose }: Props) {
               className="h-10 items-center justify-center rounded-xl bg-primary px-4 active:opacity-80 disabled:opacity-50"
             >
               {isBusy ? (
-                <ActivityIndicator size="small" color={colors.primaryForeground} />
+                <ActivityIndicator
+                  size="small"
+                  color={colors.primaryForeground}
+                />
               ) : (
-                <Text className="text-xs font-bold text-primary-foreground">Create</Text>
+                <Text className="text-xs font-bold text-primary-foreground">
+                  Create
+                </Text>
               )}
             </Pressable>
           </View>
 
-          <Text className="mb-3 text-xs font-semibold uppercase text-muted-foreground">
+          <Text
+            className="mb-3 text-xs font-semibold uppercase text-muted-foreground"
+            style={{ color: colors.mutedForeground }}
+          >
             Existing Playlists
           </Text>
 
           {!hasMedia ? (
-            <Text className="mb-3 rounded-xl bg-muted p-3 text-center text-sm text-muted-foreground">
+            <Text
+              className="mb-3 rounded-xl bg-muted p-3 text-center text-sm text-muted-foreground"
+              style={{
+                backgroundColor: colors.muted,
+                color: colors.mutedForeground,
+              }}
+            >
               Select at least one audio post first.
             </Text>
           ) : null}
 
           {isLoading ? (
             <View className="items-center py-6">
-              <ActivityIndicator />
+              <ActivityIndicator color={colors.primary} />
             </View>
           ) : playlists.length === 0 ? (
-            <Text className="py-6 text-center text-sm text-muted-foreground">
+            <Text
+              className="py-6 text-center text-sm text-muted-foreground"
+              style={{ color: colors.mutedForeground }}
+            >
               No playlists yet - create one above.
             </Text>
           ) : (
@@ -121,18 +169,35 @@ export function AddToPlaylistModal({ visible, mediaIds, onClose }: Props) {
                   disabled={isBusy || !hasMedia}
                   className="flex-row items-center gap-3 border-b border-border py-3 active:opacity-70 disabled:opacity-50"
                 >
-                  <View className="size-10 items-center justify-center rounded-lg bg-muted">
-                    <Icon name="ListMusic" size={18} className="text-muted-foreground" />
+                  <View
+                    className="size-10 items-center justify-center rounded-lg bg-muted"
+                    style={{ backgroundColor: colors.muted }}
+                  >
+                    <Icon
+                      name="ListMusic"
+                      size={18}
+                      className="text-muted-foreground"
+                    />
                   </View>
                   <View className="flex-1">
-                    <Text className="text-sm font-semibold text-foreground">
+                    <Text
+                      className="text-sm font-semibold text-foreground"
+                      style={{ color: colors.foreground }}
+                    >
                       {item.name}
                     </Text>
-                    <Text className="text-xs text-muted-foreground">
+                    <Text
+                      className="text-xs text-muted-foreground"
+                      style={{ color: colors.mutedForeground }}
+                    >
                       {item._count?.episodes ?? 0} tracks
                     </Text>
                   </View>
-                  <Icon name="ChevronRight" size={16} className="text-muted-foreground" />
+                  <Icon
+                    name="ChevronRight"
+                    size={16}
+                    className="text-muted-foreground"
+                  />
                 </Pressable>
               )}
             />
@@ -141,8 +206,14 @@ export function AddToPlaylistModal({ visible, mediaIds, onClose }: Props) {
           <Pressable
             onPress={onClose}
             className="mt-4 h-11 items-center justify-center rounded-xl bg-muted active:opacity-70"
+            style={{ backgroundColor: colors.muted }}
           >
-            <Text className="text-sm font-semibold text-foreground">Cancel</Text>
+            <Text
+              className="text-sm font-semibold text-foreground"
+              style={{ color: colors.foreground }}
+            >
+              Cancel
+            </Text>
           </Pressable>
         </Pressable>
       </Pressable>

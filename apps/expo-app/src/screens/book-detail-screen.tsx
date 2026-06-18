@@ -3,19 +3,85 @@ import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useRef, useState } from "react";
 import {
-  ActivityIndicator, Alert, Image, KeyboardAvoidingView,
-  Platform, ScrollView, Text, TextInput, View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
 } from "react-native";
 
 import { _trpc } from "@/components/static-trpc";
 import { SafeArea } from "@/components/safe-area";
 import { Icon } from "@/components/ui/icon";
-import { ChapterTree } from "@/components/book/chapter-tree";
+import { ChapterTree, type TocNode } from "@/components/book/chapter-tree";
 import { saveBookDownloadToLocalDb } from "@/lib/book-offline-download";
 import { useBookOfflineStore } from "@/store/book-offline-store";
 import { vanillaTrpc } from "@/trpc/vanilla-client";
 import { useTranslation } from "@/lib/i18n";
 import { useColors } from "@/hooks/use-color";
+import { toAbsoluteShamelaUrl } from "@/lib/shamela-url";
+
+function normalizeChapterSearch(value: string) {
+  return value.trim().toLowerCase();
+}
+
+function pageMatchesChapterSearch(
+  page: {
+    chapterTitle: string | null;
+    topicTitle: string | null;
+    shamelaPageNo: number;
+    printedPageNo: number | null;
+  },
+  query: string,
+) {
+  if (!query) return true;
+  return [
+    page.chapterTitle,
+    page.topicTitle,
+    String(page.shamelaPageNo),
+    page.printedPageNo != null ? String(page.printedPageNo) : null,
+  ].some((value) => value?.toLowerCase().includes(query));
+}
+
+function filterTocNodes(nodes: TocNode[], query: string) {
+  if (!query) return nodes;
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const byParent = new Map<number | null, TocNode[]>();
+  for (const node of nodes) {
+    const key = node.parentId ?? null;
+    byParent.set(key, [...(byParent.get(key) ?? []), node]);
+  }
+  const included = new Set<number>();
+
+  const includeDescendants = (node: TocNode) => {
+    for (const child of byParent.get(node.id) ?? []) {
+      included.add(child.id);
+      includeDescendants(child);
+    }
+  };
+
+  for (const node of nodes) {
+    const matches = [
+      node.title,
+      node.shamelaPageNo != null ? String(node.shamelaPageNo) : null,
+      node.page?.printedPageNo != null ? String(node.page.printedPageNo) : null,
+    ].some((value) => value?.toLowerCase().includes(query));
+    if (!matches) continue;
+
+    let current: TocNode | undefined = node;
+    while (current) {
+      included.add(current.id);
+      current = current.parentId != null ? byId.get(current.parentId) : undefined;
+    }
+    includeDescendants(node);
+  }
+
+  return nodes.filter((node) => included.has(node.id));
+}
 
 export default function BookDetailScreen() {
   const { bookId } = useLocalSearchParams<{ bookId: string }>();
@@ -27,68 +93,66 @@ export default function BookDetailScreen() {
 
   const [fetchUrl, setFetchUrl] = useState("");
   const [showFetchInput, setShowFetchInput] = useState(false);
-  const [fetchingPageId, setFetchingPageId] = useState<number | null>(null);
+  const fetchingPageId = null;
   const [isDownloadingBook, setIsDownloadingBook] = useState(false);
+  const [chapterQuery, setChapterQuery] = useState("");
 
   // ── Auto-fetch all ─────────────────────────────────────────────────────────
   const [isAutoFetching, setIsAutoFetching] = useState(false);
-  const [autoFetchProgress, setAutoFetchProgress] = useState({ done: 0, total: 0 });
+  const [autoFetchProgress, setAutoFetchProgress] = useState({
+    done: 0,
+    total: 0,
+  });
   const autoFetchCancelRef = useRef(false);
 
   // ── Reading progress + bookmarks ───────────────────────────────────────────
-  const getLastPage  = useBookOfflineStore((s) => s.getLastPage);
+  const getLastPage = useBookOfflineStore((s) => s.getLastPage);
   const getBookmarks = useBookOfflineStore((s) => s.getBookmarks);
   const removeBookmark = useBookOfflineStore((s) => s.removeBookmark);
   const setDownloaded = useBookOfflineStore((s) => s.setDownloaded);
   const setDownloadProgress = useBookOfflineStore((s) => s.setDownloadProgress);
-  const clearDownloadProgress = useBookOfflineStore((s) => s.clearDownloadProgress);
-  const downloadProgress = useBookOfflineStore((s) => s.downloadProgress[bookIdNum] ?? 0);
+  const clearDownloadProgress = useBookOfflineStore(
+    (s) => s.clearDownloadProgress,
+  );
+  const downloadProgress = useBookOfflineStore(
+    (s) => s.downloadProgress[bookIdNum] ?? 0,
+  );
   const [showBookmarks, setShowBookmarks] = useState(false);
 
   const { data: book, isLoading } = useQuery(
-    _trpc.book.getBook.queryOptions({ id: bookIdNum })
+    _trpc.book.getBook.queryOptions({ id: bookIdNum }),
   );
   const { data: pageImportHistory } = useQuery(
     _trpc.book.getBookPageImportHistory.queryOptions({
       bookId: bookIdNum,
       limit: 8,
-    })
+    }),
   );
 
   // Offline features
   const { mutate: fetchPage, isPending: isFetching } = useMutation(
     _trpc.book.fetchPage.mutationOptions({
       onSuccess: () => {
-        qc.invalidateQueries({ queryKey: _trpc.book.getBook.queryKey({ id: bookIdNum }) });
+        qc.invalidateQueries({
+          queryKey: _trpc.book.getBook.queryKey({ id: bookIdNum }),
+        });
         setFetchUrl("");
         setShowFetchInput(false);
       },
       onError: (e) => Alert.alert(t("error"), e.message),
-    })
-  );
-
-  const { mutate: fetchChapterPage } = useMutation(
-    _trpc.book.fetchPage.mutationOptions({
-      onSuccess: (page) => {
-        qc.invalidateQueries({ queryKey: _trpc.book.getBook.queryKey({ id: bookIdNum }) });
-        setFetchingPageId(null);
-        router.push(`/books/${bookId}/reader/${page.id}` as any);
-      },
-      onError: (e) => {
-        setFetchingPageId(null);
-        Alert.alert(t("error"), e.message);
-      },
-    })
+    }),
   );
 
   const { mutate: fetchNext, isPending: isFetchingNext } = useMutation(
     _trpc.book.fetchNextPage.mutationOptions({
       onSuccess: (page) => {
-        qc.invalidateQueries({ queryKey: _trpc.book.getBook.queryKey({ id: bookIdNum }) });
+        qc.invalidateQueries({
+          queryKey: _trpc.book.getBook.queryKey({ id: bookIdNum }),
+        });
         router.push(`/books/${bookId}/reader/${page.id}` as any);
       },
       onError: (e) => Alert.alert(t("error"), e.message),
-    })
+    }),
   );
 
   // ── Auto-fetch all pending pages sequentially ──────────────────────────────
@@ -111,10 +175,15 @@ export default function BookDetailScreen() {
     for (const p of pending) {
       if (autoFetchCancelRef.current) break;
       try {
-        await vanillaTrpc.book.fetchPage.mutate({ bookId: bookIdNum, shamelaUrl: p.shamelaUrl! });
+        await vanillaTrpc.book.fetchPage.mutate({
+          bookId: bookIdNum,
+          shamelaUrl: p.shamelaUrl!,
+        });
         done++;
         setAutoFetchProgress({ done, total: pending.length });
-        qc.invalidateQueries({ queryKey: _trpc.book.getBook.queryKey({ id: bookIdNum }) });
+        qc.invalidateQueries({
+          queryKey: _trpc.book.getBook.queryKey({ id: bookIdNum }),
+        });
       } catch {
         // skip failed, continue with rest
       }
@@ -130,7 +199,9 @@ export default function BookDetailScreen() {
     setDownloadProgress(bookIdNum, 0.08);
 
     try {
-      const payload = await vanillaTrpc.book.getBookForDownload.query({ bookId: bookIdNum });
+      const payload = await vanillaTrpc.book.getBookForDownload.query({
+        bookId: bookIdNum,
+      });
       setDownloadProgress(bookIdNum, 0.55);
 
       const meta = await saveBookDownloadToLocalDb(payload);
@@ -147,7 +218,10 @@ export default function BookDetailScreen() {
 
   if (isLoading) {
     return (
-      <View className="flex-1 items-center justify-center bg-background">
+      <View
+        className="flex-1 items-center justify-center bg-background"
+        style={{ backgroundColor: colors.background }}
+      >
         <ActivityIndicator color={colors.primary} />
       </View>
     );
@@ -162,7 +236,9 @@ export default function BookDetailScreen() {
     ? [...(book.pages ?? [])]
         .filter((p) => p.shamelaPageNo > lastFetchedPage.shamelaPageNo)
         .sort((a, b) => a.shamelaPageNo - b.shamelaPageNo)[0]
-    : [...(book.pages ?? [])].sort((a, b) => a.shamelaPageNo - b.shamelaPageNo)[0];
+    : [...(book.pages ?? [])].sort(
+        (a, b) => a.shamelaPageNo - b.shamelaPageNo,
+      )[0];
 
   const fetchedCount = book.pages.filter((p) => p.status === "fetched").length;
   const totalCount = book.pages.length;
@@ -178,8 +254,31 @@ export default function BookDetailScreen() {
     router.push(`/books/${bookId}/reader/${targetPageId}` as any);
   };
 
+  const openCaptureBrowser = (targetUrl: string) => {
+    const absoluteUrl = toAbsoluteShamelaUrl(targetUrl);
+    router.push(
+      `/book-fetch-browser?url=${encodeURIComponent(absoluteUrl)}&bookId=${bookIdNum}` as any,
+    );
+  };
+  const tocNodes = (((book as any).tocNodes ?? []) as TocNode[]);
+  const normalizedChapterQuery = normalizeChapterSearch(chapterQuery);
+  const visibleTocNodes = filterTocNodes(tocNodes, normalizedChapterQuery);
+  const visiblePages = normalizedChapterQuery
+    ? book.pages.filter((page) =>
+        pageMatchesChapterSearch(page, normalizedChapterQuery),
+      )
+    : book.pages;
+  const visibleChapterCount = tocNodes.length
+    ? visibleTocNodes.filter(
+        (node) => node.kind !== "volume" && node.shamelaPageNo != null,
+      ).length
+    : visiblePages.length;
+
   return (
-    <View className="flex-1 bg-background">
+    <View
+      className="flex-1 bg-background"
+      style={{ backgroundColor: colors.background }}
+    >
       <SafeArea>
         <View className="flex-row items-center gap-3 px-4 py-3">
           <Pressable
@@ -200,9 +299,17 @@ export default function BookDetailScreen() {
           {bookmarks.length > 0 && (
             <Pressable
               onPress={() => setShowBookmarks(!showBookmarks)}
-              className={showBookmarks ? "size-9 items-center justify-center rounded-full bg-primary/15" : "size-9 items-center justify-center rounded-full bg-card"}
+              className={
+                showBookmarks
+                  ? "size-9 items-center justify-center rounded-full bg-primary/15"
+                  : "size-9 items-center justify-center rounded-full bg-card"
+              }
             >
-              <Icon name="Bookmark" size={18} className={showBookmarks ? "text-primary" : "text-foreground"} />
+              <Icon
+                name="Bookmark"
+                size={18}
+                className={showBookmarks ? "text-primary" : "text-foreground"}
+              />
             </Pressable>
           )}
 
@@ -214,45 +321,86 @@ export default function BookDetailScreen() {
           </Pressable>
         </View>
 
-        <ScrollView contentContainerStyle={{ paddingBottom: 120 }}>
-          <View style={{ flexDirection: "row", gap: 14, paddingHorizontal: 16, marginBottom: 20 }}>
+        <ScrollView
+          style={{ backgroundColor: colors.background }}
+          contentContainerStyle={{ paddingBottom: 120 }}
+        >
+          <View
+            style={{
+              flexDirection: "row",
+              gap: 14,
+              paddingHorizontal: 16,
+              marginBottom: 20,
+            }}
+          >
             <View
               style={{
-                width: 110, height: 154, borderRadius: 10, overflow: "hidden",
+                width: 110,
+                height: 154,
+                borderRadius: 10,
+                overflow: "hidden",
                 backgroundColor: book.coverColor ?? colors.primary,
-                flexShrink: 0, alignItems: "center", justifyContent: "center",
+                flexShrink: 0,
+                alignItems: "center",
+                justifyContent: "center",
               }}
             >
               {book.coverUrl ? (
-                <Image source={{ uri: book.coverUrl }} style={{ width: "100%", height: "100%" }} resizeMode="cover" />
+                <Image
+                  source={{ uri: book.coverUrl }}
+                  style={{ width: "100%", height: "100%" }}
+                  resizeMode="cover"
+                />
               ) : (
-                <Text style={{ fontSize: 24, fontWeight: "bold", color: "white", textAlign: "center", writingDirection: "rtl" }}>
+                <Text
+                  style={{
+                    fontSize: 24,
+                    fontWeight: "bold",
+                    color: "white",
+                    textAlign: "center",
+                    writingDirection: "rtl",
+                  }}
+                >
                   {(book.nameAr ?? book.nameEn ?? t("bookTitle")).slice(0, 2)}
                 </Text>
               )}
             </View>
 
             <View style={{ flex: 1, gap: 6, justifyContent: "center" }}>
-              <Text className="text-right text-lg font-extrabold text-foreground" style={{ writingDirection: "rtl" }}>
+              <Text
+                className="text-right text-lg font-extrabold text-foreground"
+                style={{ writingDirection: "rtl" }}
+              >
                 {book.nameAr ?? book.nameEn}
               </Text>
               {book.nameEn && (
-                <Text className="text-[13px] text-muted-foreground">{book.nameEn}</Text>
+                <Text className="text-[13px] text-muted-foreground">
+                  {book.nameEn}
+                </Text>
               )}
               {book.authors.length > 0 && (
-                <Text className="text-right text-sm text-primary" style={{ writingDirection: "rtl" }}>
+                <Text
+                  className="text-right text-sm text-primary"
+                  style={{ writingDirection: "rtl" }}
+                >
                   {book.authors.map((a) => a.nameAr ?? a.name).join("، ")}
                 </Text>
               )}
               {book.shelf && (
                 <View className="self-end rounded-md bg-card px-2 py-0.5">
-                  <Text className="text-xs text-muted-foreground" style={{ writingDirection: "rtl" }}>
+                  <Text
+                    className="text-xs text-muted-foreground"
+                    style={{ writingDirection: "rtl" }}
+                  >
                     {book.shelf.nameAr ?? book.shelf.name}
                   </Text>
                 </View>
               )}
               {book.category && (
-                <Text className="text-right text-xs text-muted-foreground" style={{ writingDirection: "rtl" }}>
+                <Text
+                  className="text-right text-xs text-muted-foreground"
+                  style={{ writingDirection: "rtl" }}
+                >
                   {book.category}
                 </Text>
               )}
@@ -274,7 +422,8 @@ export default function BookDetailScreen() {
                 className="text-right text-[12px] text-muted-foreground"
                 style={{ writingDirection: "rtl" }}
               >
-                Pages can be refreshed from the Shamela source. Direct editing stays disabled.
+                Pages can be refreshed from the Shamela source. Direct editing
+                stays disabled.
               </Text>
               {book.shamelaUrl ? (
                 <Text
@@ -292,16 +441,20 @@ export default function BookDetailScreen() {
               onPress={() => openReader(continuePageId)}
               className="mx-4 mb-3 flex-row-reverse items-center gap-2.5 rounded-xl border border-primary/25 bg-primary/10 px-4 py-3"
             >
-              <View
-                className="size-9 items-center justify-center rounded-full bg-primary"
-              >
+              <View className="size-9 items-center justify-center rounded-full bg-primary">
                 <Icon name="BookOpen" size={18} className="text-background" />
               </View>
               <View style={{ flex: 1 }}>
-                <Text className="text-right text-[13px] font-bold text-primary" style={{ writingDirection: "rtl" }}>
+                <Text
+                  className="text-right text-[13px] font-bold text-primary"
+                  style={{ writingDirection: "rtl" }}
+                >
                   {t("continueReading")}
                 </Text>
-                <Text className="text-right text-[11px] text-muted-foreground" style={{ writingDirection: "rtl" }}>
+                <Text
+                  className="text-right text-[11px] text-muted-foreground"
+                  style={{ writingDirection: "rtl" }}
+                >
                   {t("backToLastPage")}
                 </Text>
               </View>
@@ -311,7 +464,10 @@ export default function BookDetailScreen() {
 
           {showBookmarks && bookmarks.length > 0 && (
             <View style={{ paddingHorizontal: 16, marginBottom: 16 }}>
-              <Text className="mb-2 text-right text-sm font-bold text-foreground" style={{ writingDirection: "rtl" }}>
+              <Text
+                className="mb-2 text-right text-sm font-bold text-foreground"
+                style={{ writingDirection: "rtl" }}
+              >
                 {t("bookmarks", { count: bookmarks.length })}
               </Text>
               {bookmarks.map((bm) => (
@@ -329,7 +485,8 @@ export default function BookDetailScreen() {
                       style={{ writingDirection: "rtl" }}
                       numberOfLines={1}
                     >
-                      {bm.chapterTitle ?? `${t("page")} ${bm.pageNo ?? bm.pageId}`}
+                      {bm.chapterTitle ??
+                        `${t("page")} ${bm.pageNo ?? bm.pageId}`}
                     </Text>
                     {bm.pageNo && (
                       <Text className="text-[11px] text-muted-foreground">
@@ -337,8 +494,15 @@ export default function BookDetailScreen() {
                       </Text>
                     )}
                   </Pressable>
-                  <Pressable onPress={() => removeBookmark(bookIdNum, bm.pageId)} hitSlop={10}>
-                    <Icon name="X" size={15} className="text-muted-foreground" />
+                  <Pressable
+                    onPress={() => removeBookmark(bookIdNum, bm.pageId)}
+                    hitSlop={10}
+                  >
+                    <Icon
+                      name="X"
+                      size={15}
+                      className="text-muted-foreground"
+                    />
                   </Pressable>
                 </View>
               ))}
@@ -347,7 +511,10 @@ export default function BookDetailScreen() {
 
           {book.blog.content && (
             <View style={{ paddingHorizontal: 16, marginBottom: 20 }}>
-              <Text className="text-right text-sm leading-[22px] text-muted-foreground" style={{ writingDirection: "rtl" }}>
+              <Text
+                className="text-right text-sm leading-[22px] text-muted-foreground"
+                style={{ writingDirection: "rtl" }}
+              >
                 {book.blog.content}
               </Text>
             </View>
@@ -355,7 +522,9 @@ export default function BookDetailScreen() {
 
           <View style={{ paddingHorizontal: 16, marginBottom: 20, gap: 8 }}>
             {showFetchInput ? (
-              <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined}>
+              <KeyboardAvoidingView
+                behavior={Platform.OS === "ios" ? "padding" : undefined}
+              >
                 <View className="flex-row items-center gap-2 rounded-xl bg-card p-2.5">
                   <TextInput
                     value={fetchUrl}
@@ -369,18 +538,30 @@ export default function BookDetailScreen() {
                   <Pressable
                     onPress={() => {
                       if (!fetchUrl.trim()) return;
-                      fetchPage({ bookId: bookIdNum, shamelaUrl: fetchUrl.trim() });
+                      fetchPage({
+                        bookId: bookIdNum,
+                        shamelaUrl: fetchUrl.trim(),
+                      });
                     }}
                     className="rounded-lg bg-primary px-3.5 py-2"
                   >
                     {isFetching ? (
-                      <ActivityIndicator size="small" color={colors.primaryForeground} />
+                      <ActivityIndicator
+                        size="small"
+                        color={colors.primaryForeground}
+                      />
                     ) : (
-                      <Text className="text-[13px] font-bold text-primary-foreground">{t("fetch")}</Text>
+                      <Text className="text-[13px] font-bold text-primary-foreground">
+                        {t("fetch")}
+                      </Text>
                     )}
                   </Pressable>
                   <Pressable onPress={() => setShowFetchInput(false)}>
-                    <Icon name="X" size={18} className="text-muted-foreground" />
+                    <Icon
+                      name="X"
+                      size={18}
+                      className="text-muted-foreground"
+                    />
                   </Pressable>
                 </View>
               </KeyboardAvoidingView>
@@ -391,8 +572,14 @@ export default function BookDetailScreen() {
                     onPress={() => setShowFetchInput(true)}
                     className="flex-1 flex-row items-center justify-center gap-1.5 rounded-xl bg-primary py-2.5"
                   >
-                    <Icon name="Download" size={16} className="text-background" />
-                    <Text className="text-sm font-bold text-primary-foreground">{t("fetchPage")}</Text>
+                    <Icon
+                      name="Download"
+                      size={16}
+                      className="text-background"
+                    />
+                    <Text className="text-sm font-bold text-primary-foreground">
+                      {t("fetchPage")}
+                    </Text>
                   </Pressable>
 
                   {lastFetchedPage && (
@@ -410,10 +597,17 @@ export default function BookDetailScreen() {
                       className="flex-1 flex-row items-center justify-center gap-1.5 rounded-xl bg-card py-2.5"
                     >
                       {isFetchingNext ? (
-                        <ActivityIndicator size="small" color={colors.primary} />
+                        <ActivityIndicator
+                          size="small"
+                          color={colors.primary}
+                        />
                       ) : (
                         <>
-                          <Icon name="ChevronRight" size={16} className="text-primary" />
+                          <Icon
+                            name="ChevronRight"
+                            size={16}
+                            className="text-primary"
+                          />
                           <Text className="text-sm font-semibold text-primary">
                             {nextPageCandidate?.status === "fetched"
                               ? t("next")
@@ -438,22 +632,34 @@ export default function BookDetailScreen() {
                       }
                     }}
                     className="flex-row items-center justify-center gap-2 rounded-xl bg-card py-2.5"
-                    style={{ borderWidth: isAutoFetching ? 1 : 0, borderColor: colors.primary }}
+                    style={{
+                      borderWidth: isAutoFetching ? 1 : 0,
+                      borderColor: colors.primary,
+                    }}
                   >
                     {isAutoFetching ? (
                       <>
-                        <ActivityIndicator size="small" color={colors.primary} />
+                        <ActivityIndicator
+                          size="small"
+                          color={colors.primary}
+                        />
                         <Text className="text-[13px] font-semibold text-primary">
                           {t("fetchAllProgress", {
                             done: autoFetchProgress.done,
                             total: autoFetchProgress.total,
                           })}
                         </Text>
-                        <Text className="text-xs text-muted-foreground">{t("stopFetch")}</Text>
+                        <Text className="text-xs text-muted-foreground">
+                          {t("stopFetch")}
+                        </Text>
                       </>
                     ) : (
                       <>
-                        <Icon name="RefreshCw" size={15} className="text-muted-foreground" />
+                        <Icon
+                          name="RefreshCw"
+                          size={15}
+                          className="text-muted-foreground"
+                        />
                         <Text className="text-[13px] font-semibold text-muted-foreground">
                           {t("fetchAll", { count: totalCount - fetchedCount })}
                         </Text>
@@ -477,7 +683,11 @@ export default function BookDetailScreen() {
                     </>
                   ) : (
                     <>
-                      <Icon name="Download" size={15} className="text-muted-foreground" />
+                      <Icon
+                        name="Download"
+                        size={15}
+                        className="text-muted-foreground"
+                      />
                       <Text className="text-[13px] font-semibold text-muted-foreground">
                         {t("downloadOffline")}
                       </Text>
@@ -537,7 +747,9 @@ export default function BookDetailScreen() {
                     className="text-right text-[13px] font-semibold text-foreground"
                     style={{ writingDirection: "rtl" }}
                   >
-                    {entry.chapterTitle ?? entry.topicTitle ?? `${t("page")} ${entry.shamelaPageNo ?? "-"}`}
+                    {entry.chapterTitle ??
+                      entry.topicTitle ??
+                      `${t("page")} ${entry.shamelaPageNo ?? "-"}`}
                   </Text>
                   <Text
                     className="text-right text-[12px] text-muted-foreground"
@@ -546,7 +758,9 @@ export default function BookDetailScreen() {
                     {entry.importMethod === "manual_paste"
                       ? t("entryManual")
                       : t("bookImportTitle")}
-                    {entry.paragraphCount ? ` - ${t("paragraphCount", { count: entry.paragraphCount })}` : ""}
+                    {entry.paragraphCount
+                      ? ` - ${t("paragraphCount", { count: entry.paragraphCount })}`
+                      : ""}
                   </Text>
                   {entry.errorMessage ? (
                     <Text
@@ -578,13 +792,39 @@ export default function BookDetailScreen() {
           {totalCount > 0 && (
             <View style={{ paddingHorizontal: 14 }}>
               <View
+                className="mb-3 flex-row-reverse items-center gap-2 rounded-xl bg-card px-3 py-2.5"
+                style={{ backgroundColor: colors.card }}
+              >
+                <Icon name="Search" size={16} className="text-muted-foreground" />
+                <TextInput
+                  value={chapterQuery}
+                  onChangeText={setChapterQuery}
+                  placeholder={t("searchChapters")}
+                  placeholderTextColor={colors.mutedForeground}
+                  className="flex-1 text-right text-[14px] text-foreground"
+                  style={{ writingDirection: "rtl" }}
+                  returnKeyType="search"
+                />
+                {chapterQuery.length > 0 ? (
+                  <Pressable onPress={() => setChapterQuery("")}>
+                    <Icon name="X" size={16} className="text-muted-foreground" />
+                  </Pressable>
+                ) : null}
+              </View>
+
+              <View
                 style={{
-                  flexDirection: "row-reverse", alignItems: "center",
-                  justifyContent: "space-between", marginBottom: 12,
+                  flexDirection: "row-reverse",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginBottom: 12,
                 }}
               >
-                <Text className="text-[15px] font-bold text-foreground" style={{ writingDirection: "rtl" }}>
-                  {t("index", { count: totalCount })}
+                <Text
+                  className="text-[15px] font-bold text-foreground"
+                  style={{ writingDirection: "rtl" }}
+                >
+                  {t("index", { count: visibleChapterCount })}
                 </Text>
                 {fetchedCount > 0 && (
                   <Text className="text-xs text-muted-foreground">
@@ -597,16 +837,24 @@ export default function BookDetailScreen() {
               </View>
 
               <ChapterTree
-                pages={book.pages}
+                pages={visiblePages}
                 volumes={book.volumes}
+                tocNodes={visibleTocNodes}
                 fetchingPageId={fetchingPageId}
                 onPagePress={(page) => {
                   if (page.status === "fetched") {
                     openReader(page.id);
                   } else if (page.shamelaUrl && !fetchingPageId) {
-                    setFetchingPageId(page.id);
-                    fetchChapterPage({ bookId: bookIdNum, shamelaUrl: page.shamelaUrl });
+                    openCaptureBrowser(page.shamelaUrl);
                   }
+                }}
+                onTocNodePress={(node) => {
+                  if (node.page?.status === "fetched" && node.page.id) {
+                    openReader(node.page.id);
+                    return;
+                  }
+                  const targetUrl = node.page?.shamelaUrl ?? node.shamelaPath;
+                  if (targetUrl) openCaptureBrowser(targetUrl);
                 }}
               />
             </View>

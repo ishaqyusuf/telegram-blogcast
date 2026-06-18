@@ -18,7 +18,13 @@ import type { AppRouter } from "@api/trpc/routers/_app";
 import { createTRPCClient, httpBatchLink } from "@trpc/client";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, Text, TextInput, View } from "react-native";
+import {
+  ActivityIndicator,
+  FlatList,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import superjson from "superjson";
 
 type ChannelRow = {
@@ -37,11 +43,16 @@ type FetcherState = {
 };
 
 function stripTrpcPath(value: string) {
-  return value.trim().replace(/\/api\/trpc\/?$/, "").replace(/\/+$/, "");
+  return value
+    .trim()
+    .replace(/\/api\/trpc\/?$/, "")
+    .replace(/\/+$/, "");
 }
 
 function getInitialLocalApiIp(savedIp: string | null, savedUrl: string | null) {
-  return savedIp || normalizeLocalApiIpInput(savedUrl) || getCurrentLocalApiIp();
+  return (
+    savedIp || normalizeLocalApiIpInput(savedUrl) || getCurrentLocalApiIp()
+  );
 }
 
 function createLocalApiClient(baseUrl: string) {
@@ -76,10 +87,15 @@ export default function BlogImportScreen() {
     getInitialLocalApiIp(localApiLastIp, savedLocalApiBaseUrl),
   );
   const [baseUrl, setBaseUrl] = useState(() => {
-    const initialIp = getInitialLocalApiIp(localApiLastIp, savedLocalApiBaseUrl);
+    const initialIp = getInitialLocalApiIp(
+      localApiLastIp,
+      savedLocalApiBaseUrl,
+    );
     return initialIp ? buildLocalApiBaseUrl(initialIp) : "";
   });
-  const [status, setStatus] = useState<"idle" | "checking" | "online" | "offline">("idle");
+  const [status, setStatus] = useState<
+    "idle" | "checking" | "online" | "offline"
+  >("idle");
   const [message, setMessage] = useState("");
   const [channels, setChannels] = useState<ChannelRow[]>([]);
   const [fetcherState, setFetcherState] = useState<FetcherState | null>(null);
@@ -94,45 +110,50 @@ export default function BlogImportScreen() {
 
   const cleanBaseUrl = stripTrpcPath(baseUrl);
 
-  const loadApiState = useCallback(async (nextBaseUrl: string, source?: LocalApiIpSource) => {
-    const cleanUrl = stripTrpcPath(nextBaseUrl);
-    if (!cleanUrl) {
-      setStatus("offline");
-      setMessage("Enter your local API IP, for example 192.168.1.20.");
-      return;
-    }
+  const loadApiState = useCallback(
+    async (nextBaseUrl: string, source?: LocalApiIpSource) => {
+      const cleanUrl = stripTrpcPath(nextBaseUrl);
+      if (!cleanUrl) {
+        setStatus("offline");
+        setMessage("Enter your local API IP, for example 192.168.1.20.");
+        return;
+      }
 
-    setStatus("checking");
-    const nextIp = normalizeLocalApiIpInput(cleanUrl);
-    setAttemptLabel(nextIp ? `Checking ${nextIp}` : "");
-    setMessage("");
-    try {
-      const ok = await checkLocalApiBaseUrl(cleanUrl);
-      if (!ok) throw new Error("Health check failed.");
-      const client = createLocalApiClient(cleanUrl);
-      const [nextChannels, nextFetcherState] = await Promise.all([
-        client.channel.getChannels.query(),
-        client.channel.getFetcherState.query(),
-      ]);
-      setChannels(nextChannels as ChannelRow[]);
-      setFetcherState(nextFetcherState as FetcherState);
-      setBaseUrl(cleanUrl);
-      if (nextIp) setApiIpInput(nextIp);
-      setStatus("online");
-      setMessage(`Local API connected using ${formatIpSource(source)}. Import continues in the API process after you start it.`);
-      setLocalApiBaseUrl(cleanUrl);
-      if (nextIp) rememberLocalApiIp(nextIp);
-    } catch (error) {
-      setStatus("offline");
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "Could not reach the local API.",
-      );
-    } finally {
-      setAttemptLabel("");
-    }
-  }, [rememberLocalApiIp, setLocalApiBaseUrl]);
+      setStatus("checking");
+      const nextIp = normalizeLocalApiIpInput(cleanUrl);
+      setAttemptLabel(nextIp ? `Checking ${nextIp}` : "");
+      setMessage("");
+      try {
+        const ok = await checkLocalApiBaseUrl(cleanUrl);
+        if (!ok) throw new Error("Health check failed.");
+        const client = createLocalApiClient(cleanUrl);
+        const [nextChannels, nextFetcherState] = await Promise.all([
+          client.channel.getChannels.query(),
+          client.channel.getFetcherState.query(),
+        ]);
+        setChannels(nextChannels as ChannelRow[]);
+        setFetcherState(nextFetcherState as FetcherState);
+        setBaseUrl(cleanUrl);
+        if (nextIp) setApiIpInput(nextIp);
+        setStatus("online");
+        setMessage(
+          `Local API connected using ${formatIpSource(source)}. Import continues in the API process after you start it.`,
+        );
+        setLocalApiBaseUrl(cleanUrl);
+        if (nextIp) rememberLocalApiIp(nextIp);
+      } catch (error) {
+        setStatus("offline");
+        setMessage(
+          error instanceof Error
+            ? error.message
+            : "Could not reach the local API.",
+        );
+      } finally {
+        setAttemptLabel("");
+      }
+    },
+    [rememberLocalApiIp, setLocalApiBaseUrl],
+  );
 
   const autoConnect = useCallback(async () => {
     setStatus("checking");
@@ -144,7 +165,9 @@ export default function BlogImportScreen() {
       history: localApiIpHistory,
       onAttempt: (candidate) => {
         setApiIpInput(candidate.ip);
-        setAttemptLabel(`Trying ${candidate.ip} (${formatIpSource(candidate.source)})`);
+        setAttemptLabel(
+          `Trying ${candidate.ip} (${formatIpSource(candidate.source)})`,
+        );
       },
     });
 
@@ -175,11 +198,18 @@ export default function BlogImportScreen() {
   }, [autoConnect]);
 
   useEffect(() => {
-    if (fetcherState?.status !== "running" && fetcherState?.status !== "retrying") return;
+    if (
+      fetcherState?.status !== "running" &&
+      fetcherState?.status !== "retrying"
+    )
+      return;
     const interval = setInterval(() => {
-      trpcClient?.channel.getFetcherState.query().then((state) => {
-        setFetcherState(state as FetcherState);
-      }).catch(() => {});
+      trpcClient?.channel.getFetcherState
+        .query()
+        .then((state) => {
+          setFetcherState(state as FetcherState);
+        })
+        .catch(() => {});
     }, 3000);
     return () => clearInterval(interval);
   }, [fetcherState?.status, trpcClient]);
@@ -213,7 +243,10 @@ export default function BlogImportScreen() {
   }
 
   return (
-    <View className="flex-1 bg-background">
+    <View
+      className="flex-1 bg-background"
+      style={{ backgroundColor: colors.background }}
+    >
       <SafeArea>
         <View className="flex-row items-center gap-3 px-4 py-3">
           <Pressable
@@ -222,7 +255,9 @@ export default function BlogImportScreen() {
           >
             <Icon name="ChevronLeft" size={22} className="text-foreground" />
           </Pressable>
-          <Text className="flex-1 text-lg font-bold text-foreground">Blog Import</Text>
+          <Text className="flex-1 text-lg font-bold text-foreground">
+            Blog Import
+          </Text>
           <Pressable
             onPress={autoConnect}
             className="size-9 items-center justify-center rounded-full bg-card active:opacity-70"
@@ -245,7 +280,12 @@ export default function BlogImportScreen() {
               autoCorrect={false}
               placeholder="192.168.1.20"
               placeholderTextColor={colors.mutedForeground}
-              style={{ flex: 1, color: colors.foreground, fontSize: 13, paddingVertical: 11 }}
+              style={{
+                flex: 1,
+                color: colors.foreground,
+                fontSize: 13,
+                paddingVertical: 11,
+              }}
             />
             <Pressable
               onPress={connectManualIp}
@@ -269,14 +309,16 @@ export default function BlogImportScreen() {
             <Text className="flex-1 text-xs text-muted-foreground">
               {attemptLabel ||
                 (status === "online"
-                ? "Connected"
-                : status === "checking"
-                  ? "Checking..."
-                  : "Not connected")}
+                  ? "Connected"
+                  : status === "checking"
+                    ? "Checking..."
+                    : "Not connected")}
             </Text>
             <Text className="text-xs text-muted-foreground">
               {fetcherState?.status ?? "idle"}
-              {fetcherState?.totalFetched ? ` · ${fetcherState.totalFetched}` : ""}
+              {fetcherState?.totalFetched
+                ? ` · ${fetcherState.totalFetched}`
+                : ""}
             </Text>
           </View>
 
@@ -291,27 +333,38 @@ export default function BlogImportScreen() {
 
           <View className="flex-row gap-2">
             <Pressable
-              onPress={() => runAction("sync", () => trpcClient!.channel.syncChannels.mutate(undefined))}
+              onPress={() =>
+                runAction("sync", () =>
+                  trpcClient!.channel.syncChannels.mutate(undefined),
+                )
+              }
               disabled={status !== "online" || busyAction != null}
               className="h-10 flex-1 items-center justify-center rounded-xl bg-muted active:opacity-80 disabled:opacity-50"
             >
               {busyAction === "sync" ? (
                 <ActivityIndicator size="small" />
               ) : (
-                <Text className="text-sm font-semibold text-foreground">Sync channels</Text>
+                <Text className="text-sm font-semibold text-foreground">
+                  Sync channels
+                </Text>
               )}
             </Pressable>
             <Pressable
-              onPress={() => runAction("stop", () => trpcClient!.channel.stopFetch.mutate())}
+              onPress={() =>
+                runAction("stop", () => trpcClient!.channel.stopFetch.mutate())
+              }
               disabled={status !== "online" || busyAction != null}
               className="h-10 flex-1 items-center justify-center rounded-xl bg-muted active:opacity-80 disabled:opacity-50"
             >
-              <Text className="text-sm font-semibold text-foreground">Stop import</Text>
+              <Text className="text-sm font-semibold text-foreground">
+                Stop import
+              </Text>
             </Pressable>
           </View>
         </View>
 
         <FlatList
+          style={{ backgroundColor: colors.background }}
           data={channels}
           keyExtractor={(item) => String(item.id)}
           contentContainerClassName="px-4 py-3 pb-8"
@@ -319,20 +372,31 @@ export default function BlogImportScreen() {
             <View className="items-center justify-center py-16">
               <Icon name="Radio" size={42} className="text-muted-foreground" />
               <Text className="mt-3 text-sm text-muted-foreground">
-                {status === "online" ? "No channels yet. Sync channels first." : "Connect to local API first."}
+                {status === "online"
+                  ? "No channels yet. Sync channels first."
+                  : "Connect to local API first."}
               </Text>
             </View>
           }
           renderItem={({ item }) => {
-            const busy = busyAction === `start-${item.id}` || busyAction === `toggle-${item.id}`;
+            const busy =
+              busyAction === `start-${item.id}` ||
+              busyAction === `toggle-${item.id}`;
             return (
               <View className="mb-2 rounded-xl bg-card p-3">
                 <View className="mb-3 flex-row items-center gap-3">
                   <View className="size-10 items-center justify-center rounded-full bg-muted">
-                    <Icon name="Radio" size={18} className="text-muted-foreground" />
+                    <Icon
+                      name="Radio"
+                      size={18}
+                      className="text-muted-foreground"
+                    />
                   </View>
                   <View className="flex-1">
-                    <Text className="text-sm font-bold text-foreground" numberOfLines={1}>
+                    <Text
+                      className="text-sm font-bold text-foreground"
+                      numberOfLines={1}
+                    >
                       {item.title ?? item.username}
                     </Text>
                     <Text className="text-xs text-muted-foreground">

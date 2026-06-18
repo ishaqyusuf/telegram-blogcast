@@ -95,6 +95,11 @@ const config: ExpoConfig = {
 		edgeToEdgeEnabled: true,
 		predictiveBackGestureEnabled: false,
 		usesCleartextTraffic: true,
+		permissions: [
+			"android.permission.FOREGROUND_SERVICE",
+			"android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK",
+			"android.permission.POST_NOTIFICATIONS",
+		],
 		package: variantConfig.androidPackage,
 	},
 

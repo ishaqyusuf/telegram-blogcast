@@ -3,9 +3,19 @@ import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, type KeyboardEvent,
+  ActivityIndicator,
+  Alert,
+  Clipboard,
+  Keyboard,
+  KeyboardAvoidingView,
+  type KeyboardEvent,
   InteractionManager,
-  PanResponder, Platform, ScrollView, Text, TextInput, View,
+  PanResponder,
+  Platform,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
 } from "react-native";
 
 import { _trpc } from "@/components/static-trpc";
@@ -21,8 +31,16 @@ import {
 import { FootnotesSheet } from "@/components/book/footnotes-sheet";
 import { BottomSheetModal } from "@gorhom/bottom-sheet";
 
-import { useHighlightsSync, pullServerHighlights, syncPendingHighlights } from "@/hooks/use-highlights-sync";
-import { useCommentsSync, pullServerComments, syncPendingComments } from "@/hooks/use-comments-sync";
+import {
+  useHighlightsSync,
+  pullServerHighlights,
+  syncPendingHighlights,
+} from "@/hooks/use-highlights-sync";
+import {
+  useCommentsSync,
+  pullServerComments,
+  syncPendingComments,
+} from "@/hooks/use-comments-sync";
 import { useBookPageDraft } from "@/hooks/use-book-page-draft";
 import { useBookOfflineStore } from "@/store/book-offline-store";
 import { useTranslation } from "@/lib/i18n";
@@ -44,7 +62,10 @@ function formatAudioReferenceTime(sec?: number | null) {
 }
 
 export default function BookReaderScreen() {
-  const { bookId, pageId } = useLocalSearchParams<{ bookId: string; pageId: string }>();
+  const { bookId, pageId } = useLocalSearchParams<{
+    bookId: string;
+    pageId: string;
+  }>();
   const router = useRouter();
   const qc = useQueryClient();
   const { t } = useTranslation();
@@ -53,15 +74,21 @@ export default function BookReaderScreen() {
   const pageIdNum = Number(pageId);
 
   // ── Reading progress + bookmarks ────────────────────────────────────────────
-  const setLastPage   = useBookOfflineStore((s) => s.setLastPage);
-  const isBookmarked  = useBookOfflineStore((s) => s.isBookmarked);
-  const addBookmark   = useBookOfflineStore((s) => s.addBookmark);
+  const setLastPage = useBookOfflineStore((s) => s.setLastPage);
+  const isBookmarked = useBookOfflineStore((s) => s.isBookmarked);
+  const addBookmark = useBookOfflineStore((s) => s.addBookmark);
   const removeBookmark = useBookOfflineStore((s) => s.removeBookmark);
 
   const footnotesRef = useRef<BottomSheetModal>(null);
-  const [highlightedMarker, setHighlightedMarker] = useState<string | null>(null);
-  const [selectedParagraphId, setSelectedParagraphId] = useState<number | null>(null);
-  const [showToolbarForParagraphId, setShowToolbarForParagraphId] = useState<number | null>(null);
+  const [highlightedMarker, setHighlightedMarker] = useState<string | null>(
+    null,
+  );
+  const [selectedParagraphId, setSelectedParagraphId] = useState<number | null>(
+    null,
+  );
+  const [showToolbarForParagraphId, setShowToolbarForParagraphId] = useState<
+    number | null
+  >(null);
   const [commentText, setCommentText] = useState("");
   const [showCommentInput, setShowCommentInput] = useState(false);
   const [mode, setMode] = useState<"read" | "edit">("read");
@@ -74,13 +101,13 @@ export default function BookReaderScreen() {
 
   // ── Server data ────────────────────────────────────────────────────────────
   const { data: page, isLoading } = useQuery(
-    _trpc.book.getPage.queryOptions({ pageId: pageIdNum })
+    _trpc.book.getPage.queryOptions({ pageId: pageIdNum }),
   );
   const { data: pageDocument } = useQuery(
     _trpc.book.getPageDocument.queryOptions(
       { pageId: pageIdNum },
       { enabled: mode === "edit" },
-    )
+    ),
   );
   const { draft, parsedDocument, saveDraft, clearDraft } = useBookPageDraft(
     bookIdNum,
@@ -89,12 +116,18 @@ export default function BookReaderScreen() {
   );
 
   // ── Offline-first highlights ───────────────────────────────────────────────
-  const { highlights, addHighlight, deleteHighlight, reload: reloadHighlights } =
-    useHighlightsSync(bookIdNum, pageIdNum);
+  const {
+    highlights,
+    addHighlight,
+    deleteHighlight,
+    reload: reloadHighlights,
+  } = useHighlightsSync(bookIdNum, pageIdNum);
 
   // ── Offline-first comments ─────────────────────────────────────────────────
-  const { comments, addComment, deleteComment } =
-    useCommentsSync(bookIdNum, pageIdNum);
+  const { comments, addComment, deleteComment } = useCommentsSync(
+    bookIdNum,
+    pageIdNum,
+  );
 
   // ── Save reading progress on every page open ───────────────────────────────
   useEffect(() => {
@@ -138,26 +171,36 @@ export default function BookReaderScreen() {
   }, [bookIdNum]);
 
   // ── Adjacent page navigation ───────────────────────────────────────────────
-  const { mutate: fetchAdjacentPage, isPending: isFetchingAdjacentPage } = useMutation(
-    _trpc.book.fetchNextPage.mutationOptions({
-      onSuccess: (newPage) => {
-        qc.invalidateQueries({ queryKey: _trpc.book.getBook.queryKey({ id: bookIdNum }) });
-        router.replace(`/books/${bookId}/reader/${newPage.id}` as any);
-      },
-      onError: (e) => Alert.alert(t("error"), e.message),
-    })
-  );
-  const { mutateAsync: savePageDocument, isPending: isSavingDocument } = useMutation(
-    _trpc.book.savePageDocument.mutationOptions({
-      onSuccess: async () => {
-        await clearDraft();
-        qc.invalidateQueries({ queryKey: _trpc.book.getPage.queryKey({ pageId: pageIdNum }) });
-        qc.invalidateQueries({ queryKey: _trpc.book.getPageDocument.queryKey({ pageId: pageIdNum }) });
-        setMode("read");
-      },
-      onError: (e) => Alert.alert(t("error"), e.message),
-    })
-  );
+  const { mutate: fetchAdjacentPage, isPending: isFetchingAdjacentPage } =
+    useMutation(
+      _trpc.book.fetchNextPage.mutationOptions({
+        onSuccess: (newPage) => {
+          qc.invalidateQueries({
+            queryKey: _trpc.book.getBook.queryKey({ id: bookIdNum }),
+          });
+          router.replace(`/books/${bookId}/reader/${newPage.id}` as any);
+        },
+        onError: (e) => Alert.alert(t("error"), e.message),
+      }),
+    );
+  const { mutateAsync: savePageDocument, isPending: isSavingDocument } =
+    useMutation(
+      _trpc.book.savePageDocument.mutationOptions({
+        onSuccess: async () => {
+          await clearDraft();
+          qc.invalidateQueries({
+            queryKey: _trpc.book.getPage.queryKey({ pageId: pageIdNum }),
+          });
+          qc.invalidateQueries({
+            queryKey: _trpc.book.getPageDocument.queryKey({
+              pageId: pageIdNum,
+            }),
+          });
+          setMode("read");
+        },
+        onError: (e) => Alert.alert(t("error"), e.message),
+      }),
+    );
 
   const serverPlainText = useMemo(
     () =>
@@ -172,7 +215,12 @@ export default function BookReaderScreen() {
       (pageDocument?.document as RichDocument | undefined) ??
         createDocumentFromPlainText(serverPlainText),
     );
-  }, [mode, pageDocument?.contentHtml, pageDocument?.document, serverPlainText]);
+  }, [
+    mode,
+    pageDocument?.contentHtml,
+    pageDocument?.document,
+    serverPlainText,
+  ]);
   const isDirty =
     mode === "edit" &&
     (editorText.trim() !== serverPlainText.trim() ||
@@ -197,7 +245,16 @@ export default function BookReaderScreen() {
       setEditorHtml(pageDocument.contentHtml ?? serverHtml);
       setBaseVersion(pageDocument.contentVersion ?? 0);
     }
-  }, [mode, draft?.plainText, draft?.contentHtml, draft?.baseVersion, pageDocument?.plainText, pageDocument?.contentHtml, pageDocument?.contentVersion, serverHtml]);
+  }, [
+    mode,
+    draft?.plainText,
+    draft?.contentHtml,
+    draft?.baseVersion,
+    pageDocument?.plainText,
+    pageDocument?.contentHtml,
+    pageDocument?.contentVersion,
+    serverHtml,
+  ]);
 
   useEffect(() => {
     if (mode !== "edit") return;
@@ -240,22 +297,18 @@ export default function BookReaderScreen() {
 
   const cancelEditMode = async () => {
     if (isDirty) {
-      Alert.alert(
-        t("cancel"),
-        "Discard your local draft changes?",
-        [
-          { text: t("cancel"), style: "cancel" },
-          {
-            text: "Discard",
-            style: "destructive",
-            onPress: () => {
-              setMode("read");
-              setEditorText(serverPlainText);
-              setEditorHtml(serverHtml);
-            },
+      Alert.alert(t("cancel"), "Discard your local draft changes?", [
+        { text: t("cancel"), style: "cancel" },
+        {
+          text: "Discard",
+          style: "destructive",
+          onPress: () => {
+            setMode("read");
+            setEditorText(serverPlainText);
+            setEditorHtml(serverHtml);
           },
-        ],
-      );
+        },
+      ]);
       return;
     }
     setMode("read");
@@ -285,7 +338,18 @@ export default function BookReaderScreen() {
   };
 
   const handleHighlightColor = async (paragraphId: number, color: string) => {
-    await addHighlight(paragraphId, color);
+    const paragraph = page?.paragraphs.find((item) => item.id === paragraphId);
+    await addHighlight(paragraphId, color, {
+      startOffset: 0,
+      endOffset: paragraph?.text.length ?? null,
+      quoteText: paragraph?.text ?? null,
+    });
+    setShowToolbarForParagraphId(null);
+    setSelectedParagraphId(null);
+  };
+
+  const handleCopyParagraph = (paragraph: { text: string }) => {
+    Clipboard.setString(paragraph.text);
     setShowToolbarForParagraphId(null);
     setSelectedParagraphId(null);
   };
@@ -306,11 +370,7 @@ export default function BookReaderScreen() {
 
   const bookmarked = isBookmarked(bookIdNum, pageIdNum);
   const editorFooterInset =
-    keyboardHeight > 0
-      ? Platform.OS === "ios"
-        ? 12
-        : keyboardHeight + 12
-      : 0;
+    keyboardHeight > 0 ? (Platform.OS === "ios" ? 12 : keyboardHeight + 12) : 0;
 
   const toggleBookmark = () => {
     if (!page) return;
@@ -355,7 +415,10 @@ export default function BookReaderScreen() {
 
   if (isLoading) {
     return (
-      <View className="flex-1 items-center justify-center bg-background">
+      <View
+        className="flex-1 items-center justify-center bg-background"
+        style={{ backgroundColor: colors.background }}
+      >
         <ActivityIndicator color={colors.primary} />
       </View>
     );
@@ -366,7 +429,7 @@ export default function BookReaderScreen() {
   const pageBook = (page as any).book;
   const canEditPage =
     pageBook?.editable !== false &&
-    ((pageBook?.sourceType ?? "user") === "user") &&
+    (pageBook?.sourceType ?? "user") === "user" &&
     !pageBook?.shamelaId &&
     !pageBook?.shamelaUrl;
   const audioReferences = Array.isArray((page as any).audioReferences)
@@ -374,7 +437,10 @@ export default function BookReaderScreen() {
     : [];
 
   return (
-    <View className="flex-1 bg-background">
+    <View
+      className="flex-1 bg-background"
+      style={{ backgroundColor: colors.background }}
+    >
       <SafeArea>
         <View className="flex-row items-center gap-2.5 border-b border-border px-4 py-2.5">
           <Pressable
@@ -398,13 +464,26 @@ export default function BookReaderScreen() {
               {page.printedPageNo != null
                 ? t("pageShort", { number: page.printedPageNo })
                 : `#${page.shamelaPageNo}`}
-              {page.volume ? `  -  ${t("volumeShort", { number: page.volume.number })}` : ""}
+              {page.volume
+                ? `  -  ${t("volumeShort", { number: page.volume.number })}`
+                : ""}
             </Text>
           </View>
 
           <Pressable
+            onPress={() => router.push(`/books/${bookId}/chapters` as any)}
+            className="size-[34px] items-center justify-center rounded-full bg-card"
+          >
+            <Icon name="ListOrdered" size={18} className="text-foreground" />
+          </Pressable>
+
+          <Pressable
             onPress={toggleBookmark}
-            className={bookmarked ? "size-[34px] items-center justify-center rounded-full bg-primary/15" : "size-[34px] items-center justify-center rounded-full bg-card"}
+            className={
+              bookmarked
+                ? "size-[34px] items-center justify-center rounded-full bg-primary/15"
+                : "size-[34px] items-center justify-center rounded-full bg-card"
+            }
           >
             <Icon
               name="Bookmark"
@@ -414,7 +493,10 @@ export default function BookReaderScreen() {
           </Pressable>
 
           <Pressable
-            onPress={() => { setHighlightedMarker(null); footnotesRef.current?.present(); }}
+            onPress={() => {
+              setHighlightedMarker(null);
+              footnotesRef.current?.present();
+            }}
             className="size-[34px] items-center justify-center rounded-full bg-card"
           >
             <Icon name="BookMarked" size={18} className="text-foreground" />
@@ -431,7 +513,11 @@ export default function BookReaderScreen() {
               }}
               className="size-[34px] items-center justify-center rounded-full bg-card"
             >
-              <Icon name={mode === "edit" ? "Check" : "Edit3"} size={18} className="text-foreground" />
+              <Icon
+                name={mode === "edit" ? "Check" : "Edit3"}
+                size={18}
+                className="text-foreground"
+              />
             </Pressable>
           )}
         </View>
@@ -456,7 +542,12 @@ export default function BookReaderScreen() {
           ) : (
             <ScrollView
               {...pageSwipeResponder.panHandlers}
-              contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 20, paddingBottom: 120 }}
+              style={{ backgroundColor: colors.background }}
+              contentContainerStyle={{
+                paddingHorizontal: 20,
+                paddingTop: 20,
+                paddingBottom: 120,
+              }}
               keyboardShouldPersistTaps="handled"
             >
               {page.topicTitle && (
@@ -480,6 +571,8 @@ export default function BookReaderScreen() {
                 }))}
                 onFootnotePress={openFootnotes}
                 onLongPress={handleLongPress}
+                onPressHighlightedParagraph={handleHighlightDelete}
+                onCopyParagraph={handleCopyParagraph}
                 selectedParagraphId={selectedParagraphId}
                 showToolbarForParagraphId={showToolbarForParagraphId}
                 onHighlightColor={handleHighlightColor}
@@ -490,89 +583,109 @@ export default function BookReaderScreen() {
                 }}
               />
 
-            {/* Comments list */}
-            {mode === "read" && comments.length > 0 && (
-              <View style={{ marginTop: 24, gap: 8 }}>
-                <Text className="text-right text-sm font-bold text-foreground" style={{ writingDirection: "rtl" }}>
-                  {t("comments", { count: comments.length })}
-                </Text>
-                {comments.map((comment) => (
-                  <View
-                    key={comment.localId}
-                    className="flex-row-reverse items-start gap-2 rounded-lg bg-card p-2.5"
+              {/* Comments list */}
+              {mode === "read" && comments.length > 0 && (
+                <View style={{ marginTop: 24, gap: 8 }}>
+                  <Text
+                    className="text-right text-sm font-bold text-foreground"
+                    style={{ writingDirection: "rtl" }}
                   >
-                    <Text
-                      className="flex-1 text-right text-sm text-foreground"
-                      style={{ writingDirection: "rtl" }}
+                    {t("comments", { count: comments.length })}
+                  </Text>
+                  {comments.map((comment) => (
+                    <View
+                      key={comment.localId}
+                      className="flex-row-reverse items-start gap-2 rounded-lg bg-card p-2.5"
                     >
-                      {comment.content}
-                    </Text>
-                    {comment.syncStatus === "pending_create" && (
-                      <Icon name="Clock" size={12} className="text-muted-foreground" />
-                    )}
-                    <Pressable onPress={() => deleteComment(comment.localId)}>
-                      <Icon name="Trash2" size={14} className="text-muted-foreground" />
-                    </Pressable>
-                  </View>
-                ))}
-              </View>
-            )}
+                      <Text
+                        className="flex-1 text-right text-sm text-foreground"
+                        style={{ writingDirection: "rtl" }}
+                      >
+                        {comment.content}
+                      </Text>
+                      {comment.syncStatus === "pending_create" && (
+                        <Icon
+                          name="Clock"
+                          size={12}
+                          className="text-muted-foreground"
+                        />
+                      )}
+                      <Pressable onPress={() => deleteComment(comment.localId)}>
+                        <Icon
+                          name="Trash2"
+                          size={14}
+                          className="text-muted-foreground"
+                        />
+                      </Pressable>
+                    </View>
+                  ))}
+                </View>
+              )}
 
-            {mode === "read" && audioReferences.length > 0 && (
-              <View style={{ marginTop: 24, gap: 8 }}>
-                <Text className="text-right text-sm font-bold text-foreground" style={{ writingDirection: "rtl" }}>
-                  Audio references
-                </Text>
-                {audioReferences.map((reference: any) => {
-                  const media = reference.media;
-                  const label =
-                    media?.title ||
-                    media?.file?.fileName ||
-                    media?.album?.name ||
-                    "Referenced audio";
-                  return (
-                    <Pressable
-                      key={reference.id}
-                      onPress={() => {
-                        const blogId = media?.blog?.id;
-                        if (blogId) {
-                          const suffix =
-                            reference.startSec != null
-                              ? `?seekSec=${reference.startSec}`
-                              : "";
-                          router.push(`/blog-view-2/${blogId}${suffix}` as any);
-                          return;
-                        }
-                        Alert.alert(
-                          "Audio unavailable",
-                          "This reference is linked to media that does not have an audio screen yet.",
-                        );
-                      }}
-                      className="flex-row-reverse items-center gap-2 rounded-lg bg-card p-2.5"
-                    >
-                      <Icon name="Headphones" size={16} className="text-primary" />
-                      <View style={{ flex: 1 }}>
-                        <Text
-                          className="text-right text-sm font-semibold text-foreground"
-                          style={{ writingDirection: "rtl" }}
-                          numberOfLines={1}
-                        >
-                          {label}
-                        </Text>
-                        <Text className="text-right text-[11px] text-muted-foreground">
-                          {reference.startSec != null
-                            ? formatAudioReferenceTime(reference.startSec)
-                            : ""}
-                          {reference.endSec != null
-                            ? ` - ${formatAudioReferenceTime(reference.endSec)}`
-                            : ""}
-                        </Text>
-                      </View>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            )}
+              {mode === "read" && audioReferences.length > 0 && (
+                <View style={{ marginTop: 24, gap: 8 }}>
+                  <Text
+                    className="text-right text-sm font-bold text-foreground"
+                    style={{ writingDirection: "rtl" }}
+                  >
+                    Audio references
+                  </Text>
+                  {audioReferences.map((reference: any) => {
+                    const media = reference.media;
+                    const label =
+                      media?.title ||
+                      media?.file?.fileName ||
+                      media?.album?.name ||
+                      "Referenced audio";
+                    return (
+                      <Pressable
+                        key={reference.id}
+                        onPress={() => {
+                          const blogId = media?.blog?.id;
+                          if (blogId) {
+                            const suffix =
+                              reference.startSec != null
+                                ? `?seekSec=${reference.startSec}`
+                                : "";
+                            router.push(
+                              `/blog-view-2/${blogId}${suffix}` as any,
+                            );
+                            return;
+                          }
+                          Alert.alert(
+                            "Audio unavailable",
+                            "This reference is linked to media that does not have an audio screen yet.",
+                          );
+                        }}
+                        className="flex-row-reverse items-center gap-2 rounded-lg bg-card p-2.5"
+                      >
+                        <Icon
+                          name="Headphones"
+                          size={16}
+                          className="text-primary"
+                        />
+                        <View style={{ flex: 1 }}>
+                          <Text
+                            className="text-right text-sm font-semibold text-foreground"
+                            style={{ writingDirection: "rtl" }}
+                            numberOfLines={1}
+                          >
+                            {label}
+                          </Text>
+                          <Text className="text-right text-[11px] text-muted-foreground">
+                            {reference.startSec != null
+                              ? formatAudioReferenceTime(reference.startSec)
+                              : ""}
+                            {reference.endSec != null
+                              ? ` - ${formatAudioReferenceTime(reference.endSec)}`
+                              : ""}
+                          </Text>
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              )}
             </ScrollView>
           )}
 
@@ -602,8 +715,14 @@ export default function BookReaderScreen() {
                 onPress={() => setShowCommentInput(!showCommentInput)}
                 className="flex-1 flex-row items-center justify-center gap-1.5 rounded-xl bg-card py-2.5"
               >
-                <Icon name="MessageSquare" size={16} className="text-foreground" />
-                <Text className="text-[13px] font-semibold text-foreground">{t("comment")}</Text>
+                <Icon
+                  name="MessageSquare"
+                  size={16}
+                  className="text-foreground"
+                />
+                <Text className="text-[13px] font-semibold text-foreground">
+                  {t("comment")}
+                </Text>
               </Pressable>
 
               <Pressable
@@ -620,8 +739,14 @@ export default function BookReaderScreen() {
                   <ActivityIndicator size="small" color={colors.primary} />
                 ) : (
                   <>
-                    <Icon name="ChevronRight" size={18} className="text-foreground" />
-                    <Text className="text-[13px] text-foreground">{t("previous")}</Text>
+                    <Icon
+                      name="ChevronRight"
+                      size={18}
+                      className="text-foreground"
+                    />
+                    <Text className="text-[13px] text-foreground">
+                      {t("previous")}
+                    </Text>
                   </>
                 )}
               </Pressable>
@@ -637,11 +762,20 @@ export default function BookReaderScreen() {
                 className="flex-row items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2.5"
               >
                 {isFetchingAdjacentPage ? (
-                  <ActivityIndicator size="small" color={colors.primaryForeground} />
+                  <ActivityIndicator
+                    size="small"
+                    color={colors.primaryForeground}
+                  />
                 ) : (
                   <>
-                    <Text className="text-[13px] font-bold text-primary-foreground">{t("next")}</Text>
-                    <Icon name="ChevronLeft" size={18} className="text-background" />
+                    <Text className="text-[13px] font-bold text-primary-foreground">
+                      {t("next")}
+                    </Text>
+                    <Icon
+                      name="ChevronLeft"
+                      size={18}
+                      className="text-background"
+                    />
                   </>
                 )}
               </Pressable>

@@ -1,4 +1,6 @@
 import { Pressable } from "@/components/ui/pressable";
+import { useColors } from "@/hooks/use-color";
+import { withAlpha } from "@/lib/theme";
 import { useTranslation, type TranslationKey } from "@/lib/i18n";
 import { ScrollView, Text, View } from "react-native";
 
@@ -31,9 +33,13 @@ interface Props {
 
 export function BlogHomeCategoryTabs({ selected, onSelect }: Props) {
   const { t } = useTranslation();
+  const colors = useColors();
 
   return (
-    <View className="bg-background py-3 pl-4">
+    <View
+      className="bg-background py-3 pl-4"
+      style={{ backgroundColor: colors.background }}
+    >
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -48,6 +54,14 @@ export function BlogHomeCategoryTabs({ selected, onSelect }: Props) {
               className={`px-4 h-9 rounded-full items-center justify-center border ${
                 isActive ? "bg-accent border-accent" : "bg-card border-border"
               }`}
+              style={{
+                backgroundColor: isActive
+                  ? withAlpha(colors.primary, 0.18)
+                  : colors.card,
+                borderColor: isActive
+                  ? withAlpha(colors.primary, 0.28)
+                  : colors.border,
+              }}
             >
               <Text
                 className={`text-sm ${
@@ -55,6 +69,9 @@ export function BlogHomeCategoryTabs({ selected, onSelect }: Props) {
                     ? "font-bold text-primary-foreground"
                     : "text-muted-foreground font-medium"
                 }`}
+                style={{
+                  color: isActive ? colors.primary : colors.mutedForeground,
+                }}
               >
                 {t(CATEGORY_KEYS[cat])}
               </Text>

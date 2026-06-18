@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Alert, Text, View } from "react-native";
+import {
+  Alert,
+  LayoutAnimation,
+  Platform,
+  Text,
+  UIManager,
+  View,
+} from "react-native";
 import { LegendList } from "@legendapp/list";
 import { useMutation } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -26,10 +33,40 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Toast } from "@/components/ui/toast";
 import { invalidateQueries } from "@/lib/trpc";
 import { useTranslation } from "@/lib/i18n";
+import { useColors } from "@/hooks/use-color";
+
+if (
+  Platform.OS === "android" &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+function animatePostListChange() {
+  LayoutAnimation.configureNext({
+    duration: 220,
+    create: {
+      type: LayoutAnimation.Types.easeInEaseOut,
+      property: LayoutAnimation.Properties.opacity,
+    },
+    update: {
+      type: LayoutAnimation.Types.easeInEaseOut,
+    },
+    delete: {
+      type: LayoutAnimation.Types.easeInEaseOut,
+      property: LayoutAnimation.Properties.opacity,
+    },
+  });
+}
 
 export function BlogHomeSkeleton() {
+  const colors = useColors();
+
   return (
-    <View className="flex-1 bg-background">
+    <View
+      className="flex-1 bg-background"
+      style={{ backgroundColor: colors.background }}
+    >
       <SafeArea>
         <BlogHomeHeader />
         <View className="flex-1 relative">
@@ -39,7 +76,14 @@ export function BlogHomeSkeleton() {
           <View className="h-4" />
           <View className="flex-1 border-t border-border">
             {[0, 1, 2].map((key) => (
-              <View key={key} className="border-b border-border bg-background p-4">
+              <View
+                key={key}
+                className="border-b border-border bg-background p-4"
+                style={{
+                  backgroundColor: colors.background,
+                  borderBottomColor: colors.border,
+                }}
+              >
                 <View className="mb-3 flex-row items-center gap-3">
                   <Skeleton className="h-10 w-10 rounded-full" />
                   <View className="flex-1 gap-2">
@@ -65,6 +109,7 @@ export default function BlogHomeScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ category?: string }>();
   const { t } = useTranslation();
+  const colors = useColors();
 
   const selectedCategory = useMemo<BlogCategory>(() => {
     const map: Record<string, BlogCategory> = {
@@ -146,6 +191,7 @@ export default function BlogHomeScreen() {
   );
   const handleDeletePost = useCallback(
     async (post: BlogItem) => {
+      animatePostListChange();
       setHiddenPostIds((prev) => new Set(prev).add(post.id));
       let deleteFailed = false;
       const deletePromise = deleteBlogMutation
@@ -160,6 +206,7 @@ export default function BlogHomeScreen() {
         if (didRestore) return;
 
         didRestore = true;
+        animatePostListChange();
         setHiddenPostIds((prev) => {
           const next = new Set(prev);
           next.delete(post.id);
@@ -171,6 +218,7 @@ export default function BlogHomeScreen() {
           await restoreBlogMutation.mutateAsync({ id: post.id });
         } catch {
           if (deleteFailed) {
+            animatePostListChange();
             setHiddenPostIds((prev) => {
               const next = new Set(prev);
               next.delete(post.id);
@@ -179,6 +227,7 @@ export default function BlogHomeScreen() {
             return;
           }
 
+          animatePostListChange();
           setHiddenPostIds((prev) => new Set(prev).add(post.id));
           Alert.alert("Undo failed", "Could not restore this post. Try again.");
         }
@@ -202,6 +251,7 @@ export default function BlogHomeScreen() {
         if (toastId) {
           Toast.dismiss(toastId);
         }
+        animatePostListChange();
         setHiddenPostIds((prev) => {
           const next = new Set(prev);
           next.delete(post.id);
@@ -229,11 +279,15 @@ export default function BlogHomeScreen() {
   }, [refetch]);
 
   return (
-    <View className="flex-1 bg-background">
+    <View
+      className="flex-1 bg-background"
+      style={{ backgroundColor: colors.background }}
+    >
       <SafeArea>
         <BlogHomeHeader />
         <View className="flex-1 relative">
           <LegendList
+            style={{ backgroundColor: colors.background }}
             data={visiblePosts}
             renderItem={({ item }) => (
               <View>
@@ -257,7 +311,10 @@ export default function BlogHomeScreen() {
                 <Text className="px-4 pt-4 pb-2 text-base font-bold text-foreground">
                   {t("latestPosts")}
                 </Text>
-                <View className="border-t border-border" />
+                <View
+                  className="border-t border-border"
+                  style={{ borderTopColor: colors.border }}
+                />
               </>
             }
             ListFooterComponent={<View className="h-40 px-4" />}

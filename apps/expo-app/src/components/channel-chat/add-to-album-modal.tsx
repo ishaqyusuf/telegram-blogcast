@@ -1,15 +1,27 @@
 import { Pressable } from "@/components/ui/pressable";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
-import { useRef, useState } from "react";
-import { ActivityIndicator, FlatList, Text, TextInput, View } from "react-native";
-import BottomSheet, { BottomSheetView } from "@gorhom/bottom-sheet";
+import { useState } from "react";
+import {
+  ActivityIndicator,
+  FlatList,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 
 import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";
 import { useColors } from "@/hooks/use-color";
 import { useTranslation } from "@/lib/i18n";
 
-const ALBUM_COLORS = ["#1e40af", "#0f766e", "#b45309", "#4f46e5", "#be123c", "#0369a1"];
+const ALBUM_COLORS = [
+  "#1e40af",
+  "#0f766e",
+  "#b45309",
+  "#4f46e5",
+  "#be123c",
+  "#0369a1",
+];
 
 function getInitials(name?: string | null) {
   if (!name) return "AL";
@@ -31,10 +43,9 @@ export function AddToAlbumModal({ mediaIds, authorId, onClose }: Props) {
   const colors = useColors();
   const { t } = useTranslation();
   const [newAlbumName, setNewAlbumName] = useState("");
-  const [creating, setCreating] = useState(false);
 
   const { data: albums = [], isLoading } = useQuery(
-    _trpc.album.getAlbums.queryOptions()
+    _trpc.album.getAlbums.queryOptions(),
   );
 
   const addMedia = useMutation(
@@ -43,7 +54,7 @@ export function AddToAlbumModal({ mediaIds, authorId, onClose }: Props) {
         queryClient.invalidateQueries(_trpc.album.getAlbums.queryOptions());
         onClose();
       },
-    })
+    }),
   );
 
   const createAlbum = useMutation(
@@ -51,7 +62,7 @@ export function AddToAlbumModal({ mediaIds, authorId, onClose }: Props) {
       onSuccess: (newAlbum) => {
         addMedia.mutate({ albumId: newAlbum.id, mediaIds });
       },
-    })
+    }),
   );
 
   function handleSelectAlbum(albumId: number) {
@@ -67,22 +78,41 @@ export function AddToAlbumModal({ mediaIds, authorId, onClose }: Props) {
   const isBusy = addMedia.isPending || createAlbum.isPending;
 
   return (
-    <View className="flex-1 bg-card rounded-t-3xl px-4 pt-4 pb-8">
+    <View
+      className="flex-1 bg-card rounded-t-3xl px-4 pt-4 pb-8"
+      style={{ backgroundColor: colors.card }}
+    >
       {/* Handle */}
-      <View className="w-10 h-1 rounded-full bg-muted self-center mb-4" />
+      <View
+        className="w-10 h-1 rounded-full bg-muted self-center mb-4"
+        style={{ backgroundColor: colors.muted }}
+      />
 
-      <Text className="text-base font-bold text-foreground mb-4">{t("addToAlbum")}</Text>
+      <Text
+        className="text-base font-bold text-foreground mb-4"
+        style={{ color: colors.foreground }}
+      >
+        {t("addToAlbum")}
+      </Text>
 
       {/* Create new album */}
       <View className="flex-row gap-2 mb-5">
-        <View className="flex-1 flex-row items-center bg-muted rounded-xl px-3 h-10 gap-2">
+        <View
+          className="flex-1 flex-row items-center bg-muted rounded-xl px-3 h-10 gap-2"
+          style={{ backgroundColor: colors.muted }}
+        >
           <Icon name="Plus" size={16} className="text-muted-foreground" />
           <TextInput
             placeholder={t("newAlbumName")}
             placeholderTextColor={colors.mutedForeground}
             value={newAlbumName}
             onChangeText={setNewAlbumName}
-            style={{ flex: 1, fontSize: 14, color: colors.foreground, paddingVertical: 0 }}
+            style={{
+              flex: 1,
+              fontSize: 14,
+              color: colors.foreground,
+              paddingVertical: 0,
+            }}
           />
         </View>
         <Pressable
@@ -93,21 +123,29 @@ export function AddToAlbumModal({ mediaIds, authorId, onClose }: Props) {
           {isBusy ? (
             <ActivityIndicator size="small" color={colors.primaryForeground} />
           ) : (
-            <Text className="text-xs font-bold text-primary-foreground">{t("create")}</Text>
+            <Text className="text-xs font-bold text-primary-foreground">
+              {t("create")}
+            </Text>
           )}
         </Pressable>
       </View>
 
-      <Text className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+      <Text
+        className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3"
+        style={{ color: colors.mutedForeground }}
+      >
         Existing Albums
       </Text>
 
       {isLoading ? (
         <View className="py-6 items-center">
-          <ActivityIndicator />
+          <ActivityIndicator color={colors.primary} />
         </View>
       ) : albums.length === 0 ? (
-        <Text className="text-sm text-muted-foreground text-center py-6">
+        <Text
+          className="text-sm text-muted-foreground text-center py-6"
+          style={{ color: colors.mutedForeground }}
+        >
           No albums yet — create one above
         </Text>
       ) : (
@@ -137,14 +175,24 @@ export function AddToAlbumModal({ mediaIds, authorId, onClose }: Props) {
                 </Text>
               </View>
               <View className="flex-1">
-                <Text className="text-sm font-semibold text-foreground">
+                <Text
+                  className="text-sm font-semibold text-foreground"
+                  style={{ color: colors.foreground }}
+                >
                   {item.name}
                 </Text>
-                <Text className="text-xs text-muted-foreground">
+                <Text
+                  className="text-xs text-muted-foreground"
+                  style={{ color: colors.mutedForeground }}
+                >
                   {item._count.medias} tracks
                 </Text>
               </View>
-              <Icon name="ChevronRight" size={16} className="text-muted-foreground" />
+              <Icon
+                name="ChevronRight"
+                size={16}
+                className="text-muted-foreground"
+              />
             </Pressable>
           )}
         />
@@ -154,8 +202,14 @@ export function AddToAlbumModal({ mediaIds, authorId, onClose }: Props) {
       <Pressable
         onPress={onClose}
         className="mt-4 h-11 rounded-xl bg-muted items-center justify-center active:opacity-70"
+        style={{ backgroundColor: colors.muted }}
       >
-        <Text className="text-sm font-semibold text-foreground">Cancel</Text>
+        <Text
+          className="text-sm font-semibold text-foreground"
+          style={{ color: colors.foreground }}
+        >
+          Cancel
+        </Text>
       </Pressable>
     </View>
   );

@@ -1,6 +1,7 @@
 import { Icon } from "@/components/ui/icon";
 import { Pressable } from "@/components/ui/pressable";
 import { SafeArea } from "@/components/safe-area";
+import { useColors } from "@/hooks/use-color";
 import config from "@root/app.config";
 import { useRouter } from "expo-router";
 import * as Updates from "expo-updates";
@@ -72,13 +73,16 @@ function UpdateStep({
           <View className="size-2 rounded-full bg-muted-foreground/50" />
         )}
       </View>
-      <Text className="flex-1 text-sm font-semibold text-foreground">{label}</Text>
+      <Text className="flex-1 text-sm font-semibold text-foreground">
+        {label}
+      </Text>
     </View>
   );
 }
 
 export default function UpdatesScreen() {
   const router = useRouter();
+  const colors = useColors();
   const {
     currentlyRunning,
     isChecking,
@@ -92,7 +96,9 @@ export default function UpdatesScreen() {
     downloadError,
   } = Updates.useUpdates();
   const [action, setAction] = useState<UpdateAction>(null);
-  const [message, setMessage] = useState("Ready to check for a published update.");
+  const [message, setMessage] = useState(
+    "Ready to check for a published update.",
+  );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const status = useMemo(() => {
@@ -103,9 +109,17 @@ export default function UpdatesScreen() {
     if (isUpdateAvailable) return "Update found";
     if (isChecking || action === "checking") return "Checking";
     return "Up to date";
-  }, [action, isChecking, isDownloading, isRestarting, isUpdateAvailable, isUpdatePending]);
+  }, [
+    action,
+    isChecking,
+    isDownloading,
+    isRestarting,
+    isUpdateAvailable,
+    isUpdatePending,
+  ]);
 
-  const canCheck = Updates.isEnabled && !isChecking && !isDownloading && !isRestarting;
+  const canCheck =
+    Updates.isEnabled && !isChecking && !isDownloading && !isRestarting;
   const canDownload = canCheck && isUpdateAvailable && !isUpdatePending;
   const canRestart = Updates.isEnabled && isUpdatePending && !isRestarting;
 
@@ -117,15 +131,21 @@ export default function UpdatesScreen() {
     try {
       const result = await Updates.checkForUpdateAsync();
       if (result.isAvailable) {
-        setMessage("A new update is available. Download it when you are ready.");
+        setMessage(
+          "A new update is available. Download it when you are ready.",
+        );
       } else if (result.isRollBackToEmbedded) {
         setMessage("A rollback to the embedded build is available.");
       } else {
-        setMessage(`No update is available for this runtime. Reason: ${result.reason}.`);
+        setMessage(
+          `No update is available for this runtime. Reason: ${result.reason}.`,
+        );
       }
     } catch (error) {
       setErrorMessage(getErrorMessage(error));
-      setMessage("Update checks only work in an installed release or preview build.");
+      setMessage(
+        "Update checks only work in an installed release or preview build.",
+      );
     } finally {
       setAction(null);
     }
@@ -166,7 +186,10 @@ export default function UpdatesScreen() {
   }, []);
 
   return (
-    <View className="flex-1 bg-background">
+    <View
+      className="flex-1 bg-background"
+      style={{ backgroundColor: colors.background }}
+    >
       <SafeArea>
         <View className="flex-row items-center gap-3 px-4 py-3">
           <Pressable
@@ -182,6 +205,7 @@ export default function UpdatesScreen() {
         </View>
 
         <ScrollView
+          style={{ backgroundColor: colors.background }}
           className="flex-1"
           contentContainerClassName="gap-4 px-4 pb-10 pt-2"
           showsVerticalScrollIndicator={false}
@@ -192,12 +216,22 @@ export default function UpdatesScreen() {
                 <Text className="text-sm font-semibold uppercase text-muted-foreground">
                   Status
                 </Text>
-                <Text className="text-2xl font-extrabold text-foreground">{status}</Text>
-                <Text className="text-sm leading-5 text-muted-foreground">{message}</Text>
+                <Text className="text-2xl font-extrabold text-foreground">
+                  {status}
+                </Text>
+                <Text className="text-sm leading-5 text-muted-foreground">
+                  {message}
+                </Text>
               </View>
               <View className="size-12 items-center justify-center rounded-full bg-secondary">
                 <Icon
-                  name={isUpdatePending ? "Download" : Updates.isEnabled ? "RefreshCw" : "Info"}
+                  name={
+                    isUpdatePending
+                      ? "Download"
+                      : Updates.isEnabled
+                        ? "RefreshCw"
+                        : "Info"
+                  }
                   size={22}
                   className="text-foreground"
                 />
@@ -206,7 +240,11 @@ export default function UpdatesScreen() {
 
             {errorMessage ? (
               <View className="flex-row gap-2 rounded-xl bg-destructive/10 p-3">
-                <Icon name="AlertCircle" size={18} className="text-destructive" />
+                <Icon
+                  name="AlertCircle"
+                  size={18}
+                  className="text-destructive"
+                />
                 <Text className="flex-1 text-sm leading-5 text-destructive">
                   {errorMessage}
                 </Text>
@@ -218,7 +256,9 @@ export default function UpdatesScreen() {
                 <View className="h-2 overflow-hidden rounded-full bg-secondary">
                   <View
                     className="h-full rounded-full bg-primary"
-                    style={{ width: `${Math.max(8, (downloadProgress ?? 0) * 100)}%` }}
+                    style={{
+                      width: `${Math.max(8, (downloadProgress ?? 0) * 100)}%`,
+                    }}
                   />
                 </View>
                 <Text className="text-xs font-medium text-muted-foreground">
@@ -255,7 +295,11 @@ export default function UpdatesScreen() {
               {isChecking || action === "checking" ? (
                 <ActivityIndicator color="white" />
               ) : (
-                <Icon name="RefreshCw" size={18} className="text-primary-foreground" />
+                <Icon
+                  name="RefreshCw"
+                  size={18}
+                  className="text-primary-foreground"
+                />
               )}
               <Text className="text-sm font-extrabold text-primary-foreground">
                 Check for update
@@ -269,7 +313,9 @@ export default function UpdatesScreen() {
                 className="flex-1 flex-row items-center justify-center gap-2 rounded-xl bg-secondary py-3.5 disabled:opacity-50"
               >
                 <Icon name="Download" size={18} className="text-foreground" />
-                <Text className="text-sm font-extrabold text-foreground">Download</Text>
+                <Text className="text-sm font-extrabold text-foreground">
+                  Download
+                </Text>
               </Pressable>
               <Pressable
                 onPress={restartIntoUpdate}
@@ -277,7 +323,9 @@ export default function UpdatesScreen() {
                 className="flex-1 flex-row items-center justify-center gap-2 rounded-xl bg-secondary py-3.5 disabled:opacity-50"
               >
                 <Icon name="RotateCw" size={18} className="text-foreground" />
-                <Text className="text-sm font-extrabold text-foreground">Restart</Text>
+                <Text className="text-sm font-extrabold text-foreground">
+                  Restart
+                </Text>
               </Pressable>
             </View>
           </View>
@@ -290,10 +338,17 @@ export default function UpdatesScreen() {
             <InfoRow label="Runtime" value={Updates.runtimeVersion} />
             <InfoRow
               label="Running"
-              value={currentlyRunning.isEmbeddedLaunch ? "Embedded build" : "Downloaded update"}
+              value={
+                currentlyRunning.isEmbeddedLaunch
+                  ? "Embedded build"
+                  : "Downloaded update"
+              }
             />
             <InfoRow label="Update ID" value={shortId(Updates.updateId)} />
-            <InfoRow label="Created" value={formatDate(currentlyRunning.createdAt)} />
+            <InfoRow
+              label="Created"
+              value={formatDate(currentlyRunning.createdAt)}
+            />
             <InfoRow
               label="Last check"
               value={formatDate(lastCheckForUpdateTimeSinceRestart)}
@@ -303,18 +358,23 @@ export default function UpdatesScreen() {
           <View className="gap-2 rounded-2xl bg-card p-4">
             <View className="flex-row items-center gap-2">
               <Icon name="Info" size={18} className="text-primary" />
-              <Text className="text-base font-extrabold text-foreground">How auto update works</Text>
+              <Text className="text-base font-extrabold text-foreground">
+                How auto update works
+              </Text>
             </View>
             <Text className="text-sm leading-5 text-muted-foreground">
-              Expo can check for updates when an installed build starts. A published update only
-              applies when it matches this build&apos;s channel and runtime version. Native changes,
-              dependency changes, or a new app version usually need a new EAS build.
+              Expo can check for updates when an installed build starts. A
+              published update only applies when it matches this build&apos;s
+              channel and runtime version. Native changes, dependency changes,
+              or a new app version usually need a new EAS build.
             </Text>
           </View>
 
           {checkError || downloadError ? (
             <View className="gap-2 rounded-2xl bg-card p-4">
-              <Text className="text-base font-extrabold text-foreground">Latest update error</Text>
+              <Text className="text-base font-extrabold text-foreground">
+                Latest update error
+              </Text>
               <Text className="text-sm leading-5 text-muted-foreground">
                 {(checkError ?? downloadError)?.message}
               </Text>

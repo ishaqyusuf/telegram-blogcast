@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import { ScrollView, Text, View } from "react-native";
 
 import { _trpc } from "@/components/static-trpc";
+import { useColors } from "@/hooks/use-color";
 import { useTranslation } from "@/lib/i18n";
 
 const CHANNEL_COLORS = [
@@ -29,9 +30,10 @@ function getInitials(value?: string | null) {
 
 export function BlogHomeChannels() {
   const router = useRouter();
+  const colors = useColors();
   const { t } = useTranslation();
   const { data: channels = [] } = useQuery(
-    _trpc.channel.getChannels.queryOptions()
+    _trpc.channel.getChannels.queryOptions(),
   );
 
   if (channels.length === 0) return null;
@@ -40,9 +42,22 @@ export function BlogHomeChannels() {
     <View className="pt-4 pb-2">
       {/* Section header */}
       <View className="flex-row items-center justify-between px-4 mb-3">
-        <Text className="text-base font-bold text-foreground">{t("channels")}</Text>
-        <Pressable onPress={() => router.push("/channels" as any)} className="active:opacity-70">
-          <Text className="text-sm font-medium text-primary">{t("viewAll")}</Text>
+        <Text
+          className="text-base font-bold text-foreground"
+          style={{ color: colors.foreground }}
+        >
+          {t("channels")}
+        </Text>
+        <Pressable
+          onPress={() => router.push("/channels" as any)}
+          className="active:opacity-70"
+        >
+          <Text
+            className="text-sm font-medium text-primary"
+            style={{ color: colors.primary }}
+          >
+            {t("viewAll")}
+          </Text>
         </Pressable>
       </View>
 
@@ -75,10 +90,14 @@ export function BlogHomeChannels() {
             <Text
               className="text-xs font-medium text-foreground text-center"
               numberOfLines={2}
+              style={{ color: colors.foreground }}
             >
               {ch.title ?? ch.username}
             </Text>
-            <Text className="text-[10px] text-muted-foreground">
+            <Text
+              className="text-[10px] text-muted-foreground"
+              style={{ color: colors.mutedForeground }}
+            >
               {ch.stats.totalBlogs} posts
             </Text>
           </Pressable>

@@ -20,7 +20,7 @@ export default function SearchScreen() {
   const inputRef = useRef<TextInput>(null);
 
   const { data: recentSearches = [] } = useQuery(
-    _trpc.blog.getRecentSearches.queryOptions({ limit: 10 })
+    _trpc.blog.getRecentSearches.queryOptions({ limit: 10 }),
   );
 
   const { data: tags = [] } = useQuery(_trpc.blog.getTags.queryOptions());
@@ -29,7 +29,7 @@ export default function SearchScreen() {
     _trpc.blog.search.queryOptions(
       { q: submitted },
       { enabled: submitted.length > 0 },
-    )
+    ),
   );
 
   const saveSearch = useMutation(_trpc.blog.saveSearch.mutationOptions());
@@ -54,7 +54,10 @@ export default function SearchScreen() {
   const showResults = submitted.length > 0;
 
   return (
-    <View className="flex-1 bg-background">
+    <View
+      className="flex-1 bg-background"
+      style={{ backgroundColor: colors.background }}
+    >
       <SafeArea>
         {/* Search bar row */}
         <View className="flex-row items-center gap-3 px-4 py-3">
@@ -75,7 +78,12 @@ export default function SearchScreen() {
               onSubmitEditing={() => handleSubmit(query)}
               autoFocus
               returnKeyType="search"
-              style={{ flex: 1, fontSize: 14, color: colors.foreground, paddingVertical: 0 }}
+              style={{
+                flex: 1,
+                fontSize: 14,
+                color: colors.foreground,
+                paddingVertical: 0,
+              }}
             />
             {query.length > 0 && (
               <Pressable
@@ -95,13 +103,18 @@ export default function SearchScreen() {
           /* ── Results ── */
           results.length === 0 ? (
             <View className="flex-1 items-center justify-center gap-2">
-              <Icon name="SearchX" size={40} className="text-muted-foreground" />
+              <Icon
+                name="SearchX"
+                size={40}
+                className="text-muted-foreground"
+              />
               <Text className="text-muted-foreground">
                 {t("noResultsFor", { query: submitted })}
               </Text>
             </View>
           ) : (
             <FlatList
+              style={{ backgroundColor: colors.background }}
               data={results}
               keyExtractor={(item: any) => String(item.id)}
               contentContainerClassName="px-4 pb-8"
@@ -110,7 +123,10 @@ export default function SearchScreen() {
                 <Pressable
                   onPress={() =>
                     router.push(
-                      getBlogHref({ id: item.id, type: item.type } as any) as any,
+                      getBlogHref({
+                        id: item.id,
+                        type: item.type,
+                      } as any) as any,
                     )
                   }
                   className="bg-card rounded-xl px-4 py-3 active:opacity-80"
@@ -131,7 +147,10 @@ export default function SearchScreen() {
                   {item.blogTags?.length > 0 && (
                     <View className="flex-row gap-1.5 mt-2 flex-wrap">
                       {item.blogTags.slice(0, 3).map((bt: any, i: number) => (
-                        <View key={i} className="px-2 py-0.5 rounded-md bg-muted">
+                        <View
+                          key={i}
+                          className="px-2 py-0.5 rounded-md bg-muted"
+                        >
                           <Text className="text-[10px] font-medium text-muted-foreground">
                             #{bt.tags?.title}
                           </Text>
@@ -144,7 +163,11 @@ export default function SearchScreen() {
             />
           )
         ) : (
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerClassName="pb-8">
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            style={{ backgroundColor: colors.background }}
+            contentContainerClassName="pb-8"
+          >
             {/* Recent Searches */}
             {recentSearches.length > 0 && (
               <View className="px-4 pt-4">
@@ -160,8 +183,14 @@ export default function SearchScreen() {
                       onPress={() => handleRecentPress(item.searchTerm)}
                       className="flex-row items-center gap-3 py-2.5 active:opacity-70"
                     >
-                      <Icon name="Clock" size={16} className="text-muted-foreground" />
-                      <Text className="flex-1 text-sm text-foreground">{item.searchTerm}</Text>
+                      <Icon
+                        name="Clock"
+                        size={16}
+                        className="text-muted-foreground"
+                      />
+                      <Text className="flex-1 text-sm text-foreground">
+                        {item.searchTerm}
+                      </Text>
                     </Pressable>
                   ))}
                 </View>

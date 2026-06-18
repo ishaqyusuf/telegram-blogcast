@@ -5,14 +5,10 @@ import { ThemeProvider } from "@react-navigation/native";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import "react-native-reanimated";
 import "@/styles/global.css";
-import {
-  AuthProvider,
-  useAuthContext,
-  useCreateAuthContext,
-} from "@/hooks/use-auth";
+import { AuthProvider, useCreateAuthContext } from "@/hooks/use-auth";
 
 import Toast from "react-native-toast-message";
 import { ToastProviderWithViewport } from "@/components/ui/toast";
@@ -26,10 +22,11 @@ import { View } from "react-native";
 import { StaticRouter } from "@/components/static-router";
 import { GlobalAudioBar } from "@/components/global-audio-bar";
 import { KeyboardProvider } from "react-native-keyboard-controller";
-import { useColorScheme } from "@/hooks/use-color";
+import { useColorScheme, useColors } from "@/hooks/use-color";
 import { initSentry, Sentry } from "@/lib/sentry";
 import { getThemeOverride } from "@/lib/theme-preference";
 import { initLocalDb } from "@/db/local-db";
+import { useAudioStore } from "@/store/audio-store";
 export {
   // Catch any errors thrown by the Layout component.
   ErrorBoundary,
@@ -42,6 +39,18 @@ export const unstable_settings = {
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 initSentry();
+
+function AudioBootstrap() {
+  const restoreAudio = useAudioStore((s) => s.restoreAudio);
+
+  useEffect(() => {
+    restoreAudio().catch((error) => {
+      console.warn("[audio] restore failed", error);
+    });
+  }, [restoreAudio]);
+
+  return null;
+}
 
 function RootLayout() {
   const [loaded, error] = useFonts({
@@ -73,18 +82,24 @@ function RootLayout() {
   return <RootLayoutNav />;
 }
 const InitialLayout = () => {
-  const { token, isInstaller, isAdmin, profile } = useAuthContext();
-  // console.log({ isInstaller, isAdmin, can: profile?.can });
+  const colors = useColors();
 
   return (
     <>
       <TRPCReactProvider>
         <StaticTrpc />
         <StaticRouter />
+        <AudioBootstrap />
         <AppStatusBar />
         {/* <StatusBar style="auto" /> */}
 
-        <Stack initialRouteName="index" screenOptions={{ headerShown: false }}>
+        <Stack
+          initialRouteName="index"
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: colors.background },
+          }}
+        >
           <Stack.Screen name="index" />
           <Stack.Screen name="home" />
           <Stack.Screen name="blog-view-2/[blogId]/index" />
@@ -120,9 +135,9 @@ const InitialLayout = () => {
           <Stack.Screen
             name="blog-options/[blogId]/index"
             options={{
-              presentation: "formSheet",
-              sheetGrabberVisible: true,
-              sheetAllowedDetents: [0.4, 0.7],
+              presentation: "transparentModal",
+              animation: "fade",
+              headerShown: false,
               contentStyle: { backgroundColor: "transparent" },
             }}
           />
@@ -168,6 +183,7 @@ const InitialLayout = () => {
 function RootLayoutNav() {
   const { setColorScheme } = useColorScheme();
   const theme = useThemeConfig();
+  const colors = useColors();
 
   useEffect(() => {
     let mounted = true;
@@ -184,7 +200,10 @@ function RootLayoutNav() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <KeyboardProvider>
-        <View className="flex-1 bg-background">
+        <View
+          className="flex-1 bg-background"
+          style={{ backgroundColor: colors.background }}
+        >
           <ThemeProvider value={theme}>
             <AuthProvider value={useCreateAuthContext()}>
               <ToastProviderWithViewport>

@@ -1,17 +1,23 @@
 import { Pressable } from "@/components/ui/pressable";
 import { Icon } from "@/components/ui/icon";
+import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import { Text, useWindowDimensions, View } from "react-native";
+import { useWindowDimensions, View } from "react-native";
 import { useCallback, useMemo, useRef } from "react";
 import ReanimatedSwipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import Animated, {
   Extrapolation,
   interpolate,
+  interpolateColor,
+  runOnJS,
   type SharedValue,
+  useAnimatedReaction,
   useAnimatedStyle,
 } from "react-native-reanimated";
 
 import { useRecentlyViewedStore } from "@/store/recently-viewed-store";
+import { useColors } from "@/hooks/use-color";
+import { withAlpha } from "@/lib/theme";
 
 import { CardFooter } from "./card-footer";
 import { CardHeader } from "./card-header";
@@ -34,6 +40,7 @@ export function BlogCard({
   const router = useRouter();
   const { width } = useWindowDimensions();
   const markViewed = useRecentlyViewedStore((state) => state.markViewed);
+  const colors = useColors();
   const swipeRef = useRef<any>(null);
   const isDeletingRef = useRef(false);
   const variant = resolveVariant(post);
@@ -95,6 +102,10 @@ export function BlogCard({
       <Pressable
         onPress={handlePress}
         className="border-b border-border bg-background px-4 py-4 active:bg-muted/40"
+        style={{
+          backgroundColor: colors.background,
+          borderBottomColor: colors.border,
+        }}
       >
         <CardHeader
           post={post}
@@ -119,11 +130,51 @@ function SwipeDeleteAction({
   actionWidth: number;
   fullSwipeThreshold: number;
 }) {
+  const colors = useColors();
+  const destructive = colors.destructive;
+  const transparentDestructive = useMemo(
+    () => withAlpha(destructive, 0),
+    [destructive],
+  );
+  const subtleDestructive = useMemo(
+    () => withAlpha(destructive, 0.1),
+    [destructive],
+  );
+  const softDestructive = useMemo(
+    () => withAlpha(destructive, 0.18),
+    [destructive],
+  );
+  const strongDestructive = useMemo(
+    () => withAlpha(destructive, 0.82),
+    [destructive],
+  );
+
   const actionStyle = useAnimatedStyle(() => {
+    const drag = Math.abs(translation.value);
+
     return {
       opacity: progress.value === 0 ? 0 : 1,
+      backgroundColor: interpolateColor(
+        drag,
+        [0, fullSwipeThreshold * 0.6, fullSwipeThreshold],
+        [transparentDestructive, subtleDestructive, softDestructive],
+      ),
     };
   });
+
+  const triggerThresholdHaptic = useCallback(() => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  }, []);
+
+  useAnimatedReaction(
+    () => Math.abs(translation.value) >= fullSwipeThreshold,
+    (isPastThreshold, wasPastThreshold) => {
+      if (isPastThreshold && !wasPastThreshold) {
+        runOnJS(triggerThresholdHaptic)();
+      }
+    },
+    [fullSwipeThreshold, triggerThresholdHaptic],
+  );
 
   const contentStyle = useAnimatedStyle(() => {
     const drag = Math.abs(translation.value);
@@ -140,7 +191,7 @@ function SwipeDeleteAction({
           translateX: interpolate(
             drag,
             [0, fullSwipeThreshold * 0.45, fullSwipeThreshold],
-            [36, 0, -Math.min(actionWidth * 0.18, 76)],
+            [28, 0, -Math.min(actionWidth * 0.14, 56)],
             Extrapolation.CLAMP,
           ),
         },
@@ -156,18 +207,103 @@ function SwipeDeleteAction({
     };
   });
 
+  const iconShellStyle = useAnimatedStyle(() => {
+    const drag = Math.abs(translation.value);
+
+    return {
+      backgroundColor: interpolateColor(
+        drag,
+        [0, fullSwipeThreshold * 0.72, fullSwipeThreshold],
+        [strongDestructive, destructive, destructive],
+      ),
+      transform: [
+        {
+          scale: interpolate(
+            drag,
+            [0, fullSwipeThreshold * 0.72, fullSwipeThreshold],
+            [0.92, 1, 1.05],
+            Extrapolation.CLAMP,
+          ),
+        },
+      ],
+    };
+  });
+
+  const deleteLabelStyle = useAnimatedStyle(() => {
+    const drag = Math.abs(translation.value);
+
+    return {
+      opacity: interpolate(
+        drag,
+        [0, fullSwipeThreshold * 0.74, fullSwipeThreshold * 0.9],
+        [1, 1, 0],
+        Extrapolation.CLAMP,
+      ),
+      transform: [
+        {
+          translateY: interpolate(
+            drag,
+            [fullSwipeThreshold * 0.74, fullSwipeThreshold],
+            [0, -4],
+            Extrapolation.CLAMP,
+          ),
+        },
+      ],
+    };
+  });
+
+  const releaseLabelStyle = useAnimatedStyle(() => {
+    const drag = Math.abs(translation.value);
+
+    return {
+      opacity: interpolate(
+        drag,
+        [fullSwipeThreshold * 0.78, fullSwipeThreshold],
+        [0, 1],
+        Extrapolation.CLAMP,
+      ),
+      transform: [
+        {
+          translateY: interpolate(
+            drag,
+            [fullSwipeThreshold * 0.78, fullSwipeThreshold],
+            [4, 0],
+            Extrapolation.CLAMP,
+          ),
+        },
+      ],
+    };
+  });
+
   return (
     <Animated.View
-      className="h-full items-end justify-center bg-destructive px-6"
+      className="h-full items-end justify-center px-4"
       style={[{ width: actionWidth }, actionStyle]}
     >
-      <Animated.View className="items-center gap-1" style={contentStyle}>
-        <View className="h-12 w-12 items-center justify-center rounded-full bg-white/20">
-          <Icon name="Trash2" size={24} className="text-white" />
+      <Animated.View
+        className="min-h-16 min-w-20 items-center justify-center gap-1"
+        style={contentStyle}
+      >
+        <Animated.View
+          className="h-12 w-12 items-center justify-center rounded-full shadow-sm"
+          style={iconShellStyle}
+        >
+          <Icon name="Trash2" className="size-md text-destructive-foreground" />
+        </Animated.View>
+        <View className="h-4 w-20 items-center justify-center">
+          <Animated.Text
+            className="absolute text-[11px] font-semibold uppercase text-destructive"
+            style={[{ color: destructive }, deleteLabelStyle]}
+          >
+            Delete
+          </Animated.Text>
+          <Animated.Text
+            className="absolute text-[11px] font-semibold uppercase text-destructive"
+            style={[{ color: destructive }, releaseLabelStyle]}
+          >
+            Release
+          </Animated.Text>
         </View>
-        <Text className="text-xs font-semibold uppercase text-white">
-          Delete
-        </Text>
       </Animated.View>
     </Animated.View>
   );

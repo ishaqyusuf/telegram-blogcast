@@ -117,9 +117,7 @@ function AudioBookReferences({
     const refs = Array.isArray((album as any)?.bookReferences)
       ? ((album as any).bookReferences as any[])
       : [];
-    return refs
-      .map((reference) => reference.book)
-      .filter((book) => book?.id);
+    return refs.map((reference) => reference.book).filter((book) => book?.id);
   }, [album]);
   const libraryBooks = useMemo(
     () =>
@@ -136,7 +134,10 @@ function AudioBookReferences({
 
   useEffect(() => {
     if (candidateBooks.length === 0) return;
-    if (selectedBookId && candidateBooks.some((book: any) => book.id === selectedBookId)) {
+    if (
+      selectedBookId &&
+      candidateBooks.some((book: any) => book.id === selectedBookId)
+    ) {
       return;
     }
     setSelectedBookId(candidateBooks[0].id);
@@ -146,7 +147,9 @@ function AudioBookReferences({
     _trpc.album.addMediaBookPageReference.mutationOptions({
       onSuccess: () => {
         qc.invalidateQueries({
-          queryKey: _trpc.album.getMediaBookPageReferences.queryKey({ mediaId }),
+          queryKey: _trpc.album.getMediaBookPageReferences.queryKey({
+            mediaId,
+          }),
         });
         setPageIdInput("");
         setPageSearch("");
@@ -155,16 +158,19 @@ function AudioBookReferences({
       onError: (e) => Alert.alert("خطأ", e.message),
     }),
   );
-  const { mutate: deleteReference, isPending: isDeletingReference } = useMutation(
-    _trpc.album.deleteMediaBookPageReference.mutationOptions({
-      onSuccess: () => {
-        qc.invalidateQueries({
-          queryKey: _trpc.album.getMediaBookPageReferences.queryKey({ mediaId }),
-        });
-      },
-      onError: (e) => Alert.alert("خطأ", e.message),
-    }),
-  );
+  const { mutate: deleteReference, isPending: isDeletingReference } =
+    useMutation(
+      _trpc.album.deleteMediaBookPageReference.mutationOptions({
+        onSuccess: () => {
+          qc.invalidateQueries({
+            queryKey: _trpc.album.getMediaBookPageReferences.queryKey({
+              mediaId,
+            }),
+          });
+        },
+        onError: (e) => Alert.alert("خطأ", e.message),
+      }),
+    );
 
   const pageId = Number(pageIdInput.trim());
   const canAttach = Number.isFinite(pageId) && pageId > 0;
@@ -180,8 +186,16 @@ function AudioBookReferences({
 
   return (
     <View style={{ gap: 10, marginHorizontal: 24, marginTop: 14 }}>
-      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-        <Text style={{ fontSize: 14, fontWeight: "700", color: colors.foreground }}>
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
+        <Text
+          style={{ fontSize: 14, fontWeight: "700", color: colors.foreground }}
+        >
           Book pages
         </Text>
         <Text style={{ fontSize: 12, color: colors.mutedForeground }}>
@@ -203,8 +217,17 @@ function AudioBookReferences({
           }}
         >
           <Pressable
-            onPress={() => router.push(`/books/${reference.bookId}/reader/${reference.pageId}` as any)}
-            style={{ flex: 1, flexDirection: "row-reverse", alignItems: "center", gap: 9 }}
+            onPress={() =>
+              router.push(
+                `/books/${reference.bookId}/reader/${reference.pageId}` as any,
+              )
+            }
+            style={{
+              flex: 1,
+              flexDirection: "row-reverse",
+              alignItems: "center",
+              gap: 9,
+            }}
           >
             <Icon name="BookOpen" size={16} className="text-primary" />
             <View style={{ flex: 1 }}>
@@ -223,8 +246,16 @@ function AudioBookReferences({
                   reference.book?.nameAr ??
                   "Book page"}
               </Text>
-              <Text style={{ fontSize: 11, color: colors.mutedForeground, textAlign: "right" }}>
-                {reference.startSec != null ? formatMs(reference.startSec * 1000) : "No timestamp"}
+              <Text
+                style={{
+                  fontSize: 11,
+                  color: colors.mutedForeground,
+                  textAlign: "right",
+                }}
+              >
+                {reference.startSec != null
+                  ? formatMs(reference.startSec * 1000)
+                  : "No timestamp"}
               </Text>
             </View>
           </Pressable>
@@ -246,8 +277,20 @@ function AudioBookReferences({
       ))}
 
       {mediaReferences.length === 0 ? (
-        <View style={{ borderRadius: 12, backgroundColor: colors.card, padding: 12 }}>
-          <Text style={{ fontSize: 12, color: colors.mutedForeground, textAlign: "center" }}>
+        <View
+          style={{
+            borderRadius: 12,
+            backgroundColor: colors.card,
+            padding: 12,
+          }}
+        >
+          <Text
+            style={{
+              fontSize: 12,
+              color: colors.mutedForeground,
+              textAlign: "center",
+            }}
+          >
             No book pages referenced yet.
           </Text>
         </View>
@@ -262,7 +305,11 @@ function AudioBookReferences({
         }}
       >
         {candidateBooks.length > 0 && (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 8 }}
+          >
             {candidateBooks.map((book: any) => {
               const selected = selectedBookId === book.id;
               return (
@@ -272,7 +319,9 @@ function AudioBookReferences({
                   style={{
                     maxWidth: 180,
                     borderRadius: 999,
-                    backgroundColor: selected ? colors.primary : colors.background,
+                    backgroundColor: selected
+                      ? colors.primary
+                      : colors.background,
                     borderWidth: 1,
                     borderColor: selected ? colors.primary : colors.border,
                     paddingHorizontal: 12,
@@ -281,7 +330,9 @@ function AudioBookReferences({
                 >
                   <Text
                     style={{
-                      color: selected ? colors.primaryForeground : colors.foreground,
+                      color: selected
+                        ? colors.primaryForeground
+                        : colors.foreground,
                       fontSize: 12,
                       fontWeight: "700",
                       textAlign: "right",
@@ -345,7 +396,9 @@ function AudioBookReferences({
                 }}
                 numberOfLines={1}
               >
-                {result.chapterTitle ?? result.topicTitle ?? `Page ${result.shamelaPageNo}`}
+                {result.chapterTitle ??
+                  result.topicTitle ??
+                  `Page ${result.shamelaPageNo}`}
               </Text>
               <Text
                 style={{
@@ -410,9 +463,19 @@ function AudioBookReferences({
           {isPending ? (
             <ActivityIndicator size="small" color={colors.primaryForeground} />
           ) : (
-            <Icon name="BookOpen" size={15} className="text-primary-foreground" />
+            <Icon
+              name="BookOpen"
+              size={15}
+              className="text-primary-foreground"
+            />
           )}
-          <Text style={{ fontSize: 13, fontWeight: "700", color: colors.primaryForeground }}>
+          <Text
+            style={{
+              fontSize: 13,
+              fontWeight: "700",
+              color: colors.primaryForeground,
+            }}
+          >
             Attach current time to page
           </Text>
         </Pressable>
@@ -693,7 +756,9 @@ function PlayerSection() {
   const setPlaybackRate = useAudioStore((s) => s.setPlaybackRate);
 
   const cycleSpeed = () => {
-    const idx = SPEED_OPTIONS.findIndex((r) => Math.abs(playbackRate - r) < 0.01);
+    const idx = SPEED_OPTIONS.findIndex(
+      (r) => Math.abs(playbackRate - r) < 0.01,
+    );
     const next = SPEED_OPTIONS[(idx + 1) % SPEED_OPTIONS.length]!;
     setPlaybackRate(next);
   };
@@ -710,8 +775,12 @@ function PlayerSection() {
   const trackWidthRef = useRef(0);
   const durationRef = useRef(duration);
   const seekRef = useRef(seek);
-  useEffect(() => { durationRef.current = duration; }, [duration]);
-  useEffect(() => { seekRef.current = seek; }, [seek]);
+  useEffect(() => {
+    durationRef.current = duration;
+  }, [duration]);
+  useEffect(() => {
+    seekRef.current = seek;
+  }, [seek]);
 
   // Sync store position → animated value when not dragging
   useEffect(() => {
@@ -733,11 +802,19 @@ function PlayerSection() {
   // Interpolated pixel positions — recalculated only when trackWidth changes
   const KNOB = 16;
   const fillWidth = useMemo(
-    () => progressAnim.interpolate({ inputRange: [0, 1], outputRange: [0, trackWidth] }),
+    () =>
+      progressAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [0, trackWidth],
+      }),
     [trackWidth],
   );
   const knobLeft = useMemo(
-    () => progressAnim.interpolate({ inputRange: [0, 1], outputRange: [-(KNOB / 2), trackWidth - KNOB / 2] }),
+    () =>
+      progressAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: [-(KNOB / 2), trackWidth - KNOB / 2],
+      }),
     [trackWidth],
   );
 
@@ -1552,7 +1629,11 @@ export default function AudioBlogScreen() {
   const router = useRouter();
   const qc = useQueryClient();
   const colors = useColors();
-  const { blogId, openComments: openCommentsParam, seekSec: seekSecParam } = useLocalSearchParams<{
+  const {
+    blogId,
+    openComments: openCommentsParam,
+    seekSec: seekSecParam,
+  } = useLocalSearchParams<{
     blogId: string;
     openComments?: string;
     seekSec?: string;
@@ -1634,7 +1715,13 @@ export default function AudioBlogScreen() {
   }, [id, seekSecParam]);
 
   useEffect(() => {
-    if (!hasSeekTarget || !blog || loadedBlog?.id !== blog.id || !sound || seekAppliedRef.current) {
+    if (
+      !hasSeekTarget ||
+      !blog ||
+      loadedBlog?.id !== blog.id ||
+      !sound ||
+      seekAppliedRef.current
+    ) {
       return;
     }
     seekAudio(Math.floor(seekTargetSec * 1000))
@@ -1673,7 +1760,10 @@ export default function AudioBlogScreen() {
   }
 
   return (
-    <View className="flex-1 bg-background">
+    <View
+      className="flex-1 bg-background"
+      style={{ backgroundColor: colors.background }}
+    >
       <SafeArea style={{ flex: 1 }}>
         {/* ── Comments inline view (YouTube-style) ───────────────── */}
         {showComments ? (
@@ -1841,7 +1931,10 @@ export default function AudioBlogScreen() {
               </View>
 
               {mediaId ? (
-                <AudioBookReferences mediaId={mediaId} albumId={media?.albumId} />
+                <AudioBookReferences
+                  mediaId={mediaId}
+                  albumId={media?.albumId}
+                />
               ) : null}
 
               {/* Tabs */}

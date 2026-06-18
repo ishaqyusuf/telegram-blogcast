@@ -76,6 +76,7 @@ import {
   Share02Icon as Share2,
   ShuffleIcon as Shuffle,
   SparklesIcon as Sparkles,
+  Settings01Icon as Settings,
   Sun01Icon as Sun,
   Tick01Icon as Check,
   Timer01Icon as Timer,
@@ -83,6 +84,7 @@ import {
   UserIcon as User,
   VolumeHighIcon as Volume2,
   Vynil03Icon as Disc3,
+  Wifi01Icon as Wifi,
   WifiOff01Icon as WifiOff,
   WorkHistoryIcon as History,
 } from "@hugeicons/core-free-icons";
@@ -149,6 +151,7 @@ const appIcons = {
   FolderOpen,
   BadgeCheck,
   Bell,
+  Settings,
   AudioWaveform,
   AudioLines,
   SkipForward,
@@ -161,6 +164,7 @@ const appIcons = {
   Copy,
   ListMusic,
   Disc3,
+  Wifi,
   CheckCircle2,
   SearchX,
   Loader,
@@ -175,11 +179,13 @@ const appIcons = {
   BookOpen,
   BookMarked,
   RefreshCw,
+  RefreshCcw: RotateCcw,
   WifiOff,
   HardDrive,
   AlertCircle,
   Layers,
   Check,
+  Circle: Radio,
   Radio,
   Lock,
   Info,
@@ -195,7 +201,10 @@ export type IconProps = Omit<HugeiconsProps, "icon"> & {
   name?: IconKeys;
 };
 
-function resolveColor(className?: string, colorScheme: "light" | "dark" = "light") {
+function resolveColor(
+  className?: string,
+  colorScheme: "light" | "dark" = "light",
+) {
   const textToken = className
     ?.split(" ")
     .reverse()
@@ -206,7 +215,7 @@ function resolveColor(className?: string, colorScheme: "light" | "dark" = "light
     ? camel(colorToken.split("-").join(" "))
     : undefined;
   const color = colorKey
-    ? THEME[colorScheme][colorKey as keyof typeof THEME.light] ?? colorKey
+    ? (THEME[colorScheme][colorKey as keyof typeof THEME.light] ?? colorKey)
     : undefined;
   const parsedOpacity = opacityToken ? Number(opacityToken) : undefined;
   const opacity =
@@ -247,12 +256,13 @@ function IconImpl({ name = "X", className, size, style, ...props }: IconProps) {
   const { color, opacity } = resolveColor(className, colorScheme);
   const otherClasses = className
     ?.split(" ")
-    .filter((token) => ["size-", "text-"].every((prefix) => !token.startsWith(prefix)));
+    .filter((token) =>
+      ["size-", "text-"].every((prefix) => !token.startsWith(prefix)),
+    );
 
   const iconNode = (
     <HugeiconsIcon
       icon={icon}
-      className={className}
       size={resolveSize(className, size)}
       color={color}
       style={opacity === undefined ? style : ([style, { opacity }] as any)}

@@ -1,5 +1,6 @@
 import { Platform, StyleProp, View, ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useColors } from "@/hooks/use-color";
 
 export function SafeArea({
   children,
@@ -9,19 +10,23 @@ export function SafeArea({
   style?: StyleProp<ViewStyle>;
 }) {
   const insets = useSafeAreaInsets();
+  const colors = useColors();
   return (
-    // <View className="flex-1">
     <View
-      style={{
-        ...(style || ({} as any)),
-        paddingTop: Platform.select({
-          android: insets.top,
-        }),
-        flex: 1,
-      }}
+      style={[
+        {
+          flex: 1,
+          backgroundColor: colors.background,
+        },
+        style,
+        {
+          paddingTop: Platform.select({
+            android: insets.top,
+          }),
+        },
+      ]}
     >
       {children}
     </View>
-    // </View>
   );
 }

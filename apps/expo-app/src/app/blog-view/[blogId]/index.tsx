@@ -2,11 +2,13 @@ import { DesignSwitch } from "@/components/design-switch";
 import { _trpc } from "@/components/static-trpc";
 import BlogViewAudio from "@/screens.example/blog-view-audio";
 import BlogViewText from "@/screens.example/blog-view-text";
+import { useColors } from "@/hooks/use-color";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams } from "expo-router";
 import { ActivityIndicator, Text, View } from "react-native";
 
 export default function BlogViewPage() {
+  const colors = useColors();
   const { blogId } = useLocalSearchParams<{ blogId?: string }>();
   const id = Number(blogId);
   const canQuery = Number.isFinite(id) && id > 0;
@@ -22,8 +24,14 @@ export default function BlogViewPage() {
 
   if (!canQuery) {
     return (
-      <View className="flex-1 items-center justify-center bg-background px-6">
-        <Text className="text-base font-semibold text-foreground">
+      <View
+        className="flex-1 items-center justify-center bg-background px-6"
+        style={{ backgroundColor: colors.background }}
+      >
+        <Text
+          className="text-base font-semibold text-foreground"
+          style={{ color: colors.foreground }}
+        >
           Invalid blog id
         </Text>
       </View>
@@ -32,9 +40,17 @@ export default function BlogViewPage() {
 
   if (isPending) {
     return (
-      <View className="flex-1 items-center justify-center gap-3 bg-background">
-        <ActivityIndicator />
-        <Text className="text-sm text-muted-foreground">Loading design...</Text>
+      <View
+        className="flex-1 items-center justify-center gap-3 bg-background"
+        style={{ backgroundColor: colors.background }}
+      >
+        <ActivityIndicator color={colors.primary} />
+        <Text
+          className="text-sm text-muted-foreground"
+          style={{ color: colors.mutedForeground }}
+        >
+          Loading design...
+        </Text>
       </View>
     );
   }

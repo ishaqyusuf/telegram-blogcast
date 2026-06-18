@@ -3,6 +3,7 @@ import { SafeArea } from "@/components/safe-area";
 import { Icon } from "@/components/ui/icon";
 import React from "react";
 import { View, Text, ScrollView, Image } from "react-native";
+import { useColors } from "@/hooks/use-color";
 
 // --- Sub-Components ---
 
@@ -71,8 +72,8 @@ const ArticleBody = () => (
     {/* Pull Quote */}
     <View className="bg-card border-r-4 border-accent rounded-l-xl p-6 my-2 shadow-sm">
       <Text className="text-xl font-bold text-accent italic text-right writing-direction-rtl leading-relaxed">
-        "الغربة ليست مكاناً نعيش فيه، بل هي حالة تعيش فينا، تعيد صياغة أحلامنا
-        وتصوراتنا عن الانتماء."
+        {'"'}الغربة ليست مكاناً نعيش فيه، بل هي حالة تعيش فينا، تعيد صياغة
+        أحلامنا وتصوراتنا عن الانتماء.{'"'}
       </Text>
     </View>
 
@@ -196,12 +197,17 @@ const BottomNav = () => (
 );
 
 export default function BlogViewText() {
+  const colors = useColors();
   return (
-    <View className="flex-1 bg-background">
+    <View
+      className="flex-1 bg-background"
+      style={{ backgroundColor: colors.background }}
+    >
       <SafeArea>
         <Header />
         <ScrollView
           className="flex-1"
+          style={{ backgroundColor: colors.background }}
           contentContainerClassName="px-4 pt-4 pb-48"
           showsVerticalScrollIndicator={false}
         >

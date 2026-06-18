@@ -34,6 +34,12 @@ Tracks the current audio playback experience, supporting components, and future 
 
 ### State And Persistence
 - Store: `apps/expo-app/src/store/audio-store.ts`
+- Android playback engine: `react-native-track-player` for native media-session playback, notification controls, lock-screen controls, and headset/Bluetooth remote events.
+- iOS currently keeps the previous `expo-av` playback path; iOS lock-screen / Control Center support is intentionally deferred.
+- Native service:
+  - `apps/expo-app/index.js` registers the playback service before Expo Router starts.
+  - `apps/expo-app/src/services/audio-player/playback-service.ts` handles remote play, pause, seek, duck/interruption, and 15-second jump events.
+  - `apps/expo-app/src/services/audio-player/setup-track-player.ts` configures media notification capabilities and background behavior.
 - Known tracked state:
   - URI
   - Local path
@@ -46,6 +52,7 @@ Tracks the current audio playback experience, supporting components, and future 
 ### UX Notes
 - Persistent mini-player is a core interaction pattern.
 - Quick seek controls are part of the intended experience.
+- Android system player controls expose play/pause, seek, and 15-second jump backward/forward actions through media notifications, lock screen, and compatible headset/Bluetooth controls. The operating system owns the final notification/card visual treatment; the app supplies metadata, artwork, progress, and actions.
 - Custom skip icons exist because the desired transport affordance was not available out of the box.
 - Audio comments default to timestamp metadata on the play screen and render seekable timestamp chips.
 - Album suggestions are same-channel audio candidates, ranked by matching tags.

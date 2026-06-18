@@ -1,11 +1,10 @@
-import { CommentsSheet } from "@/components/comments-sheet";
+import { CommentContent } from "@/components/comments-sheet";
 import { CommentInput } from "@/components/comments-sheet/comment-input";
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";
 import { Pressable } from "@/components/ui/pressable";
 import { useColors } from "@/hooks/use-color";
-import { useCommentsSheet } from "@/hooks/use-comments-sheet";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { withAlpha } from "@/lib/theme";
 import { cn } from "@/lib/utils";
@@ -30,7 +29,6 @@ export default function TextBlogScreen() {
   const router = useRouter();
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { onOpen: openComments } = useCommentsSheet();
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const numericBlogId = Number(blogId);
 
@@ -80,7 +78,10 @@ export default function TextBlogScreen() {
   const commentCount = blog.blogs?.length ?? 0;
 
   return (
-    <View className="flex-1 bg-background">
+    <View
+      className="flex-1 bg-background"
+      style={{ backgroundColor: colors.background }}
+    >
       <SafeArea>
         <View className="flex-row items-center justify-between border-b border-border px-4 py-3">
           <Pressable
@@ -111,6 +112,7 @@ export default function TextBlogScreen() {
         </View>
 
         <ScrollView
+          style={{ backgroundColor: colors.background }}
           contentContainerStyle={{ paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
@@ -160,13 +162,16 @@ export default function TextBlogScreen() {
             ))}
           </View>
 
-          <Pressable
-            onPress={openComments}
-            className="mx-5 mb-4 flex-row items-center justify-between rounded-xl bg-card p-4 active:opacity-80"
-          >
-            <View className="flex-row items-center gap-2">
-              <Icon name="MessageCircle" size={18} className="text-foreground" />
-              <Text className="text-sm font-bold text-foreground">Comments</Text>
+          <View className="mx-5 mb-4 border-t border-border pt-5">
+            <View className="mb-1 flex-row items-center gap-2">
+              <Icon
+                name="MessageCircle"
+                size={18}
+                className="text-foreground"
+              />
+              <Text className="text-sm font-bold text-foreground">
+                Comments
+              </Text>
               {commentCount > 0 && (
                 <View className="rounded-full bg-muted px-1.5 py-0.5">
                   <Text className="text-xs text-muted-foreground">
@@ -175,14 +180,8 @@ export default function TextBlogScreen() {
                 </View>
               )}
             </View>
-            <Icon
-              name="ChevronRight"
-              size={16}
-              className="text-muted-foreground"
-            />
-          </Pressable>
-
-          <CommentsSheet blogId={numericBlogId} />
+            <CommentContent blogId={numericBlogId} />
+          </View>
         </ScrollView>
 
         <View

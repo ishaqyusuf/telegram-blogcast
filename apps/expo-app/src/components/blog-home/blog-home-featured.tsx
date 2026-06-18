@@ -1,4 +1,5 @@
 import { Pressable } from "@/components/ui/pressable";
+import { useColors } from "@/hooks/use-color";
 import { Text, View } from "react-native";
 
 const FEATURED_ITEMS = [
@@ -19,15 +20,17 @@ function getInitials(label: string) {
 }
 
 export function BlogHomeFeatured() {
+  const colors = useColors();
+
   return (
     <View className="px-4 pt-4 pb-2">
       <View className="flex-row flex-wrap gap-2">
         {FEATURED_ITEMS.map((item) => (
-          <Pressable
-            key={item.label}
-            className="w-[48%] active:opacity-80"
-          >
-            <View className="flex-row items-center rounded-lg overflow-hidden bg-card h-14">
+          <Pressable key={item.label} className="w-[48%] active:opacity-80">
+            <View
+              className="flex-row items-center rounded-lg overflow-hidden bg-card h-14"
+              style={{ backgroundColor: colors.card }}
+            >
               <View
                 style={{
                   width: 56,
@@ -45,6 +48,7 @@ export function BlogHomeFeatured() {
               <Text
                 className="flex-1 px-3 text-sm font-bold text-foreground"
                 numberOfLines={2}
+                style={{ color: colors.foreground }}
               >
                 {item.label}
               </Text>

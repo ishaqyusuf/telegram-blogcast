@@ -3,6 +3,7 @@ import { Icon, IconKeys } from "@/components/ui/icon";
 import React from "react";
 import { View, Text, ScrollView, Image } from "react-native";
 import { SafeArea } from "@/components/safe-area";
+import { useColors } from "@/hooks/use-color";
 
 const Header = () => (
   <View className="pt-16 pb-6 px-6 z-10">
@@ -165,10 +166,11 @@ const TranscriptSheet = () => (
           <Text className="text-sm leading-relaxed text-muted-foreground">
             <Text className="font-bold text-primary">12:45 </Text>
             So when we talk about the architecture of these large language
-            models, what's really fascinating is how the attention mechanism
+            models, {"what's"} really fascinating is how the attention mechanism
             specifically allows the model to weigh different parts of the input
-            sequence. It's not just reading left to right; it's understanding
-            context in a multi-dimensional way. This is crucial for...
+            sequence. {"It's"} not just reading left to right; {"it's"}{" "}
+            understanding context in a multi-dimensional way. This is crucial
+            for...
             <Text className="text-primary"> |</Text>
           </Text>
         </View>
@@ -181,8 +183,12 @@ const TranscriptSheet = () => (
 );
 
 export default function TranscribeAudio() {
+  const colors = useColors();
   return (
-    <View className="flex-1 bg-background">
+    <View
+      className="flex-1 bg-background"
+      style={{ backgroundColor: colors.background }}
+    >
       {/* Background Image Layer */}
       <View className="absolute inset-0 z-0 opacity-40">
         <Image

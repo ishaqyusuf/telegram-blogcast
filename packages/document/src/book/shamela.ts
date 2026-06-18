@@ -11,6 +11,38 @@ export type TenTapBreadcrumbItem = {
   role: "book-index" | "volume" | "topic" | "unknown";
 };
 
+export type ShamelaBookMetadata = {
+  shamelaBookId: number | null;
+  title: string | null;
+  bookPath: string | null;
+  bookUrl: string | null;
+  author: {
+    name: string;
+    path: string | null;
+    url: string | null;
+  } | null;
+  category: {
+    name: string;
+    path: string | null;
+    url: string | null;
+  } | null;
+};
+
+export type ShamelaTocNode = {
+  kind: "volume" | "chapter";
+  title: string;
+  path: string | null;
+  url: string | null;
+  shamelaPageNo: number | null;
+  volumeNumber: number | null;
+  depth: number;
+  sortOrder: number;
+  treePath: string;
+  parentTreePath: string | null;
+  active: boolean;
+  children: ShamelaTocNode[];
+};
+
 export type TenTapPageDocumentV1 = {
   version: "10tap.page.v1";
   source: {
@@ -39,6 +71,7 @@ export type TenTapPageDocumentV1 = {
         href: string | null;
       }>;
     }>;
+    toc: ShamelaTocNode[];
   };
   content: Array<
     | {
@@ -71,6 +104,7 @@ export type TenTapPageDocumentV1 = {
 };
 
 export type ShamelaOpenPageFacts = {
+  book: ShamelaBookMetadata;
   pageMeta: {
     shamelaBookId: number | null;
     shamelaPageNo: number | null;
@@ -96,6 +130,12 @@ export type ShamelaOpenPageFacts = {
         href: string | null;
       }>;
     }>;
+  };
+  toc: {
+    nodes: ShamelaTocNode[];
+    topLevelCount: number;
+    linkCount: number;
+    activeNode: ShamelaTocNode | null;
   };
   blocks: Array<{
     index: number;
@@ -174,6 +214,76 @@ function getPageNoFromUrl(rawUrl: string) {
   return Number.isFinite(value) ? value : null;
 }
 
+function getPathFromHref(rawHref: string | null | undefined) {
+  if (!rawHref || rawHref === "javascript:;") return null;
+  try {
+    const url = new URL(decodeHtmlEntities(rawHref), "https://shamela.ws");
+    return url.pathname.replace(/\/+$/, "") || "/";
+  } catch {
+    return null;
+  }
+}
+
+function getUrlFromPath(path: string | null | undefined) {
+  if (!path) return null;
+  try {
+    return new URL(path, "https://shamela.ws").toString();
+  } catch {
+    return null;
+  }
+}
+
+function extractHref(attrSource: string) {
+  return attrSource.match(/\bhref=["']([^"']+)["']/i)?.[1] ?? null;
+}
+
+function extractClassNames(attrSource: string) {
+  return (attrSource.match(/\bclass=["']([^"']+)["']/i)?.[1] ?? "")
+    .split(/\s+/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function getPageNoFromPath(path: string | null | undefined) {
+  return path ? getPageNoFromUrl(path) : null;
+}
+
+function extractBookMetadata(html: string, finalUrl: string): ShamelaBookMetadata {
+  const titleMatch = html.match(
+    /<h1[^>]*>[\s\S]*?<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/i,
+  );
+  const authorMatch = html.match(
+    /<div class=["']["']>\s*\[\s*<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>\s*\]\s*<\/div>/i,
+  );
+  const categoryMatch = html.match(
+    /<li>\s*<a\b[^>]*href=["']([^"']*\/category\/\d+)["'][^>]*>([\s\S]*?)<\/a>\s*<\/li>/i,
+  );
+  const bookPath = getPathFromHref(titleMatch?.[1]) ?? getPathFromHref(finalUrl);
+  const authorPath = getPathFromHref(authorMatch?.[1]);
+  const categoryPath = getPathFromHref(categoryMatch?.[1]);
+
+  return {
+    shamelaBookId: bookPath ? getBookIdFromUrl(bookPath) : getBookIdFromUrl(finalUrl),
+    title: normalizeText(titleMatch?.[2]),
+    bookPath,
+    bookUrl: getUrlFromPath(bookPath),
+    author: authorMatch
+      ? {
+          name: normalizeText(authorMatch[2]),
+          path: authorPath,
+          url: getUrlFromPath(authorPath),
+        }
+      : null,
+    category: categoryMatch
+      ? {
+          name: normalizeText(categoryMatch[2]),
+          path: categoryPath,
+          url: getUrlFromPath(categoryPath),
+        }
+      : null,
+  };
+}
+
 function parseArabicDigits(value: string | null | undefined) {
   if (!value) return null;
   const normalized = value.replace(/[٠-٩]/g, (digit) =>
@@ -181,6 +291,30 @@ function parseArabicDigits(value: string | null | undefined) {
   );
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function extractNassMeta(html: string) {
+  const match = html.match(
+    /<div\b[^>]*class=["'][^"']*\bnass\b[^"']*["'][^>]*>/i,
+  );
+  const attrs = match?.[0] ?? "";
+  const pageId = parseArabicDigits(
+    attrs.match(/\bdata-page-id=["']([^"']+)["']/i)?.[1],
+  );
+  const pageNum = parseArabicDigits(
+    attrs.match(/\bdata-page-num=["']([^"']+)["']/i)?.[1],
+  );
+
+  return {
+    pageId,
+    pageNum,
+  };
+}
+
+function extractNassContentHtml(html: string) {
+  return html.match(
+    /<div\b[^>]*class=["'][^"']*\bnass\b[^"']*["'][^>]*>([\s\S]*?)<\/div>\s*<div\s+id=["']appended_pages["']/i,
+  )?.[1] ?? html;
 }
 
 function extractInputValue(html: string, inputId: string) {
@@ -218,16 +352,87 @@ function extractCurrentTopicFromInlineLabel(html: string) {
 }
 
 function extractNavigationSections(html: string) {
-  const matches = [...html.matchAll(/<s-nav[\s\S]*?<s-nav-head[^>]*>([\s\S]*?)<\/s-nav-head>([\s\S]*?)<\/s-nav>/gi)];
-  return matches.map((match) => ({
-    head: normalizeText(match[1]),
-    items: [...(match[2] ?? "").matchAll(/<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)].map(
-      (item) => ({
-        label: normalizeText(item[2]),
-        href: item[1] ?? null,
-      }),
+  const navBlock = html.match(
+    /<div\b[^>]*class=["'][^"']*\bs-nav\b[^"']*["'][^>]*>([\s\S]*?)<\/div>\s*<\/div>\s*<div\b[^>]*class=["'][^"']*\bcol-md-8\b/i,
+  )?.[1];
+  if (!navBlock) return [];
+
+  const head = normalizeText(
+    navBlock.match(/<div\b[^>]*class=["'][^"']*\bs-nav-head\b[^"']*["'][^>]*>([\s\S]*?)<\/div>/i)?.[1],
+  );
+
+  return [
+    {
+      head,
+      items: [...navBlock.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/gi)]
+        .map((item) => ({
+          label: normalizeText(item[2]),
+          href: extractHref(item[1] ?? ""),
+        }))
+        .filter((item) => item.label && item.href !== "javascript:;"),
+    },
+  ];
+}
+
+function flattenToc(nodes: ShamelaTocNode[]): ShamelaTocNode[] {
+  return nodes.flatMap((node) => [node, ...flattenToc(node.children)]);
+}
+
+function extractTocTree(html: string): ShamelaTocNode[] {
+  const navBlock = html.match(
+    /<div\b[^>]*class=["'][^"']*\bs-nav\b[^"']*["'][^>]*>([\s\S]*?)<\/div>\s*<\/div>\s*<div\b[^>]*class=["'][^"']*\bcol-md-8\b/i,
+  )?.[1];
+  if (!navBlock) return [];
+
+  const topLevelMatches = [
+    ...navBlock.matchAll(
+      /<li>\s*<a\b[^>]*href=["']javascript:;["'][^>]*class=["'][^"']*\bexp_bu\b[^"']*["'][\s\S]*?<\/a>\s*<a\b([^>]*)>([\s\S]*?)<\/a>\s*<ul[^>]*>([\s\S]*?)<\/ul>\s*<\/li>/gi,
     ),
-  }));
+  ];
+
+  return topLevelMatches.map((match, volumeIndex) => {
+    const attrs = match[1] ?? "";
+    const path = getPathFromHref(extractHref(attrs));
+    const treePath = String(volumeIndex + 1);
+    const volumeNumber = volumeIndex + 1;
+    const volumeNode: ShamelaTocNode = {
+      kind: "volume",
+      title: normalizeText(match[2]),
+      path,
+      url: getUrlFromPath(path),
+      shamelaPageNo: getPageNoFromPath(path),
+      volumeNumber,
+      depth: 0,
+      sortOrder: volumeIndex,
+      treePath,
+      parentTreePath: null,
+      active: extractClassNames(attrs).includes("active"),
+      children: [],
+    };
+
+    volumeNode.children = [...(match[3] ?? "").matchAll(/<li>\s*-?\s*<a\b([^>]*)>([\s\S]*?)<\/a>\s*<\/li>/gi)]
+      .map((childMatch, childIndex) => {
+        const childAttrs = childMatch[1] ?? "";
+        const childPath = getPathFromHref(extractHref(childAttrs));
+        return {
+          kind: "chapter" as const,
+          title: normalizeText(childMatch[2]),
+          path: childPath,
+          url: getUrlFromPath(childPath),
+          shamelaPageNo: getPageNoFromPath(childPath),
+          volumeNumber,
+          depth: 1,
+          sortOrder: childIndex,
+          treePath: `${treePath}.${childIndex + 1}`,
+          parentTreePath: treePath,
+          active: extractClassNames(childAttrs).includes("active"),
+          children: [],
+        };
+      })
+      .filter((node) => node.title.length > 0);
+
+    return volumeNode;
+  });
 }
 
 function extractFootnotes(html: string) {
@@ -297,17 +502,28 @@ export function parseShamelaOpenPage(input: {
 }): ShamelaOpenPageParseResult {
   const diagnostics: ParseDiagnostic[] = [];
 
-  const shamelaPageNoFromInput = parseArabicDigits(extractInputValue(input.html, "fld_goto_top"));
+  const nassMeta = extractNassMeta(input.html);
+  const printedPageNoFromInput = parseArabicDigits(extractInputValue(input.html, "fld_goto_top"));
   const volumeNumber = parseArabicDigits(extractInputValue(input.html, "fld_part_top"));
-  const shamelaPageNo = shamelaPageNoFromInput ?? getPageNoFromUrl(input.finalUrl);
+  const shamelaPageNo = nassMeta.pageId ?? getPageNoFromUrl(input.finalUrl);
+  const printedPageNo = nassMeta.pageNum ?? printedPageNoFromInput;
   const shamelaBookId = getBookIdFromUrl(input.finalUrl) ?? getBookIdFromUrl(input.requestedUrl);
+  const book = extractBookMetadata(input.html, input.finalUrl);
 
-  if (shamelaPageNoFromInput != null) {
+  if (nassMeta.pageId != null) {
     diagnostics.push({
-      code: "page-number-from-input",
+      code: "shamela-page-id-from-nass",
       severity: "info",
-      message: `Resolved page number from #fld_goto_top: ${shamelaPageNoFromInput}`,
-      source: "#fld_goto_top",
+      message: `Resolved Shamela page ID from .nass[data-page-id]: ${nassMeta.pageId}`,
+      source: ".nass[data-page-id]",
+    });
+  }
+  if (printedPageNo != null) {
+    diagnostics.push({
+      code: "printed-page-number-from-nass",
+      severity: "info",
+      message: `Resolved printed page number: ${printedPageNo}`,
+      source: ".nass[data-page-num]",
     });
   }
   if (volumeNumber != null) {
@@ -318,11 +534,6 @@ export function parseShamelaOpenPage(input: {
       source: "#fld_part_top",
     });
   }
-
-  const printedPageMatch = stripTags(input.html).match(
-    /(?:الصفحة|صفحة|Page)\s*[:#]?\s*([0-9\u0660-\u0669]+)/i,
-  );
-  const printedPageNo = parseArabicDigits(printedPageMatch?.[1]);
 
   const breadcrumbFacts = extractAnchorTrail(input.html);
   const breadcrumb = breadcrumbFacts.map((item, index) => ({
@@ -344,6 +555,13 @@ export function parseShamelaOpenPage(input: {
     })();
 
   const navigationSections = extractNavigationSections(input.html);
+  const documentNavigationSections = navigationSections.map((section) => ({
+    label: section.head,
+    items: section.items,
+  }));
+  const tocNodes = extractTocTree(input.html);
+  const flatTocNodes = flattenToc(tocNodes);
+  const activeTocNode = flatTocNodes.find((node) => node.active) ?? null;
   if (navigationSections.some((section) => section.head === "فصول الكتاب")) {
     diagnostics.push({
       code: "navigation-fusul-detected",
@@ -352,9 +570,18 @@ export function parseShamelaOpenPage(input: {
       source: "s-nav > s-nav-head",
     });
   }
+  if (tocNodes.length > 0) {
+    diagnostics.push({
+      code: "toc-tree-detected",
+      severity: "info",
+      message: `Detected ${tocNodes.length} top-level TOC nodes and ${flatTocNodes.length} total TOC nodes.`,
+      source: ".s-nav",
+    });
+  }
 
-  const paragraphBlocks = extractParagraphMatches(input.html);
-  const footnotes = extractFootnotes(input.html);
+  const pageContentHtml = extractNassContentHtml(input.html);
+  const paragraphBlocks = extractParagraphMatches(pageContentHtml);
+  const footnotes = extractFootnotes(pageContentHtml);
   if (footnotes.length > 0) {
     diagnostics.push({
       code: "footnotes-from-hamesh",
@@ -400,7 +627,9 @@ export function parseShamelaOpenPage(input: {
       id: `p-${index + 1}`,
       text: block.text,
       marks,
-      footnoteRefs: [] as string[],
+      footnoteRefs: [...block.html.matchAll(/<span\b[^>]*class=["'][^"']*\bc2\b[^"']*["'][^>]*>\s*\(([^)]+)\)\s*<\/span>/gi)]
+        .map((match) => normalizeText(match[1]))
+        .filter(Boolean),
     };
   });
 
@@ -429,8 +658,9 @@ export function parseShamelaOpenPage(input: {
     : [];
 
   const facts: ShamelaOpenPageFacts = {
+    book,
     pageMeta: {
-      shamelaBookId,
+      shamelaBookId: book.shamelaBookId ?? shamelaBookId,
       shamelaPageNo,
       printedPageNo,
       volumeNumber,
@@ -441,6 +671,12 @@ export function parseShamelaOpenPage(input: {
     },
     navigation: {
       sections: navigationSections,
+    },
+    toc: {
+      nodes: tocNodes,
+      topLevelCount: tocNodes.length,
+      linkCount: flatTocNodes.filter((node) => node.path).length,
+      activeNode: activeTocNode,
     },
     blocks: [
       ...headingContent.map((heading, index) => ({
@@ -487,7 +723,7 @@ export function parseShamelaOpenPage(input: {
       htmlHash: input.htmlHash ?? null,
     },
     meta: {
-      shamelaBookId,
+      shamelaBookId: book.shamelaBookId ?? shamelaBookId,
       shamelaPageNo,
       printedPageNo,
       volumeNumber,
@@ -495,7 +731,8 @@ export function parseShamelaOpenPage(input: {
     context: {
       breadcrumb,
       currentTopic,
-      navigationSections,
+      navigationSections: documentNavigationSections,
+      toc: tocNodes,
     },
     content: [...headingContent, ...paragraphContent, ...footnoteContent],
     diagnostics,

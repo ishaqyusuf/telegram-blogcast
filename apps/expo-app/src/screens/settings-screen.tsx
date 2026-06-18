@@ -7,10 +7,14 @@ import {
   formatTranscriptionCost,
   TRANSCRIPTION_MODELS,
 } from "@/lib/transcription-models";
-import { getDefaultTranscriberUrl, isHttpTranscriberUrl } from "@/lib/transcribe";
+import {
+  getDefaultTranscriberUrl,
+  isHttpTranscriberUrl,
+} from "@/lib/transcribe";
 import { useQuery } from "@/lib/react-query";
 import type { AppLanguage } from "@/store/app-settings-store";
 import { useAppSettingsStore } from "@/store/app-settings-store";
+import { useColors } from "@/hooks/use-color";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { ScrollView, Text, TextInput, View } from "react-native";
@@ -19,32 +23,50 @@ const LANGUAGES: AppLanguage[] = ["en", "ar"];
 
 export default function SettingsScreen() {
   const router = useRouter();
+  const colors = useColors();
   const { language, setLanguage, t, textAlign, writingDirection, isRtl } =
     useTranslation();
   const transcriptionModel = useAppSettingsStore((s) => s.transcriptionModel);
-  const setTranscriptionModel = useAppSettingsStore((s) => s.setTranscriptionModel);
-  const localTranscriberBaseUrl = useAppSettingsStore((s) => s.localTranscriberBaseUrl);
-  const setLocalTranscriberBaseUrl = useAppSettingsStore((s) => s.setLocalTranscriberBaseUrl);
-  const resolvedTranscriberUrl = getDefaultTranscriberUrl(localTranscriberBaseUrl);
+  const setTranscriptionModel = useAppSettingsStore(
+    (s) => s.setTranscriptionModel,
+  );
+  const localTranscriberBaseUrl = useAppSettingsStore(
+    (s) => s.localTranscriberBaseUrl,
+  );
+  const setLocalTranscriberBaseUrl = useAppSettingsStore(
+    (s) => s.setLocalTranscriberBaseUrl,
+  );
+  const resolvedTranscriberUrl = getDefaultTranscriberUrl(
+    localTranscriberBaseUrl,
+  );
   const [transcriberUrlInput, setTranscriberUrlInput] = useState(
     localTranscriberBaseUrl ?? resolvedTranscriberUrl ?? "",
   );
   const canCheckTranscriber = isHttpTranscriberUrl(resolvedTranscriberUrl);
-  const { data: transcriberHealth, isFetching: checkingTranscriber } = useQuery({
-    ..._trpc.blog.checkLocalTranscriber.queryOptions({
-      baseUrl: canCheckTranscriber ? resolvedTranscriberUrl ?? undefined : undefined,
-    }),
-    enabled: canCheckTranscriber,
-    retry: false,
-  });
+  const { data: transcriberHealth, isFetching: checkingTranscriber } = useQuery(
+    {
+      ..._trpc.blog.checkLocalTranscriber.queryOptions({
+        baseUrl: canCheckTranscriber
+          ? (resolvedTranscriberUrl ?? undefined)
+          : undefined,
+      }),
+      enabled: canCheckTranscriber,
+      retry: false,
+    },
+  );
   const whisperAvailable = Boolean(transcriberHealth?.ok);
 
   useEffect(() => {
-    setTranscriberUrlInput(localTranscriberBaseUrl ?? resolvedTranscriberUrl ?? "");
+    setTranscriberUrlInput(
+      localTranscriberBaseUrl ?? resolvedTranscriberUrl ?? "",
+    );
   }, [localTranscriberBaseUrl, resolvedTranscriberUrl]);
 
   return (
-    <View className="flex-1 bg-background">
+    <View
+      className="flex-1 bg-background"
+      style={{ backgroundColor: colors.background }}
+    >
       <SafeArea>
         <View className="flex-row items-center gap-3 px-4 py-3">
           <Pressable
@@ -68,6 +90,7 @@ export default function SettingsScreen() {
         </View>
 
         <ScrollView
+          style={{ backgroundColor: colors.background }}
           contentContainerClassName="gap-4 px-4 pt-2 pb-8"
           keyboardShouldPersistTaps="handled"
         >
@@ -150,7 +173,11 @@ export default function SettingsScreen() {
                     }
                   >
                     {selected ? (
-                      <Icon name="Check" size={16} className="text-background" />
+                      <Icon
+                        name="Check"
+                        size={16}
+                        className="text-background"
+                      />
                     ) : null}
                     <Text
                       className={
@@ -204,7 +231,8 @@ export default function SettingsScreen() {
             <View className="gap-2">
               {TRANSCRIPTION_MODELS.map((model) => {
                 const selected = transcriptionModel === model.id;
-                const disabled = model.requiresLocalTranscriber && !whisperAvailable;
+                const disabled =
+                  model.requiresLocalTranscriber && !whisperAvailable;
                 return (
                   <Pressable
                     key={model.id}
@@ -224,7 +252,9 @@ export default function SettingsScreen() {
                       <Icon
                         name={selected ? "CheckCircle2" : "Circle"}
                         size={18}
-                        className={selected ? "text-primary" : "text-muted-foreground"}
+                        className={
+                          selected ? "text-primary" : "text-muted-foreground"
+                        }
                       />
                       <View className="flex-1">
                         <Text
@@ -285,7 +315,9 @@ export default function SettingsScreen() {
                 value={transcriberUrlInput}
                 onChangeText={(value) => {
                   setTranscriberUrlInput(value);
-                  setLocalTranscriberBaseUrl(value.trim() ? value.trim() : null);
+                  setLocalTranscriberBaseUrl(
+                    value.trim() ? value.trim() : null,
+                  );
                 }}
                 autoCapitalize="none"
                 autoCorrect={false}

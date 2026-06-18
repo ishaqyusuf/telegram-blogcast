@@ -3,6 +3,7 @@ import { useRouter } from "expo-router";
 import { ScrollView, Text, View } from "react-native";
 
 import { Icon } from "@/components/ui/icon";
+import { useColors } from "@/hooks/use-color";
 import { useRecentlyViewedStore } from "@/store/recently-viewed-store";
 
 const TYPE_ICONS = {
@@ -14,6 +15,7 @@ const TYPE_ICONS = {
 
 export function BlogHomeRecentlyViewed() {
   const router = useRouter();
+  const colors = useColors();
   const { items } = useRecentlyViewedStore();
 
   if (items.length === 0) return null;
@@ -21,12 +23,22 @@ export function BlogHomeRecentlyViewed() {
   return (
     <View className="pt-4 pb-2">
       <View className="flex-row items-center justify-between px-4 mb-3">
-        <Text className="text-base font-bold text-foreground">Recently Viewed</Text>
+        <Text
+          className="text-base font-bold text-foreground"
+          style={{ color: colors.foreground }}
+        >
+          Recently Viewed
+        </Text>
         <Pressable
           onPress={() => useRecentlyViewedStore.getState().clear()}
           className="active:opacity-70"
         >
-          <Text className="text-xs text-muted-foreground">Clear</Text>
+          <Text
+            className="text-xs text-muted-foreground"
+            style={{ color: colors.mutedForeground }}
+          >
+            Clear
+          </Text>
         </Pressable>
       </View>
 
@@ -42,14 +54,26 @@ export function BlogHomeRecentlyViewed() {
             className="active:opacity-80"
             style={{ width: 80 }}
           >
-            <View className="w-full h-20 rounded-xl bg-card items-center justify-center mb-2 border border-border">
+            <View
+              className="w-full h-20 rounded-xl bg-card items-center justify-center mb-2 border border-border"
+              style={{
+                backgroundColor: colors.card,
+                borderColor: colors.border,
+              }}
+            >
               <Icon
-                name={TYPE_ICONS[item.type as keyof typeof TYPE_ICONS] ?? "FileText"}
+                name={
+                  TYPE_ICONS[item.type as keyof typeof TYPE_ICONS] ?? "FileText"
+                }
                 size={24}
                 className="text-muted-foreground"
               />
             </View>
-            <Text className="text-xs font-medium text-foreground text-center" numberOfLines={2}>
+            <Text
+              className="text-xs font-medium text-foreground text-center"
+              numberOfLines={2}
+              style={{ color: colors.foreground }}
+            >
               {item.title}
             </Text>
           </Pressable>

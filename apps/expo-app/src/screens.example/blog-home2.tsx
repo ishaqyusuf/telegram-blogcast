@@ -4,9 +4,9 @@ import { View, Text, ScrollView, Image } from "react-native";
 
 import { SafeArea } from "@/components/safe-area";
 import { Icon } from "@/components/ui/icon";
-import { _router } from "@/components/static-router";
 import { HomeBottomNav } from "@/components/home-bottom-footer";
 import { BlogCardShell } from "@/components/blog-card-shell";
+import { useColors } from "@/hooks/use-color";
 
 // --- Types & Data ---
 
@@ -14,60 +14,78 @@ const CATEGORIES = ["All", "Following", "Popular", "History", "Religion"];
 
 // --- Components ---
 
-const Header = () => (
-  <View className="flex-row items-center justify-between px-4 py-3 bg-background/95 sticky top-0 z-50 border-b border-border">
-    <View className="flex-row items-center gap-3">
-      <View className="bg-accent rounded-lg p-1.5 items-center justify-center">
-        <Icon name="AudioWaveform" className="  text-accent-foreground" />
-      </View>
-      <Text className="text-xl font-bold tracking-tight text-foreground">
-        Alghurobaa
-      </Text>
-    </View>
-    <View className="flex-row items-center gap-3">
-      <Pressable className="relative p-2 rounded-full">
-        <Icon name="Bell" className="  text-muted-foreground" />
-        <View className="absolute top-2 right-2 size-2 bg-destructive rounded-full border-2 border-background" />
-      </Pressable>
-      {/* Avatar Rule: Initials Only */}
-      <View className="size-9 rounded-full bg-muted border border-border items-center justify-center">
-        <Text className="text-sm font-bold text-muted-foreground">ME</Text>
-      </View>
-    </View>
-  </View>
-);
-
-const CategoryTabs = () => (
-  <View className="py-3 pl-4 border-b border-border bg-background z-40">
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerClassName="gap-2 pr-4"
+const Header = () => {
+  const colors = useColors();
+  return (
+    <View
+      className="flex-row items-center justify-between px-4 py-3 bg-background/95 sticky top-0 z-50 border-b border-border"
+      style={{
+        backgroundColor: colors.background,
+        borderBottomColor: colors.border,
+      }}
     >
-      {CATEGORIES.map((cat, index) => {
-        const isActive = index === 0;
-        return (
-          <Pressable
-            key={cat}
-            className={`px-4 h-9 rounded-full items-center justify-center border ${
-              isActive ? "bg-accent border-accent" : "bg-card border-border"
-            }`}
-          >
-            <Text
-              className={`text-sm font-medium ${
-                isActive
-                  ? "text-accent-foreground font-bold"
-                  : "text-muted-foreground"
+      <View className="flex-row items-center gap-3">
+        <View className="bg-accent rounded-lg p-1.5 items-center justify-center">
+          <Icon name="AudioWaveform" className="  text-accent-foreground" />
+        </View>
+        <Text className="text-xl font-bold tracking-tight text-foreground">
+          Alghurobaa
+        </Text>
+      </View>
+      <View className="flex-row items-center gap-3">
+        <Pressable className="relative p-2 rounded-full">
+          <Icon name="Bell" className="  text-muted-foreground" />
+          <View className="absolute top-2 right-2 size-2 bg-destructive rounded-full border-2 border-background" />
+        </Pressable>
+        {/* Avatar Rule: Initials Only */}
+        <View className="size-9 rounded-full bg-muted border border-border items-center justify-center">
+          <Text className="text-sm font-bold text-muted-foreground">ME</Text>
+        </View>
+      </View>
+    </View>
+  );
+};
+
+const CategoryTabs = () => {
+  const colors = useColors();
+  return (
+    <View
+      className="py-3 pl-4 border-b border-border bg-background z-40"
+      style={{
+        backgroundColor: colors.background,
+        borderBottomColor: colors.border,
+      }}
+    >
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerClassName="gap-2 pr-4"
+      >
+        {CATEGORIES.map((cat, index) => {
+          const isActive = index === 0;
+          return (
+            <Pressable
+              key={cat}
+              className={`px-4 h-9 rounded-full items-center justify-center border ${
+                isActive ? "bg-accent border-accent" : "bg-card border-border"
               }`}
             >
-              {cat}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </ScrollView>
-  </View>
-);
+              <Text
+                className={`text-sm font-medium ${
+                  isActive
+                    ? "text-accent-foreground font-bold"
+                    : "text-muted-foreground"
+                }`}
+              >
+                {cat}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+};
 
 // --- Card Components ---
 
@@ -305,13 +323,18 @@ const FAB = () => (
 // --- Main Screen ---
 
 export default function BlogHome2() {
+  const colors = useColors();
   return (
-    <View className="flex-1 bg-background">
+    <View
+      className="flex-1 bg-background"
+      style={{ backgroundColor: colors.background }}
+    >
       <SafeArea>
         <Header />
         <View className="flex-1 relative">
           <ScrollView
             className="flex-1"
+            style={{ backgroundColor: colors.background }}
             contentContainerClassName="pb-40"
             showsVerticalScrollIndicator={false}
           >

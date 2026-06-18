@@ -196,7 +196,7 @@ export function CommentContent({ blogId = 0 }: CommentsSheetProps) {
       {/* <CommentsHeader state={state} onClose={() => {}} /> */}
       {/* <CommentsAudioContext /> */}
       <View className="relative">
-        <CommentsList state={state} />
+        <CommentsList state={state} inline />
         {/* <LinearGradient
           colors={["transparent", "rgba(18,18,18,1)"]}
           className="absolute bottom-0 left-0 w-full h-20 pointer-events-none" */}

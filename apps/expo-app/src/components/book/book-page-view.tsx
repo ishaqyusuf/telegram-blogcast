@@ -31,6 +31,8 @@ type Props = {
   highlights?: HighlightEntry[];
   onFootnotePress?: (marker: string) => void;
   onLongPress?: (paragraph: Paragraph) => void;
+  onPressHighlightedParagraph?: (localId: string) => void;
+  onCopyParagraph?: (paragraph: Paragraph) => void;
   selectedParagraphId?: number | null;
   // Highlight actions
   onHighlightColor?: (paragraphId: number, color: string) => void;
@@ -79,6 +81,8 @@ export function BookPageView({
   highlights = [],
   onFootnotePress,
   onLongPress,
+  onPressHighlightedParagraph,
+  onCopyParagraph,
   selectedParagraphId,
   onHighlightColor,
   onHighlightDelete,
@@ -129,13 +133,18 @@ export function BookPageView({
             {showToolbar && (
               <HighlightToolbar
                 existingColor={highlight?.color ?? null}
-                onSelectColor={(color) => onHighlightColor?.(para.id, color)}
+                onCopy={() => onCopyParagraph?.(para)}
+                onHighlight={() => onHighlightColor?.(para.id, "#facc15")}
                 onDelete={highlight ? () => onHighlightDelete?.(highlight.localId) : undefined}
                 onDismiss={() => onDismissHighlight?.()}
               />
             )}
 
             <Pressable
+              onPress={() => {
+                if (!highlight) return;
+                onPressHighlightedParagraph?.(highlight.localId);
+              }}
               onLongPress={() => onLongPress?.(para)}
               delayLongPress={250}
               style={{
@@ -152,6 +161,7 @@ export function BookPageView({
                     document={createBookDocumentFromParagraphs([{ id: para.id, text: para.text }])}
                     annotations={annotations}
                     selectable
+                    onLongPress={() => onLongPress?.(para)}
                     style={{
                       fontSize: 18,
                       lineHeight: 32,

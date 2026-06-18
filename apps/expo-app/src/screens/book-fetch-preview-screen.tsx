@@ -5,15 +5,16 @@ import { Pressable } from "@/components/ui/pressable";
 import { useColors } from "@/hooks/use-color";
 import { useTranslation } from "@/lib/i18n";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
+import { withAlpha } from "@/lib/theme";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ActivityIndicator, Alert, ScrollView, Text, View } from "react-native";
 
 type StagedPreviewDocument = {
   context?: {
     currentTopic?: { label?: string | null } | null;
-    breadcrumb?: Array<{ role?: string | null; label?: string | null }>;
+    breadcrumb?: { role?: string | null; label?: string | null }[];
   } | null;
-  content?: Array<Record<string, any>>;
+  content?: Record<string, any>[];
 };
 
 function asJsonObject(value: unknown) {
@@ -38,8 +39,7 @@ function normalizeDiagnostic(item: unknown) {
 
     return {
       code: typeof record.code === "string" ? record.code : "diagnostic",
-      severity:
-        typeof record.severity === "string" ? record.severity : "info",
+      severity: typeof record.severity === "string" ? record.severity : "info",
       message:
         typeof record.message === "string"
           ? record.message
@@ -54,6 +54,10 @@ function normalizeDiagnostic(item: unknown) {
     message: String(item),
     source: null as string | null,
   };
+}
+
+function shouldShowBlockMarker(marker: unknown) {
+  return typeof marker === "string" && !marker.toLowerCase().startsWith("p-");
 }
 
 export default function BookFetchPreviewScreen() {
@@ -75,30 +79,45 @@ export default function BookFetchPreviewScreen() {
     : [];
   const document = asJsonObject(data?.document) as StagedPreviewDocument | null;
   const linkGraph = asJsonObject(data?.linkGraph);
+  const facts = asJsonObject(data?.facts);
+  const tocFacts = asJsonObject(facts?.toc);
   const isPromoted = data?.status === "promoted";
+  const previewBlockStyle = {
+    backgroundColor: colors.background,
+    borderColor: withAlpha(colors.border, 0.75),
+  };
   const { mutate: promotePage, isPending: isPromoting } = useMutation(
     _trpc.book.promoteStagedShamelaPageParse.mutationOptions({
       onSuccess: (result) => {
         qc.invalidateQueries({ queryKey: _trpc.book.getBooks.queryKey() });
-        qc.invalidateQueries({ queryKey: _trpc.book.getBook.queryKey({ id: result.bookId }) });
-        router.replace(`/books/${result.bookId}/reader/${result.page.id}` as any);
+        qc.invalidateQueries({
+          queryKey: _trpc.book.getBook.queryKey({ id: result.bookId }),
+        });
+        router.replace(
+          `/books/${result.bookId}/reader/${result.page.id}` as any,
+        );
       },
       onError: (error) => Alert.alert("Import failed", error.message),
     }),
   );
 
   return (
-    <View className="flex-1 bg-background">
+    <View className="flex-1" style={{ backgroundColor: colors.background }}>
       <SafeArea>
         <View
           className="items-center gap-3 border-b border-border px-4 py-3"
-          style={{ flexDirection: isRtl ? "row-reverse" : "row" }}
+          style={{
+            backgroundColor: colors.background,
+            borderBottomColor: colors.border,
+            flexDirection: isRtl ? "row-reverse" : "row",
+          }}
         >
           <Pressable
             onPress={() => router.back()}
             className="size-9 items-center justify-center rounded-full bg-card"
+            style={{ backgroundColor: colors.card }}
           >
-            <Icon name="ChevronLeft" size={22} className="text-foreground" />
+            <Icon name="ChevronLeft" size={22} color={colors.foreground} />
           </Pressable>
           <Text
             style={{
@@ -114,43 +133,84 @@ export default function BookFetchPreviewScreen() {
           </Text>
         </View>
 
-        <ScrollView contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 40 }}>
+        <ScrollView
+          contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 40 }}
+        >
           {isLoading || !data ? (
-            <View className="rounded-xl bg-card p-4">
-              <Text className="text-sm text-muted-foreground">Loading staged parse...</Text>
+            <View
+              className="rounded-xl p-4"
+              style={{ backgroundColor: colors.card }}
+            >
+              <Text style={{ color: colors.mutedForeground, fontSize: 14 }}>
+                Loading staged parse...
+              </Text>
             </View>
           ) : (
             <>
-              <View className="gap-2 rounded-xl bg-card p-4">
-                <Text className="text-base font-bold text-foreground">
+              <View
+                className="gap-2 rounded-xl p-4"
+                style={{ backgroundColor: colors.card }}
+              >
+                <Text
+                  style={{
+                    color: colors.cardForeground,
+                    fontSize: 16,
+                    fontWeight: "700",
+                  }}
+                >
                   {document?.context?.currentTopic?.label ||
                     data.chapterTitle ||
                     data.rawPage.title ||
                     "Untitled page"}
                 </Text>
                 {data.topicTitle ? (
-                  <Text className="text-sm text-primary">{data.topicTitle}</Text>
+                  <Text style={{ color: colors.primary, fontSize: 14 }}>
+                    {data.topicTitle}
+                  </Text>
                 ) : null}
-                <Text className="text-xs text-muted-foreground">
+                <Text style={{ color: colors.mutedForeground, fontSize: 12 }}>
                   Shamela page {data.shamelaPageNo ?? "unknown"} · printed{" "}
                   {data.printedPageNo ?? "unknown"} · volume{" "}
                   {data.volumeNumber ?? "unknown"}
                 </Text>
-                <Text className="text-xs text-muted-foreground">
+                <Text style={{ color: colors.mutedForeground, fontSize: 12 }}>
                   {data.rawPage.finalUrl}
                 </Text>
+                {typeof tocFacts?.topLevelCount === "number" ||
+                typeof tocFacts?.linkCount === "number" ? (
+                  <Text style={{ color: colors.mutedForeground, fontSize: 12 }}>
+                    TOC: {tocFacts.topLevelCount ?? 0} sections ·{" "}
+                    {tocFacts.linkCount ?? 0} links
+                  </Text>
+                ) : null}
                 <Pressable
                   disabled={isPromoting}
                   onPress={() => promotePage({ stagedParseId: stagedId })}
                   className="mt-2 flex-row items-center justify-center gap-2 rounded-xl bg-primary py-3"
-                  style={{ opacity: isPromoting ? 0.65 : 1 }}
+                  style={{
+                    backgroundColor: colors.primary,
+                    opacity: isPromoting ? 0.65 : 1,
+                  }}
                 >
                   {isPromoting ? (
-                    <ActivityIndicator size="small" color={colors.primaryForeground} />
+                    <ActivityIndicator
+                      size="small"
+                      color={colors.primaryForeground}
+                    />
                   ) : (
-                    <Icon name="Download" size={17} className="text-primary-foreground" />
+                    <Icon
+                      name="Download"
+                      size={17}
+                      color={colors.primaryForeground}
+                    />
                   )}
-                  <Text className="text-[14px] font-bold text-primary-foreground">
+                  <Text
+                    style={{
+                      color: colors.primaryForeground,
+                      fontSize: 14,
+                      fontWeight: "700",
+                    }}
+                  >
                     {isPromoting
                       ? isPromoted
                         ? "Opening..."
@@ -164,20 +224,53 @@ export default function BookFetchPreviewScreen() {
 
               {Array.isArray(document?.context?.breadcrumb) &&
               document.context.breadcrumb.length > 0 ? (
-                <View className="gap-3 rounded-xl bg-card p-4">
-                  <Text className="text-sm font-bold text-foreground">Breadcrumb</Text>
-                  {document.context.breadcrumb.map((item: any, index: number) => (
-                    <Text key={`${item.label}-${index}`} className="text-xs text-muted-foreground">
-                      {item.role} · {item.label}
-                    </Text>
-                  ))}
+                <View
+                  className="gap-3 rounded-xl p-4"
+                  style={{ backgroundColor: colors.card }}
+                >
+                  <Text
+                    style={{
+                      color: colors.cardForeground,
+                      fontSize: 14,
+                      fontWeight: "700",
+                    }}
+                  >
+                    Breadcrumb
+                  </Text>
+                  {document.context.breadcrumb.map(
+                    (item: any, index: number) => (
+                      <Text
+                        key={`${item.label}-${index}`}
+                        style={{ color: colors.mutedForeground, fontSize: 12 }}
+                      >
+                        {item.role} · {item.label}
+                      </Text>
+                    ),
+                  )}
                 </View>
               ) : null}
 
               {linkGraph ? (
-                <View className="gap-2 rounded-xl bg-card p-4">
-                  <Text className="text-sm font-bold text-foreground">Link graph</Text>
-                  <Text className="text-xs text-muted-foreground">
+                <View
+                  className="gap-2 rounded-xl p-4"
+                  style={{ backgroundColor: colors.card }}
+                >
+                  <Text
+                    style={{
+                      color: colors.cardForeground,
+                      fontSize: 14,
+                      fontWeight: "700",
+                    }}
+                  >
+                    Link graph
+                  </Text>
+                  <Text
+                    style={{
+                      color: colors.mutedForeground,
+                      fontSize: 12,
+                      lineHeight: 18,
+                    }}
+                  >
                     {linkGraph.knownTopicGraph
                       ? "Topic graph already exists in database. No topic refetch required."
                       : "Topic graph not fully known yet. Opened-page staging still proceeds without refetch."}
@@ -185,12 +278,27 @@ export default function BookFetchPreviewScreen() {
                 </View>
               ) : null}
 
-              <View className="gap-3 rounded-xl bg-card p-4">
-                <Text className="text-sm font-bold text-foreground">Document</Text>
+              <View
+                className="gap-3 rounded-xl p-4"
+                style={{ backgroundColor: colors.card }}
+              >
+                <Text
+                  style={{
+                    color: colors.cardForeground,
+                    fontSize: 14,
+                    fontWeight: "700",
+                  }}
+                >
+                  Document
+                </Text>
                 {(document?.content ?? []).map((block: any) => {
                   if (block.type === "heading") {
                     return (
-                      <View key={block.id} className="rounded-lg bg-background p-3">
+                      <View
+                        key={block.id}
+                        className="rounded-lg border p-3"
+                        style={previewBlockStyle}
+                      >
                         <Text
                           style={{
                             textAlign: "right",
@@ -198,6 +306,7 @@ export default function BookFetchPreviewScreen() {
                             fontWeight: "700",
                             color: colors.foreground,
                             writingDirection: "rtl",
+                            lineHeight: 28,
                           }}
                         >
                           {block.text}
@@ -208,35 +317,44 @@ export default function BookFetchPreviewScreen() {
 
                   if (block.type === "paragraph") {
                     return (
-                      <View key={block.id} className="gap-1 rounded-lg bg-background p-3">
-                        <Text className="text-[11px] font-semibold text-primary">
-                          {block.id}
-                        </Text>
-                        <Text
-                          style={{
-                            textAlign: "right",
-                            fontSize: 15,
-                            lineHeight: 28,
-                            color: colors.foreground,
-                            writingDirection: "rtl",
-                          }}
-                        >
-                          {block.text}
-                        </Text>
-                      </View>
+                      <Text
+                        key={block.id}
+                        style={{
+                          textAlign: "right",
+                          fontSize: 16,
+                          lineHeight: 31,
+                          color: colors.foreground,
+                          writingDirection: "rtl",
+                          marginBottom: 8,
+                        }}
+                      >
+                        {block.text}
+                      </Text>
                     );
                   }
 
                   return (
-                    <View key={block.id} className="gap-1 rounded-lg bg-background p-3">
-                      <Text className="text-[11px] font-semibold text-primary">
-                        {block.marker}
-                      </Text>
+                    <View
+                      key={block.id}
+                      className="gap-2 rounded-lg border p-3"
+                      style={previewBlockStyle}
+                    >
+                      {shouldShowBlockMarker(block.marker) ? (
+                        <Text
+                          style={{
+                            color: colors.primary,
+                            fontSize: 12,
+                            fontWeight: "700",
+                          }}
+                        >
+                          {block.marker}
+                        </Text>
+                      ) : null}
                       <Text
                         style={{
                           textAlign: "right",
                           fontSize: 14,
-                          lineHeight: 24,
+                          lineHeight: 26,
                           color: colors.foreground,
                           writingDirection: "rtl",
                         }}
@@ -248,21 +366,47 @@ export default function BookFetchPreviewScreen() {
                 })}
               </View>
 
-              <View className="gap-2 rounded-xl bg-card p-4">
-                <Text className="text-sm font-bold text-foreground">Diagnostics</Text>
+              <View
+                className="gap-2 rounded-xl p-4"
+                style={{ backgroundColor: colors.card }}
+              >
+                <Text
+                  style={{
+                    color: colors.cardForeground,
+                    fontSize: 14,
+                    fontWeight: "700",
+                  }}
+                >
+                  Diagnostics
+                </Text>
                 {diagnostics.length === 0 ? (
-                  <Text className="text-sm text-muted-foreground">No parser diagnostics.</Text>
+                  <Text style={{ color: colors.mutedForeground, fontSize: 14 }}>
+                    No parser diagnostics.
+                  </Text>
                 ) : (
                   diagnostics.map((item, index) => (
                     <View key={`${item.code}-${index}`} className="gap-0.5">
-                      <Text className="text-[11px] font-semibold text-primary">
+                      <Text
+                        style={{
+                          color: colors.primary,
+                          fontSize: 11,
+                          fontWeight: "700",
+                        }}
+                      >
                         {item.severity} · {item.code}
                       </Text>
-                      <Text className="text-xs text-muted-foreground">
+                      <Text
+                        style={{ color: colors.mutedForeground, fontSize: 12 }}
+                      >
                         {item.message}
                       </Text>
                       {item.source ? (
-                        <Text className="text-[11px] text-muted-foreground">
+                        <Text
+                          style={{
+                            color: colors.mutedForeground,
+                            fontSize: 11,
+                          }}
+                        >
                           {item.source}
                         </Text>
                       ) : null}

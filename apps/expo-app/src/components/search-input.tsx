@@ -13,15 +13,19 @@ interface Props {
 }
 export function SearchInput(props: Props) {
   const size = props.size || "default";
-  const isDefault = size == "default";
+  const isDefault = size === "default";
   const colors = useColors();
   return (
     <View className={cn("px-5 py-2", props?.className)}>
       <View
         className={cn(
           "flex-row w-full items-center rounded-full bg-card border  gap-3 shadow-sm border-border",
-          isDefault ? "h-14 px-5" : "h-12 px-4"
+          isDefault ? "h-14 px-5" : "h-12 px-4",
         )}
+        style={{
+          backgroundColor: colors.card,
+          borderColor: colors.border,
+        }}
       >
         <Icon
           name="Search"
@@ -33,8 +37,8 @@ export function SearchInput(props: Props) {
           onChangeText={props.onChangeText}
           className="flex-1 bg-transparent text-base text-foreground h-full"
           placeholder={props.placeholder}
-          // placeholderTextColor={colors.mutedForeground}
-          placeholderTextColor="hsl(var(--muted-foreground))"
+          placeholderTextColor={colors.mutedForeground}
+          style={{ color: colors.foreground }}
         />
       </View>
     </View>

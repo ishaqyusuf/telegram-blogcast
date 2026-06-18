@@ -21,7 +21,7 @@ export function BlogHomeRecentlyPlayed() {
   const router = useRouter();
   const colors = useColors();
   const { data: history = [] } = useQuery(
-    _trpc.blog.getRecentlyPlayed.queryOptions({ limit: 10 })
+    _trpc.blog.getRecentlyPlayed.queryOptions({ limit: 10 }),
   );
 
   if (history.length === 0) return null;
@@ -29,12 +29,22 @@ export function BlogHomeRecentlyPlayed() {
   return (
     <View className="pt-4 pb-2">
       <View className="flex-row items-center justify-between px-4 mb-3">
-        <Text className="text-base font-bold text-foreground">Recently Played</Text>
+        <Text
+          className="text-base font-bold text-foreground"
+          style={{ color: colors.foreground }}
+        >
+          Recently Played
+        </Text>
         <Pressable
           onPress={() => router.push("/play-history" as any)}
           className="active:opacity-70"
         >
-          <Text className="text-sm font-medium text-primary">See all</Text>
+          <Text
+            className="text-sm font-medium text-primary"
+            style={{ color: colors.primary }}
+          >
+            See all
+          </Text>
         </Pressable>
       </View>
 
@@ -45,7 +55,10 @@ export function BlogHomeRecentlyPlayed() {
       >
         {history.map((item) => {
           const duration = item.Media?.file?.duration;
-          const title = item.Media?.title || item.Media?.blog?.content?.slice(0, 40) || "Audio";
+          const title =
+            item.Media?.title ||
+            item.Media?.blog?.content?.slice(0, 40) ||
+            "Audio";
           const progressPct =
             duration && duration > 0
               ? Math.min((item.progress / 1000 / duration) * 100, 100)
@@ -61,21 +74,46 @@ export function BlogHomeRecentlyPlayed() {
               className="w-[130px] active:opacity-80"
             >
               {/* Thumbnail */}
-              <View className="w-full h-24 rounded-xl bg-muted items-center justify-center mb-2 relative overflow-hidden">
-                <Icon name="Headphones" size={32} className="text-muted-foreground" />
+              <View
+                className="w-full h-24 rounded-xl bg-muted items-center justify-center mb-2 relative overflow-hidden"
+                style={{ backgroundColor: colors.muted }}
+              >
+                <Icon
+                  name="Headphones"
+                  size={32}
+                  className="text-muted-foreground"
+                />
                 {/* Progress bar at bottom */}
-                <View className="absolute bottom-0 left-0 right-0 h-1 bg-muted">
+                <View
+                  className="absolute bottom-0 left-0 right-0 h-1 bg-muted"
+                  style={{ backgroundColor: colors.muted }}
+                >
                   <View
-                    style={{ height: "100%", backgroundColor: colors.primary, width: `${progressPct}%` }}
+                    style={{
+                      height: "100%",
+                      backgroundColor: colors.primary,
+                      width: `${progressPct}%`,
+                    }}
                   />
                 </View>
               </View>
-              <Text className="text-xs font-bold text-foreground" numberOfLines={2}>
+              <Text
+                className="text-xs font-bold text-foreground"
+                numberOfLines={2}
+                style={{ color: colors.foreground }}
+              >
                 {title}
               </Text>
               <View className="flex-row items-center gap-1 mt-0.5">
-                <Icon name="Clock" size={10} className="text-muted-foreground" />
-                <Text className="text-[10px] text-muted-foreground">
+                <Icon
+                  name="Clock"
+                  size={10}
+                  className="text-muted-foreground"
+                />
+                <Text
+                  className="text-[10px] text-muted-foreground"
+                  style={{ color: colors.mutedForeground }}
+                >
                   {formatProgress(item.progress, duration)}
                 </Text>
               </View>

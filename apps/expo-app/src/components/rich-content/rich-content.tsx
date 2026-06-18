@@ -20,6 +20,7 @@ type Props = {
   enableTelegramParsing?: boolean;
   onHashtagPress?: (tag: string) => void;
   onLinkPress?: (url: string) => void;
+  onLongPress?: () => void;
 };
 
 function getMarkStyle(marks: RichMark[]): TextStyle | undefined {
@@ -74,6 +75,7 @@ export function RichContent({
   enableTelegramParsing = true,
   onHashtagPress,
   onLinkPress,
+  onLongPress,
 }: Props) {
   const sourceDocument = document ?? createDocumentFromPlainText(text ?? "");
   const renderBlocks = buildRenderBlocks(sourceDocument, {
@@ -87,6 +89,7 @@ export function RichContent({
         <Text
           key={block.id}
           selectable={selectable}
+          onLongPress={onLongPress}
           style={[
             {
               fontSize: 17,
@@ -105,6 +108,7 @@ export function RichContent({
               <Text
                 key={run.key}
                 style={getMarkStyle(run.marks)}
+                onLongPress={onLongPress}
                 onPress={() => {
                   if (interactiveMark?.type === "link") {
                     const href = String(interactiveMark.attrs?.href ?? run.text);

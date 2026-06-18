@@ -4,16 +4,29 @@ import { useRouter } from "expo-router";
 import { ScrollView, Text, View } from "react-native";
 
 import { _trpc } from "@/components/static-trpc";
+import { useColors } from "@/hooks/use-color";
 
-const ALBUM_COLORS = ["#1e40af", "#0f766e", "#b45309", "#4f46e5", "#be123c", "#0369a1"];
+const ALBUM_COLORS = [
+  "#1e40af",
+  "#0f766e",
+  "#b45309",
+  "#4f46e5",
+  "#be123c",
+  "#0369a1",
+];
 
 function getInitials(name?: string | null) {
   if (!name) return "AL";
-  return name.split(" ").slice(0, 2).map((w) => w[0]?.toUpperCase() ?? "").join("");
+  return name
+    .split(" ")
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("");
 }
 
 export function BlogHomeAlbums() {
   const router = useRouter();
+  const colors = useColors();
   const { data: albums = [] } = useQuery(_trpc.album.getAlbums.queryOptions());
 
   if (albums.length === 0) return null;
@@ -21,12 +34,22 @@ export function BlogHomeAlbums() {
   return (
     <View className="pt-4 pb-2">
       <View className="flex-row items-center justify-between px-4 mb-3">
-        <Text className="text-base font-bold text-foreground">Albums</Text>
+        <Text
+          className="text-base font-bold text-foreground"
+          style={{ color: colors.foreground }}
+        >
+          Albums
+        </Text>
         <Pressable
           onPress={() => router.push("/albums" as any)}
           className="active:opacity-70"
         >
-          <Text className="text-sm font-medium text-primary">See all</Text>
+          <Text
+            className="text-sm font-medium text-primary"
+            style={{ color: colors.primary }}
+          >
+            See all
+          </Text>
         </Pressable>
       </View>
 
@@ -56,10 +79,17 @@ export function BlogHomeAlbums() {
                 {getInitials(album.name)}
               </Text>
             </View>
-            <Text className="text-xs font-bold text-foreground" numberOfLines={2}>
+            <Text
+              className="text-xs font-bold text-foreground"
+              numberOfLines={2}
+              style={{ color: colors.foreground }}
+            >
               {album.name}
             </Text>
-            <Text className="text-[10px] text-muted-foreground mt-0.5">
+            <Text
+              className="text-[10px] text-muted-foreground mt-0.5"
+              style={{ color: colors.mutedForeground }}
+            >
               {album._count.medias} tracks
             </Text>
           </Pressable>

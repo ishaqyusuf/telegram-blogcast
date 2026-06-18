@@ -1,9 +1,16 @@
 import { Pressable } from "@/components/ui/pressable";
-import { useMutation, useQueryClient } from "@/lib/react-query";
+import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import * as DocumentPicker from "expo-document-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useRef, useState } from "react";
-import { ActivityIndicator, Alert, ScrollView, Text, TextInput, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 
 import { _trpc } from "@/components/static-trpc";
 import { SafeArea } from "@/components/safe-area";
@@ -39,7 +46,7 @@ function StyledText({
           <Text key={i} style={{ color: SEGMENT_COLORS[seg.type] }}>
             {seg.value}
           </Text>
-        )
+        ),
       )}
     </Text>
   );
@@ -128,7 +135,9 @@ function TagChip({ label, onRemove }: { label: string; onRemove: () => void }) {
         borderColor: withAlpha(colors.primary, 0.3),
       }}
     >
-      <Text style={{ fontSize: 12, color: colors.primary, fontWeight: "600" }}>#{label}</Text>
+      <Text style={{ fontSize: 12, color: colors.primary, fontWeight: "600" }}>
+        #{label}
+      </Text>
       <Pressable onPress={onRemove} hitSlop={6}>
         <Icon name="X" size={12} className="text-primary" />
       </Pressable>
@@ -189,7 +198,11 @@ function MediaUploadRow({
         <View style={{ flex: 1 }}>
           <Text
             numberOfLines={1}
-            style={{ color: colors.foreground, fontSize: 13, fontWeight: "700" }}
+            style={{
+              color: colors.foreground,
+              fontSize: 13,
+              fontWeight: "700",
+            }}
           >
             {item.name}
           </Text>
@@ -211,7 +224,14 @@ function MediaUploadRow({
         </Pressable>
       </View>
       {isUploading ? (
-        <View style={{ height: 4, overflow: "hidden", borderRadius: 99, backgroundColor: colors.muted }}>
+        <View
+          style={{
+            height: 4,
+            overflow: "hidden",
+            borderRadius: 99,
+            backgroundColor: colors.muted,
+          }}
+        >
           <View
             style={{
               height: "100%",
@@ -243,8 +263,32 @@ export default function BlogComposeScreen() {
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
   const [mediaUploads, setMediaUploads] = useState<ComposeMediaUpload[]>([]);
+  const prefilledEditIdRef = useRef<number | null>(null);
 
-  const isEditing = !!editId;
+  const numericEditId = Number(editId);
+  const isEditing = Number.isFinite(numericEditId) && numericEditId > 0;
+  const editBlogId = isEditing ? numericEditId : 0;
+
+  const { data: existingBlog } = useQuery({
+    ..._trpc.blog.getBlog.queryOptions({ id: editBlogId }),
+    enabled: isEditing,
+  });
+
+  useEffect(() => {
+    if (!isEditing) {
+      prefilledEditIdRef.current = null;
+      return;
+    }
+    if (!existingBlog || prefilledEditIdRef.current === editBlogId) return;
+
+    setContent(existingBlog.content ?? "");
+    setTags(
+      existingBlog.blogTags
+        ?.map((blogTag: any) => blogTag.tags?.title)
+        .filter(Boolean) ?? [],
+    );
+    prefilledEditIdRef.current = editBlogId;
+  }, [editBlogId, existingBlog, isEditing]);
 
   const { mutate: createBlog, isPending: isCreating } = useMutation(
     _trpc.blog.createBlog.mutationOptions({
@@ -253,20 +297,24 @@ export default function BlogComposeScreen() {
         router.replace(`/blog-view-text/${blog.id}` as any);
       },
       onError: (e) => Alert.alert(t("error"), e.message),
-    })
+    }),
   );
 
   const { mutate: updateBlog, isPending: isUpdating } = useMutation(
     _trpc.blog.updateBlog.mutationOptions({
       onSuccess: (blog) => {
-        qc.invalidateQueries({ queryKey: _trpc.blog.getBlog.queryKey({ id: blog.id }) });
+        qc.invalidateQueries({
+          queryKey: _trpc.blog.getBlog.queryKey({ id: blog.id }),
+        });
         router.back();
       },
       onError: (e) => Alert.alert(t("error"), e.message),
-    })
+    }),
   );
 
-  const hasUploadingMedia = mediaUploads.some((item) => item.status === "uploading");
+  const hasUploadingMedia = mediaUploads.some(
+    (item) => item.status === "uploading",
+  );
   const uploadedMedia = mediaUploads
     .map((item) => item.blob)
     .filter(Boolean) as BlobMediaUpload[];
@@ -301,7 +349,12 @@ export default function BlogComposeScreen() {
       const blob = await uploadBlogMediaAsset(asset, (progress) => {
         updateMedia(id, { progress });
       });
-      updateMedia(id, { status: "uploaded", progress: 1, blob, error: undefined });
+      updateMedia(id, {
+        status: "uploaded",
+        progress: 1,
+        blob,
+        error: undefined,
+      });
     } catch (error) {
       updateMedia(id, {
         status: "failed",
@@ -335,7 +388,10 @@ export default function BlogComposeScreen() {
 
   function addTag() {
     const t = tagInput.trim().replace(/^#/, "");
-    if (!t || tags.includes(t)) { setTagInput(""); return; }
+    if (!t || tags.includes(t)) {
+      setTagInput("");
+      return;
+    }
     setTags((prev) => [...prev, t]);
     setTagInput("");
   }
@@ -346,9 +402,9 @@ export default function BlogComposeScreen() {
       return;
     }
     if (hasUploadingMedia) return;
-    if (isEditing && editId) {
+    if (isEditing) {
       updateBlog({
-        id: Number(editId),
+        id: editBlogId,
         content: content.trim(),
         status,
         tags: allTags,
@@ -365,9 +421,9 @@ export default function BlogComposeScreen() {
   }
 
   // Extract auto-detected hashtags from content for display hint
-  const autoTags = [...(content.match(/#([\p{L}\p{N}_\u0600-\u06FF]+)/gsu) ?? [])].map((t) =>
-    t.slice(1)
-  );
+  const autoTags = [
+    ...(content.match(/#([\p{L}\p{N}_\u0600-\u06FF]+)/gsu) ?? []),
+  ].map((t) => t.slice(1));
   const allTags = [...new Set([...tags, ...autoTags])];
 
   return (
@@ -399,7 +455,13 @@ export default function BlogComposeScreen() {
             <Icon name="X" size={20} className="text-foreground" />
           </Pressable>
 
-          <Text style={{ fontSize: 16, fontWeight: "700", color: colors.foreground }}>
+          <Text
+            style={{
+              fontSize: 16,
+              fontWeight: "700",
+              color: colors.foreground,
+            }}
+          >
             {isEditing ? t("editBlog") : t("newBlog")}
           </Text>
 
@@ -416,14 +478,26 @@ export default function BlogComposeScreen() {
             }}
           >
             {isPending ? (
-              <ActivityIndicator size="small" color={colors.primaryForeground} />
+              <ActivityIndicator
+                size="small"
+                color={colors.primaryForeground}
+              />
             ) : (
-              <Text style={{ fontSize: 13, fontWeight: "700", color: colors.primaryForeground }}>{t("publish")}</Text>
+              <Text
+                style={{
+                  fontSize: 13,
+                  fontWeight: "700",
+                  color: colors.primaryForeground,
+                }}
+              >
+                {t("publish")}
+              </Text>
             )}
           </Pressable>
         </View>
 
         <ScrollView
+          style={{ backgroundColor: colors.background }}
           keyboardDismissMode="interactive"
           contentContainerStyle={{ padding: 20, paddingBottom: 120, gap: 0 }}
         >
@@ -435,7 +509,13 @@ export default function BlogComposeScreen() {
           />
 
           {/* Divider */}
-          <View style={{ height: 1, backgroundColor: colors.border, marginVertical: 20 }} />
+          <View
+            style={{
+              height: 1,
+              backgroundColor: colors.border,
+              marginVertical: 20,
+            }}
+          />
 
           {/* Tags section */}
           <View style={{ gap: 12 }}>
@@ -443,7 +523,7 @@ export default function BlogComposeScreen() {
               style={{
                 fontSize: 12,
                 fontWeight: "600",
-                color: "#6b7280",
+                color: colors.mutedForeground,
                 textAlign: "right",
                 writingDirection: "rtl",
               }}
@@ -456,7 +536,7 @@ export default function BlogComposeScreen() {
               <Text
                 style={{
                   fontSize: 11,
-                  color: "#4a4a4a",
+                  color: colors.mutedForeground,
                   textAlign: "right",
                   writingDirection: "rtl",
                 }}
@@ -467,12 +547,21 @@ export default function BlogComposeScreen() {
 
             {/* Tag chips */}
             {allTags.length > 0 && (
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "flex-end" }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  flexWrap: "wrap",
+                  gap: 8,
+                  justifyContent: "flex-end",
+                }}
+              >
                 {allTags.map((tag) => (
                   <TagChip
                     key={tag}
                     label={tag}
-                    onRemove={() => setTags((prev) => prev.filter((t) => t !== tag))}
+                    onRemove={() =>
+                      setTags((prev) => prev.filter((t) => t !== tag))
+                    }
                   />
                 ))}
               </View>
@@ -518,11 +607,19 @@ export default function BlogComposeScreen() {
                   writingDirection: "rtl",
                 }}
               />
-              <Text style={{ fontSize: 13, color: "#6b7280" }}>#</Text>
+              <Text style={{ fontSize: 13, color: colors.mutedForeground }}>
+                #
+              </Text>
             </View>
           </View>
 
-          <View style={{ height: 1, backgroundColor: colors.border, marginVertical: 20 }} />
+          <View
+            style={{
+              height: 1,
+              backgroundColor: colors.border,
+              marginVertical: 20,
+            }}
+          />
 
           <View style={{ gap: 12 }}>
             <View style={{ gap: 4 }}>
@@ -565,7 +662,13 @@ export default function BlogComposeScreen() {
               }}
             >
               <Icon name="Plus" size={18} className="text-primary" />
-              <Text style={{ color: colors.primary, fontWeight: "700", fontSize: 13 }}>
+              <Text
+                style={{
+                  color: colors.primary,
+                  fontWeight: "700",
+                  fontSize: 13,
+                }}
+              >
                 {t("pickMedia")}
               </Text>
             </Pressable>
@@ -574,7 +677,9 @@ export default function BlogComposeScreen() {
                 key={item.id}
                 item={item}
                 onRemove={() =>
-                  setMediaUploads((prev) => prev.filter((media) => media.id !== item.id))
+                  setMediaUploads((prev) =>
+                    prev.filter((media) => media.id !== item.id),
+                  )
                 }
                 onRetry={() => retryUpload(item)}
               />
@@ -609,7 +714,13 @@ export default function BlogComposeScreen() {
               borderColor: colors.border,
             }}
           >
-            <Text style={{ fontSize: 14, fontWeight: "600", color: colors.mutedForeground }}>
+            <Text
+              style={{
+                fontSize: 14,
+                fontWeight: "600",
+                color: colors.mutedForeground,
+              }}
+            >
               {t("saveDraft")}
             </Text>
           </Pressable>

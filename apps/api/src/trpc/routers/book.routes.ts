@@ -11,6 +11,7 @@ import {
   parseShamelaOpenPage,
   serializeDocumentToHtml,
 } from "@acme/document";
+import type { ShamelaTocNode } from "@acme/document";
 
 const SHAMELA_EXTRACT_PROMPT = `You are a structured data extractor for Islamic books from Shamela (the largest Islamic digital library).
 
@@ -548,13 +549,117 @@ async function syncToc(
     data: toc.chapters.map((ch) => ({
       bookId,
       shamelaPageNo: ch.shamelaPageNo,
-      shamelaUrl: ch.shamelaUrl,
+      shamelaUrl: getShamelaStoragePath(ch.shamelaUrl) ?? ch.shamelaUrl,
       chapterTitle: ch.chapterTitle ?? null,
       topicTitle: ch.topicTitle ?? null,
       volumeId: volumeIdMap.get(ch.volumeNumber) ?? null,
       status: "pending",
     })),
   });
+
+  for (const chapter of toc.chapters) {
+    const shamelaUrl =
+      getShamelaStoragePath(chapter.shamelaUrl) ?? chapter.shamelaUrl;
+    await db.bookPage.updateMany({
+      where: { bookId, shamelaPageNo: chapter.shamelaPageNo },
+      data: { shamelaUrl },
+    });
+  }
+
+  for (const vol of toc.volumes ?? []) {
+    await db.bookTocNode.upsert({
+      where: { bookId_treePath: { bookId, treePath: String(vol.number) } },
+      create: {
+        bookId,
+        kind: "volume",
+        title: vol.title ?? `Volume ${vol.number}`,
+        shamelaPath: null,
+        volumeNumber: vol.number,
+        depth: 0,
+        sortOrder: vol.number - 1,
+        treePath: String(vol.number),
+      },
+      update: {
+        title: vol.title ?? `Volume ${vol.number}`,
+        volumeNumber: vol.number,
+        depth: 0,
+        sortOrder: vol.number - 1,
+        deletedAt: null,
+      },
+    });
+  }
+
+  const pageRows = await db.bookPage.findMany({
+    where: {
+      bookId,
+      shamelaPageNo: { in: toc.chapters.map((chapter) => chapter.shamelaPageNo) },
+      deletedAt: null,
+    },
+    select: { id: true, shamelaPageNo: true },
+  });
+  const pageIdByPageNo = new Map(
+    pageRows.map((page: { id: number; shamelaPageNo: number }) => [
+      page.shamelaPageNo,
+      page.id,
+    ]),
+  );
+  const chaptersByVolume = new Map<number, ParsedTocData["chapters"]>();
+  for (const chapter of toc.chapters) {
+    const volumeNumber = chapter.volumeNumber || 1;
+    const current = chaptersByVolume.get(volumeNumber) ?? [];
+    current.push(chapter);
+    chaptersByVolume.set(volumeNumber, current);
+  }
+  for (const [volumeNumber, chapters] of chaptersByVolume) {
+    const parent = await db.bookTocNode.upsert({
+      where: { bookId_treePath: { bookId, treePath: String(volumeNumber) } },
+      create: {
+        bookId,
+        kind: "volume",
+        title:
+          toc.volumes.find((volume) => volume.number === volumeNumber)?.title ??
+          `Volume ${volumeNumber}`,
+        volumeNumber,
+        depth: 0,
+        sortOrder: volumeNumber - 1,
+        treePath: String(volumeNumber),
+      },
+      update: { deletedAt: null },
+      select: { id: true },
+    });
+    for (const [index, chapter] of chapters.entries()) {
+      const treePath = `${volumeNumber}.${index + 1}`;
+      await db.bookTocNode.upsert({
+        where: { bookId_treePath: { bookId, treePath } },
+        create: {
+          bookId,
+          parentId: parent.id,
+          pageId: pageIdByPageNo.get(chapter.shamelaPageNo) ?? null,
+          kind: "chapter",
+          title: chapter.topicTitle ?? chapter.chapterTitle ?? `Page ${chapter.shamelaPageNo}`,
+          shamelaPath: getShamelaStoragePath(chapter.shamelaUrl),
+          shamelaPageNo: chapter.shamelaPageNo,
+          volumeNumber,
+          depth: 1,
+          sortOrder: index,
+          treePath,
+          metadataJson: { source: "ai_toc" },
+        },
+        update: {
+          parentId: parent.id,
+          pageId: pageIdByPageNo.get(chapter.shamelaPageNo) ?? null,
+          title: chapter.topicTitle ?? chapter.chapterTitle ?? `Page ${chapter.shamelaPageNo}`,
+          shamelaPath: getShamelaStoragePath(chapter.shamelaUrl),
+          shamelaPageNo: chapter.shamelaPageNo,
+          volumeNumber,
+          depth: 1,
+          sortOrder: index,
+          metadataJson: { source: "ai_toc" },
+          deletedAt: null,
+        },
+      });
+    }
+  }
 
   return results.count;
 }
@@ -711,14 +816,86 @@ function buildPageDocument(page: {
 }
 
 function normalizeSourceUrl(rawUrl: string): string {
-  const url = new URL(rawUrl.trim());
+  const url = new URL(rawUrl.trim(), "https://shamela.ws");
   url.search = "";
   url.hash = "";
   return `${url.origin}${url.pathname}`.replace(/\/+$/, "");
 }
 
+function isAbsoluteUrl(value: string) {
+  return /^[a-z][a-z\d+.-]*:\/\//i.test(value);
+}
+
+function isShamelaHostname(hostname: string) {
+  return hostname === "shamela.ws" || hostname.endsWith(".shamela.ws");
+}
+
+function isShamelaUrlOrPath(rawUrlOrPath: string) {
+  try {
+    const url = new URL(rawUrlOrPath.trim(), "https://shamela.ws");
+    return !isAbsoluteUrl(rawUrlOrPath) || isShamelaHostname(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function getShamelaPath(rawUrlOrPath: string | null | undefined): string | null {
+  const value = safeString(rawUrlOrPath);
+  if (!value) return null;
+  try {
+    const url = new URL(value, "https://shamela.ws");
+    return url.pathname.replace(/\/+$/, "") || "/";
+  } catch {
+    return null;
+  }
+}
+
+function getShamelaStoragePath(rawUrlOrPath: string | null | undefined): string | null {
+  const value = safeString(rawUrlOrPath);
+  if (!value) return null;
+  try {
+    const url = new URL(value, "https://shamela.ws");
+    if (isAbsoluteUrl(value) && !isShamelaHostname(url.hostname)) {
+      return null;
+    }
+    return url.pathname.replace(/\/+$/, "") || "/";
+  } catch {
+    return null;
+  }
+}
+
+function getShamelaBookStoragePath(rawUrlOrPath: string | null | undefined): string | null {
+  const path = getShamelaStoragePath(rawUrlOrPath);
+  const match = path?.match(/^\/book\/(\d+)(?:\/\d+)?$/);
+  return match ? `/book/${match[1]}` : null;
+}
+
+function buildShamelaUrlFromPath(pathOrUrl: string): string {
+  return normalizeSourceUrl(pathOrUrl);
+}
+
+function buildShamelaPageSourceUrl(pathOrUrl: string): string {
+  if (!isShamelaUrlOrPath(pathOrUrl)) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Invalid Shamela page link — only shamela.ws links are supported.",
+    });
+  }
+  const sourceUrl = buildShamelaUrlFromPath(pathOrUrl);
+  const hasBook = getShamelaBookIdFromUrl(sourceUrl) != null;
+  const hasPage = getShamelaPageNoFromUrl(sourceUrl) != null;
+  if (!hasBook || !hasPage) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Invalid Shamela page link — expected /book/{bookId}/{pageNo}.",
+    });
+  }
+  return sourceUrl;
+}
+
 function getShamelaBookUrlFromUrl(rawUrl: string): string | null {
   try {
+    if (!isShamelaUrlOrPath(rawUrl)) return null;
     const normalizedUrl = normalizeSourceUrl(rawUrl);
     const match = normalizedUrl.match(/^(https?:\/\/[^/]+\/book\/\d+)(?:\/\d+)?$/);
     return match?.[1] ?? null;
@@ -730,14 +907,14 @@ function getShamelaBookUrlFromUrl(rawUrl: string): string | null {
 function normalizeShamelaUrlInput(rawUrl: string | null | undefined) {
   const value = safeString(rawUrl);
   if (!value) return undefined;
-  const bookUrl = getShamelaBookUrlFromUrl(value);
-  if (!bookUrl) {
+  const bookPath = getShamelaBookStoragePath(value);
+  if (!bookPath) {
     throw new TRPCError({
       code: "BAD_REQUEST",
       message: "Invalid Shamela URL — expected a /book/... path.",
     });
   }
-  return bookUrl;
+  return bookPath;
 }
 
 function getShamelaBookIdFromUrl(rawUrl: string | null | undefined): number | null {
@@ -910,6 +1087,70 @@ function toErrorLogPayload(error: unknown) {
   return { error };
 }
 
+function getPreviewSafeShamelaDocument(
+  document: ReturnType<typeof parseShamelaOpenPage>["document"],
+) {
+  return {
+    ...document,
+    context: {
+      ...document.context,
+      toc: document.context.toc.map((node) => ({
+        kind: node.kind,
+        title: node.title,
+        path: node.path,
+        url: node.url,
+        shamelaPageNo: node.shamelaPageNo,
+        volumeNumber: node.volumeNumber,
+        depth: node.depth,
+        sortOrder: node.sortOrder,
+        treePath: node.treePath,
+        parentTreePath: node.parentTreePath,
+        active: node.active,
+      })),
+    },
+  };
+}
+
+function getPreviewSafeShamelaFacts(
+  facts: ReturnType<typeof parseShamelaOpenPage>["facts"],
+) {
+  const flatNodes = flattenShamelaTocNodes(facts.toc.nodes);
+  return {
+    ...facts,
+    toc: {
+      ...facts.toc,
+      nodes: flatNodes.map((node) => ({
+        kind: node.kind,
+        title: node.title,
+        path: node.path,
+        url: node.url,
+        shamelaPageNo: node.shamelaPageNo,
+        volumeNumber: node.volumeNumber,
+        depth: node.depth,
+        sortOrder: node.sortOrder,
+        treePath: node.treePath,
+        parentTreePath: node.parentTreePath,
+        active: node.active,
+      })),
+      activeNode: facts.toc.activeNode
+        ? {
+            kind: facts.toc.activeNode.kind,
+            title: facts.toc.activeNode.title,
+            path: facts.toc.activeNode.path,
+            url: facts.toc.activeNode.url,
+            shamelaPageNo: facts.toc.activeNode.shamelaPageNo,
+            volumeNumber: facts.toc.activeNode.volumeNumber,
+            depth: facts.toc.activeNode.depth,
+            sortOrder: facts.toc.activeNode.sortOrder,
+            treePath: facts.toc.activeNode.treePath,
+            parentTreePath: facts.toc.activeNode.parentTreePath,
+            active: facts.toc.activeNode.active,
+          }
+        : null,
+    },
+  };
+}
+
 function extractJsonPayload(text: string): string {
   const trimmed = text.trim();
 
@@ -958,8 +1199,14 @@ function getShamelaBookInfo(rawUrl: string): {
   bookIndexUrl: string;
   linkedPageUrl: string | null;
 } {
+  if (!isShamelaUrlOrPath(rawUrl)) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Invalid Shamela URL — only shamela.ws links are supported.",
+    });
+  }
   const normalizedUrl = normalizeSourceUrl(rawUrl);
-  const parsedUrl = new URL(rawUrl.trim());
+  const parsedUrl = new URL(rawUrl.trim(), "https://shamela.ws");
   const match = normalizedUrl.match(/\/book\/(\d+)/);
   if (!match) {
     throw new TRPCError({
@@ -1177,6 +1424,235 @@ async function upsertShelfAndAuthor(
   return { shelfId, authorId };
 }
 
+function flattenShamelaTocNodes(nodes: ShamelaTocNode[]): ShamelaTocNode[] {
+  return nodes.flatMap((node) => [node, ...flattenShamelaTocNodes(node.children)]);
+}
+
+async function syncParsedShamelaBookTree(
+  db: any,
+  input: {
+    explicitBookId?: number | null;
+    parsed: ReturnType<typeof parseShamelaOpenPage>;
+    fallbackTitle?: string | null;
+    finalUrl: string;
+  },
+) {
+  const bookMeta = input.parsed.facts.book;
+  const shamelaId =
+    bookMeta.shamelaBookId ??
+    input.parsed.document.meta.shamelaBookId ??
+    getShamelaBookIdFromUrl(input.finalUrl);
+  const bookPath =
+    bookMeta.bookPath ??
+    (shamelaId ? `/book/${shamelaId}` : getShamelaPath(input.finalUrl));
+  const bookUrl = bookPath ? buildShamelaUrlFromPath(bookPath) : input.finalUrl;
+  const bookStoragePath = getShamelaBookStoragePath(bookPath ?? bookUrl) ?? bookPath ?? bookUrl;
+  const title =
+    safeString(bookMeta.title) ??
+    safeString(input.fallbackTitle) ??
+    `Shamela book ${shamelaId ?? "unknown"}`;
+
+  let book = input.explicitBookId
+    ? await db.book.findFirst({
+        where: { id: input.explicitBookId, deletedAt: null },
+        include: { blog: { select: { id: true } } },
+      })
+    : null;
+
+  if (!book && shamelaId) {
+    book = await db.book.findFirst({
+      where: { shamelaId, deletedAt: null },
+      include: { blog: { select: { id: true } } },
+    });
+  }
+
+  if (!book) {
+    const blog = await db.blog.create({
+      data: {
+        type: "book",
+        content: title,
+        published: true,
+        status: "published",
+      },
+    });
+    book = await db.book.create({
+      data: {
+        blogId: blog.id,
+        ownerUserId: getDefaultBookUserId(),
+        sourceType: "shamela",
+        editable: false,
+        nameAr: title,
+        shamelaId: shamelaId ?? undefined,
+        shamelaUrl: bookStoragePath,
+        category: bookMeta.category?.name ?? undefined,
+        categoryUrl: bookMeta.category?.url ?? undefined,
+        coverColor: "#14532d",
+      },
+      include: { blog: { select: { id: true } } },
+    });
+  } else {
+    book = await db.book.update({
+      where: { id: book.id },
+      data: {
+        nameAr: title,
+        sourceType: "shamela",
+        editable: false,
+        shamelaId: shamelaId ?? book.shamelaId ?? undefined,
+        shamelaUrl: bookStoragePath,
+        category: bookMeta.category?.name ?? undefined,
+        categoryUrl: bookMeta.category?.url ?? undefined,
+      },
+      include: { blog: { select: { id: true } } },
+    });
+  }
+
+  if (bookMeta.author?.name) {
+    const author = await db.bookAuthor.upsert({
+      where: { name: bookMeta.author.name },
+      create: {
+        name: bookMeta.author.name,
+        nameAr: bookMeta.author.name,
+        url: bookMeta.author.url ?? undefined,
+      },
+      update: {
+        nameAr: bookMeta.author.name,
+        url: bookMeta.author.url ?? undefined,
+      },
+    });
+    await db.book.update({
+      where: { id: book.id },
+      data: { authors: { set: [{ id: author.id }] } },
+    });
+  }
+
+  const tocNodes = input.parsed.facts.toc.nodes;
+  const flatNodes = flattenShamelaTocNodes(tocNodes);
+  const volumeIdByNumber = new Map<number, number>();
+  for (const node of tocNodes.filter((item) => item.kind === "volume")) {
+    if (node.volumeNumber == null) continue;
+    const volume = await db.bookVolume.upsert({
+      where: { bookId_number: { bookId: book.id, number: node.volumeNumber } },
+      create: { bookId: book.id, number: node.volumeNumber, title: node.title },
+      update: { title: node.title, deletedAt: null },
+    });
+    volumeIdByNumber.set(node.volumeNumber, volume.id);
+  }
+
+  const pageIdByPageNo = new Map<number, number>();
+  const nodesWithPages = flatNodes.filter(
+    (node) => node.shamelaPageNo != null && (node.path || node.url),
+  );
+  for (const node of nodesWithPages) {
+    const shamelaPageNo = node.shamelaPageNo!;
+    const shamelaUrl =
+      getShamelaStoragePath(node.path ?? node.url!) ??
+      buildShamelaUrlFromPath(node.path ?? node.url!);
+    const page = await db.bookPage.upsert({
+      where: {
+        bookId_shamelaPageNo: {
+          bookId: book.id,
+          shamelaPageNo,
+        },
+      },
+      create: {
+        bookId: book.id,
+        volumeId:
+          node.volumeNumber != null
+            ? volumeIdByNumber.get(node.volumeNumber) ?? null
+            : null,
+        shamelaPageNo,
+        shamelaUrl,
+        chapterTitle: node.kind === "chapter" ? node.title : null,
+        topicTitle: node.kind === "chapter" ? node.title : null,
+        status: "pending",
+      },
+      update: {
+        volumeId:
+          node.volumeNumber != null
+            ? volumeIdByNumber.get(node.volumeNumber) ?? undefined
+            : undefined,
+        shamelaUrl,
+        ...(node.kind === "chapter"
+          ? {
+              chapterTitle: node.title,
+              topicTitle: node.title,
+            }
+          : {}),
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+    pageIdByPageNo.set(shamelaPageNo, page.id);
+  }
+
+  async function upsertNode(node: ShamelaTocNode, parentId: number | null) {
+    const pageId =
+      node.shamelaPageNo != null
+        ? pageIdByPageNo.get(node.shamelaPageNo) ?? null
+        : null;
+    const nodeShamelaPath = getShamelaStoragePath(node.path ?? node.url);
+    const row = await db.bookTocNode.upsert({
+      where: {
+        bookId_treePath: {
+          bookId: book.id,
+          treePath: node.treePath,
+        },
+      },
+      create: {
+        bookId: book.id,
+        parentId,
+        pageId,
+        kind: node.kind,
+        title: node.title,
+        shamelaPath: nodeShamelaPath,
+        shamelaPageNo: node.shamelaPageNo ?? null,
+        volumeNumber: node.volumeNumber ?? null,
+        depth: node.depth,
+        sortOrder: node.sortOrder,
+        treePath: node.treePath,
+        isCurrent: node.active,
+        metadataJson: {
+          url: node.url,
+          parentTreePath: node.parentTreePath,
+        },
+        deletedAt: null,
+      },
+      update: {
+        parentId,
+        pageId,
+        kind: node.kind,
+        title: node.title,
+        shamelaPath: nodeShamelaPath,
+        shamelaPageNo: node.shamelaPageNo ?? null,
+        volumeNumber: node.volumeNumber ?? null,
+        depth: node.depth,
+        sortOrder: node.sortOrder,
+        isCurrent: node.active,
+        metadataJson: {
+          url: node.url,
+          parentTreePath: node.parentTreePath,
+        },
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+    for (const child of node.children) {
+      await upsertNode(child, row.id);
+    }
+  }
+
+  for (const node of tocNodes) {
+    await upsertNode(node, null);
+  }
+
+  return {
+    bookId: book.id,
+    book,
+    tocNodeCount: flatNodes.length,
+    pageStubCount: pageIdByPageNo.size,
+  };
+}
+
 async function rebindPageAnnotations(
   db: any,
   pageId: number,
@@ -1296,6 +1772,7 @@ async function saveParsedPageData(
     ...input.pageData,
     shamelaPageNo: resolvedShamelaPageNo,
   };
+  const sourceStoragePath = getShamelaStoragePath(input.sourceUrl) ?? input.sourceUrl ?? "";
   const existingPage = await db.bookPage.findFirst({
     where: {
       bookId: input.bookId,
@@ -1330,7 +1807,7 @@ async function saveParsedPageData(
         bookId: input.bookId,
         volumeId: input.volumeId ?? null,
         shamelaPageNo: resolvedShamelaPageNo,
-        shamelaUrl: input.sourceUrl ?? "",
+        shamelaUrl: sourceStoragePath,
         printedPageNo: pageData.printedPageNo ?? null,
         chapterTitle: pageData.chapterTitle ?? null,
         chapterUrl: pageData.chapterUrl ?? null,
@@ -1341,7 +1818,7 @@ async function saveParsedPageData(
       },
       update: {
         volumeId: input.volumeId ?? undefined,
-        shamelaUrl: input.sourceUrl ?? existingPage?.shamelaUrl ?? "",
+        shamelaUrl: sourceStoragePath || (existingPage?.shamelaUrl ?? ""),
         printedPageNo: pageData.printedPageNo ?? null,
         chapterTitle: pageData.chapterTitle ?? null,
         chapterUrl: pageData.chapterUrl ?? null,
@@ -1403,7 +1880,7 @@ async function saveParsedPageData(
           ? {
               sourceType: "shamela",
               editable: false,
-              shamelaUrl: shamelaBookUrl,
+              shamelaUrl: getShamelaBookStoragePath(shamelaBookUrl) ?? shamelaBookUrl,
             }
           : {}),
       },
@@ -1447,6 +1924,7 @@ async function syncBookFromShamelaInternal(
   const { normalizedUrl, shamelaId, bookIndexUrl, linkedPageUrl } = getShamelaBookInfo(
     input.shamelaUrl,
   );
+  const bookStoragePath = getShamelaBookStoragePath(bookIndexUrl) ?? bookIndexUrl;
 
   const existing = await db.book.findFirst({
     where: { shamelaId, deletedAt: null },
@@ -1502,7 +1980,7 @@ async function syncBookFromShamelaInternal(
           categoryUrl: meta.categoryUrl ?? undefined,
           coverColor: meta.coverColor ?? undefined,
           shelfId: shelfId ?? undefined,
-          shamelaUrl: bookIndexUrl,
+          shamelaUrl: bookStoragePath,
           ...(authorId ? { authors: { set: [{ id: authorId }] } } : {}),
         },
         include: { authors: true, shelf: true },
@@ -1531,7 +2009,7 @@ async function syncBookFromShamelaInternal(
           sourceType: "shamela",
           editable: false,
           shamelaId,
-          shamelaUrl: bookIndexUrl,
+          shamelaUrl: bookStoragePath,
           category: meta.category ?? undefined,
           categoryUrl: meta.categoryUrl ?? undefined,
           coverColor: meta.coverColor ?? undefined,
@@ -1742,6 +2220,16 @@ async function captureAndStageShamelaPageInternal(
     bookId?: number | null;
   },
 ) {
+  if (
+    !isShamelaUrlOrPath(input.finalUrl || input.requestedUrl) ||
+    getShamelaBookIdFromUrl(input.finalUrl || input.requestedUrl) == null
+  ) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Only Shamela book pages can be captured here.",
+    });
+  }
+
   const normalizedUrl = (() => {
     try {
       return normalizeSourceUrl(input.finalUrl || input.requestedUrl);
@@ -1819,9 +2307,10 @@ async function captureAndStageShamelaPageInternal(
     finalUrl: input.finalUrl,
     title: input.title ?? null,
     document: {
-      ...parsed.document,
+      ...getPreviewSafeShamelaDocument(parsed.document),
       diagnostics: [...parsed.document.diagnostics, ...dbWarnings],
     },
+    facts: getPreviewSafeShamelaFacts(parsed.facts),
     diagnostics: [...parsed.diagnostics, ...dbWarnings],
     linkGraph,
     artifactPaths,
@@ -1896,6 +2385,8 @@ async function promoteStagedShamelaPageParseInternal(
           requestedUrl: true,
           finalUrl: true,
           title: true,
+          html: true,
+          htmlHash: true,
         },
       },
     },
@@ -1915,7 +2406,16 @@ async function promoteStagedShamelaPageParseInternal(
     }
   }
 
-  const document = isRecord(staged.documentJson) ? staged.documentJson as any : null;
+  const reparsed = parseShamelaOpenPage({
+    html: staged.rawPage.html,
+    requestedUrl: staged.rawPage.requestedUrl,
+    finalUrl: staged.rawPage.finalUrl,
+    title: staged.rawPage.title,
+    capturedAt: staged.createdAt?.toISOString() ?? null,
+    htmlHash: staged.rawPage.htmlHash,
+  });
+
+  const document = reparsed.document;
   const meta = isRecord(document?.meta) ? document.meta as any : {};
   const linkGraph = isRecord(staged.linkGraphJson) ? staged.linkGraphJson as any : {};
   const shamelaBookId =
@@ -1933,65 +2433,50 @@ async function promoteStagedShamelaPageParseInternal(
     bookId = existingBook?.id ?? null;
   }
 
-  if (!bookId) {
-    const title =
+  const treeSync = await syncParsedShamelaBookTree(db, {
+    explicitBookId: bookId,
+    parsed: reparsed,
+    fallbackTitle:
       safeString(staged.rawPage.title) ??
       safeString(staged.chapterTitle) ??
-      safeString(staged.topicTitle) ??
-      `Shamela book ${shamelaBookId ?? "unknown"}`;
-    const blog = await db.blog.create({
-      data: {
-        type: "book",
-        content: title,
-        published: true,
-        status: "published",
-      },
-    });
-    const book = await db.book.create({
-      data: {
-        blogId: blog.id,
-        ownerUserId: getDefaultBookUserId(),
-        sourceType: "shamela",
-        editable: false,
-        nameAr: title,
-        shamelaId: shamelaBookId ?? undefined,
-        shamelaUrl: shamelaBookId
-          ? `https://shamela.ws/book/${shamelaBookId}`
-          : staged.rawPage.finalUrl,
-        coverColor: "#14532d",
-      },
-      select: { id: true },
-    });
-    bookId = book.id;
-  }
+      safeString(staged.topicTitle),
+    finalUrl: staged.rawPage.finalUrl,
+  });
+  bookId = treeSync.bookId;
 
   let volumeId: number | null = null;
-  if (typeof staged.volumeNumber === "number") {
+  const parsedVolumeNumber =
+    typeof meta.volumeNumber === "number" ? meta.volumeNumber : staged.volumeNumber;
+  if (typeof parsedVolumeNumber === "number") {
     const volume = await db.bookVolume.upsert({
-      where: { bookId_number: { bookId, number: staged.volumeNumber } },
-      create: { bookId, number: staged.volumeNumber, title: null },
+      where: { bookId_number: { bookId, number: parsedVolumeNumber } },
+      create: { bookId, number: parsedVolumeNumber, title: null },
       update: {},
     });
     volumeId = volume.id;
   }
 
-  const paragraphBlocks = Array.isArray(staged.paragraphsJson)
-    ? staged.paragraphsJson as any[]
-    : [];
-  const footnoteBlocks = Array.isArray(staged.footnotesJson)
-    ? staged.footnotesJson as any[]
-    : [];
+  const paragraphBlocks = document.content.filter((block) => block.type === "paragraph");
+  const footnoteBlocks = document.content.filter((block) => block.type === "footnote");
   const pageData: ParsedPageData = {
     shamelaPageNo:
+      (typeof meta.shamelaPageNo === "number" ? meta.shamelaPageNo : null) ??
       staged.shamelaPageNo ??
       getShamelaPageNoFromUrl(staged.rawPage.finalUrl) ??
       getShamelaPageNoFromUrl(staged.rawPage.requestedUrl) ??
       1,
-    printedPageNo: staged.printedPageNo ?? null,
-    chapterTitle: staged.chapterTitle ?? null,
-    chapterUrl: staged.chapterUrl ?? null,
-    topicTitle: staged.topicTitle ?? null,
-    topicUrl: staged.topicUrl ?? null,
+    printedPageNo:
+      (typeof meta.printedPageNo === "number" ? meta.printedPageNo : null) ??
+      staged.printedPageNo ??
+      null,
+    chapterTitle:
+      document.context.currentTopic?.label ?? staged.chapterTitle ?? null,
+    chapterUrl:
+      document.context.currentTopic?.href ?? staged.chapterUrl ?? null,
+    topicTitle:
+      document.context.currentTopic?.label ?? staged.topicTitle ?? null,
+    topicUrl:
+      document.context.currentTopic?.href ?? staged.topicUrl ?? null,
     paragraphs: paragraphBlocks
       .filter((block) => block?.type === "paragraph" && safeString(block.text))
       .map((block, index) => ({
@@ -2132,7 +2617,7 @@ export const bookRoutes = createTRPCRouter({
   getBook: publicProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ ctx, input }) => {
-      return ctx.db.book.findFirstOrThrow({
+      const book = await ctx.db.book.findFirstOrThrow({
         where: { id: input.id, deletedAt: null },
         include: {
           blog: {
@@ -2161,6 +2646,43 @@ export const bookRoutes = createTRPCRouter({
           },
         },
       });
+      const tocDelegate = (ctx.db as any).bookTocNode;
+      let tocNodes: any[] = [];
+      if (tocDelegate) {
+        try {
+          tocNodes = await tocDelegate.findMany({
+            where: { bookId: input.id, deletedAt: null },
+            orderBy: [{ depth: "asc" }, { sortOrder: "asc" }],
+            select: {
+              id: true,
+              parentId: true,
+              pageId: true,
+              kind: true,
+              title: true,
+              shamelaPath: true,
+              shamelaPageNo: true,
+              volumeNumber: true,
+              depth: true,
+              sortOrder: true,
+              treePath: true,
+              isCurrent: true,
+              page: {
+                select: {
+                  id: true,
+                  status: true,
+                  shamelaUrl: true,
+                  printedPageNo: true,
+                  volumeId: true,
+                },
+              },
+            },
+          });
+        } catch (error) {
+          console.warn("[Book] tocNodes unavailable for getBook", error);
+        }
+      }
+
+      return { ...book, tocNodes };
     }),
 
   createBook: publicProcedure
@@ -2528,7 +3050,7 @@ export const bookRoutes = createTRPCRouter({
     .input(
       z.object({
         bookId: z.number(),
-        shamelaUrl: z.string().url(),
+        shamelaUrl: z.string().min(1),
         volumeId: z.number().optional(),
         aiProvider: z
           .enum(["anthropic", "openai", "gemini"])
@@ -2537,17 +3059,18 @@ export const bookRoutes = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       const { db } = ctx;
+      const sourceUrl = buildShamelaPageSourceUrl(input.shamelaUrl);
       const aiResult = await callAI(
         input.aiProvider,
         SHAMELA_EXTRACT_PROMPT,
         4096,
-        input.shamelaUrl,
+        sourceUrl,
       );
       const pageData = parsePageData(aiResult.text);
       const { page, historyId, diffSummaryJson } = await saveParsedPageData(db, {
         bookId: input.bookId,
         pageData,
-        sourceUrl: input.shamelaUrl,
+        sourceUrl,
         volumeId: input.volumeId ?? null,
         importMethod: "reimport_url",
         provider: input.aiProvider,
@@ -2628,7 +3151,7 @@ export const bookRoutes = createTRPCRouter({
         };
       }
 
-      const nextUrl =
+      const nextUrlCandidate =
         nextExistingPage?.shamelaUrl ||
         (currentPage.shamelaUrl
           ? buildShamelaPageUrl(currentPage.shamelaUrl, nextPageNo)
@@ -2636,12 +3159,13 @@ export const bookRoutes = createTRPCRouter({
             ? buildShamelaPageUrl(book.shamelaUrl, nextPageNo)
             : null);
 
-      if (!nextUrl) {
+      if (!nextUrlCandidate) {
         throw new TRPCError({
           code: "BAD_REQUEST",
           message: "No Shamela link is available to import the next page.",
         });
       }
+      const nextUrl = buildShamelaPageSourceUrl(nextUrlCandidate);
 
       const aiResult = await callAI(
         input.aiProvider,
@@ -2965,6 +3489,33 @@ export const bookRoutes = createTRPCRouter({
         },
         orderBy: { shamelaPageNo: "asc" },
       });
+      let tocNodes: any[] = [];
+      const tocDelegate = (db as any).bookTocNode;
+      if (tocDelegate) {
+        try {
+          tocNodes = await tocDelegate.findMany({
+            where: { bookId: input.bookId, deletedAt: null },
+            select: {
+              id: true,
+              bookId: true,
+              parentId: true,
+              pageId: true,
+              kind: true,
+              title: true,
+              shamelaPath: true,
+              shamelaPageNo: true,
+              volumeNumber: true,
+              depth: true,
+              sortOrder: true,
+              treePath: true,
+              isCurrent: true,
+            },
+            orderBy: [{ depth: "asc" }, { sortOrder: "asc" }],
+          });
+        } catch (error) {
+          console.warn("[Book] tocNodes unavailable for download", error);
+        }
+      }
       const highlights = await db.bookPageHighlight.findMany({
         where: {
           page: { bookId: input.bookId },
@@ -2999,7 +3550,7 @@ export const bookRoutes = createTRPCRouter({
           updatedAt: true,
         },
       });
-      return { book, volumes, pages, highlights, comments };
+      return { book, volumes, pages, tocNodes, highlights, comments };
     }),
 
   // ── Search book content ───────────────────────────────────────────────────────

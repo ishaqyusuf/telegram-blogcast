@@ -4,12 +4,21 @@ import { useRouter } from "expo-router";
 import { Image, ScrollView, Text, View } from "react-native";
 
 import { _trpc } from "@/components/static-trpc";
+import { useColors } from "@/hooks/use-color";
 import { useTranslation } from "@/lib/i18n";
 
-const BOOK_COLORS = ["#1e40af", "#0f766e", "#b45309", "#4f46e5", "#be123c", "#0369a1"];
+const BOOK_COLORS = [
+  "#1e40af",
+  "#0f766e",
+  "#b45309",
+  "#4f46e5",
+  "#be123c",
+  "#0369a1",
+];
 
 export function BlogHomeBooks() {
   const router = useRouter();
+  const colors = useColors();
   const { t, textAlign, writingDirection } = useTranslation();
   const { data } = useQuery(_trpc.book.getBooks.queryOptions({ limit: 8 }));
   const books = data?.data ?? [];
@@ -35,13 +44,16 @@ export function BlogHomeBooks() {
         }}
       >
         <Pressable onPress={() => router.push("/books" as any)}>
-          <Text className="text-sm font-semibold text-primary">
+          <Text
+            className="text-sm font-semibold text-primary"
+            style={{ color: colors.primary }}
+          >
             {t("viewAll")}
           </Text>
         </Pressable>
         <Text
           className="text-base font-bold text-foreground"
-          style={{ textAlign, writingDirection }}
+          style={{ color: colors.foreground, textAlign, writingDirection }}
         >
           {t("library")}
         </Text>
@@ -53,8 +65,10 @@ export function BlogHomeBooks() {
         contentContainerStyle={{ gap: 12, paddingHorizontal: 16 }}
       >
         {books.map((book, idx) => {
-          const bgColor = book.coverColor ?? BOOK_COLORS[idx % BOOK_COLORS.length];
-          const authorName = book.authors?.[0]?.nameAr ?? book.authors?.[0]?.name;
+          const bgColor =
+            book.coverColor ?? BOOK_COLORS[idx % BOOK_COLORS.length];
+          const authorName =
+            book.authors?.[0]?.nameAr ?? book.authors?.[0]?.name;
           return (
             <Pressable
               key={book.id}
@@ -81,7 +95,13 @@ export function BlogHomeBooks() {
                   />
                 ) : (
                   <Text
-                    style={{ fontSize: 20, fontWeight: "bold", color: "white", textAlign: "center", writingDirection: "rtl" }}
+                    style={{
+                      fontSize: 20,
+                      fontWeight: "bold",
+                      color: "white",
+                      textAlign: "center",
+                      writingDirection: "rtl",
+                    }}
                   >
                     {(book.nameAr ?? book.nameEn ?? t("bookTitle")).slice(0, 2)}
                   </Text>
@@ -89,7 +109,11 @@ export function BlogHomeBooks() {
               </View>
               <Text
                 className="text-[12px] font-bold text-foreground"
-                style={{ textAlign: "right", writingDirection: "rtl" }}
+                style={{
+                  color: colors.foreground,
+                  textAlign: "right",
+                  writingDirection: "rtl",
+                }}
                 numberOfLines={2}
               >
                 {book.nameAr ?? book.nameEn}
@@ -97,7 +121,11 @@ export function BlogHomeBooks() {
               {authorName && (
                 <Text
                   className="mt-0.5 text-[10px] text-muted-foreground"
-                  style={{ textAlign: "right", writingDirection: "rtl" }}
+                  style={{
+                    color: colors.mutedForeground,
+                    textAlign: "right",
+                    writingDirection: "rtl",
+                  }}
                   numberOfLines={1}
                 >
                   {authorName}

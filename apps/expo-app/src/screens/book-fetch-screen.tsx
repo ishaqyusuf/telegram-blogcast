@@ -8,6 +8,7 @@ import { Modal, useModal } from "@/components/ui/modal";
 import { useTranslation } from "@/lib/i18n";
 import { useColors } from "@/hooks/use-color";
 import { withAlpha } from "@/lib/theme";
+import { toAbsoluteShamelaUrl } from "@/lib/shamela-url";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { useBookFetchBrowserStore } from "@/store/book-fetch-browser-store";
 import { useRouter } from "expo-router";
@@ -160,7 +161,9 @@ export default function BookFetchScreen() {
   const [expandedHistoryErrorId, setExpandedHistoryErrorId] = useState<
     number | null
   >(null);
-  const [previewResult, setPreviewResult] = useState<PreviewResult | null>(null);
+  const [previewResult, setPreviewResult] = useState<PreviewResult | null>(
+    null,
+  );
 
   const { data: importHistory } = useQuery(
     _trpc.book.getBookImportHistory.queryOptions({ limit: 10 }),
@@ -170,7 +173,8 @@ export default function BookFetchScreen() {
   );
 
   const selectableBooks = useMemo(
-    () => (Array.isArray((booksData as any)?.data) ? (booksData as any).data : []),
+    () =>
+      Array.isArray((booksData as any)?.data) ? (booksData as any).data : [],
     [booksData],
   );
 
@@ -217,7 +221,9 @@ export default function BookFetchScreen() {
 
   const invalidateBooks = () => {
     qc.invalidateQueries({ queryKey: _trpc.book.getBooks.queryKey() });
-    qc.invalidateQueries({ queryKey: _trpc.book.getBookImportHistory.queryKey({ limit: 10 }) });
+    qc.invalidateQueries({
+      queryKey: _trpc.book.getBookImportHistory.queryKey({ limit: 10 }),
+    });
   };
 
   const showFailureDetails = (message: string) => {
@@ -286,7 +292,7 @@ export default function BookFetchScreen() {
       },
       onError: (error) => {
         console.error("manual book page import failed", {
-          bookId: createBookInline ? undefined : selectedBookId ?? undefined,
+          bookId: createBookInline ? undefined : (selectedBookId ?? undefined),
           createBookInline,
           manualBookName: manualBookName.trim() || undefined,
           sourceUrl: manualLink.trim() || undefined,
@@ -319,7 +325,7 @@ export default function BookFetchScreen() {
     clearBrowserCapture();
     router.push({
       pathname: "/book-fetch-browser",
-      params: { url: trimmed },
+      params: { url: toAbsoluteShamelaUrl(trimmed) },
     } as any);
   };
 
@@ -394,7 +400,7 @@ export default function BookFetchScreen() {
     }
 
     importManualPage({
-      bookId: createBookInline ? undefined : selectedBookId ?? undefined,
+      bookId: createBookInline ? undefined : (selectedBookId ?? undefined),
       createBook: createBookInline
         ? {
             nameAr: manualBookName.trim(),
@@ -411,7 +417,10 @@ export default function BookFetchScreen() {
   };
 
   return (
-    <View className="flex-1 bg-background">
+    <View
+      className="flex-1 bg-background"
+      style={{ backgroundColor: colors.background }}
+    >
       <SafeArea>
         <View
           className="items-center gap-3 px-4 py-3"
@@ -538,7 +547,11 @@ export default function BookFetchScreen() {
                 />
                 {url ? (
                   <Pressable onPress={() => handleSetUrl("")}>
-                    <Icon name="X" size={16} className="text-muted-foreground" />
+                    <Icon
+                      name="X"
+                      size={16}
+                      className="text-muted-foreground"
+                    />
                   </Pressable>
                 ) : (
                   <Pressable
@@ -563,9 +576,14 @@ export default function BookFetchScreen() {
               >
                 {step === "fetching" || isPreviewing ? (
                   <>
-                    <ActivityIndicator size="small" color={colors.primaryForeground} />
+                    <ActivityIndicator
+                      size="small"
+                      color={colors.primaryForeground}
+                    />
                     <Text className="text-[15px] font-bold text-primary-foreground">
-                      {step === "fetching" ? t("fetchingBook") : "Generating preview"}
+                      {step === "fetching"
+                        ? t("fetchingBook")
+                        : "Generating preview"}
                     </Text>
                   </>
                 ) : (
@@ -573,7 +591,11 @@ export default function BookFetchScreen() {
                     <Icon
                       name="Download"
                       size={18}
-                      className={!url.trim() ? "text-muted-foreground" : "text-background"}
+                      className={
+                        !url.trim()
+                          ? "text-muted-foreground"
+                          : "text-background"
+                      }
                     />
                     <Text
                       className={
@@ -592,7 +614,11 @@ export default function BookFetchScreen() {
             {browserCapture && browserCapture.requestedUrl === url.trim() ? (
               <View className="gap-2 rounded-xl border border-primary/25 bg-primary/10 p-3.5">
                 <View className="flex-row items-center gap-2">
-                  <Icon name="CheckCircle2" size={18} className="text-primary" />
+                  <Icon
+                    name="CheckCircle2"
+                    size={18}
+                    className="text-primary"
+                  />
                   <Text className="text-sm font-bold text-primary">
                     Browser page captured
                   </Text>
@@ -604,7 +630,8 @@ export default function BookFetchScreen() {
                   {browserCapture.finalUrl}
                 </Text>
                 <Text className="text-[12px] leading-5 text-muted-foreground">
-                  The mobile browser assist flow is ready. The next step is passing this captured HTML into the backend import parser.
+                  The mobile browser assist flow is ready. The next step is
+                  passing this captured HTML into the backend import parser.
                 </Text>
                 <View className="flex-row gap-2">
                   <Pressable
@@ -639,7 +666,11 @@ export default function BookFetchScreen() {
             {step === "error" && (
               <View className="gap-2 rounded-xl border border-destructive/30 bg-destructive/10 p-3.5">
                 <View className="flex-row items-center gap-2">
-                  <Icon name="AlertCircle" size={18} className="text-destructive" />
+                  <Icon
+                    name="AlertCircle"
+                    size={18}
+                    className="text-destructive"
+                  />
                   <Text className="text-sm font-bold text-destructive">
                     {t("error")}
                   </Text>
@@ -679,7 +710,9 @@ export default function BookFetchScreen() {
                   <Icon
                     name={result.created ? "CheckCircle2" : "RefreshCw"}
                     size={16}
-                    className={result.created ? "text-primary" : "text-blue-400"}
+                    className={
+                      result.created ? "text-primary" : "text-blue-400"
+                    }
                   />
                   <View className="flex-row-reverse items-center gap-2">
                     <Text
@@ -699,7 +732,9 @@ export default function BookFetchScreen() {
                   </View>
                 </View>
 
-                <View style={{ padding: 14, flexDirection: "row-reverse", gap: 12 }}>
+                <View
+                  style={{ padding: 14, flexDirection: "row-reverse", gap: 12 }}
+                >
                   <View
                     style={{
                       width: 64,
@@ -727,7 +762,11 @@ export default function BookFetchScreen() {
                           writingDirection: "rtl",
                         }}
                       >
-                        {(result.book.nameAr ?? result.book.nameEn ?? t("bookTitle")).slice(0, 2)}
+                        {(
+                          result.book.nameAr ??
+                          result.book.nameEn ??
+                          t("bookTitle")
+                        ).slice(0, 2)}
                       </Text>
                     )}
                   </View>
@@ -755,7 +794,9 @@ export default function BookFetchScreen() {
                         }}
                         numberOfLines={1}
                       >
-                        {result.book.authors.map((author) => author.nameAr ?? author.name).join("، ")}
+                        {result.book.authors
+                          .map((author) => author.nameAr ?? author.name)
+                          .join("، ")}
                       </Text>
                     )}
                     <Text className="text-[12px] text-muted-foreground">
@@ -779,17 +820,27 @@ export default function BookFetchScreen() {
                       }
                       className="flex-1 flex-row items-center justify-center gap-1.5 rounded-xl bg-card py-3"
                     >
-                      <Icon name="FileText" size={16} className="text-foreground" />
+                      <Icon
+                        name="FileText"
+                        size={16}
+                        className="text-foreground"
+                      />
                       <Text className="text-sm font-semibold text-foreground">
                         Open Page
                       </Text>
                     </Pressable>
                   ) : null}
                   <Pressable
-                    onPress={() => router.push(`/books/${result.book.id}` as any)}
+                    onPress={() =>
+                      router.push(`/books/${result.book.id}` as any)
+                    }
                     className="flex-1 flex-row items-center justify-center gap-1.5 rounded-xl bg-primary py-3"
                   >
-                    <Icon name="BookOpen" size={16} className="text-background" />
+                    <Icon
+                      name="BookOpen"
+                      size={16}
+                      className="text-background"
+                    />
                     <Text className="text-sm font-bold text-primary-foreground">
                       {t("openBook")}
                     </Text>
@@ -819,7 +870,11 @@ export default function BookFetchScreen() {
                 >
                   {t("history")}
                 </Text>
-                <Icon name="History" size={16} className="text-muted-foreground" />
+                <Icon
+                  name="History"
+                  size={16}
+                  className="text-muted-foreground"
+                />
               </View>
 
               {importHistory?.length ? (
@@ -843,9 +898,14 @@ export default function BookFetchScreen() {
                         writingDirection: "rtl",
                       }}
                     >
-                      {entry.book?.nameAr ?? entry.book?.nameEn ?? t("importBook")}
+                      {entry.book?.nameAr ??
+                        entry.book?.nameEn ??
+                        t("importBook")}
                     </Text>
-                    <Text className="text-xs text-muted-foreground" numberOfLines={1}>
+                    <Text
+                      className="text-xs text-muted-foreground"
+                      numberOfLines={1}
+                    >
                       {entry.sourceUrl}
                     </Text>
                     {entry.errorMessage ? (
@@ -892,13 +952,17 @@ export default function BookFetchScreen() {
                           writingDirection: "rtl",
                         }}
                       >
-                        {t("syncedChaptersShort", { count: entry.chaptersImported })}
+                        {t("syncedChaptersShort", {
+                          count: entry.chaptersImported,
+                        })}
                       </Text>
                     )}
                     <View className="flex-row gap-2">
                       {entry.bookId ? (
                         <Pressable
-                          onPress={() => router.push(`/books/${entry.bookId}` as any)}
+                          onPress={() =>
+                            router.push(`/books/${entry.bookId}` as any)
+                          }
                           className="flex-1 items-center rounded-lg bg-card py-2.5"
                         >
                           <Text className="text-[12px] font-semibold text-foreground">
@@ -1150,14 +1214,21 @@ export default function BookFetchScreen() {
               >
                 {manualStep === "saving" ? (
                   <>
-                    <ActivityIndicator size="small" color={colors.primaryForeground} />
+                    <ActivityIndicator
+                      size="small"
+                      color={colors.primaryForeground}
+                    />
                     <Text className="text-[15px] font-bold text-primary-foreground">
                       {t("saving")}
                     </Text>
                   </>
                 ) : (
                   <>
-                    <Icon name="FilePenLine" size={18} className="text-background" />
+                    <Icon
+                      name="FilePenLine"
+                      size={18}
+                      className="text-background"
+                    />
                     <Text className="text-[15px] font-bold text-primary-foreground">
                       {t("savePage")}
                     </Text>
@@ -1185,7 +1256,7 @@ export default function BookFetchScreen() {
                       textAlign,
                       fontSize: 14,
                       fontWeight: "700",
-                    color: colors.primary,
+                      color: colors.primary,
                       writingDirection,
                     }}
                   >
@@ -1232,11 +1303,7 @@ export default function BookFetchScreen() {
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeArea>
-      <Modal
-        ref={previewModal.ref}
-        title="Import Preview"
-        snapPoints={["85%"]}
-      >
+      <Modal ref={previewModal.ref} title="Import Preview" snapPoints={["85%"]}>
         <View className="flex-1 bg-background px-4 pb-6">
           <BottomSheetScrollView
             contentContainerStyle={{ gap: 12, paddingBottom: 24 }}
@@ -1261,7 +1328,11 @@ export default function BookFetchScreen() {
                   fontSize: 12,
                   lineHeight: 18,
                   color: colors.foreground,
-                  fontFamily: Platform.select({ ios: "Menlo", android: "monospace", default: "monospace" }),
+                  fontFamily: Platform.select({
+                    ios: "Menlo",
+                    android: "monospace",
+                    default: "monospace",
+                  }),
                 }}
               >
                 {previewResult
@@ -1291,11 +1362,7 @@ export default function BookFetchScreen() {
           </View>
         </View>
       </Modal>
-      <Modal
-        ref={failureModal.ref}
-        title="Import Failure"
-        snapPoints={["88%"]}
-      >
+      <Modal ref={failureModal.ref} title="Import Failure" snapPoints={["88%"]}>
         <View className="flex-1 bg-background px-4 pb-6">
           <BottomSheetScrollView
             contentContainerStyle={{ gap: 12, paddingBottom: 24 }}

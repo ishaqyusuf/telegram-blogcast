@@ -274,7 +274,13 @@ function CommentItem({
 
 // ── Main list ─────────────────────────────────────────────────────────────────
 
-export function CommentsList({ state }: { state: CommentsSheetState }) {
+export function CommentsList({
+  state,
+  inline = false,
+}: {
+  state: CommentsSheetState;
+  inline?: boolean;
+}) {
   const colors = useColors();
   const {
     comments,
@@ -333,7 +339,7 @@ export function CommentsList({ state }: { state: CommentsSheetState }) {
   }
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={inline ? undefined : { flex: 1 }}>
       {/* Search bar */}
       {searchVisible && (
         <View
@@ -456,15 +462,52 @@ export function CommentsList({ state }: { state: CommentsSheetState }) {
 
       {/* Comment list */}
       {isLoading ? (
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
+        <View
+          style={{
+            flex: inline ? undefined : 1,
+            alignItems: "center",
+            justifyContent: "center",
+            paddingVertical: inline ? 28 : undefined,
+          }}
+        >
           <ActivityIndicator color={colors.primary} />
         </View>
       ) : displayComments.length === 0 ? (
-        <View style={{ flex: 1, alignItems: "center", justifyContent: "center", gap: 8 }}>
+        <View
+          style={{
+            flex: inline ? undefined : 1,
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 8,
+            paddingVertical: inline ? 28 : undefined,
+          }}
+        >
           <Icon name="MessageCircle" size={36} className="text-muted-foreground" />
           <Text style={{ color: colors.mutedForeground, fontSize: 14 }}>
             {search || activeTagId ? "لا توجد نتائج" : "لا توجد تعليقات بعد"}
           </Text>
+        </View>
+      ) : inline ? (
+        <View style={{ padding: 20, paddingBottom: 24 }}>
+          {displayComments.map((item, index) => (
+            <View key={String(item.id)}>
+              <CommentItem
+                item={item}
+                isReorderMode={reorderMode}
+                isFirst={index === 0}
+                isLast={index === displayComments.length - 1}
+                onMoveUp={() => moveItem(index, index - 1)}
+                onMoveDown={() => moveItem(index, index + 1)}
+                onEdit={editComment}
+                onDelete={deleteComment}
+                isEditPending={isEditPending}
+                isDeletePending={isDeletePending}
+              />
+              {index < displayComments.length - 1 ? (
+                <View style={{ height: 20 }} />
+              ) : null}
+            </View>
+          ))}
         </View>
       ) : (
         <LegendList

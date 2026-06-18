@@ -1,5 +1,5 @@
 import { Pressable } from "@/components/ui/pressable";
-import { useMutation } from "@/lib/react-query";
+import { useMutation, useQueryClient } from "@/lib/react-query";
 import { useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -41,6 +41,7 @@ export function CommentInput({
   timestampMode,
 }: CommentInputProps) {
   const colors = useColors();
+  const qc = useQueryClient();
   const [text, setText] = useState("");
   const [timestampEnabled, setTimestampEnabled] = useState(Boolean(timestampMode));
   const [timestampMs, setTimestampMs] = useState(0);
@@ -53,6 +54,10 @@ export function CommentInput({
         setText("");
         setTimestampMs(0);
         setTimestampEnabled(Boolean(timestampMode));
+        qc.invalidateQueries({ queryKey: _trpc.blog.getComments.queryKey() });
+        qc.invalidateQueries({
+          queryKey: _trpc.blog.getBlog.queryKey({ id: blogId }),
+        });
         onCommentAdded?.();
         onClose?.();
       },

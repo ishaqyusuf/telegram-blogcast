@@ -36,6 +36,22 @@ export const localPages = sqliteTable("local_pages", {
   status:        text("status").notNull().default("pending"),
 });
 
+export const localTocNodes = sqliteTable("local_toc_nodes", {
+  id:            integer("id").primaryKey(),       // server BookTocNode.id
+  bookId:        integer("book_id").notNull(),
+  parentId:      integer("parent_id"),
+  pageId:        integer("page_id"),
+  kind:          text("kind").notNull(),
+  title:         text("title").notNull(),
+  shamelaPath:   text("shamela_path"),
+  shamelaPageNo: integer("shamela_page_no"),
+  volumeNumber:  integer("volume_number"),
+  depth:         integer("depth").notNull().default(0),
+  sortOrder:     integer("sort_order").notNull().default(0),
+  treePath:      text("tree_path").notNull(),
+  isCurrent:     integer("is_current", { mode: "boolean" }).notNull().default(false),
+});
+
 export const localParagraphs = sqliteTable("local_paragraphs", {
   id:          integer("id").primaryKey(),         // server BookPageParagraph.id
   pageId:      integer("page_id").notNull(),
@@ -118,6 +134,7 @@ export type LocalHighlight = typeof localHighlights.$inferSelect;
 export type LocalComment   = typeof localComments.$inferSelect;
 export type LocalPageDraft = typeof localPageDrafts.$inferSelect;
 export type LocalPage      = typeof localPages.$inferSelect;
+export type LocalTocNode   = typeof localTocNodes.$inferSelect;
 export type LocalParagraph = typeof localParagraphs.$inferSelect;
 export type LocalFootnote  = typeof localFootnotes.$inferSelect;
 export type LocalTranscriptionJob = typeof localTranscriptionJobs.$inferSelect;

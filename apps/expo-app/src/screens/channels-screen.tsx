@@ -6,11 +6,18 @@ import { FlatList, Text, View } from "react-native";
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";
+import { useColors } from "@/hooks/use-color";
 import { useTranslation } from "@/lib/i18n";
 
 const CHANNEL_COLORS = [
-  "#1e40af", "#0f766e", "#b45309", "#4f46e5",
-  "#be123c", "#0369a1", "#7c3aed", "#334155",
+  "#1e40af",
+  "#0f766e",
+  "#b45309",
+  "#4f46e5",
+  "#be123c",
+  "#0369a1",
+  "#7c3aed",
+  "#334155",
 ];
 
 function getInitials(value?: string | null) {
@@ -25,13 +32,17 @@ function getInitials(value?: string | null) {
 
 export default function ChannelsScreen() {
   const router = useRouter();
+  const colors = useColors();
   const { t } = useTranslation();
   const { data: channels = [], isFetching } = useQuery(
-    _trpc.channel.getChannels.queryOptions()
+    _trpc.channel.getChannels.queryOptions(),
   );
 
   return (
-    <View className="flex-1 bg-background">
+    <View
+      className="flex-1 bg-background"
+      style={{ backgroundColor: colors.background }}
+    >
       <SafeArea>
         {/* Header */}
         <View className="flex-row items-center px-4 py-3 gap-3">
@@ -52,6 +63,7 @@ export default function ChannelsScreen() {
         </View>
 
         <FlatList
+          style={{ backgroundColor: colors.background }}
           data={channels}
           keyExtractor={(item) => String(item.id)}
           contentContainerClassName="px-4 pb-8 gap-2"
@@ -74,7 +86,8 @@ export default function ChannelsScreen() {
                     alignItems: "center",
                     justifyContent: "center",
                     flexShrink: 0,
-                    backgroundColor: CHANNEL_COLORS[index % CHANNEL_COLORS.length],
+                    backgroundColor:
+                      CHANNEL_COLORS[index % CHANNEL_COLORS.length],
                   }}
                 >
                   <Text className="text-base font-bold text-white">
@@ -95,7 +108,8 @@ export default function ChannelsScreen() {
                   </Text>
                   <View className="flex-row items-center gap-2 mt-0.5">
                     <Text className="text-[10px] text-muted-foreground">
-                      {ch.stats.totalBlogs} posts · {ch.stats.publishedBlogs} published
+                      {ch.stats.totalBlogs} posts · {ch.stats.publishedBlogs}{" "}
+                      published
                     </Text>
                     {ch.isFetchable && (
                       <View className="px-1.5 py-0.5 rounded-full bg-primary/20">
@@ -107,13 +121,21 @@ export default function ChannelsScreen() {
                   </View>
                 </View>
 
-                <Icon name="ChevronRight" size={18} className="text-muted-foreground" />
+                <Icon
+                  name="ChevronRight"
+                  size={18}
+                  className="text-muted-foreground"
+                />
               </View>
             </Pressable>
           )}
           ListEmptyComponent={
             <View className="items-center justify-center py-20">
-              <Icon name="Radio" size={48} className="text-muted-foreground mb-3" />
+              <Icon
+                name="Radio"
+                size={48}
+                className="text-muted-foreground mb-3"
+              />
               <Text className="text-sm text-muted-foreground">
                 {isFetching ? t("loading") : t("noChannels")}
               </Text>

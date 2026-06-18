@@ -1,7 +1,17 @@
 import { Pressable } from "@/components/ui/pressable";
 import { useEffect, useRef, useState } from "react";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Alert, Keyboard, KeyboardEvent, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View } from "react-native";
+import {
+  Alert,
+  Keyboard,
+  KeyboardEvent,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { Audio, AVPlaybackStatus } from "expo-av";
 
 import {
@@ -12,6 +22,7 @@ import { SafeArea } from "@/components/safe-area";
 import { Icon } from "@/components/ui/icon";
 import { getTelegramFileUrl } from "@/lib/get-telegram-file";
 import { useAudioStore } from "@/store/audio-store";
+import { useColors } from "@/hooks/use-color";
 
 function formatSeconds(totalSeconds: number) {
   const m = Math.floor(totalSeconds / 60)
@@ -25,6 +36,7 @@ function formatSeconds(totalSeconds: number) {
 
 export default function BlogFormScreen() {
   const router = useRouter();
+  const colors = useColors();
   const params = useLocalSearchParams<BlogFormParams>();
   const audioStore = useAudioStore();
 
@@ -266,7 +278,10 @@ export default function BlogFormScreen() {
   };
 
   return (
-    <View className="flex-1 bg-background">
+    <View
+      className="flex-1 bg-background"
+      style={{ backgroundColor: colors.background }}
+    >
       <SafeArea>
         <View className="flex-row items-center justify-between border-b border-border bg-background/80 px-4 py-3">
           <Pressable onPress={() => router.back()} className="py-2">
@@ -275,7 +290,11 @@ export default function BlogFormScreen() {
             </Text>
           </Pressable>
           <Text className="text-base font-bold tracking-tight text-foreground">
-            {isCommentMode ? "Add Comment" : isEditMode ? "Edit Story" : "New Story"}
+            {isCommentMode
+              ? "Add Comment"
+              : isEditMode
+                ? "Edit Story"
+                : "New Story"}
           </Text>
           {isCommentMode ? (
             <View className="w-14" />
@@ -302,7 +321,9 @@ export default function BlogFormScreen() {
                 (isKeyboardVisible ? keyboardHeight + 24 : 0),
             }}
             keyboardShouldPersistTaps="handled"
-            keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+            keyboardDismissMode={
+              Platform.OS === "ios" ? "interactive" : "on-drag"
+            }
           >
             {isAudioComment ? (
               <View className="flex-col gap-3 rounded-2xl border border-border bg-card p-6">
@@ -544,7 +565,11 @@ export default function BlogFormScreen() {
                 className="h-12 flex-[1.4] flex-row items-center justify-center gap-2 rounded-2xl bg-foreground shadow-sm"
               >
                 <Text className="text-sm font-bold text-background">
-                  {isSubmitting ? "Saving..." : isEditMode ? "Update" : "Publish"}
+                  {isSubmitting
+                    ? "Saving..."
+                    : isEditMode
+                      ? "Update"
+                      : "Publish"}
                 </Text>
                 {!isSubmitting ? (
                   <Icon name="Send" className="size-sm text-background" />

@@ -1,7 +1,14 @@
 import { Pressable } from "@/components/ui/pressable";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { useRouter } from "expo-router";
-import { ActivityIndicator, FlatList, Modal, Text, TextInput, View } from "react-native";
+import {
+  ActivityIndicator,
+  FlatList,
+  Modal,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { useState } from "react";
 
 import { _trpc } from "@/components/static-trpc";
@@ -10,7 +17,14 @@ import { Icon } from "@/components/ui/icon";
 import { useTranslation } from "@/lib/i18n";
 import { useColors } from "@/hooks/use-color";
 
-const ALBUM_COLORS = ["#1e40af", "#0f766e", "#b45309", "#4f46e5", "#be123c", "#0369a1"];
+const ALBUM_COLORS = [
+  "#1e40af",
+  "#0f766e",
+  "#b45309",
+  "#4f46e5",
+  "#be123c",
+  "#0369a1",
+];
 
 function getInitials(name?: string | null) {
   if (!name) return "AL";
@@ -29,7 +43,7 @@ export default function AlbumsScreen() {
   const [createVisible, setCreateVisible] = useState(false);
   const [name, setName] = useState("");
   const { data: albums = [], isLoading } = useQuery(
-    _trpc.album.getAlbums.queryOptions()
+    _trpc.album.getAlbums.queryOptions(),
   );
   const createAlbum = useMutation(
     _trpc.album.createAlbum.mutationOptions({
@@ -39,7 +53,7 @@ export default function AlbumsScreen() {
         setCreateVisible(false);
         router.push(`/albums/${album.id}` as any);
       },
-    })
+    }),
   );
 
   function handleCreateAlbum() {
@@ -49,7 +63,10 @@ export default function AlbumsScreen() {
   }
 
   return (
-    <View className="flex-1 bg-background">
+    <View
+      className="flex-1 bg-background"
+      style={{ backgroundColor: colors.background }}
+    >
       <SafeArea>
         {/* Header */}
         <View className="flex-row items-center gap-3 px-4 py-3">
@@ -59,7 +76,9 @@ export default function AlbumsScreen() {
           >
             <Icon name="ChevronLeft" size={22} className="text-foreground" />
           </Pressable>
-          <Text className="text-lg font-bold text-foreground flex-1">{t("albums")}</Text>
+          <Text className="text-lg font-bold text-foreground flex-1">
+            {t("albums")}
+          </Text>
           <Pressable
             onPress={() => setCreateVisible(true)}
             className="size-9 rounded-full bg-primary items-center justify-center active:opacity-80"
@@ -79,6 +98,7 @@ export default function AlbumsScreen() {
           </View>
         ) : (
           <FlatList
+            style={{ backgroundColor: colors.background }}
             data={albums}
             keyExtractor={(item) => String(item.id)}
             numColumns={2}
@@ -159,7 +179,9 @@ export default function AlbumsScreen() {
                 onPress={() => setCreateVisible(false)}
                 className="h-11 flex-1 items-center justify-center rounded-xl bg-muted active:opacity-80"
               >
-                <Text className="text-sm font-semibold text-foreground">Cancel</Text>
+                <Text className="text-sm font-semibold text-foreground">
+                  Cancel
+                </Text>
               </Pressable>
               <Pressable
                 onPress={handleCreateAlbum}
@@ -167,7 +189,10 @@ export default function AlbumsScreen() {
                 className="h-11 flex-1 items-center justify-center rounded-xl bg-primary active:opacity-80 disabled:opacity-50"
               >
                 {createAlbum.isPending ? (
-                  <ActivityIndicator size="small" color={colors.primaryForeground} />
+                  <ActivityIndicator
+                    size="small"
+                    color={colors.primaryForeground}
+                  />
                 ) : (
                   <Text className="text-sm font-bold text-primary-foreground">
                     {t("create")}
