@@ -5,9 +5,10 @@ import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
 import { useMutation, useQueryClient } from "@/lib/react-query";
 import type { RouterOutputs } from "@api/trpc/routers/_app";
+import { BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, ScrollView, View } from "react-native";
+import { ActivityIndicator, View } from "react-native";
 import { Pressable } from "@/components/ui/pressable";
 
 type SummaryChannel =
@@ -97,6 +98,8 @@ export function ChannelUpdatePrompt() {
   const [channels, setChannels] = useState<SummaryChannel[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(false);
+  const [waitingForLogin, setWaitingForLogin] = useState(false);
+  const [loginMessage, setLoginMessage] = useState<string | null>(null);
 
   const selectedCount = selectedIds.size;
   const updateMutation = useMutation(
@@ -111,38 +114,57 @@ export function ChannelUpdatePrompt() {
     }),
   );
 
+  const loadPrompt = async (mountedRef?: { current: boolean }) => {
+    setLoading(true);
+    setWaitingForLogin(false);
+    setLoginMessage(null);
+    try {
+      await queryClient.fetchQuery(_trpc.channel.pingFetcher.queryOptions());
+      const authStatus = await queryClient.fetchQuery(
+        _trpc.channel.telegramAuthStatus.queryOptions(),
+      );
+      if (mountedRef && !mountedRef.current) return;
+
+      if (!authStatus.authorized) {
+        setChannels([]);
+        setSelectedIds(new Set());
+        setWaitingForLogin(true);
+        setLoginMessage(authStatus.error);
+        requestAnimationFrame(() => modal.present());
+        return;
+      }
+
+      const summary = await queryClient.fetchQuery(
+        _trpc.channel.getUpdatePromptSummary.queryOptions(),
+      );
+      if (mountedRef && !mountedRef.current) return;
+      if (summary.channels.length === 0) return;
+
+      setChannels(summary.channels);
+      setSelectedIds(
+        new Set(
+          summary.channels
+            .filter((channel) => channel.delta !== null && channel.delta > 0)
+            .map((channel) => channel.channelId),
+        ),
+      );
+      requestAnimationFrame(() => modal.present());
+    } catch {
+      // Local API/fetcher is unavailable. Startup should stay silent.
+    } finally {
+      if (!mountedRef || mountedRef.current) setLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (didRunPromptThisSession) return;
     didRunPromptThisSession = true;
 
-    let mounted = true;
-    setLoading(true);
-    (async () => {
-      try {
-        await queryClient.fetchQuery(_trpc.channel.pingFetcher.queryOptions());
-        const summary = await queryClient.fetchQuery(
-          _trpc.channel.getUpdatePromptSummary.queryOptions(),
-        );
-        if (!mounted || summary.channels.length === 0) return;
-
-        setChannels(summary.channels);
-        setSelectedIds(
-          new Set(
-            summary.channels
-              .filter((channel) => channel.delta !== null && channel.delta > 0)
-              .map((channel) => channel.channelId),
-          ),
-        );
-        requestAnimationFrame(() => modal.present());
-      } catch {
-        // Local API/fetcher is unavailable. Startup should stay silent.
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
+    const mountedRef = { current: true };
+    void loadPrompt(mountedRef);
 
     return () => {
-      mounted = false;
+      mountedRef.current = false;
     };
   }, [modal, queryClient]);
 
@@ -161,7 +183,12 @@ export function ChannelUpdatePrompt() {
   );
 
   const startUpdate = () => {
-    if (selectedChannelIds.length === 0 || updateMutation.isPending) return;
+    if (
+      waitingForLogin ||
+      selectedChannelIds.length === 0 ||
+      updateMutation.isPending
+    )
+      return;
     updateMutation.mutate({ channelIds: selectedChannelIds });
   };
 
@@ -182,37 +209,67 @@ export function ChannelUpdatePrompt() {
           )}
         </View>
 
-        <ScrollView
-          className="flex-1"
-          contentContainerClassName="gap-2 pb-2"
-          showsVerticalScrollIndicator={false}
-        >
-          {channels.map((channel) => (
-            <ChannelRow
-              key={channel.channelId}
-              channel={channel}
-              selected={selectedIds.has(channel.channelId)}
-              onToggle={() => toggleChannel(channel.channelId)}
-            />
-          ))}
-        </ScrollView>
-
-        <View className="gap-2 border-t border-border pt-3">
-          <Button
-            disabled={selectedCount === 0 || updateMutation.isPending}
-            onPress={startUpdate}
-            className="min-h-11"
-          >
-            {updateMutation.isPending ? (
-              <ActivityIndicator size="small" />
-            ) : (
-              <Text>
-                {selectedCount === 0
-                  ? "Update selected"
-                  : `Update ${selectedCount} channel${selectedCount === 1 ? "" : "s"}`}
+        {waitingForLogin ? (
+          <View className="flex-1 items-center justify-center gap-3 rounded-lg border border-border bg-card px-4 py-8">
+            <View className="size-10 items-center justify-center rounded-full bg-secondary">
+              <Icon name="Lock" className="size-sm text-foreground" />
+            </View>
+            <Text className="text-center text-base font-bold text-foreground">
+              Waiting for Telegram login
+            </Text>
+            <Text className="text-center text-sm text-muted-foreground">
+              Open the website, log in with Telegram, then come back and check
+              again.
+            </Text>
+            {loginMessage && (
+              <Text className="text-center text-xs text-muted-foreground">
+                {loginMessage}
               </Text>
             )}
-          </Button>
+          </View>
+        ) : (
+          <BottomSheetScrollView
+            className="flex-1"
+            contentContainerStyle={{ gap: 8, paddingBottom: 8 }}
+            showsVerticalScrollIndicator={false}
+          >
+            {channels.map((channel) => (
+              <ChannelRow
+                key={channel.channelId}
+                channel={channel}
+                selected={selectedIds.has(channel.channelId)}
+                onToggle={() => toggleChannel(channel.channelId)}
+              />
+            ))}
+          </BottomSheetScrollView>
+        )}
+
+        <View className="gap-2 border-t border-border pt-3">
+          {waitingForLogin ? (
+            <Button
+              disabled={loading}
+              onPress={() => void loadPrompt()}
+              className="min-h-11"
+            >
+              {loading ? <ActivityIndicator size="small" /> : <Text>Check again</Text>}
+            </Button>
+          ) : (
+            <Button
+              disabled={selectedCount === 0 || updateMutation.isPending}
+              onPress={startUpdate}
+              className="min-h-11"
+            >
+              {updateMutation.isPending ? (
+                <ActivityIndicator size="small" />
+              ) : (
+                <Text>
+                  {selectedCount === 0
+                    ? "Update selected"
+                    : `Update ${selectedCount} channel${selectedCount === 1 ? "" : "s"}`}
+                </Text>
+              )}
+            </Button>
+          )}
           <View className="flex-row gap-2">
             <Button
               variant="outline"

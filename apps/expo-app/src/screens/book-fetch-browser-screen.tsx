@@ -9,8 +9,9 @@ import {
   BookFetchBrowserCapture,
   useBookFetchBrowserStore,
 } from "@/store/book-fetch-browser-store";
+import { useGlobalAudioBarStore } from "@/store/global-audio-bar-store";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Text, View } from "react-native";
 import { WebView, WebViewMessageEvent } from "react-native-webview";
 
@@ -72,6 +73,7 @@ export default function BookFetchBrowserScreen() {
   const colors = useColors();
   const webViewRef = useRef<WebView>(null);
   const { setCaptured, setCancelled } = useBookFetchBrowserStore();
+  const setGlobalAudioBarHidden = useGlobalAudioBarStore((s) => s.setHidden);
 
   const [currentUrl, setCurrentUrl] = useState(url ?? "");
   const [pageTitle, setPageTitle] = useState("");
@@ -83,6 +85,15 @@ export default function BookFetchBrowserScreen() {
   const parsedBookId =
     bookId && Number.isFinite(Number(bookId)) ? Number(bookId) : undefined;
   const shouldAutoPromote = autoPromote === "1" || autoPromote === "true";
+
+  useEffect(() => {
+    setGlobalAudioBarHidden(true);
+
+    return () => {
+      setGlobalAudioBarHidden(false);
+    };
+  }, [setGlobalAudioBarHidden]);
+
   const { mutate: promotePage, isPending: isPromoting } = useMutation(
     _trpc.book.promoteStagedShamelaPageParse.mutationOptions({
       onSuccess: (result) => {

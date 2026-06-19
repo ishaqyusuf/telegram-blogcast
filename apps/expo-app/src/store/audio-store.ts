@@ -16,7 +16,7 @@ const Paths = {
 };
 
 const LOADED_SOUND_MARKER = { engine: "track-player" } as const;
-const CONTEXT_REWIND_MS = 3000;
+const CONTEXT_REWIND_MS = 1500;
 const CONTEXT_REWIND_THRESHOLD_MS = CONTEXT_REWIND_MS;
 const POSITION_POLL_MS = 500;
 const DEFAULT_ARTWORK = Image.resolveAssetSource(
@@ -257,7 +257,9 @@ export const useAudioStore = create<AudioState>()(
           }
 
           set({
+            downloadProgress: 0,
             error: null,
+            isDownloading: false,
             isLoading: true,
             playSessionStartPosition: null,
           });
@@ -292,10 +294,15 @@ export const useAudioStore = create<AudioState>()(
             }
 
             audioSource = sourceUrls[0];
-            set({ downloadProgress: 0, localPath: null });
+            set({
+              downloadProgress: 0,
+              isDownloading: true,
+              localPath: null,
+            });
           }
 
           const track = buildTrack(blog, audioSource);
+          const shouldCacheAudio = audioSource !== file.uri;
 
           await TrackPlayer.reset();
           await TrackPlayer.add(track);
@@ -310,6 +317,7 @@ export const useAudioStore = create<AudioState>()(
             duration: secondsToMillis(progress.duration),
             error: null,
             isLoading: false,
+            isDownloading: shouldCacheAudio,
             isPlaying: false,
             playSessionStartPosition: null,
             position: 0,
@@ -317,7 +325,7 @@ export const useAudioStore = create<AudioState>()(
             uri: audioSource,
           });
 
-          if (audioSource !== file.uri) {
+          if (shouldCacheAudio) {
             set({ downloadProgress: 0, isDownloading: true });
 
             LegacyFileSystem.createDownloadResumable(

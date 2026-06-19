@@ -248,6 +248,15 @@ export default function BookDetailScreen() {
     Boolean(book.shamelaId || book.shamelaUrl);
 
   const continuePageId = getLastPage(bookIdNum);
+  const lastReadPage =
+    continuePageId != null
+      ? book.pages.find(
+          (page) => page.id === continuePageId && page.status === "fetched",
+        )
+      : null;
+  const firstFetchedPage = book.pages.find((page) => page.status === "fetched");
+  const firstFetchablePage = book.pages.find((page) => page.shamelaUrl);
+  const primaryReadPage = lastReadPage ?? firstFetchedPage ?? firstFetchablePage;
   const bookmarks = getBookmarks(bookIdNum);
 
   const openReader = (targetPageId: number) => {
@@ -259,6 +268,16 @@ export default function BookDetailScreen() {
     router.push(
       `/book-fetch-browser?url=${encodeURIComponent(absoluteUrl)}&bookId=${bookIdNum}` as any,
     );
+  };
+  const openPrimaryReadTarget = () => {
+    if (!primaryReadPage) return;
+    if (primaryReadPage.status === "fetched") {
+      openReader(primaryReadPage.id);
+      return;
+    }
+    if (primaryReadPage.shamelaUrl) {
+      openCaptureBrowser(primaryReadPage.shamelaUrl);
+    }
   };
   const tocNodes = (((book as any).tocNodes ?? []) as TocNode[]);
   const normalizedChapterQuery = normalizeChapterSearch(chapterQuery);
@@ -436,9 +455,9 @@ export default function BookDetailScreen() {
             </View>
           )}
 
-          {continuePageId && (
+          {primaryReadPage && (
             <Pressable
-              onPress={() => openReader(continuePageId)}
+              onPress={openPrimaryReadTarget}
               className="mx-4 mb-3 flex-row-reverse items-center gap-2.5 rounded-xl border border-primary/25 bg-primary/10 px-4 py-3"
             >
               <View className="size-9 items-center justify-center rounded-full bg-primary">
@@ -449,13 +468,17 @@ export default function BookDetailScreen() {
                   className="text-right text-[13px] font-bold text-primary"
                   style={{ writingDirection: "rtl" }}
                 >
-                  {t("continueReading")}
+                  {lastReadPage ? t("continueReading") : t("openBook")}
                 </Text>
                 <Text
                   className="text-right text-[11px] text-muted-foreground"
                   style={{ writingDirection: "rtl" }}
                 >
-                  {t("backToLastPage")}
+                  {lastReadPage
+                    ? t("backToLastPage")
+                    : firstFetchedPage
+                      ? t("openFirstPage")
+                      : t("fetchFirstPage")}
                 </Text>
               </View>
               <Icon name="ChevronLeft" size={18} className="text-primary" />
@@ -531,7 +554,12 @@ export default function BookDetailScreen() {
                     onChangeText={setFetchUrl}
                     placeholder={t("pageLink")}
                     placeholderTextColor={colors.mutedForeground}
-                    className="flex-1 text-right text-[13px] text-foreground"
+                    style={{
+                      flex: 1,
+                      color: colors.foreground,
+                      fontSize: 13,
+                      textAlign: "right",
+                    }}
                     autoFocus
                     returnKeyType="done"
                   />
@@ -801,8 +829,13 @@ export default function BookDetailScreen() {
                   onChangeText={setChapterQuery}
                   placeholder={t("searchChapters")}
                   placeholderTextColor={colors.mutedForeground}
-                  className="flex-1 text-right text-[14px] text-foreground"
-                  style={{ writingDirection: "rtl" }}
+                  style={{
+                    flex: 1,
+                    color: colors.foreground,
+                    fontSize: 14,
+                    textAlign: "right",
+                    writingDirection: "rtl",
+                  }}
                   returnKeyType="search"
                 />
                 {chapterQuery.length > 0 ? (

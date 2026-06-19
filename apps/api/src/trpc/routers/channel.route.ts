@@ -1,5 +1,6 @@
 // apps/api/src/routers/channel.route.ts
 import { createTRPCRouter, publicProcedure } from "../init";
+import { getClient } from "@telegram/telegram-client";
 import { z } from "zod";
 import {
   getChannels,
@@ -82,6 +83,21 @@ export const channelRoutes = createTRPCRouter({
 
   pingFetcher: publicProcedure.query(async () => {
     return { ok: true, fetcherState: await getFetcherState() };
+  }),
+
+  telegramAuthStatus: publicProcedure.query(async () => {
+    try {
+      const client = await getClient();
+      return { authorized: await client.checkAuthorization(), error: null };
+    } catch (error) {
+      return {
+        authorized: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Telegram login is not available.",
+      };
+    }
   }),
 
   getUpdatePromptSummary: publicProcedure.query(async (props) => {

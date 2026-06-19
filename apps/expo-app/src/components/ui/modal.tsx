@@ -33,7 +33,6 @@ import type {
   BottomSheetModalProps,
 } from "@gorhom/bottom-sheet";
 import { BottomSheetModal, useBottomSheet } from "@gorhom/bottom-sheet";
-import { useColorScheme } from "nativewind";
 import * as React from "react";
 import { Pressable, View } from "react-native";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
@@ -71,11 +70,11 @@ export const Modal = React.forwardRef(
       snapPoints: _snapPoints = ["60%"],
       title,
       detached = false,
+      containerStyle,
       ...props
     }: ModalProps,
     ref: ModalRef
   ) => {
-    const { colorScheme } = useColorScheme();
     const detachedProps = React.useMemo(
       () => getDetachedProps(detached),
       [detached]
@@ -115,6 +114,13 @@ export const Modal = React.forwardRef(
         enableDynamicSizing={false}
         handleComponent={renderHandleComponent}
         backgroundStyle={backgroundStyle}
+        containerStyle={[
+          {
+            zIndex: 2000,
+            elevation: 2000,
+          },
+          containerStyle,
+        ]}
       />
     );
   }

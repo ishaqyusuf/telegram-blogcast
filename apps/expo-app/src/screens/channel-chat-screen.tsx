@@ -2,15 +2,31 @@ import { Pressable } from "@/components/ui/pressable";
 import { formatDate } from "@acme/utils/dayjs";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import type { ComponentProps } from "react";
-import { useCallback, useRef, useState } from "react";
-import { Alert, Animated, Modal, Text, View } from "react-native";
-import { Swipeable } from "react-native-gesture-handler";
+import { useCallback, useMemo, useRef, useState } from "react";
+import {
+  Alert,
+  LayoutAnimation,
+  Modal,
+  Platform,
+  Text,
+  UIManager,
+  useWindowDimensions,
+  View,
+} from "react-native";
+import ReanimatedSwipeable, {
+  SwipeDirection,
+} from "react-native-gesture-handler/ReanimatedSwipeable";
+import type { SharedValue } from "react-native-reanimated";
 import { LegendList } from "@legendapp/list";
 
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";
+import {
+  getSwipeDeleteThreshold,
+  SwipeDeleteAction,
+} from "@/components/ui/swipe-delete-action";
+import { Toast } from "@/components/ui/toast";
 import { useInfiniteLoader } from "@/components/infinite-loader";
 import { minuteToString } from "@/lib/utils";
 import { AddToAlbumModal } from "@/components/channel-chat/add-to-album-modal";
@@ -18,6 +34,30 @@ import { AddToPlaylistModal } from "@/components/channel-chat/add-to-playlist-mo
 import type { BlogItem } from "@/components/blog-card";
 import { useColors } from "@/hooks/use-color";
 import { withAlpha } from "@/lib/theme";
+
+if (
+  Platform.OS === "android" &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+function animatePostListChange() {
+  LayoutAnimation.configureNext({
+    duration: 220,
+    create: {
+      type: LayoutAnimation.Types.easeInEaseOut,
+      property: LayoutAnimation.Properties.opacity,
+    },
+    update: {
+      type: LayoutAnimation.Types.easeInEaseOut,
+    },
+    delete: {
+      type: LayoutAnimation.Types.easeInEaseOut,
+      property: LayoutAnimation.Properties.opacity,
+    },
+  });
+}
 
 function compactTags(tags?: (string | undefined)[] | null): string[] {
   return tags?.filter((tag): tag is string => Boolean(tag)) ?? [];
@@ -293,7 +333,7 @@ function ImageBubble({
 interface ContextMenuProps {
   post: BlogItem;
   onClose: () => void;
-  onDelete: (id: number) => void;
+  onDelete: (post: BlogItem) => void;
   onAddToAlbum: (post: BlogItem) => void;
   onAddToPlaylist: (post: BlogItem) => void;
   onStartMerge: (id: number) => void;
@@ -347,7 +387,7 @@ function ContextMenu({
       </Pressable>
       <Pressable
         onPress={() => {
-          onDelete(post.id);
+          onDelete(post);
           onClose();
         }}
         className="flex-row items-center gap-3 px-4 py-3 active:bg-muted"
@@ -366,8 +406,10 @@ interface BubbleRowProps {
   selected: boolean;
   isSelectMode: boolean;
   activeTag: string | null;
+  actionWidth: number;
+  fullSwipeThreshold: number;
   onLongPress: (post: BlogItem) => void;
-  onDelete: (id: number) => void;
+  onDelete: (post: BlogItem) => Promise<void> | void;
   onToggleSelect: (id: number) => void;
   onTagPress: (tag: string) => void;
 }
@@ -377,6 +419,8 @@ function BubbleRow({
   selected,
   isSelectMode,
   activeTag,
+  actionWidth,
+  fullSwipeThreshold,
   onLongPress,
   onDelete,
   onToggleSelect,
@@ -384,50 +428,32 @@ function BubbleRow({
 }: BubbleRowProps) {
   const router = useRouter();
   const colors = useColors();
+  const swipeRef = useRef<any>(null);
+  const isDeletingRef = useRef(false);
 
-  const renderRightActions = useCallback<
-    NonNullable<ComponentProps<typeof Swipeable>["renderRightActions"]>
-  >(
-    (progress) => {
-      const opacity = progress.interpolate({
-        inputRange: [0, 0.65, 1],
-        outputRange: [0, 0.85, 1],
-        extrapolate: "clamp",
-      });
-      const scale = progress.interpolate({
-        inputRange: [0, 0.85, 1],
-        outputRange: [0.92, 0.98, 1],
-        extrapolate: "clamp",
-      });
+  const handleSwipeWillOpen = async (direction: SwipeDirection) => {
+    if (direction !== SwipeDirection.LEFT || isDeletingRef.current) return;
 
-      return (
-        <Animated.View
-          className="my-0.5 items-center justify-center pr-3"
-          style={{ opacity, transform: [{ scale }] }}
-        >
-          <Pressable
-            haptic
-            onPress={() => onDelete(post.id)}
-            className="min-h-14 min-w-16 items-center justify-center rounded-2xl border active:opacity-80"
-            style={{
-              backgroundColor: withAlpha(colors.destructive, 0.1),
-              borderColor: withAlpha(colors.destructive, 0.2),
-            }}
-          >
-            <View
-              className="h-11 w-11 items-center justify-center rounded-full"
-              style={{ backgroundColor: colors.destructive }}
-            >
-              <Icon
-                name="Trash2"
-                className="size-md text-destructive-foreground"
-              />
-            </View>
-          </Pressable>
-        </Animated.View>
-      );
-    },
-    [colors.destructive, onDelete, post.id],
+    isDeletingRef.current = true;
+    swipeRef.current?.close();
+
+    try {
+      await onDelete(post);
+    } finally {
+      isDeletingRef.current = false;
+    }
+  };
+
+  const renderRightActions = useCallback(
+    (progress: SharedValue<number>, translation: SharedValue<number>) => (
+      <SwipeDeleteAction
+        progress={progress}
+        translation={translation}
+        actionWidth={actionWidth}
+        fullSwipeThreshold={fullSwipeThreshold}
+      />
+    ),
+    [actionWidth, fullSwipeThreshold],
   );
 
   const handlePress = () => {
@@ -454,7 +480,16 @@ function BubbleRow({
     );
 
   return (
-    <Swipeable renderRightActions={renderRightActions} overshootRight={false}>
+    <ReanimatedSwipeable
+      ref={swipeRef}
+      enabled={!isSelectMode}
+      friction={1.15}
+      overshootFriction={8}
+      overshootRight
+      rightThreshold={fullSwipeThreshold}
+      onSwipeableWillOpen={handleSwipeWillOpen}
+      renderRightActions={renderRightActions}
+    >
       <Pressable
         onPress={handlePress}
         onLongPress={() => onLongPress(post)}
@@ -487,7 +522,7 @@ function BubbleRow({
           {bubble}
         </View>
       </Pressable>
-    </Swipeable>
+    </ReanimatedSwipeable>
   );
 }
 
@@ -553,6 +588,7 @@ export default function ChannelChatScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const colors = useColors();
+  const { width } = useWindowDimensions();
   const { channelId } = useLocalSearchParams<{ channelId: string }>();
   const id = Number(channelId);
 
@@ -573,7 +609,19 @@ export default function ChannelChatScreen() {
     queryOptions: { staleTime: 5 * 60 * 1000, gcTime: 10 * 60 * 1000 },
   });
 
-  const reversedPosts = [...(posts ?? [])].reverse();
+  const [hiddenPostIds, setHiddenPostIds] = useState<Set<number>>(new Set());
+  const visiblePosts = useMemo(
+    () => (posts ?? []).filter((post) => !hiddenPostIds.has(post.id)),
+    [hiddenPostIds, posts],
+  );
+  const reversedPosts = useMemo(
+    () => [...visiblePosts].reverse(),
+    [visiblePosts],
+  );
+  const fullSwipeThreshold = useMemo(
+    () => getSwipeDeleteThreshold(width),
+    [width],
+  );
 
   // ── Tag scroll ────────────────────────────────────────────────────────────
   const [activeTag, setActiveTag] = useState<string | null>(null);
@@ -630,21 +678,6 @@ export default function ChannelChatScreen() {
     setTagMatchIdx(0);
   }
 
-  // ── Delete ────────────────────────────────────────────────────────────────
-  const deleteMutation = useMutation(
-    _trpc.blog.deleteBlog.mutationOptions({
-      onSuccess: () => {
-        queryClient.invalidateQueries(
-          _trpc.blog.posts.queryOptions({ channelId: id } as any),
-        );
-      },
-    }),
-  );
-
-  function handleDelete(blogId: number) {
-    deleteMutation.mutate({ id: blogId });
-  }
-
   // ── Long-press context menu ───────────────────────────────────────────────
   const [contextPost, setContextPost] = useState<BlogItem | null>(null);
 
@@ -664,6 +697,108 @@ export default function ChannelChatScreen() {
   function clearSelection() {
     setSelectedIds(new Set());
   }
+
+  // ── Delete ────────────────────────────────────────────────────────────────
+  const deleteMutation = useMutation(
+    _trpc.blog.deleteBlog.mutationOptions({
+      onSettled: () => {
+        queryClient.invalidateQueries(
+          _trpc.blog.posts.queryOptions({ channelId: id } as any),
+        );
+      },
+    }),
+  );
+
+  const restoreMutation = useMutation(
+    _trpc.blog.restoreBlog.mutationOptions({
+      onSettled: () => {
+        queryClient.invalidateQueries(
+          _trpc.blog.posts.queryOptions({ channelId: id } as any),
+        );
+      },
+    }),
+  );
+
+  const handleDelete = useCallback(
+    async (post: BlogItem) => {
+      animatePostListChange();
+      setHiddenPostIds((prev) => new Set(prev).add(post.id));
+      setSelectedIds((prev) => {
+        if (!prev.has(post.id)) return prev;
+        const next = new Set(prev);
+        next.delete(post.id);
+        return next;
+      });
+
+      let deleteFailed = false;
+      const deletePromise = deleteMutation
+        .mutateAsync({ id: post.id })
+        .catch((error) => {
+          deleteFailed = true;
+          throw error;
+        });
+      let didRestore = false;
+
+      const restorePost = async () => {
+        if (didRestore) return;
+
+        didRestore = true;
+        animatePostListChange();
+        setHiddenPostIds((prev) => {
+          const next = new Set(prev);
+          next.delete(post.id);
+          return next;
+        });
+
+        try {
+          await deletePromise;
+          await restoreMutation.mutateAsync({ id: post.id });
+        } catch {
+          if (deleteFailed) {
+            animatePostListChange();
+            setHiddenPostIds((prev) => {
+              const next = new Set(prev);
+              next.delete(post.id);
+              return next;
+            });
+            return;
+          }
+
+          animatePostListChange();
+          setHiddenPostIds((prev) => new Set(prev).add(post.id));
+          Alert.alert("Undo failed", "Could not restore this post. Try again.");
+        }
+      };
+
+      const toastId = Toast.show("Post deleted", {
+        action: {
+          label: "Undo",
+          onPress: () => {
+            void restorePost();
+          },
+        },
+        duration: 5000,
+        position: "bottom",
+        type: "default",
+      });
+
+      try {
+        await deletePromise;
+      } catch {
+        if (toastId) {
+          Toast.dismiss(toastId);
+        }
+        animatePostListChange();
+        setHiddenPostIds((prev) => {
+          const next = new Set(prev);
+          next.delete(post.id);
+          return next;
+        });
+        Alert.alert("Delete failed", "Could not delete this post. Try again.");
+      }
+    },
+    [deleteMutation, restoreMutation],
+  );
 
   function handleLongPress(post: BlogItem) {
     if (isSelectMode) {
@@ -867,6 +1002,8 @@ export default function ChannelChatScreen() {
                   selected={selectedIds.has(item.id)}
                   isSelectMode={isSelectMode}
                   activeTag={activeTag}
+                  actionWidth={width}
+                  fullSwipeThreshold={fullSwipeThreshold}
                   onLongPress={handleLongPress}
                   onDelete={handleDelete}
                   onToggleSelect={toggleSelect}

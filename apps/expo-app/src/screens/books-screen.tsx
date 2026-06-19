@@ -21,6 +21,7 @@ export default function BooksScreen() {
   );
   const [showBookmarks, setShowBookmarks] = useState(false);
   const bookmarksByBook = useBookOfflineStore((s) => s.bookmarks);
+  const getLastPage = useBookOfflineStore((s) => s.getLastPage);
   const removeBookmark = useBookOfflineStore((s) => s.removeBookmark);
 
   const { data: shelves = [] } = useQuery(_trpc.book.getShelves.queryOptions());
@@ -28,7 +29,7 @@ export default function BooksScreen() {
     _trpc.book.getBooks.queryOptions({ shelfId: selectedShelfId, limit: 40 }),
   );
 
-  const books = data?.data ?? [];
+  const books = useMemo(() => data?.data ?? [], [data?.data]);
   const bookTitles = useMemo(() => {
     const titles = new Map<number, string>();
     for (const book of books) {
@@ -48,6 +49,18 @@ export default function BooksScreen() {
   );
 
   const openBook = (book: (typeof books)[number]) => {
+    const lastPageId = getLastPage(book.id);
+    if (lastPageId) {
+      router.push(`/books/${book.id}/reader/${lastPageId}` as any);
+      return;
+    }
+
+    const firstFetchedPage = book.pages[0];
+    if (firstFetchedPage) {
+      router.push(`/books/${book.id}/reader/${firstFetchedPage.id}` as any);
+      return;
+    }
+
     router.push(`/books/${book.id}` as any);
   };
 

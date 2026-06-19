@@ -597,18 +597,22 @@ function AnimatedPlayButton({
           />
         </View>
       ) : null}
-      {isLoading ? (
-        <ActivityIndicator color={colors.primaryForeground} />
-      ) : isDownloading ? (
-        <Text
-          style={{
-            color: colors.primaryForeground,
-            fontSize: size >= 60 ? 13 : 10,
-            fontWeight: "800",
-          }}
-        >
-          {formatPercent(downloadProgress)}
-        </Text>
+      {busy ? (
+        <View style={{ alignItems: "center", gap: size >= 60 ? 2 : 0 }}>
+          <ActivityIndicator color={colors.primaryForeground} />
+          {isDownloading && size >= 60 ? (
+            <Text
+              style={{
+                color: colors.primaryForeground,
+                fontSize: 10,
+                fontWeight: "800",
+                lineHeight: 12,
+              }}
+            >
+              {formatPercent(downloadProgress)}
+            </Text>
+          ) : null}
+        </View>
       ) : (
         <Icon
           name={isPlaying ? "Pause" : "Play"}

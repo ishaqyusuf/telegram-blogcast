@@ -3,9 +3,9 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useThemeConfig } from "@/hooks/use-theme-color";
 import { ThemeProvider } from "@react-navigation/native";
 import { useFonts } from "expo-font";
-import { Stack } from "expo-router";
+import { router, Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import "react-native-reanimated";
 import "@/styles/global.css";
 import { AuthProvider, useCreateAuthContext } from "@/hooks/use-auth";
@@ -18,7 +18,7 @@ import { PortalHost } from "@rn-primitives/portal";
 import { TRPCReactProvider } from "@/trpc/client";
 import { StaticTrpc } from "@/components/static-trpc";
 import { AppStatusBar } from "@/components/app-status-bar";
-import { View } from "react-native";
+import { Linking, Platform, View } from "react-native";
 import { StaticRouter } from "@/components/static-router";
 import { GlobalAudioBar } from "@/components/global-audio-bar";
 import { ChannelUpdatePrompt } from "@/components/channel-updates/channel-update-prompt";
@@ -41,6 +41,8 @@ export const unstable_settings = {
 SplashScreen.preventAutoHideAsync();
 initSentry();
 
+const TRACK_PLAYER_NOTIFICATION_URL = "trackplayer://notification.click";
+
 function AudioBootstrap() {
   const restoreAudio = useAudioStore((s) => s.restoreAudio);
 
@@ -49,6 +51,54 @@ function AudioBootstrap() {
       console.warn("[audio] restore failed", error);
     });
   }, [restoreAudio]);
+
+  return null;
+}
+
+function AudioNotificationRouter() {
+  const blogId = useAudioStore((s) => s.blog?.id);
+  const handledInitialUrlRef = useRef(false);
+  const pendingNotificationOpenRef = useRef(false);
+
+  useEffect(() => {
+    if (Platform.OS !== "android" || !blogId) return;
+    if (!pendingNotificationOpenRef.current) return;
+
+    pendingNotificationOpenRef.current = false;
+    router.push(`/blog-view-2/${blogId}?openComments=1` as any);
+  }, [blogId]);
+
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+
+    const openCurrentAudioComments = (url: string | null | undefined) => {
+      if (!url?.startsWith(TRACK_PLAYER_NOTIFICATION_URL)) return;
+
+      if (!blogId) {
+        pendingNotificationOpenRef.current = true;
+        return;
+      }
+
+      router.push(`/blog-view-2/${blogId}?openComments=1` as any);
+    };
+
+    if (!handledInitialUrlRef.current) {
+      handledInitialUrlRef.current = true;
+      Linking.getInitialURL()
+        .then(openCurrentAudioComments)
+        .catch((error) => {
+          console.warn("[audio] notification link failed", error);
+        });
+    }
+
+    const subscription = Linking.addEventListener("url", ({ url }) => {
+      openCurrentAudioComments(url);
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, [blogId]);
 
   return null;
 }
@@ -91,6 +141,7 @@ const InitialLayout = () => {
         <StaticTrpc />
         <StaticRouter />
         <AudioBootstrap />
+        <AudioNotificationRouter />
         <ChannelUpdatePrompt />
         <AppStatusBar />
         {/* <StatusBar style="auto" /> */}

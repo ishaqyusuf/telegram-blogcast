@@ -16,6 +16,12 @@ const playerCapabilities = [
   Capability.JumpForward,
 ];
 
+const mediaSessionCapabilities = [
+  ...playerCapabilities,
+  Capability.SkipToPrevious,
+  Capability.SkipToNext,
+];
+
 export async function setupTrackPlayer() {
   if (!setupPromise) {
     setupPromise = TrackPlayer.setupPlayer({
@@ -23,6 +29,7 @@ export async function setupTrackPlayer() {
       autoHandleInterruptions: true,
       autoUpdateMetadata: true,
       minBuffer: 10,
+      maxBuffer: 50,
       playBuffer: 1.5,
       backBuffer: 30,
     }).catch((error: unknown) => {
@@ -48,7 +55,7 @@ export async function setupTrackPlayer() {
       alwaysPauseOnInterruption: true,
     },
     backwardJumpInterval: AUDIO_JUMP_SECONDS,
-    capabilities: playerCapabilities,
+    capabilities: mediaSessionCapabilities,
     compactCapabilities: [
       Capability.JumpBackward,
       Capability.Play,

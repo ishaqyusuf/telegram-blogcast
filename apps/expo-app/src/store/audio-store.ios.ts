@@ -12,6 +12,7 @@ import { getTelegramFileUrl } from "@/lib/get-telegram-file";
 const Paths = {
   document: FileSystem.Paths.document,
 };
+const CONTEXT_REWIND_MS = 1500;
 let positionInterval: ReturnType<typeof setInterval> | null = null;
 
 function joinDocumentPath(...parts: string[]) {
@@ -239,7 +240,7 @@ export const useAudioStore = create<AudioState>()(
         if (!sound) return;
 
         try {
-          const resumePos = Math.max(0, position - 3000);
+          const resumePos = Math.max(0, position - CONTEXT_REWIND_MS);
           await sound.setPositionAsync(resumePos);
           set({ position: resumePos });
           await sound.playAsync();

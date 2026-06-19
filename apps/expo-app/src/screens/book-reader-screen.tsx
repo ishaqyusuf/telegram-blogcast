@@ -45,6 +45,7 @@ import {
 } from "@/hooks/use-comments-sync";
 import { useBookPageDraft } from "@/hooks/use-book-page-draft";
 import { useBookOfflineStore } from "@/store/book-offline-store";
+import { useGlobalAudioBarStore } from "@/store/global-audio-bar-store";
 import { useAppSettingsStore } from "@/store/app-settings-store";
 import { useTranslation } from "@/lib/i18n";
 import { useColors } from "@/hooks/use-color";
@@ -73,6 +74,13 @@ const HIGHLIGHT_COLORS = [
   "#fb7185",
   "#f97316",
 ];
+
+type SelectedTextRange = {
+  paragraphId: number;
+  startOffset: number;
+  endOffset: number;
+  quoteText: string;
+};
 
 function getLineSpacingMultiplier(spacing: "compact" | "normal" | "relaxed") {
   if (spacing === "compact") return 1.55;
@@ -108,18 +116,15 @@ export default function BookReaderScreen() {
   const resetReaderSettings = useAppSettingsStore(
     (s) => s.resetReaderSettings,
   );
+  const setGlobalAudioBarHidden = useGlobalAudioBarStore((s) => s.setHidden);
 
   const footnotesRef = useRef<BottomSheetModal>(null);
   const readerSettingsModal = useModal();
   const [highlightedMarker, setHighlightedMarker] = useState<string | null>(
     null,
   );
-  const [selectedParagraphId, setSelectedParagraphId] = useState<number | null>(
-    null,
-  );
-  const [showToolbarForParagraphId, setShowToolbarForParagraphId] = useState<
-    number | null
-  >(null);
+  const [selectedTextRange, setSelectedTextRange] =
+    useState<SelectedTextRange | null>(null);
   const [commentText, setCommentText] = useState("");
   const [showCommentInput, setShowCommentInput] = useState(false);
   const [showHighlightColors, setShowHighlightColors] = useState(false);
@@ -135,6 +140,7 @@ export default function BookReaderScreen() {
   >(null);
   const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editorRef = useRef<BookRichEditorHandle>(null);
+  const refetchRedirectedRef = useRef(false);
 
   // ── Server data ────────────────────────────────────────────────────────────
   const { data: page, isLoading } = useQuery(
@@ -388,75 +394,105 @@ export default function BookReaderScreen() {
     editorRef.current?.exec(command);
   };
 
-  const handleLongPress = (para: { id: number }) => {
-    const newId = para.id === selectedParagraphId ? null : para.id;
-    setShowToolbarForParagraphId(null);
-    setSelectedParagraphId(newId);
-    setShowHighlightColors(false);
-    setShowCommentInput(false);
-  };
+  const handleHighlightColor = async (
+    paragraphId: number,
+    color: string,
+    range?: SelectedTextRange | null,
+  ) => {
+    const selection =
+      range?.paragraphId === paragraphId &&
+      range.endOffset > range.startOffset &&
+      range.quoteText.trim()
+        ? range
+        : null;
+    if (!selection) return;
 
-  const handleHighlightColor = async (paragraphId: number, color: string) => {
-    const paragraph = page?.paragraphs.find((item) => item.id === paragraphId);
     const existingHighlights = highlights.filter(
       (highlight) => highlight.paragraphId === paragraphId,
     );
     for (const highlight of existingHighlights) {
-      await deleteHighlight(highlight.localId);
+      const start = highlight.startOffset ?? null;
+      const end = highlight.endOffset ?? null;
+      const overlaps =
+        start !== null &&
+        end !== null &&
+        start < selection.endOffset &&
+        end > selection.startOffset;
+      if (overlaps) {
+        await deleteHighlight(highlight.localId);
+      }
     }
     await addHighlight(paragraphId, color, {
-      startOffset: 0,
-      endOffset: paragraph?.text.length ?? null,
-      quoteText: paragraph?.text ?? null,
+      startOffset: selection.startOffset,
+      endOffset: selection.endOffset,
+      quoteText: selection.quoteText,
     });
-    setShowToolbarForParagraphId(null);
-    setSelectedParagraphId(null);
+    setSelectedTextRange(null);
     setShowHighlightColors(false);
   };
 
   const handleCopyParagraph = (paragraph: { text: string }) => {
     Clipboard.setString(paragraph.text);
-    setShowToolbarForParagraphId(null);
-    setSelectedParagraphId(null);
+    setSelectedTextRange(null);
     setShowHighlightColors(false);
   };
 
   const handleHighlightDelete = async (localId: string) => {
     await deleteHighlight(localId);
-    setShowToolbarForParagraphId(null);
-    setSelectedParagraphId(null);
+    setSelectedTextRange(null);
     setShowHighlightColors(false);
   };
 
   const selectedParagraph = useMemo(
-    () => page?.paragraphs.find((item) => item.id === selectedParagraphId),
-    [page?.paragraphs, selectedParagraphId],
+    () =>
+      page?.paragraphs.find(
+        (item) => item.id === selectedTextRange?.paragraphId,
+      ),
+    [page?.paragraphs, selectedTextRange?.paragraphId],
   );
+  const hasSelectedText =
+    selectedTextRange != null &&
+    selectedTextRange.endOffset > selectedTextRange.startOffset &&
+    selectedTextRange.quoteText.trim().length > 0;
+
+  useEffect(() => {
+    const shouldHideGlobalAudioBar = mode === "read" && hasSelectedText;
+    setGlobalAudioBarHidden(shouldHideGlobalAudioBar);
+
+    return () => {
+      setGlobalAudioBarHidden(false);
+    };
+  }, [hasSelectedText, mode, setGlobalAudioBarHidden]);
 
   const shareSelectedText = async () => {
-    if (!selectedParagraph?.text) return;
-    await Share.share({ message: selectedParagraph.text });
-    setSelectedParagraphId(null);
+    const selectedText = selectedTextRange?.quoteText.trim() ?? "";
+    if (!selectedText) return;
+    await Share.share({ message: selectedText });
+    setSelectedTextRange(null);
     setShowHighlightColors(false);
   };
 
   const openSelectedNote = () => {
-    if (!selectedParagraphId) return;
+    if (!selectedTextRange) return;
     setShowCommentInput(true);
     setShowHighlightColors(false);
   };
 
   const highlightSelectedParagraph = (color = selectedHighlightColor) => {
-    if (!selectedParagraphId) return;
-    void handleHighlightColor(selectedParagraphId, color);
+    if (!selectedTextRange) return;
+    void handleHighlightColor(
+      selectedTextRange.paragraphId,
+      color,
+      selectedTextRange,
+    );
   };
 
   const submitComment = async () => {
     if (!commentText.trim()) return;
-    await addComment(commentText.trim(), selectedParagraphId ?? undefined);
+    await addComment(commentText.trim(), selectedTextRange?.paragraphId);
     setCommentText("");
     setShowCommentInput(false);
-    setSelectedParagraphId(null);
+    setSelectedTextRange(null);
   };
 
   const bookmarked = isBookmarked(bookIdNum, pageIdNum);
@@ -537,7 +573,41 @@ export default function BookReaderScreen() {
 
   useEffect(() => {
     setAdjacentLoadingDirection(null);
+    refetchRedirectedRef.current = false;
+    setSelectedTextRange(null);
+    setShowHighlightColors(false);
+    setShowCommentInput(false);
   }, [pageIdNum]);
+
+  const pageBook = (page as any)?.book;
+  const pageSourceUrl = (page as any)?.shamelaUrl as
+    | string
+    | null
+    | undefined;
+  const isImportedShamelaPage =
+    pageBook?.editable === false ||
+    pageBook?.sourceType === "shamela" ||
+    Boolean(pageBook?.shamelaId || pageBook?.shamelaUrl);
+  const shouldRefetchPage =
+    Boolean(page) &&
+    mode === "read" &&
+    isImportedShamelaPage &&
+    Boolean(pageSourceUrl) &&
+    ((page as any)?.status !== "fetched" ||
+      ((page as any)?.paragraphs?.length ?? 0) === 0);
+
+  useEffect(() => {
+    if (!shouldRefetchPage || !pageSourceUrl || refetchRedirectedRef.current) {
+      return;
+    }
+
+    refetchRedirectedRef.current = true;
+    router.replace(
+      `/book-fetch-browser?url=${encodeURIComponent(
+        toAbsoluteShamelaUrl(pageSourceUrl),
+      )}&bookId=${bookIdNum}&autoPromote=1` as any,
+    );
+  }, [bookIdNum, pageSourceUrl, router, shouldRefetchPage]);
 
   if (isLoading) {
     return (
@@ -552,7 +622,6 @@ export default function BookReaderScreen() {
 
   if (!page) return null;
 
-  const pageBook = (page as any).book;
   const canEditPage =
     pageBook?.editable !== false &&
     (pageBook?.sourceType ?? "user") === "user" &&
@@ -561,6 +630,17 @@ export default function BookReaderScreen() {
   const audioReferences = Array.isArray((page as any).audioReferences)
     ? (page as any).audioReferences
     : [];
+
+  if (shouldRefetchPage) {
+    return (
+      <View
+        className="flex-1 items-center justify-center bg-background"
+        style={{ backgroundColor: colors.background }}
+      >
+        <ActivityIndicator color={colors.primary} />
+      </View>
+    );
+  }
 
   return (
     <View
@@ -703,17 +783,13 @@ export default function BookReaderScreen() {
                   quoteText: h.quoteText,
                 }))}
                 onFootnotePress={openFootnotes}
-                onLongPress={handleLongPress}
-                onPressHighlightedParagraph={handleHighlightDelete}
                 onCopyParagraph={handleCopyParagraph}
-                selectedParagraphId={selectedParagraphId}
-                showToolbarForParagraphId={null}
+                selectedTextRange={selectedTextRange}
+                onTextSelection={(selection) => {
+                  setSelectedTextRange(selection);
+                }}
                 onHighlightColor={handleHighlightColor}
                 onHighlightDelete={handleHighlightDelete}
-                onDismissHighlight={() => {
-                  setShowToolbarForParagraphId(null);
-                  setSelectedParagraphId(null);
-                }}
                 fontSize={readerFontSize}
                 lineHeight={readerLineHeight}
                 textColor={readerPalette.text}
@@ -845,18 +921,21 @@ export default function BookReaderScreen() {
                 void handleSaveDocument();
               }}
             />
-          ) : selectedParagraphId && selectedParagraph ? (
+          ) : hasSelectedText && selectedParagraph ? (
             <View className="border-t border-border bg-background px-4 py-3">
               {showHighlightColors ? (
                 <View className="mb-3 flex-row items-center justify-center gap-3">
                   {HIGHLIGHT_COLORS.map((color) => (
                     <Pressable
                       key={color}
+                      disabled={!hasSelectedText}
                       onPress={() => {
                         setSelectedHighlightColor(color);
                         highlightSelectedParagraph(color);
                       }}
-                      className="size-9 items-center justify-center rounded-full bg-card"
+                      className={`size-9 items-center justify-center rounded-full bg-card ${
+                        hasSelectedText ? "" : "opacity-40"
+                      }`}
                     >
                       <View
                         style={{
@@ -875,10 +954,13 @@ export default function BookReaderScreen() {
 
               <View className="flex-row items-center justify-around">
                 <Pressable
+                  disabled={!hasSelectedText}
                   onPress={() => {
                     void shareSelectedText();
                   }}
-                  className="min-h-12 flex-1 items-center justify-center gap-1"
+                  className={`min-h-12 flex-1 items-center justify-center gap-1 ${
+                    hasSelectedText ? "" : "opacity-40"
+                  }`}
                 >
                   <Icon name="Share2" size={22} className="text-foreground" />
                   <Text className="text-[12px] font-medium text-foreground">
@@ -901,10 +983,13 @@ export default function BookReaderScreen() {
                 </Pressable>
 
                 <Pressable
+                  disabled={!hasSelectedText}
                   onPress={() => highlightSelectedParagraph()}
                   onLongPress={() => setShowHighlightColors((value) => !value)}
                   delayLongPress={250}
-                  className="min-h-12 flex-1 items-center justify-center gap-1"
+                  className={`min-h-12 flex-1 items-center justify-center gap-1 ${
+                    hasSelectedText ? "" : "opacity-40"
+                  }`}
                 >
                   <View>
                     <Icon
@@ -997,7 +1082,7 @@ export default function BookReaderScreen() {
                 value={commentText}
                 onChangeText={setCommentText}
                 placeholder={
-                  selectedParagraphId
+                  selectedTextRange
                     ? t("addParagraphComment")
                     : t("addComment")
                 }
