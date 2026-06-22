@@ -12,7 +12,6 @@ import {
 import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";
 import { useColors } from "@/hooks/use-color";
-import { useTranslation } from "@/lib/i18n";
 
 const ALBUM_COLORS = [
   "#1e40af",
@@ -41,7 +40,6 @@ interface Props {
 export function AddToAlbumModal({ mediaIds, authorId, onClose }: Props) {
   const queryClient = useQueryClient();
   const colors = useColors();
-  const { t } = useTranslation();
   const [newAlbumName, setNewAlbumName] = useState("");
 
   const { data: albums = [], isLoading } = useQuery(
@@ -92,7 +90,7 @@ export function AddToAlbumModal({ mediaIds, authorId, onClose }: Props) {
         className="text-base font-bold text-foreground mb-4"
         style={{ color: colors.foreground }}
       >
-        {t("addToAlbum")}
+        Add to album
       </Text>
 
       {/* Create new album */}
@@ -103,7 +101,7 @@ export function AddToAlbumModal({ mediaIds, authorId, onClose }: Props) {
         >
           <Icon name="Plus" size={16} className="text-muted-foreground" />
           <TextInput
-            placeholder={t("newAlbumName")}
+            placeholder="New album name..."
             placeholderTextColor={colors.mutedForeground}
             value={newAlbumName}
             onChangeText={setNewAlbumName}
@@ -124,7 +122,7 @@ export function AddToAlbumModal({ mediaIds, authorId, onClose }: Props) {
             <ActivityIndicator size="small" color={colors.primaryForeground} />
           ) : (
             <Text className="text-xs font-bold text-primary-foreground">
-              {t("create")}
+              Create
             </Text>
           )}
         </Pressable>

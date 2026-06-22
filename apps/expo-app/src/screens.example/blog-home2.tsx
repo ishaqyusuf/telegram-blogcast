@@ -156,7 +156,7 @@ const CardFooter = ({
         <Icon name="Bookmark" className=" text-muted-foreground" />
       </Pressable>
       <Pressable>
-        <Icon name="Share2" className=" text-muted-foreground" />
+        <Icon name="Share" className=" text-muted-foreground" />
       </Pressable>
     </View>
   </View>
@@ -277,7 +277,7 @@ const TextCard = () => (
           <Text className="text-xs font-medium text-muted-foreground">42</Text>
         </Pressable>
         <Pressable>
-          <Icon name="Share2" className=" text-muted-foreground" />
+          <Icon name="Share" className=" text-muted-foreground" />
         </Pressable>
       </View>
     </View>

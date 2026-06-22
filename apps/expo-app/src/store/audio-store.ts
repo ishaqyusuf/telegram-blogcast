@@ -19,6 +19,7 @@ const LOADED_SOUND_MARKER = { engine: "track-player" } as const;
 const CONTEXT_REWIND_MS = 1500;
 const CONTEXT_REWIND_THRESHOLD_MS = CONTEXT_REWIND_MS;
 const POSITION_POLL_MS = 500;
+const STALE_AUDIO_MS = 12 * 60 * 60 * 1000;
 const DEFAULT_ARTWORK = Image.resolveAssetSource(
   require("../../assets/icons/loading-icon.png"),
 ).uri;
@@ -51,6 +52,10 @@ function millisToSeconds(ms: number) {
 
 function isPlayingState(state?: State) {
   return state === State.Playing || state === State.Buffering;
+}
+
+function isOlderThan(timestamp: number | null | undefined, maxAgeMs: number) {
+  return Boolean(timestamp && Date.now() - timestamp > maxAgeMs);
 }
 
 function getPlaybackStateName(
@@ -137,9 +142,11 @@ async function syncPlayerSnapshot() {
     TrackPlayer.getProgress(),
   ]);
 
+  const isPlaying = isPlayingState(getPlaybackStateName(playbackState));
   useAudioStore.setState({
     duration: secondsToMillis(progress.duration),
-    isPlaying: isPlayingState(getPlaybackStateName(playbackState)),
+    isPlaying,
+    playedAt: isPlaying ? Date.now() : useAudioStore.getState().playedAt,
     position: secondsToMillis(progress.position),
   });
 }
@@ -149,15 +156,21 @@ function ensureTrackPlayerListeners() {
 
   const subscriptions = [
     TrackPlayer.addEventListener(Event.PlaybackState, (event) => {
+      const isPlaying = isPlayingState(event.state);
       useAudioStore.setState({
         isLoading:
           event.state === State.Loading || event.state === State.Buffering,
-        isPlaying: isPlayingState(event.state),
+        isPlaying,
+        pausedAt: isPlaying ? null : Date.now(),
+        playedAt: isPlaying ? Date.now() : useAudioStore.getState().playedAt,
       });
     }),
     TrackPlayer.addEventListener(Event.PlaybackProgressUpdated, (event) => {
       useAudioStore.setState({
         duration: secondsToMillis(event.duration),
+        playedAt: useAudioStore.getState().isPlaying
+          ? Date.now()
+          : useAudioStore.getState().playedAt,
         position: secondsToMillis(event.position),
       });
     }),
@@ -166,11 +179,13 @@ function ensureTrackPlayerListeners() {
         error: event.message ?? "Audio playback failed",
         isLoading: false,
         isPlaying: false,
+        pausedAt: Date.now(),
       });
     }),
     TrackPlayer.addEventListener(Event.PlaybackQueueEnded, () => {
       useAudioStore.setState({
         isPlaying: false,
+        pausedAt: Date.now(),
         playSessionStartPosition: null,
       });
       useAudioStore.getState().stopPositionTracking();
@@ -208,6 +223,8 @@ interface AudioState {
   playbackRate: number;
   sleepTimerEnd: number | null;
   activeTrackId: string | null;
+  pausedAt: number | null;
+  playedAt: number | null;
 
   loadAudio: (blog: ItemProps) => Promise<void>;
   play: () => Promise<void>;
@@ -242,6 +259,8 @@ export const useAudioStore = create<AudioState>()(
       volume: 1,
       playbackRate: 1,
       sleepTimerEnd: null,
+      pausedAt: null,
+      playedAt: null,
       isSeeking: false,
       playSessionStartPosition: null,
       activeTrackId: null,
@@ -261,6 +280,7 @@ export const useAudioStore = create<AudioState>()(
             error: null,
             isDownloading: false,
             isLoading: true,
+            pausedAt: null,
             playSessionStartPosition: null,
           });
 
@@ -385,6 +405,8 @@ export const useAudioStore = create<AudioState>()(
           set({
             error: null,
             isPlaying: true,
+            pausedAt: null,
+            playedAt: Date.now(),
             playSessionStartPosition,
             position: playSessionStartPosition,
           });
@@ -421,6 +443,7 @@ export const useAudioStore = create<AudioState>()(
           set({
             error: null,
             isPlaying: false,
+            pausedAt: Date.now(),
             playSessionStartPosition: null,
             position: nextPosition,
           });
@@ -442,6 +465,7 @@ export const useAudioStore = create<AudioState>()(
           set({
             error: null,
             isPlaying: false,
+            pausedAt: Date.now(),
             playSessionStartPosition: null,
             position: 0,
           });
@@ -512,6 +536,8 @@ export const useAudioStore = create<AudioState>()(
             isDownloading: false,
             isPlaying: false,
             localPath: null,
+            pausedAt: null,
+            playedAt: null,
             playSessionStartPosition: null,
             position: 0,
             sound: null,
@@ -525,17 +551,59 @@ export const useAudioStore = create<AudioState>()(
       },
 
       updatePosition: (position: number) => {
-        set({ position });
+        set({
+          position,
+          playedAt: get().isPlaying ? Date.now() : get().playedAt,
+        });
       },
 
       restoreAudio: async () => {
-        const { blog, localPath, position, uri, volume, playbackRate } = get();
+        const {
+          blog,
+          isPlaying: wasPlaying,
+          localPath,
+          pausedAt,
+          playedAt,
+          position,
+          uri,
+          volume,
+          playbackRate,
+        } = get();
         const audioSource = localPath || uri;
 
         if (!audioSource || !blog) return;
 
+        const effectivePausedAt = wasPlaying ? pausedAt : pausedAt ?? Date.now();
+        const effectivePlayedAt = wasPlaying ? playedAt ?? Date.now() : playedAt;
+        const isStale =
+          (!wasPlaying && isOlderThan(effectivePausedAt, STALE_AUDIO_MS)) ||
+          (wasPlaying && isOlderThan(effectivePlayedAt, STALE_AUDIO_MS));
+
+        if (isStale) {
+          set({
+            activeTrackId: null,
+            blog: null!,
+            duration: 0,
+            isPlaying: false,
+            localPath: null,
+            pausedAt: null,
+            playedAt: null,
+            position: 0,
+            sound: null,
+            uri: null,
+          });
+          return;
+        }
+
         try {
-          set({ error: null, isLoading: true, playSessionStartPosition: null });
+          set({
+            error: null,
+            isLoading: true,
+            isPlaying: false,
+            pausedAt: wasPlaying ? Date.now() : effectivePausedAt,
+            playedAt: effectivePlayedAt,
+            playSessionStartPosition: null,
+          });
           await preparePlayer();
 
           const track = buildTrack(blog, audioSource, get().duration);
@@ -553,6 +621,7 @@ export const useAudioStore = create<AudioState>()(
             duration: secondsToMillis(progress.duration) || get().duration,
             isLoading: false,
             isPlaying: false,
+            pausedAt: wasPlaying ? Date.now() : effectivePausedAt,
             position,
             sound: LOADED_SOUND_MARKER,
           });
@@ -619,6 +688,8 @@ export const useAudioStore = create<AudioState>()(
         duration: state.duration,
         isPlaying: state.isPlaying,
         localPath: state.localPath,
+        pausedAt: state.pausedAt,
+        playedAt: state.playedAt,
         playbackRate: state.playbackRate,
         position: state.position,
         uri: state.uri,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, type RefObject } from "react";
+import { useRef, type ReactNode, type RefObject } from "react";
 
 type AudioPlayerProps = {
     src: string;
@@ -8,6 +8,7 @@ type AudioPlayerProps = {
     audioRef?: RefObject<HTMLAudioElement | null>;
     stopLinkNavigation?: boolean;
     className?: string;
+    beforeControls?: ReactNode;
 };
 
 export function AudioPlayer({
@@ -16,6 +17,7 @@ export function AudioPlayer({
     audioRef,
     stopLinkNavigation = false,
     className = "",
+    beforeControls,
 }: AudioPlayerProps) {
     const localAudioRef = useRef<HTMLAudioElement>(null);
     const resolvedAudioRef = audioRef ?? localAudioRef;
@@ -36,6 +38,7 @@ export function AudioPlayer({
                 <p className="mb-2 text-xs uppercase tracking-wide text-zinc-400">
                     {title}
                 </p>
+                {beforeControls}
                 <audio
                     controls
                     preload="metadata"

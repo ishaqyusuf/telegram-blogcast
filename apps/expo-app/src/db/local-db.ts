@@ -54,7 +54,7 @@ export async function withLocalDbRetry<T>(
 
 async function runStartupStatement(
   statement: ReturnType<typeof sql>,
-  options?: { ignoreLocked?: boolean },
+  options?: { ignoreErrors?: boolean; ignoreLocked?: boolean },
 ) {
   try {
     await withLocalDbRetry(() => localDb.run(statement), {
@@ -62,6 +62,10 @@ async function runStartupStatement(
       delayMs: 150,
     });
   } catch (error) {
+    if (options?.ignoreErrors) {
+      console.warn("[DB] startup statement skipped", error);
+      return;
+    }
     if (options?.ignoreLocked && isLockedSqliteError(error)) {
       console.warn(
         "[DB] startup statement skipped because database is locked",
@@ -82,6 +86,7 @@ export async function initLocalDb() {
   localDbInitPromise = (async () => {
     await runStartupStatement(sql`PRAGMA busy_timeout = 5000;`);
     await runStartupStatement(sql`PRAGMA journal_mode = WAL;`, {
+      ignoreErrors: true,
       ignoreLocked: true,
     });
     await runStartupStatement(sql`PRAGMA foreign_keys = ON;`);

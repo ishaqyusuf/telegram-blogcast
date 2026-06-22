@@ -18,7 +18,7 @@ import { PortalHost } from "@rn-primitives/portal";
 import { TRPCReactProvider } from "@/trpc/client";
 import { StaticTrpc } from "@/components/static-trpc";
 import { AppStatusBar } from "@/components/app-status-bar";
-import { Linking, Platform, View } from "react-native";
+import { Alert, Linking, Platform, View } from "react-native";
 import { StaticRouter } from "@/components/static-router";
 import { GlobalAudioBar } from "@/components/global-audio-bar";
 import { ChannelUpdatePrompt } from "@/components/channel-updates/channel-update-prompt";
@@ -28,6 +28,9 @@ import { initSentry, Sentry } from "@/lib/sentry";
 import { getThemeOverride } from "@/lib/theme-preference";
 import { initLocalDb } from "@/db/local-db";
 import { useAudioStore } from "@/store/audio-store";
+import { useTranscriptionQueue } from "@/hooks/use-transcription-queue";
+import { useAppSettingsStore } from "@/store/app-settings-store";
+import { checkTranscriberHealth, getDefaultTranscriberUrl } from "@/lib/transcribe";
 export {
   // Catch any errors thrown by the Layout component.
   ErrorBoundary,
@@ -103,6 +106,77 @@ function AudioNotificationRouter() {
   return null;
 }
 
+function TranscriptionQueueResumePrompt() {
+  const localTranscriberBaseUrl = useAppSettingsStore(
+    (s) => s.localTranscriberBaseUrl,
+  );
+  const transcriberUrl = getDefaultTranscriberUrl(localTranscriberBaseUrl);
+  const { queuedCount, isRunning, runQueued, reload } = useTranscriptionQueue();
+  const promptedKeyRef = useRef<string | null>(null);
+  const alertOpenRef = useRef(false);
+
+  useEffect(() => {
+    if (queuedCount <= 0) {
+      promptedKeyRef.current = null;
+      return;
+    }
+    if (isRunning || !transcriberUrl) return;
+
+    let cancelled = false;
+
+    const checkAndPrompt = async () => {
+      if (cancelled || alertOpenRef.current || isRunning || queuedCount <= 0) {
+        return;
+      }
+
+      try {
+        const online = await checkTranscriberHealth(transcriberUrl);
+        if (!online || cancelled) return;
+      } catch {
+        return;
+      }
+
+      const promptKey = `${transcriberUrl}:${queuedCount}`;
+      if (promptedKeyRef.current === promptKey) return;
+
+      promptedKeyRef.current = promptKey;
+      alertOpenRef.current = true;
+      Alert.alert(
+        "Resume transcribe?",
+        `${queuedCount} queued transcription ${
+          queuedCount === 1 ? "job is" : "jobs are"
+        } ready and Local Whisper is online.`,
+        [
+          {
+            text: "Later",
+            style: "cancel",
+            onPress: () => {
+              alertOpenRef.current = false;
+            },
+          },
+          {
+            text: "Run now",
+            onPress: () => {
+              alertOpenRef.current = false;
+              void runQueued().then(reload);
+            },
+          },
+        ],
+      );
+    };
+
+    void checkAndPrompt();
+    const id = setInterval(checkAndPrompt, 60 * 1000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [isRunning, queuedCount, reload, runQueued, transcriberUrl]);
+
+  return null;
+}
+
 function RootLayout() {
   const [loaded, error] = useFonts({
     SpaceMono: require("../../assets/fonts/SpaceMono-Regular.ttf"),
@@ -143,6 +217,7 @@ const InitialLayout = () => {
         <AudioBootstrap />
         <AudioNotificationRouter />
         <ChannelUpdatePrompt />
+        <TranscriptionQueueResumePrompt />
         <AppStatusBar />
         {/* <StatusBar style="auto" /> */}
 
@@ -171,6 +246,7 @@ const InitialLayout = () => {
           <Stack.Screen name="play-history" />
           <Stack.Screen name="search" />
           <Stack.Screen name="settings" />
+          <Stack.Screen name="transcribe-queue" />
           <Stack.Screen name="updates" />
           <Stack.Screen name="albums" />
           <Stack.Screen name="albums/[albumId]" />

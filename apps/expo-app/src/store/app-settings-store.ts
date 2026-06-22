@@ -40,7 +40,7 @@ export const useAppSettingsStore = create<AppSettingsState>()(
       localApiLastIp: null,
       localApiIpHistory: [],
       localTranscriberBaseUrl: null,
-      transcriptionModel: "gpt-4o-transcribe",
+      transcriptionModel: "whisper-local",
       setLanguage: (language) => set({ language }),
       setReaderFontSize: (fontSize) =>
         set({ readerFontSize: Math.max(14, Math.min(28, fontSize)) }),

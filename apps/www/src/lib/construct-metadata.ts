@@ -9,20 +9,20 @@ export function constructMetadata({
   icons = [
     {
       rel: "apple-touch-icon",
-      sizes: "32x32",
-      url: `/icons/apple-touch-icon${prod ? ".png" : ".dev.jpg"}`,
+      sizes: "180x180",
+      url: `/apple-touch-icon${prod ? ".png" : ".dev.jpg"}`,
     },
     {
       rel: "icon",
       type: "image/png",
       sizes: "32x32",
-      url: `/icons/favicon-32x32s${prod ? ".png" : ".dev.jpg"}`,
+      url: `/favicon-32x32${prod ? ".png" : ".dev.jpg"}`,
     },
     {
       rel: "icon",
       type: "image/png",
       sizes: "16x16",
-      url: `/icons/favicon-16x16${prod ? ".png" : ".dev.jpg"}`,
+      url: `/favicon-16x16${prod ? ".png" : ".dev.jpg"}`,
     },
   ],
   noIndex = false,

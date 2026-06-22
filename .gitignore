@@ -88,4 +88,6 @@ services/transcriber/cache/transcripts/*
 !services/transcriber/cache/audio/.gitkeep
 !services/transcriber/cache/clips/.gitkeep
 !services/transcriber/cache/transcripts/.gitkeep
-services/transcriber/.venv/
+services/transcriber/.venv*/
+__pycache__/
+*.py[cod]

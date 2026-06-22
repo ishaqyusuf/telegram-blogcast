@@ -34,6 +34,13 @@ export function getBlogHref(post: Pick<BlogItem, "id" | "type">) {
   return `/blog-view/${post.id}`;
 }
 
+export function getInlinePreviewText(value?: string | null) {
+  return value
+    ?.replace(/[\r\n]+/g, " ")
+    .replace(/[ \t\f\v]+/g, " ")
+    .trim();
+}
+
 export function getPrimaryImageUrl(post: BlogItem) {
   if (post.coverImageUrl) return post.coverImageUrl;
   const firstImage = post.img?.[0] as any;

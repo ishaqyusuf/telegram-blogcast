@@ -95,6 +95,14 @@ export function BlogHomeHeader() {
           >
             <Icon name="Settings" className="size-base text-muted-foreground" />
           </Pressable>
+          <Pressable
+            onPress={() => router.push("/transcribe-queue" as any)}
+            className="p-2 rounded-full active:bg-muted"
+            accessibilityRole="button"
+            accessibilityLabel="Transcribe queue"
+          >
+            <Icon name="Captions" className="size-base text-muted-foreground" />
+          </Pressable>
           <View className="size-9 rounded-full bg-primary items-center justify-center">
             <Text
               className="text-xs font-bold text-primary-foreground"

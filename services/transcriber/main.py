@@ -36,6 +36,8 @@ CACHE_DIR = Path(os.getenv("CACHE_DIR", "./cache"))
 MAX_DOWNLOAD_MB = int(os.getenv("MAX_DOWNLOAD_MB", "500"))
 REQUEST_TIMEOUT_SECONDS = int(os.getenv("REQUEST_TIMEOUT_SECONDS", "60"))
 ALLOWED_HOSTS = os.getenv("ALLOWED_AUDIO_HOSTS", "*")
+PRELOAD_WHISPER = os.getenv("PRELOAD_WHISPER", "0") == "1"
+TRANSCRIPT_CACHE_ENABLED = os.getenv("TRANSCRIPT_CACHE_ENABLED", "0") == "1"
 
 AUDIO_CACHE = CACHE_DIR / "audio"
 CLIP_CACHE = CACHE_DIR / "clips"
@@ -48,6 +50,13 @@ TRANSCRIPT_CACHE.mkdir(parents=True, exist_ok=True)
 # ── Inference lock ──────────────────────────────────────────────────────────────
 
 _inference_lock = threading.Lock()
+_whisper_load_lock = threading.RLock()
+_whisper_module = None
+_whisper_model_path: Optional[str] = None
+_whisper_status = "not_loaded"
+_whisper_error: Optional[str] = None
+_whisper_load_started_at: Optional[float] = None
+_whisper_load_finished_at: Optional[float] = None
 
 # ── App ─────────────────────────────────────────────────────────────────────────
 
@@ -60,6 +69,103 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def load_whisper_module():
+    global _whisper_module
+    global _whisper_status
+    global _whisper_error
+    global _whisper_load_started_at
+    global _whisper_load_finished_at
+
+    if _whisper_module is not None:
+        return _whisper_module
+
+    with _whisper_load_lock:
+        if _whisper_module is not None:
+            return _whisper_module
+
+        _whisper_status = "loading"
+        _whisper_error = None
+        _whisper_load_started_at = time.time()
+        _whisper_load_finished_at = None
+        log.info("Loading mlx_whisper module")
+
+        try:
+            import mlx_whisper
+        except Exception as exc:
+            _whisper_status = "error"
+            _whisper_error = str(exc)[:500]
+            _whisper_load_finished_at = time.time()
+            log.exception("Failed to load mlx_whisper module")
+            raise
+
+        _whisper_module = mlx_whisper
+        _whisper_status = "module_loaded"
+        _whisper_load_finished_at = time.time()
+        log.info(
+            "Loaded mlx_whisper module in %.2fs",
+            _whisper_load_finished_at - _whisper_load_started_at,
+        )
+        return _whisper_module
+
+
+def ensure_whisper_model_ready():
+    global _whisper_model_path
+    global _whisper_status
+    global _whisper_error
+    global _whisper_load_started_at
+    global _whisper_load_finished_at
+
+    if _whisper_status == "ready" and _whisper_model_path:
+        return
+
+    with _whisper_load_lock:
+        if _whisper_status == "ready" and _whisper_model_path:
+            return
+
+        _whisper_status = "loading"
+        _whisper_error = None
+        _whisper_load_started_at = time.time()
+        _whisper_load_finished_at = None
+
+        try:
+            load_whisper_module()
+            model_path = Path(WHISPER_MODEL).expanduser()
+            if model_path.exists():
+                _whisper_model_path = str(model_path)
+            else:
+                from huggingface_hub import snapshot_download
+
+                log.info("Downloading/preparing Whisper model assets: %s", WHISPER_MODEL)
+                _whisper_model_path = snapshot_download(repo_id=WHISPER_MODEL)
+        except Exception as exc:
+            _whisper_status = "error"
+            _whisper_error = str(exc)[:500]
+            _whisper_load_finished_at = time.time()
+            log.exception("Failed to prepare Whisper model")
+            raise
+
+        _whisper_status = "ready"
+        _whisper_load_finished_at = time.time()
+        log.info(
+            "Prepared Whisper model %s in %.2fs",
+            WHISPER_MODEL,
+            _whisper_load_finished_at - _whisper_load_started_at,
+        )
+
+
+def warm_whisper_model():
+    try:
+        ensure_whisper_model_ready()
+    except Exception:
+        pass
+
+
+@app.on_event("startup")
+def start_whisper_warmup():
+    if PRELOAD_WHISPER:
+        threading.Thread(target=warm_whisper_model, daemon=True).start()
 
 # ── Models ──────────────────────────────────────────────────────────────────────
 
@@ -83,10 +189,17 @@ class TranscribeRequest(BaseModel):
         populate_by_name = True
 
 
+class WordOut(BaseModel):
+    word: str
+    start: float
+    end: float
+
+
 class SegmentOut(BaseModel):
     start: float
     end: float
     text: str
+    words: list[WordOut] = Field(default_factory=list)
 
 
 class TranscribeResponse(BaseModel):
@@ -99,7 +212,7 @@ class TranscribeResponse(BaseModel):
     language: str = ""
     model: str = ""
     text: str = ""
-    segments: list[SegmentOut] = []
+    segments: list[SegmentOut] = Field(default_factory=list)
     durationSeconds: float = 0
     processingSeconds: float = 0
 
@@ -238,26 +351,40 @@ def run_ffmpeg(input_path: Path, output_path: Path, from_sec: Optional[float] = 
 # ── Whisper transcription ───────────────────────────────────────────────────────
 
 def transcribe_clip(clip_path: Path, language: str, word_timestamps: bool, from_offset: float = 0.0):
-    import mlx_whisper
+    mlx_whisper = load_whisper_module()
 
     log.info("Transcribing %s with model %s (language=%s)", clip_path, WHISPER_MODEL, language)
 
+    transcribe_start = time.time()
     result = mlx_whisper.transcribe(
         str(clip_path),
         path_or_hf_repo=WHISPER_MODEL,
         language=language,
         word_timestamps=word_timestamps,
     )
+    log.info("mlx_whisper returned in %.2fs", time.time() - transcribe_start)
 
     text = result.get("text", "").strip()
     raw_segments = result.get("segments", [])
 
     segments_out: list[SegmentOut] = []
     for seg in raw_segments:
+        words_out: list[WordOut] = []
+        for word in seg.get("words", []) or []:
+            word_text = (word.get("word", "") or "").strip()
+            if not word_text:
+                continue
+            words_out.append(WordOut(
+                word=word_text,
+                start=round(word.get("start", 0.0) + from_offset, 3),
+                end=round(word.get("end", 0.0) + from_offset, 3),
+            ))
+
         segments_out.append(SegmentOut(
             start=round(seg.get("start", 0.0) + from_offset, 3),
             end=round(seg.get("end", 0.0) + from_offset, 3),
             text=(seg.get("text", "") or "").strip(),
+            words=words_out,
         ))
 
     return text, segments_out
@@ -287,17 +414,38 @@ def save_cached_transcript(cache_key: str, data: dict):
 
 @app.get("/health")
 def health():
+    load_elapsed = None
+    if _whisper_load_started_at:
+        load_ended_at = _whisper_load_finished_at or time.time()
+        load_elapsed = round(load_ended_at - _whisper_load_started_at, 2)
+
     return {
-        "ok": True,
+        "ok": _whisper_status == "ready",
         "service": "al-ghurobaa-local-transcriber",
         "model": WHISPER_MODEL,
         "device": "apple-silicon-local",
+        "status": _whisper_status,
+        "ready": _whisper_status == "ready",
+        "error": _whisper_error,
+        "loadSeconds": load_elapsed,
     }
 
 
 @app.post("/transcribe")
 def transcribe(req: TranscribeRequest):
     validate_audio_url(req.audioUrl)
+
+    if _whisper_status != "ready":
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "ok": False,
+                "error": {
+                    "code": "WHISPER_NOT_READY",
+                    "message": "Local Whisper is still loading. Wait for /health status=ready, then retry.",
+                },
+            },
+        )
 
     cache_key = make_cache_key(
         audio_url=req.audioUrl,
@@ -309,7 +457,7 @@ def transcribe(req: TranscribeRequest):
     )
 
     # Check cache
-    if not req.force:
+    if TRANSCRIPT_CACHE_ENABLED and not req.force:
         cached = load_cached_transcript(cache_key)
         if cached:
             cached["ok"] = True
@@ -371,8 +519,8 @@ def transcribe(req: TranscribeRequest):
         "processingSeconds": elapsed,
     }
 
-    # Cache for future use
-    save_cached_transcript(cache_key, response_data)
+    if TRANSCRIPT_CACHE_ENABLED:
+        save_cached_transcript(cache_key, response_data)
 
     return response_data
 

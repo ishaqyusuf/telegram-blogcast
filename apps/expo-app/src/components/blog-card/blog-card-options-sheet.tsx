@@ -1,17 +1,26 @@
 import { Pressable } from "@/components/ui/pressable";
 import { useRouter } from "expo-router";
+import { useEffect } from "react";
 import { Alert, Share, Text, View } from "react-native";
 
 import { Icon, type IconKeys } from "@/components/ui/icon";
-import { _trpc } from "@/components/static-trpc";
-import { useQuery } from "@/lib/react-query";
 import { getWebUrl } from "@/lib/base-url";
 import { getBlogHref } from "./utils";
 import { useColors } from "@/hooks/use-color";
 import { withAlpha } from "@/lib/theme";
+import { useGlobalAudioBarStore } from "@/store/global-audio-bar-store";
+import { useTranscriptionQueue } from "@/hooks/use-transcription-queue";
+import { useAppSettingsStore } from "@/store/app-settings-store";
+import { getDefaultTranscriberUrl } from "@/lib/transcribe";
+import { Toast } from "@/components/ui/toast";
 
 type Props = {
   blogId: string;
+  postType?: string | null;
+  postTitle?: string | null;
+  audioMediaId?: string | null;
+  audioTelegramFileId?: string | null;
+  audioUrl?: string | null;
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -83,16 +92,36 @@ function ActionRow({
   );
 }
 
-export function BlogCardOptionsSheet({ blogId }: Props) {
+export function BlogCardOptionsSheet({
+  blogId,
+  postType,
+  postTitle: initialPostTitle,
+  audioMediaId,
+  audioTelegramFileId,
+  audioUrl,
+}: Props) {
   const router = useRouter();
   const colors = useColors();
-  const numericBlogId = Number(blogId);
-  const { data: blog } = useQuery(
-    _trpc.blog.getBlog.queryOptions(
-      { id: numericBlogId || 0 },
-      { enabled: Number.isFinite(numericBlogId) && numericBlogId > 0 },
-    ),
+  const setGlobalAudioBarHidden = useGlobalAudioBarStore((s) => s.setHidden);
+  const localTranscriberBaseUrl = useAppSettingsStore(
+    (s) => s.localTranscriberBaseUrl,
   );
+  const transcriberUrl = getDefaultTranscriberUrl(localTranscriberBaseUrl);
+  const { enqueue } = useTranscriptionQueue(undefined, {
+    autoLoad: false,
+    reloadOnEnqueue: false,
+  });
+  const numericBlogId = Number(blogId);
+  const numericAudioMediaId = Number(audioMediaId);
+
+  useEffect(() => {
+    const previousHidden = useGlobalAudioBarStore.getState().hidden;
+    setGlobalAudioBarHidden(true);
+
+    return () => {
+      setGlobalAudioBarHidden(previousHidden);
+    };
+  }, [setGlobalAudioBarHidden]);
 
   const onShare = async () => {
     const id = encodeURIComponent(blogId);
@@ -109,13 +138,52 @@ export function BlogCardOptionsSheet({ blogId }: Props) {
   const onComingSoon = () => {
     Alert.alert("Coming soon", "This action is not connected yet.");
   };
-  const postTitle =
-    (blog as any)?.caption?.trim() ||
-    (blog as any)?.content?.trim() ||
-    (blog as any)?.medias?.[0]?.title?.trim() ||
-    `Post #${blogId}`;
-  const rawPostType = blog ? String((blog as any).type ?? "post") : "post";
-  const postType = TYPE_LABELS[rawPostType] ?? "Post";
+  const postTitle = initialPostTitle?.trim() || `Post #${blogId}`;
+  const rawPostType = postType ? String(postType) : "post";
+  const postTypeLabel = TYPE_LABELS[rawPostType] ?? "Post";
+  const canQueueTranscription = Boolean(
+    rawPostType === "audio" &&
+      Number.isFinite(numericAudioMediaId) &&
+      numericAudioMediaId > 0,
+  );
+
+  const onQueueTranscription = async () => {
+    if (!canQueueTranscription) return;
+    const reachableAudioUrl =
+      audioUrl?.startsWith("http://") || audioUrl?.startsWith("https://")
+        ? audioUrl
+        : null;
+
+    if (!audioTelegramFileId && !reachableAudioUrl) {
+      Alert.alert(
+        "Cannot transcribe yet",
+        "This audio does not have a reachable file source to queue.",
+      );
+      return;
+    }
+
+    try {
+      await enqueue({
+        mediaId: numericAudioMediaId,
+        telegramFileId: audioTelegramFileId ?? null,
+        audioUrl: reachableAudioUrl,
+        language: "ar",
+        transcriberUrl,
+      });
+      Toast.show("Added to transcription queue", {
+        type: "success",
+        position: "bottom",
+      });
+      router.back();
+    } catch (error) {
+      Alert.alert(
+        "Could not queue transcription",
+        error instanceof Error
+          ? error.message
+          : "This audio could not be added to the transcription queue.",
+      );
+    }
+  };
 
   return (
     <View
@@ -153,7 +221,7 @@ export function BlogCardOptionsSheet({ blogId }: Props) {
                 className="text-xs font-semibold text-primary"
                 style={{ color: colors.primary }}
               >
-                {postType}
+                {postTypeLabel}
               </Text>
             </View>
             <Text
@@ -185,19 +253,18 @@ export function BlogCardOptionsSheet({ blogId }: Props) {
             description="View the full post and media"
             icon="FileText"
             onPress={() => {
-              if (blog) {
-                router.replace(
-                  getBlogHref({ id: blog.id, type: blog.type } as any) as any,
-                );
-                return;
-              }
-              router.replace(`/blog-view/${blogId}` as any);
+              router.replace(
+                getBlogHref({
+                  id: numericBlogId || Number(blogId),
+                  type: rawPostType,
+                } as any) as any,
+              );
             }}
           />
           <ActionRow
             label="Share"
             description="Send a web link to this post"
-            icon="Share2"
+            icon="Share"
             onPress={onShare}
           />
           <ActionRow
@@ -205,19 +272,25 @@ export function BlogCardOptionsSheet({ blogId }: Props) {
             description="Open the discussion for this post"
             icon="MessageSquare"
             onPress={() => {
-              if (blog) {
-                router.replace({
-                  pathname: getBlogHref({
-                    id: blog.id,
-                    type: blog.type,
-                  } as any) as any,
-                  params: { openComments: "1" },
-                });
-                return;
-              }
-              router.replace(`/blog-view/${blogId}` as any);
+              router.replace({
+                pathname: getBlogHref({
+                  id: numericBlogId || Number(blogId),
+                  type: rawPostType,
+                } as any) as any,
+                params: { openComments: "1" },
+              });
             }}
           />
+          {canQueueTranscription ? (
+            <ActionRow
+              label="Transcribe"
+              description="Queue this audio for local Whisper"
+              icon="Captions"
+              onPress={() => {
+                void onQueueTranscription();
+              }}
+            />
+          ) : null}
           <ActionRow
             label="Save"
             description="Keep this post in saved items"

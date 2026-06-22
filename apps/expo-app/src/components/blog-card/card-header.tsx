@@ -3,6 +3,7 @@ import { Text, View } from "react-native";
 
 import { Icon } from "@/components/ui/icon";
 import { useColors } from "@/hooks/use-color";
+import { withAlpha } from "@/lib/theme";
 
 import type { BlogCardVariant, BlogItem } from "./types";
 import {
@@ -36,6 +37,7 @@ export function CardHeader({
   const subtitle = [channelHandle, getPostDateLabel(post)]
     .filter(Boolean)
     .join(" · ");
+  const isTranscribed = Boolean((post.audio as any)?.isTranscribed);
 
   return (
     <View className="mb-3 flex-row items-center justify-between gap-3">
@@ -70,6 +72,22 @@ export function CardHeader({
       </View>
 
       <View className="flex-row items-center gap-2">
+        {variant === "audio" && isTranscribed ? (
+          <View
+            className="rounded-full border border-border bg-primary/10 px-2.5 py-1"
+            style={{
+              backgroundColor: withAlpha(colors.primary, 0.1),
+              borderColor: colors.border,
+            }}
+          >
+            <Text
+              className="text-[11px] font-semibold text-primary"
+              style={{ color: colors.primary }}
+            >
+              Transcribed
+            </Text>
+          </View>
+        ) : null}
         <View
           className="rounded-full border border-border bg-muted px-2.5 py-1"
           style={{ backgroundColor: colors.muted, borderColor: colors.border }}

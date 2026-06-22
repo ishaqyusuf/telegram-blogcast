@@ -6,24 +6,14 @@ import {
   splitTextLinesWithLinks,
 } from "@acme/blog";
 import { useRouter } from "expo-router";
-import { useCallback } from "react";
 import { Image, Linking, Text, View } from "react-native";
 
-import { minuteToString } from "@/lib/utils";
 import { Icon } from "@/components/ui/icon";
 import { useColors } from "@/hooks/use-color";
 import { useTranslation } from "@/lib/i18n";
-import { useAudioStore } from "@/store/audio-store";
 
 import type { BlogCardVariant, BlogItem } from "./types";
-import { getPrimaryImageUrl } from "./utils";
-
-function formatMediaSizeMb(size?: number | null) {
-  if (!size || !Number.isFinite(size) || size <= 0) return null;
-
-  const mb = size / (1024 * 1024);
-  return `${mb >= 10 ? Math.round(mb) : mb.toFixed(1)} MB`;
-}
+import { getInlinePreviewText, getPrimaryImageUrl } from "./utils";
 
 function truncateUrlLabel(value: string) {
   const trimmed = value.trim();
@@ -107,7 +97,8 @@ function LinkifiedText({
 
 function CardText({ post }: { post: BlogItem }) {
   const colors = useColors();
-  const content = post.content?.trim() || post.caption?.trim();
+  const content =
+    getInlinePreviewText(post.content) || getInlinePreviewText(post.caption);
   if (!content) return null;
 
   return (
@@ -117,100 +108,8 @@ function CardText({ post }: { post: BlogItem }) {
         className="text-[15px] leading-6 text-foreground"
         color={colors.foreground}
         linkColor={colors.primary}
+        numberOfLines={3}
       />
-    </View>
-  );
-}
-
-function CardAudio({ post }: { post: BlogItem }) {
-  const colors = useColors();
-  const audioStore = useAudioStore();
-  const hasAudioSource = !!(
-    post.audio?.telegramFileId || (post.audio as any)?.url
-  );
-  const mediaSize = formatMediaSizeMb(post.audio?.size);
-  const isCurrent = audioStore.blog?.id === post.id;
-  const isPlaying = isCurrent && audioStore.isPlaying;
-  const isLoading = isCurrent && audioStore.isLoading;
-  const progress =
-    isCurrent && audioStore.duration > 0
-      ? Math.max(0, Math.min(1, audioStore.position / audioStore.duration))
-      : 0;
-
-  const playPause = useCallback(async () => {
-    if (isPlaying) {
-      await audioStore.pause();
-      return;
-    }
-
-    if (isCurrent) {
-      await audioStore.play();
-      return;
-    }
-
-    await audioStore.loadAudio(post as any);
-    if (!useAudioStore.getState().error) {
-      await useAudioStore.getState().play();
-    }
-  }, [audioStore, isCurrent, isPlaying, post]);
-
-  if (!hasAudioSource) return null;
-
-  return (
-    <View
-      className="mb-1 flex-row items-center gap-3 rounded-xl border border-border bg-background p-3"
-      style={{
-        backgroundColor: colors.card,
-        borderColor: colors.border,
-      }}
-    >
-      <Pressable
-        className="size-10 items-center justify-center rounded-full bg-accent"
-        disabled={isLoading}
-        onPress={(e) => {
-          e.stopPropagation();
-          void playPause();
-        }}
-      >
-        <Icon
-          name={isPlaying ? "Pause" : "Play"}
-          className={
-            isPlaying
-              ? "text-accent-foreground"
-              : "ml-0.5 text-accent-foreground"
-          }
-        />
-      </Pressable>
-      <View className="flex-1 gap-1.5">
-        <View
-          className="h-1 w-full overflow-hidden rounded-full bg-muted"
-          style={{ backgroundColor: colors.muted }}
-        >
-          <View
-            className="h-full bg-accent"
-            style={{
-              backgroundColor: colors.accent,
-              width: `${progress * 100}%`,
-            }}
-          />
-        </View>
-        <View className="flex-row justify-between">
-          <Text
-            className="text-[10px] font-medium text-muted-foreground"
-            style={{ color: colors.mutedForeground }}
-          >
-            {isCurrent ? minuteToString(audioStore.position / 1000) : "00:00"}
-          </Text>
-          <Text
-            className="text-[10px] font-medium text-muted-foreground"
-            style={{ color: colors.mutedForeground }}
-          >
-            {[minuteToString(post.audio?.duration), mediaSize]
-              .filter(Boolean)
-              .join(" • ")}
-          </Text>
-        </View>
-      </View>
     </View>
   );
 }
@@ -274,12 +173,7 @@ export function CardMedia({
   const { t } = useTranslation();
   const colors = useColors();
   if (variant === "audio") {
-    return (
-      <>
-        <CardText post={post} />
-        <CardAudio post={post} />
-      </>
-    );
+    return <CardText post={post} />;
   }
 
   if (variant === "video") {
@@ -313,7 +207,11 @@ export function CardMedia({
         }}
       >
         <LinkifiedText
-          content={post.content ?? ""}
+          content={
+            getInlinePreviewText(post.content) ||
+            getInlinePreviewText(post.caption) ||
+            ""
+          }
           className="text-lg leading-8 text-foreground"
           color={colors.foreground}
           linkColor={colors.primary}

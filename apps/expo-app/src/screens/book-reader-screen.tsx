@@ -962,7 +962,7 @@ export default function BookReaderScreen() {
                     hasSelectedText ? "" : "opacity-40"
                   }`}
                 >
-                  <Icon name="Share2" size={22} className="text-foreground" />
+                  <Icon name="Share" size={22} className="text-foreground" />
                   <Text className="text-[12px] font-medium text-foreground">
                     Share Text
                   </Text>

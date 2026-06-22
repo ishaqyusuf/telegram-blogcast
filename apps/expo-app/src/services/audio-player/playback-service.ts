@@ -1,6 +1,9 @@
 import TrackPlayer, { Event } from "react-native-track-player";
+import * as Linking from "expo-linking";
 
 import { AUDIO_JUMP_SECONDS } from "./setup-track-player";
+
+const SPEED_OPTIONS = [1, 1.25, 1.5, 1.75, 2];
 
 function runRemoteAction(action: () => Promise<void>) {
   action().catch((error) => {
@@ -21,6 +24,27 @@ async function seekBySeconds(offsetSeconds: number) {
   await TrackPlayer.seekTo(nextPosition);
 }
 
+async function cyclePlaybackRate() {
+  const rate = await TrackPlayer.getRate();
+  const currentIndex = SPEED_OPTIONS.findIndex(
+    (option) => Math.abs(option - rate) < 0.01,
+  );
+  const nextRate = SPEED_OPTIONS[(currentIndex + 1) % SPEED_OPTIONS.length]!;
+  await TrackPlayer.setRate(nextRate);
+}
+
+async function openCurrentTrackComments() {
+  const track = await TrackPlayer.getActiveTrack();
+  const blogId = (track as any)?.blogId ?? track?.id;
+  if (!blogId) return;
+
+  await Linking.openURL(
+    Linking.createURL(`/blog-view-2/${blogId}`, {
+      queryParams: { openComments: "1" },
+    }),
+  );
+}
+
 export async function playbackService() {
   TrackPlayer.addEventListener(Event.RemotePlay, () => {
     runRemoteAction(() => TrackPlayer.play());
@@ -35,11 +59,11 @@ export async function playbackService() {
   });
 
   TrackPlayer.addEventListener(Event.RemotePrevious, () => {
-    runRemoteAction(() => seekBySeconds(-AUDIO_JUMP_SECONDS));
+    runRemoteAction(cyclePlaybackRate);
   });
 
   TrackPlayer.addEventListener(Event.RemoteNext, () => {
-    runRemoteAction(() => seekBySeconds(AUDIO_JUMP_SECONDS));
+    runRemoteAction(openCurrentTrackComments);
   });
 
   TrackPlayer.addEventListener(Event.RemoteJumpBackward, (event) => {

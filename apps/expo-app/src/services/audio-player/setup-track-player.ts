@@ -6,21 +6,28 @@ import TrackPlayer, {
 
 let setupPromise: Promise<void> | null = null;
 
-export const AUDIO_JUMP_SECONDS = 15;
+export const AUDIO_JUMP_SECONDS = 5;
 
 const playerCapabilities = [
   Capability.Play,
   Capability.Pause,
   Capability.SeekTo,
+  Capability.SkipToPrevious,
   Capability.JumpBackward,
   Capability.JumpForward,
-];
-
-const mediaSessionCapabilities = [
-  ...playerCapabilities,
-  Capability.SkipToPrevious,
   Capability.SkipToNext,
 ];
+
+const notificationCapabilities = [
+  Capability.SkipToPrevious,
+  Capability.JumpBackward,
+  Capability.Play,
+  Capability.JumpForward,
+  Capability.SkipToNext,
+];
+
+const notificationSpeedIcon = require("../../../assets/notification/notification_speed_1x.png");
+const notificationPlusIcon = require("../../../assets/notification/notification_plus.png");
 
 export async function setupTrackPlayer() {
   if (!setupPromise) {
@@ -55,15 +62,16 @@ export async function setupTrackPlayer() {
       alwaysPauseOnInterruption: true,
     },
     backwardJumpInterval: AUDIO_JUMP_SECONDS,
-    capabilities: mediaSessionCapabilities,
+    capabilities: playerCapabilities,
     compactCapabilities: [
       Capability.JumpBackward,
       Capability.Play,
-      Capability.Pause,
       Capability.JumpForward,
     ],
     forwardJumpInterval: AUDIO_JUMP_SECONDS,
-    notificationCapabilities: playerCapabilities,
+    previousIcon: notificationSpeedIcon,
+    nextIcon: notificationPlusIcon,
+    notificationCapabilities,
     progressUpdateEventInterval: 1,
   });
 }

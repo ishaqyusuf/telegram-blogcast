@@ -3,12 +3,12 @@ import { useGlobalAudioBarStore } from "@/store/global-audio-bar-store";
 import { useColors } from "@/hooks/use-color";
 import { usePathname, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Easing, Platform, Pressable, Text, View } from "react-native";
+import { Animated, Easing, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { SkipBack5Icon, SkipForward5Icon } from "./skip-icons";
 import { Icon } from "@/components/ui/icon";
 
 const SPEED_OPTIONS = [1, 1.25, 1.5, 1.75, 2];
+const STALE_PAUSED_AUDIO_MS = 12 * 60 * 60 * 1000;
 
 function formatSleepRemaining(ms: number): string {
   const totalSec = Math.max(0, Math.ceil(ms / 1000));
@@ -124,7 +124,10 @@ export function GlobalAudioBar() {
   const pause = useAudioStore((s) => s.pause);
   const playbackRate = useAudioStore((s) => s.playbackRate);
   const setPlaybackRate = useAudioStore((s) => s.setPlaybackRate);
+  const pausedAt = useAudioStore((s) => s.pausedAt);
+  const unloadAudio = useAudioStore((s) => s.unloadAudio);
   const hidden = useGlobalAudioBarStore((s) => s.hidden);
+  const scrollHidden = useGlobalAudioBarStore((s) => s.scrollHidden);
 
   // ── Sleep timer countdown + enforcement ────────────────────────────────────
   const [sleepRemaining, setSleepRemaining] = useState<number | null>(null);
@@ -148,6 +151,20 @@ export function GlobalAudioBar() {
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, [sleepTimerEnd]);
+
+  useEffect(() => {
+    if (!sound || isPlaying || !pausedAt) return;
+
+    const maybeHideStaleAudio = () => {
+      if (Date.now() - pausedAt > STALE_PAUSED_AUDIO_MS) {
+        void unloadAudio();
+      }
+    };
+
+    maybeHideStaleAudio();
+    const id = setInterval(maybeHideStaleAudio, 60 * 1000);
+    return () => clearInterval(id);
+  }, [isPlaying, pausedAt, sound, unloadAudio]);
 
   // ── Spinning disc animation ────────────────────────────────────────────────
   const spinAnim = useRef(new Animated.Value(0)).current;
@@ -176,12 +193,13 @@ export function GlobalAudioBar() {
   });
 
   // Hide on the full audio screen or when nothing loaded
-  if (hidden || !sound || pathname.includes("blog-view-2")) return null;
+  if (hidden || scrollHidden || !sound || pathname.includes("blog-view-2")) {
+    return null;
+  }
 
   const title = blog?.audio?.title ?? blog?.caption ?? "Now Playing";
   const blogId = blog?.id;
   const progress = duration > 0 ? position / duration : 0;
-  const showAndroidPodcastActions = Platform.OS === "android";
 
   const cycleSpeed = () => {
     const idx = SPEED_OPTIONS.findIndex(
@@ -305,7 +323,6 @@ export function GlobalAudioBar() {
               onPress={cycleSpeed}
               hitSlop={10}
               style={{
-                display: showAndroidPodcastActions ? "flex" : "none",
                 minWidth: 34,
                 paddingHorizontal: 7,
                 paddingVertical: 5,
@@ -331,7 +348,7 @@ export function GlobalAudioBar() {
               hitSlop={10}
               style={{ padding: 4 }}
             >
-              <SkipBack5Icon size={26} color={colors.mutedForeground} />
+              <Icon name="Backward5" size={26} color={colors.mutedForeground} />
             </Pressable>
 
             <Pressable
@@ -368,14 +385,13 @@ export function GlobalAudioBar() {
               hitSlop={10}
               style={{ padding: 4 }}
             >
-              <SkipForward5Icon size={26} color={colors.mutedForeground} />
+              <Icon name="Forward5" size={26} color={colors.mutedForeground} />
             </Pressable>
 
             <Pressable
               onPress={openComments}
               hitSlop={10}
               style={{
-                display: showAndroidPodcastActions ? "flex" : "none",
                 width: 34,
                 height: 34,
                 borderRadius: 17,

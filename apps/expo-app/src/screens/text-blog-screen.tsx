@@ -106,7 +106,7 @@ export default function TextBlogScreen() {
               onPress={() => Share.share({ message: blog.content ?? "" })}
               className="p-2"
             >
-              <Icon name="Share2" size={18} className="text-muted-foreground" />
+              <Icon name="Share" size={18} className="text-muted-foreground" />
             </Pressable>
           </View>
         </View>

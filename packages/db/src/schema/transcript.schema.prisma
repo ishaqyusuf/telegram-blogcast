@@ -16,6 +16,37 @@ model TranscriptSegment {
   startSec     Float
   endSec       Float
   text         String
+  chunkStartSec Float?
+  chunkEndSec   Float?
+  // pending | processing | done | failed
+  status       String     @default("done")
+  words        Json?
+  model        String?
+  error        String?
 
   @@index([transcriptId])
+  @@index([transcriptId, chunkStartSec])
+}
+
+model TranscriptionJob {
+  id             Int       @unique @default(autoincrement())
+  createdAt      DateTime? @default(now()) @db.Timestamp(0)
+  updatedAt      DateTime? @updatedAt
+  completedAt    DateTime?
+  mediaId        Int
+  media          Media     @relation(fields: [mediaId], references: [id])
+  telegramFileId String?
+  audioUrl       String?
+  fromSec        Int?
+  toSec          Int?
+  language       String    @default("ar")
+  transcriberUrl String?
+  // queued | running | completed | failed
+  status         String    @default("queued")
+  retryCount     Int       @default(0)
+  errorMessage   String?
+
+  @@index([mediaId])
+  @@index([status])
+  @@index([mediaId, status])
 }

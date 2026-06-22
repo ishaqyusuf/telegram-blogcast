@@ -18,10 +18,13 @@ Tracks how schema changes are applied and what migration workflows are expected 
 
 ### Operational Notes
 - `packages/db` uses Prisma and environment-driven commands.
-- Capture any production-safe migration policy here if the team formalizes one.
+- This project does not have a local database workflow, so Prisma database updates should be applied with `bun db:push` only after schema changes.
+- Do not run `bun db:migrate` unless the project gains a local DB setup or the user explicitly asks for it.
+- Do not manually create migration files; let Prisma and the repository scripts generate/apply the required migration state.
 
 ### Migration Checklist
 - Update Prisma schema.
+- Run `bun db:push`.
 - Regenerate client if needed.
 - Verify app and API queries against schema changes.
 - Update Brain docs when domain shapes change.

@@ -1,12 +1,33 @@
 // apps/api/src/routers/blog.route.ts
 import { createTRPCRouter, publicProcedure } from "../init";
 import { z } from "zod";
-import { checkLocalTranscriber, transcribeRange, transcribeRangeSchema } from "../../queries/blog";
+import {
+  checkLocalTranscriber,
+  getOrTranscribeTranscriptChunk,
+  transcriptChunkSchema,
+  transcribeRange,
+  transcribeRangeSchema,
+} from "../../queries/blog";
 import { posts, postsSchema } from "../../queries/posts";
 import { consoleLog } from "@acme/utils";
 import { TRPCError } from "@trpc/server";
 
 const blogStatusSchema = z.enum(["draft", "published"]);
+const transcriptionJobStatusSchema = z.enum([
+  "queued",
+  "running",
+  "completed",
+  "failed",
+]);
+const transcriptionJobRangeSchema = z.object({
+  mediaId: z.number(),
+  telegramFileId: z.string().nullish(),
+  audioUrl: z.string().nullish(),
+  fromSec: z.number().int().nullish(),
+  toSec: z.number().int().nullish(),
+  language: z.string().default("ar"),
+  transcriberUrl: z.string().nullish(),
+});
 const blogMediaUploadSchema = z.object({
   url: z.string().url(),
   downloadUrl: z.string().url().optional(),
@@ -549,6 +570,39 @@ export const blogRoutes = createTRPCRouter({
       return transcribeRange(props.ctx, props.input);
     }),
 
+  getTranscriptChunk: publicProcedure
+    .input(transcriptChunkSchema)
+    .mutation(async (props) => {
+      return getOrTranscribeTranscriptChunk(props.ctx, props.input);
+    }),
+
+  testTranscriptRange: publicProcedure
+    .input(
+      z.object({
+        fileId: z.string().min(1),
+        localTranscriberBaseUrl: z.string().url().optional(),
+        language: z.string().min(2).max(8).optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const startedAt = Date.now();
+      const result = await transcribeRange(ctx, {
+        fileId: input.fileId,
+        fromSec: 0,
+        toSec: 20,
+        model: "whisper-local",
+        localTranscriberBaseUrl: input.localTranscriberBaseUrl,
+        language: input.language,
+      });
+
+      return {
+        ...result,
+        fromSec: 0,
+        toSec: 20,
+        elapsedMs: Date.now() - startedAt,
+      };
+    }),
+
   checkLocalTranscriber: publicProcedure
     .input(z.object({ baseUrl: z.string().url().optional() }).optional())
     .query(async ({ input }) => {
@@ -558,6 +612,10 @@ export const blogRoutes = createTRPCRouter({
         service: health.service ?? "local-transcriber",
         model: health.model ?? "unknown",
         device: health.device ?? "local",
+        status: health.status ?? (health.ok === false ? "offline" : "ready"),
+        ready: health.ready ?? health.ok !== false,
+        error: health.error ?? null,
+        loadSeconds: health.loadSeconds ?? null,
       };
     }),
 
@@ -608,6 +666,94 @@ export const blogRoutes = createTRPCRouter({
         })),
       });
       return transcript;
+    }),
+
+  getTranscriptionJobs: publicProcedure
+    .input(
+      z
+        .object({
+          mediaId: z.number().optional(),
+          statuses: z.array(transcriptionJobStatusSchema).optional(),
+        })
+        .optional(),
+    )
+    .query(async ({ ctx, input }) => {
+      const db = ctx.db as any;
+      return db.transcriptionJob.findMany({
+        where: {
+          ...(input?.mediaId ? { mediaId: input.mediaId } : {}),
+          ...(input?.statuses?.length
+            ? { status: { in: input.statuses } }
+            : {}),
+        },
+        orderBy: { createdAt: "asc" },
+      });
+    }),
+
+  enqueueTranscriptionJob: publicProcedure
+    .input(transcriptionJobRangeSchema)
+    .mutation(async ({ ctx, input }) => {
+      const db = ctx.db as any;
+      const fromSec = input.fromSec ?? null;
+      const toSec = input.toSec ?? null;
+      const telegramFileId = input.telegramFileId || null;
+      const audioUrl = input.audioUrl || null;
+
+      if (!telegramFileId && !audioUrl) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message:
+            "Queued transcription requires a reachable audio URL or Telegram file ID.",
+        });
+      }
+
+      const existing = await db.transcriptionJob.findFirst({
+        where: {
+          mediaId: input.mediaId,
+          fromSec,
+          toSec,
+          status: { in: ["queued", "running"] },
+        },
+        orderBy: { createdAt: "desc" },
+      });
+      if (existing) return existing;
+
+      return db.transcriptionJob.create({
+        data: {
+          mediaId: input.mediaId,
+          telegramFileId,
+          audioUrl,
+          fromSec,
+          toSec,
+          language: input.language || "ar",
+          transcriberUrl: input.transcriberUrl || null,
+          status: "queued",
+        },
+      });
+    }),
+
+  updateTranscriptionJob: publicProcedure
+    .input(
+      z.object({
+        id: z.number(),
+        status: transcriptionJobStatusSchema,
+        errorMessage: z.string().nullish(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const db = ctx.db as any;
+      return db.transcriptionJob.update({
+        where: { id: input.id },
+        data: {
+          status: input.status,
+          updatedAt: new Date(),
+          completedAt: input.status === "completed" ? new Date() : undefined,
+          errorMessage:
+            input.status === "failed" ? input.errorMessage || null : null,
+          retryCount:
+            input.status === "failed" ? { increment: 1 } : undefined,
+        },
+      });
     }),
 
   // ── Play History ─────────────────────────────────────────────────────────

@@ -62,6 +62,12 @@ export default function SettingsScreen() {
     );
   }, [localTranscriberBaseUrl, resolvedTranscriberUrl]);
 
+  useEffect(() => {
+    if (transcriptionModel !== "whisper-local") {
+      setTranscriptionModel("whisper-local");
+    }
+  }, [setTranscriptionModel, transcriptionModel]);
+
   return (
     <View
       className="flex-1 bg-background"
@@ -229,7 +235,7 @@ export default function SettingsScreen() {
             </View>
 
             <View className="gap-2">
-              {TRANSCRIPTION_MODELS.map((model) => {
+              {TRANSCRIPTION_MODELS.filter((model) => model.id === "whisper-local").map((model) => {
                 const selected = transcriptionModel === model.id;
                 const disabled =
                   model.requiresLocalTranscriber && !whisperAvailable;

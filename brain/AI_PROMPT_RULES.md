@@ -19,6 +19,7 @@ Provides prompt hygiene rules for AI agents working in this repository so output
 - Prefer reading existing code and docs before proposing new abstractions.
 - Reuse workspace packages and utilities before copying logic.
 - Preserve user-authored changes unless explicitly asked to overwrite them.
+- For Prisma database schema updates in this project, run `bun db:push` only because there is no local database workflow; do not run `bun db:migrate` unless the project gains a local DB setup or the user explicitly asks. Do not manually create migration files.
 - When repo context is ambiguous, call out assumptions in the final summary.
 - For reviews, prioritize bugs, regressions, and missing tests over broad commentary.
 

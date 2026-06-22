@@ -17,7 +17,7 @@ const Header = () => (
     </Text>
     <View className="flex-row items-center gap-1 -mr-2">
       <Pressable className="w-10 h-10 items-center justify-center rounded-full">
-        <Icon name="Share2" className="size-md text-muted-foreground" />
+        <Icon name="Share" className="size-md text-muted-foreground" />
       </Pressable>
       <Pressable className="w-10 h-10 items-center justify-center rounded-full">
         <Icon name="Bookmark" className="size-base text-muted-foreground" />

@@ -40,7 +40,7 @@ export function HomeFeedPostFooter({
           />
         </TouchableOpacity>
         <TouchableOpacity className="p-1.5">
-          <Icon name="Share2" className="text-muted-foreground size-20" />
+          <Icon name="Share" className="text-muted-foreground size-20" />
         </TouchableOpacity>
       </View>
     </View>

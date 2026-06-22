@@ -58,8 +58,10 @@ Tracks the current audio playback experience, supporting components, and future 
 - Audio comments default to timestamp metadata on the play screen and render seekable timestamp chips.
 - Album suggestions are same-channel audio candidates, ranked by matching tags.
 - Playlists accept audio media only and skip duplicate additions.
-- Transcripts are persisted after successful server or local LAN transcription and read back through the transcript view.
-- Transcription model preference is selectable globally from Settings and switchable from the audio transcript screen. Local Whisper is only selectable when the LAN transcriber health check succeeds.
+- Transcripts are persisted after successful Local Whisper transcription and read back through the transcript view.
+- Audio transcript chunks require the local MLX Whisper transcriber. Hosted OpenAI/Gemini transcription is not used for chunk transcription.
+- Web uses the API default local transcriber URL `http://127.0.0.1:8787`; mobile must use a reachable Mac LAN URL such as `http://192.168.x.x:8787`.
+- Transcription controls are disabled when the local transcriber health check fails. Start it with `bun run transcriber:dev`.
 - Local transcription can be queued when the LAN transcriber is unavailable. Queued jobs are stored in local SQLite, require a reachable HTTP(S) audio URL or Telegram file ID, show failures in the local transcription panel, and can be retried later.
 
 ### Organization Rules
@@ -68,7 +70,7 @@ Tracks the current audio playback experience, supporting components, and future 
 - Individual audio media can reference book pages through `MediaBookPageReference`, including timestamp ranges and notes. Album/book and media/page references can be removed from the mobile UI, and book-page reference taps open audio at the referenced timestamp when available.
 - Playlists are user-curated and can mix audio across channels unless future product rules tighten them.
 - Audio menus and channel chat expose add-to-album and add-to-playlist actions for audio media.
-- Local Whisper transcription is routed through the tRPC API with a LAN transcriber URL, keeping the client on the same typed transcription contract as hosted models.
+- Local Whisper transcription is routed through the tRPC API with a LAN transcriber URL, keeping web and mobile on the same typed chunk transcription contract.
 
 ### Future Improvements
 - Stronger offline download and sync behavior

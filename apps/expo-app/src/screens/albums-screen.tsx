@@ -14,7 +14,7 @@ import { useState } from "react";
 import { _trpc } from "@/components/static-trpc";
 import { SafeArea } from "@/components/safe-area";
 import { Icon } from "@/components/ui/icon";
-import { useTranslation } from "@/lib/i18n";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useColors } from "@/hooks/use-color";
 
 const ALBUM_COLORS = [
@@ -35,11 +35,39 @@ function getInitials(name?: string | null) {
     .join("");
 }
 
+function AlbumGridSkeleton() {
+  return (
+    <View className="flex-1 px-3 pb-8">
+      <View className="flex-row gap-3 mb-3">
+        <AlbumTileSkeleton />
+        <AlbumTileSkeleton />
+      </View>
+      <View className="flex-row gap-3 mb-3">
+        <AlbumTileSkeleton />
+        <AlbumTileSkeleton />
+      </View>
+      <View className="flex-row gap-3">
+        <AlbumTileSkeleton />
+        <AlbumTileSkeleton />
+      </View>
+    </View>
+  );
+}
+
+function AlbumTileSkeleton() {
+  return (
+    <View className="flex-1">
+      <Skeleton className="w-full rounded-2xl" style={{ aspectRatio: 1 }} />
+      <Skeleton className="mt-2 h-4 w-4/5 rounded-md" />
+      <Skeleton className="mt-1.5 h-3 w-2/5 rounded-md" />
+    </View>
+  );
+}
+
 export default function AlbumsScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const colors = useColors();
-  const { t } = useTranslation();
   const [createVisible, setCreateVisible] = useState(false);
   const [name, setName] = useState("");
   const { data: albums = [], isLoading } = useQuery(
@@ -77,7 +105,7 @@ export default function AlbumsScreen() {
             <Icon name="ChevronLeft" size={22} className="text-foreground" />
           </Pressable>
           <Text className="text-lg font-bold text-foreground flex-1">
-            {t("albums")}
+            Albums
           </Text>
           <Pressable
             onPress={() => setCreateVisible(true)}
@@ -88,13 +116,11 @@ export default function AlbumsScreen() {
         </View>
 
         {isLoading ? (
-          <View className="flex-1 items-center justify-center">
-            <Text className="text-muted-foreground">{t("loading")}</Text>
-          </View>
+          <AlbumGridSkeleton />
         ) : albums.length === 0 ? (
           <View className="flex-1 items-center justify-center gap-3">
             <Icon name="Music2" size={48} className="text-muted-foreground" />
-            <Text className="text-muted-foreground">{t("noAlbums")}</Text>
+            <Text className="text-muted-foreground">No albums yet</Text>
           </View>
         ) : (
           <FlatList
@@ -161,7 +187,7 @@ export default function AlbumsScreen() {
               <TextInput
                 value={name}
                 onChangeText={setName}
-                placeholder={t("newAlbumName")}
+                placeholder="New album name..."
                 placeholderTextColor={colors.mutedForeground}
                 autoFocus
                 returnKeyType="done"
@@ -195,7 +221,7 @@ export default function AlbumsScreen() {
                   />
                 ) : (
                   <Text className="text-sm font-bold text-primary-foreground">
-                    {t("create")}
+                    Create
                   </Text>
                 )}
               </Pressable>

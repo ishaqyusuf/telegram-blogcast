@@ -154,7 +154,7 @@ const TranscriptSheet = () => (
               </Text>
             </Pressable>
             <Pressable className="flex-row items-center gap-1.5 px-3 py-1.5 bg-muted rounded-full">
-              <Icon name="Share2" className="size-sm text-muted-foreground" />
+              <Icon name="Share" className="size-sm text-muted-foreground" />
               <Text className="text-xs font-medium text-muted-foreground">
                 Share
               </Text>

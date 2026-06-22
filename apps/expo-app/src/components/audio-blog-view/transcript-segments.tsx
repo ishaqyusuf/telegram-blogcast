@@ -8,6 +8,13 @@ export interface TranscriptSegmentData {
   endSec: number;
   text: string;
   id?: number | string;
+  words?: TranscriptWordData[];
+}
+
+export interface TranscriptWordData {
+  word: string;
+  startSec: number;
+  endSec: number;
 }
 
 function formatSec(sec: number) {
@@ -91,7 +98,31 @@ export function TranscriptSegments({ segments }: TranscriptSegmentsProps) {
                 fontWeight: isActive ? "500" : "400",
               }}
             >
-              {seg.text}
+              {seg.words?.length
+                ? seg.words.map((word, wordIndex) => {
+                    const wordActive =
+                      positionSec >= word.startSec && positionSec < word.endSec;
+                    return (
+                      <Text
+                        key={`${word.startSec}-${wordIndex}`}
+                        style={{
+                          backgroundColor: wordActive
+                            ? colors.primary
+                            : "transparent",
+                          color: wordActive
+                            ? colors.primaryForeground
+                            : isActive
+                              ? colors.foreground
+                              : colors.mutedForeground,
+                          borderRadius: 4,
+                          fontWeight: wordActive ? "800" : undefined,
+                        }}
+                      >
+                        {word.word}{" "}
+                      </Text>
+                    );
+                  })
+                : seg.text}
             </Text>
           </Pressable>
         );

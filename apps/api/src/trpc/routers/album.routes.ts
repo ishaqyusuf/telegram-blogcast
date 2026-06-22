@@ -4,11 +4,31 @@ import { z } from "zod";
 
 const suggestedMediaInput = z.object({
 	albumId: z.number(),
-	limit: z.number().int().min(1).max(100).optional().default(20),
+	limit: z.number().int().min(1).max(100).optional().default(25),
+	keyword: z.string().trim().optional(),
 });
 
 function uniqueNumbers(values: number[]) {
 	return Array.from(new Set(values.filter((value) => Number.isFinite(value))));
+}
+
+function tokenizeSearchText(value?: string | null) {
+	return Array.from(
+		new Set(
+			(value ?? "")
+				.toLowerCase()
+				.match(/[\p{L}\p{N}]{3,}/gu) ?? [],
+		),
+	);
+}
+
+function scoreTextAgainstTerms(value: string | null | undefined, terms: string[]) {
+	const text = (value ?? "").toLowerCase();
+	if (!text || terms.length === 0) return 0;
+	return terms.reduce((score, term) => {
+		if (!text.includes(term)) return score;
+		return score + Math.min(4, Math.max(1, Math.floor(term.length / 4)));
+	}, 0);
 }
 
 export const albumRoutes = createTRPCRouter({
@@ -125,10 +145,7 @@ export const albumRoutes = createTRPCRouter({
 								select: {
 									id: true,
 									channelId: true,
-									blogTags: {
-										where: { deletedAt: null },
-										include: { tags: { select: { id: true, title: true } } },
-									},
+									content: true,
 								},
 							},
 						},
@@ -140,16 +157,27 @@ export const albumRoutes = createTRPCRouter({
 			const channelId =
 				album.channelId ??
 				album.medias.find((media) => media.blog?.channelId)?.blog?.channelId;
-			const tagIds = uniqueNumbers(
-				album.medias.flatMap(
-					(media) =>
-						media.blog?.blogTags
-							?.map((blogTag) => blogTag.tags?.id)
-							.filter((id): id is number => typeof id === "number") ?? [],
-				),
-			);
 
-			if (!channelId || tagIds.length === 0) return [];
+			if (!channelId) return [];
+
+			const rawKeyword = input.keyword?.trim().toLowerCase();
+			const keywordTerms = rawKeyword
+				? tokenizeSearchText(rawKeyword).length > 0
+					? tokenizeSearchText(rawKeyword)
+					: [rawKeyword]
+				: [];
+			const hasKeyword = Boolean(rawKeyword);
+			const albumTitleTerms = hasKeyword ? keywordTerms : tokenizeSearchText(album.name);
+			const existingAudioTerms = hasKeyword ? [] : tokenizeSearchText(
+				album.medias
+					.map((media) => `${media.title ?? ""} ${media.blog?.content ?? ""}`)
+					.join(" "),
+			);
+			const terms = Array.from(
+				new Set([...albumTitleTerms, ...existingAudioTerms]),
+			).slice(0, 80);
+
+			if (terms.length === 0) return [];
 
 			const candidates = await ctx.db.media.findMany({
 				where: {
@@ -160,12 +188,6 @@ export const albumRoutes = createTRPCRouter({
 							deletedAt: null,
 							type: "audio",
 							channelId,
-							blogTags: {
-								some: {
-									deletedAt: null,
-									tagId: { in: tagIds },
-								},
-							},
 						},
 					},
 				},
@@ -178,10 +200,7 @@ export const albumRoutes = createTRPCRouter({
 							type: true,
 							blogDate: true,
 							channelId: true,
-							blogTags: {
-								where: { deletedAt: null },
-								include: { tags: { select: { id: true, title: true } } },
-							},
+							channel: { select: { id: true, title: true, username: true } },
 						},
 					},
 				},
@@ -190,12 +209,13 @@ export const albumRoutes = createTRPCRouter({
 
 			return candidates
 				.map((media) => {
-					const matchingTags =
-						media.blog?.blogTags
-							?.map((blogTag) => blogTag.tags)
-							.filter((tag): tag is { id: number; title: string } =>
-								Boolean(tag && tagIds.includes(tag.id)),
-							) ?? [];
+					const titleScore =
+						scoreTextAgainstTerms(media.title, albumTitleTerms) * 3 +
+						scoreTextAgainstTerms(media.title, existingAudioTerms) * 2;
+					const captionScore =
+						scoreTextAgainstTerms(media.blog?.content, albumTitleTerms) * 2 +
+						scoreTextAgainstTerms(media.blog?.content, existingAudioTerms);
+					const matchScore = titleScore + captionScore;
 
 					return {
 						id: media.id,
@@ -209,12 +229,18 @@ export const albumRoutes = createTRPCRouter({
 									type: media.blog.type,
 									blogDate: media.blog.blogDate,
 									channelId: media.blog.channelId,
+									channel: media.blog.channel,
 								}
 							: null,
-						matchingTags,
-						matchScore: matchingTags.length,
+						matchingTerms: terms.filter((term) =>
+							`${media.title ?? ""} ${media.blog?.content ?? ""}`
+								.toLowerCase()
+								.includes(term),
+						),
+						matchScore,
 					};
 				})
+				.filter((media) => media.matchScore > 0)
 				.sort((a, b) => {
 					if (b.matchScore !== a.matchScore) return b.matchScore - a.matchScore;
 					const aTime = a.blog?.blogDate?.getTime() ?? 0;
@@ -336,6 +362,38 @@ export const albumRoutes = createTRPCRouter({
 					skipped: mediaItems.length - itemsToAdd.length,
 				};
 			});
+		}),
+
+	removeMediaFromAlbum: publicProcedure
+		.input(
+			z.object({
+				albumId: z.number(),
+				mediaId: z.number(),
+			}),
+		)
+		.mutation(async ({ ctx, input }) => {
+			const db = ctx.db as any;
+			const media = await db.media.findFirstOrThrow({
+				where: { id: input.mediaId, albumId: input.albumId },
+				select: { id: true, mediaIndexId: true },
+			});
+
+			await db.media.update({
+				where: { id: input.mediaId },
+				data: { albumId: null },
+			});
+
+			if (media.mediaIndexId) {
+				await db.albumAudioIndex.updateMany({
+					where: {
+						albumId: input.albumId,
+						blogAudioId: media.mediaIndexId,
+					},
+					data: { albumId: null },
+				});
+			}
+
+			return { removed: true };
 		}),
 
 	attachBook: publicProcedure

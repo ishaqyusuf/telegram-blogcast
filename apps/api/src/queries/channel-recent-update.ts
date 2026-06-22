@@ -113,7 +113,6 @@ async function getStoredChannelCounts(
   channelIds?: number[],
 ) {
   const where = {
-    deletedAt: null,
     ...(channelIds ? { channelId: { in: channelIds } } : {}),
   };
   const [counts, latestDates, blogs] = await Promise.all([
@@ -258,7 +257,7 @@ async function buildJobItems(
 }
 
 async function countStoredBlogs(ctx: TRPCContext, channelId: number) {
-  return ctx.db.blog.count({ where: { channelId, deletedAt: null } });
+  return ctx.db.blog.count({ where: { channelId } });
 }
 
 async function runChannelUpdate(

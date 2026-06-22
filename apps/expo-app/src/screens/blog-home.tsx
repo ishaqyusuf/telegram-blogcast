@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   LayoutAnimation,
@@ -34,6 +34,7 @@ import { Toast } from "@/components/ui/toast";
 import { invalidateQueries } from "@/lib/trpc";
 import { useTranslation } from "@/lib/i18n";
 import { useColors } from "@/hooks/use-color";
+import { useGlobalAudioBarStore } from "@/store/global-audio-bar-store";
 
 if (
   Platform.OS === "android" &&
@@ -41,6 +42,9 @@ if (
 ) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
+
+const AUDIO_BAR_SCROLL_HIDE_THRESHOLD = 28;
+const AUDIO_BAR_SCROLL_SHOW_THRESHOLD = -18;
 
 function animatePostListChange() {
   LayoutAnimation.configureNext({
@@ -110,6 +114,12 @@ export default function BlogHomeScreen() {
   const params = useLocalSearchParams<{ category?: string }>();
   const { t } = useTranslation();
   const colors = useColors();
+  const setGlobalAudioBarScrollHidden = useGlobalAudioBarStore(
+    (s) => s.setScrollHidden,
+  );
+  const lastScrollYRef = useRef(0);
+  const scrollDeltaAccumulatorRef = useRef(0);
+  const audioBarScrollHiddenRef = useRef(false);
 
   const selectedCategory = useMemo<BlogCategory>(() => {
     const map: Record<string, BlogCategory> = {
@@ -191,7 +201,6 @@ export default function BlogHomeScreen() {
   );
   const handleDeletePost = useCallback(
     async (post: BlogItem) => {
-      animatePostListChange();
       setHiddenPostIds((prev) => new Set(prev).add(post.id));
       let deleteFailed = false;
       const deletePromise = deleteBlogMutation
@@ -278,6 +287,58 @@ export default function BlogHomeScreen() {
     }
   }, [refetch]);
 
+  const handleScroll = useCallback(
+    (event: any) => {
+      const currentY = event.nativeEvent.contentOffset?.y ?? 0;
+      const deltaY = currentY - lastScrollYRef.current;
+      lastScrollYRef.current = currentY;
+
+      if (currentY <= 0) {
+        scrollDeltaAccumulatorRef.current = 0;
+        if (audioBarScrollHiddenRef.current) {
+          audioBarScrollHiddenRef.current = false;
+          setGlobalAudioBarScrollHidden(false);
+        }
+        return;
+      }
+
+      if (Math.abs(deltaY) < 2) return;
+
+      const previousAccumulated = scrollDeltaAccumulatorRef.current;
+      const changedDirection =
+        (previousAccumulated > 0 && deltaY < 0) ||
+        (previousAccumulated < 0 && deltaY > 0);
+
+      scrollDeltaAccumulatorRef.current = changedDirection
+        ? deltaY
+        : previousAccumulated + deltaY;
+
+      if (
+        scrollDeltaAccumulatorRef.current > AUDIO_BAR_SCROLL_HIDE_THRESHOLD &&
+        !audioBarScrollHiddenRef.current
+      ) {
+        audioBarScrollHiddenRef.current = true;
+        scrollDeltaAccumulatorRef.current = 0;
+        setGlobalAudioBarScrollHidden(true);
+      } else if (
+        scrollDeltaAccumulatorRef.current < AUDIO_BAR_SCROLL_SHOW_THRESHOLD &&
+        audioBarScrollHiddenRef.current
+      ) {
+        audioBarScrollHiddenRef.current = false;
+        scrollDeltaAccumulatorRef.current = 0;
+        setGlobalAudioBarScrollHidden(false);
+      }
+    },
+    [setGlobalAudioBarScrollHidden],
+  );
+
+  useEffect(() => {
+    return () => {
+      audioBarScrollHiddenRef.current = false;
+      setGlobalAudioBarScrollHidden(false);
+    };
+  }, [setGlobalAudioBarScrollHidden]);
+
   return (
     <View
       className="flex-1 bg-background"
@@ -320,6 +381,8 @@ export default function BlogHomeScreen() {
             ListFooterComponent={<View className="h-40 px-4" />}
             refreshing={isPullRefreshing || isRefetching}
             onRefresh={onRefresh}
+            onScroll={handleScroll}
+            scrollEventThrottle={16}
             onEndReached={() => {
               if (hasNextPage && !isFetching) {
                 fetchNextPage();

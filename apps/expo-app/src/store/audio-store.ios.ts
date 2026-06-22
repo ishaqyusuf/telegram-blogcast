@@ -13,6 +13,7 @@ const Paths = {
   document: FileSystem.Paths.document,
 };
 const CONTEXT_REWIND_MS = 1500;
+const STALE_AUDIO_MS = 12 * 60 * 60 * 1000;
 let positionInterval: ReturnType<typeof setInterval> | null = null;
 
 function joinDocumentPath(...parts: string[]) {
@@ -27,6 +28,10 @@ function uniqueUrls(urls: (string | null | undefined)[]) {
     (url, index): url is string =>
       Boolean(url) && urls.findIndex((candidate) => candidate === url) === index,
   );
+}
+
+function isOlderThan(timestamp: number | null | undefined, maxAgeMs: number) {
+  return Boolean(timestamp && Date.now() - timestamp > maxAgeMs);
 }
 
 interface AudioState {
@@ -45,6 +50,8 @@ interface AudioState {
   isSeeking: boolean;
   playbackRate: number;
   sleepTimerEnd: number | null;
+  pausedAt: number | null;
+  playedAt: number | null;
 
   loadAudio: (blog: ItemProps) => Promise<void>;
   play: () => Promise<void>;
@@ -79,6 +86,8 @@ export const useAudioStore = create<AudioState>()(
       volume: 1,
       playbackRate: 1,
       sleepTimerEnd: null,
+      pausedAt: null,
+      playedAt: null,
       isSeeking: false,
       blog: null!,
 
@@ -185,6 +194,7 @@ export const useAudioStore = create<AudioState>()(
             uri: loadedSource,
             isLoading: false,
             isPlaying: false,
+            pausedAt: null,
             duration: status.isLoaded ? status.durationMillis || 0 : 0,
             position: 0,
             blog,
@@ -244,7 +254,12 @@ export const useAudioStore = create<AudioState>()(
           await sound.setPositionAsync(resumePos);
           set({ position: resumePos });
           await sound.playAsync();
-          set({ isPlaying: true, error: null });
+          set({
+            isPlaying: true,
+            error: null,
+            pausedAt: null,
+            playedAt: Date.now(),
+          });
           startPositionTracking();
         } catch (err) {
           set({
@@ -259,7 +274,7 @@ export const useAudioStore = create<AudioState>()(
 
         try {
           await sound.pauseAsync();
-          set({ isPlaying: false, error: null });
+          set({ isPlaying: false, error: null, pausedAt: Date.now() });
           stopPositionTracking();
         } catch (err) {
           set({
@@ -275,7 +290,12 @@ export const useAudioStore = create<AudioState>()(
         try {
           await sound.stopAsync();
           await sound.setPositionAsync(0);
-          set({ isPlaying: false, position: 0, error: null });
+          set({
+            isPlaying: false,
+            position: 0,
+            error: null,
+            pausedAt: Date.now(),
+          });
           stopPositionTracking();
         } catch (err) {
           set({
@@ -340,6 +360,8 @@ export const useAudioStore = create<AudioState>()(
             isDownloading: false,
             downloadProgress: 0,
             duration: 0,
+            pausedAt: null,
+            playedAt: null,
             position: 0,
             uri: null,
             localPath: null,
@@ -353,18 +375,53 @@ export const useAudioStore = create<AudioState>()(
       },
 
       updatePosition: (position: number) => {
-        set({ position });
+        set({
+          position,
+          playedAt: get().isPlaying ? Date.now() : get().playedAt,
+        });
       },
 
       restoreAudio: async () => {
-        const { uri, position, volume } = get();
+        const {
+          isPlaying: wasPlaying,
+          pausedAt,
+          playedAt,
+          position,
+          uri,
+          volume,
+        } = get();
 
         if (!uri) return;
 
         const { localPath } = get();
+        const effectivePausedAt = wasPlaying ? pausedAt : pausedAt ?? Date.now();
+        const effectivePlayedAt = wasPlaying ? playedAt ?? Date.now() : playedAt;
+        const isStale =
+          (!wasPlaying && isOlderThan(effectivePausedAt, STALE_AUDIO_MS)) ||
+          (wasPlaying && isOlderThan(effectivePlayedAt, STALE_AUDIO_MS));
+
+        if (isStale) {
+          set({
+            duration: 0,
+            isPlaying: false,
+            localPath: null,
+            pausedAt: null,
+            playedAt: null,
+            position: 0,
+            sound: null,
+            uri: null,
+          });
+          return;
+        }
 
         try {
-          set({ isLoading: true, error: null });
+          set({
+            isLoading: true,
+            error: null,
+            isPlaying: false,
+            pausedAt: wasPlaying ? Date.now() : effectivePausedAt,
+            playedAt: effectivePlayedAt,
+          });
 
           await Audio.setAudioModeAsync({
             playsInSilentModeIOS: true,
@@ -384,6 +441,8 @@ export const useAudioStore = create<AudioState>()(
               if (status.isLoaded) {
                 set({
                   isPlaying: status.isPlaying,
+                  pausedAt: status.isPlaying ? null : Date.now(),
+                  playedAt: status.isPlaying ? Date.now() : get().playedAt,
                   duration: status.durationMillis || 0,
                   position: status.positionMillis || 0,
                 });
@@ -400,6 +459,7 @@ export const useAudioStore = create<AudioState>()(
             isLoading: false,
             duration: status.isLoaded ? status.durationMillis || 0 : 0,
             isPlaying: false,
+            pausedAt: wasPlaying ? Date.now() : effectivePausedAt,
           });
         } catch (err) {
           set({
@@ -423,6 +483,7 @@ export const useAudioStore = create<AudioState>()(
                 set({
                   position: status.positionMillis,
                   duration: status.durationMillis || get().duration,
+                  playedAt: Date.now(),
                 });
               }
             } catch (err) {
@@ -465,6 +526,8 @@ export const useAudioStore = create<AudioState>()(
       partialize: (state) => ({
         uri: state.uri,
         localPath: state.localPath,
+        pausedAt: state.pausedAt,
+        playedAt: state.playedAt,
         position: state.position,
         volume: state.volume,
         isPlaying: state.isPlaying,

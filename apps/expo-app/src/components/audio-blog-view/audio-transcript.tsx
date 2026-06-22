@@ -1,7 +1,7 @@
 import { Pressable } from "@/components/ui/pressable";
 import { useMutation, useQuery } from "@/lib/react-query";
-import { Modal, PanResponder, Text, TextInput, View } from "react-native";
-import { useEffect, useRef, useState } from "react";
+import { Modal, PanResponder, Text, View } from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";
@@ -28,6 +28,42 @@ function formatSec(sec: number) {
 function parseMmSs(str: string): number {
   const [mm, ss] = str.split(":").map(Number);
   return (mm || 0) * 60 + (ss || 0);
+}
+
+const TRANSCRIPT_CHUNK_SEC = 30;
+const TRANSCRIPT_PREFETCH_AT_SEC = 20;
+const TRANSCRIPT_CHUNK_CACHE_ENABLED = false;
+
+type TranscriptChunkSegment = {
+  id?: string | number;
+  from?: number;
+  to?: number;
+  startSec?: number;
+  endSec?: number;
+  text: string;
+  words?: Array<{ word: string; startSec: number; endSec: number }>;
+};
+
+type TranscriptChunk = {
+  chunkStartSec: number;
+  chunkEndSec: number;
+  status: "done";
+  cached: boolean;
+  segments: TranscriptChunkSegment[];
+};
+
+function getTranscriptChunkStart(sec: number) {
+  return Math.floor(Math.max(0, sec) / TRANSCRIPT_CHUNK_SEC) * TRANSCRIPT_CHUNK_SEC;
+}
+
+function normalizeSegment(segment: TranscriptChunkSegment) {
+  const startSec = segment.startSec ?? segment.from ?? 0;
+  const endSec = segment.endSec ?? segment.to ?? startSec;
+  return {
+    ...segment,
+    startSec,
+    endSec,
+  };
 }
 
 // ── Model picker sheet ────────────────────────────────────────────────────────
@@ -91,7 +127,7 @@ function ModelSheet({
           >
             Switch Transcription Model
           </Text>
-          {TRANSCRIPTION_MODELS.map((p) => {
+          {TRANSCRIPTION_MODELS.filter((p) => p.id === "whisper-local").map((p) => {
             const isSelected = p.id === selected;
             const disabled = p.requiresLocalTranscriber && !whisperAvailable;
             return (
@@ -327,22 +363,26 @@ export function AudioTranscript({
 }: AudioTranscriptProps) {
   const colors = useColors();
   const durationMs = useAudioStore((s) => s.duration);
+  const positionMs = useAudioStore((s) => s.position);
   const transcriptionModel = useAppSettingsStore((s) => s.transcriptionModel);
   const setTranscriptionModel = useAppSettingsStore((s) => s.setTranscriptionModel);
   const localTranscriberBaseUrl = useAppSettingsStore((s) => s.localTranscriberBaseUrl);
 
   const durationSec = Math.floor(durationMs / 1000);
+  const positionSec = positionMs / 1000;
+  const activeChunkStart = getTranscriptChunkStart(positionSec);
   const transcriberUrl = getDefaultTranscriberUrl(localTranscriberBaseUrl);
   const canCheckTranscriber = isHttpTranscriberUrl(transcriberUrl);
 
   const [modelSheetVisible, setModelSheetVisible] = useState(false);
-  const [fromStr, setFromStr] = useState("00:00");
-  const [toStr, setToStr] = useState(() => formatSec(durationSec || 300));
-
-  const fromSec = parseMmSs(fromStr);
-  const toSec = parseMmSs(toStr);
-  const rangeSec = Math.max(0, toSec - fromSec);
-  const modelConfig = getTranscriptionModelOption(transcriptionModel);
+  const [chunks, setChunks] = useState<Record<number, TranscriptChunk>>({});
+  const [pendingChunks, setPendingChunks] = useState<number[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const chunkCacheRef = useRef(chunks);
+  const pendingChunksRef = useRef(pendingChunks);
+  const failedChunksRef = useRef<Set<number>>(new Set());
+  const rangeSec = TRANSCRIPT_CHUNK_SEC;
+  const modelConfig = getTranscriptionModelOption("whisper-local");
 
   const { data: transcript, refetch } = useQuery(
     _trpc.blog.getTranscript.queryOptions({ mediaId }),
@@ -356,288 +396,271 @@ export function AudioTranscript({
   });
   const whisperAvailable = Boolean(localTranscriberHealth?.ok);
 
-  const { mutate: startTranscribe, isPending: isTranscribing } = useMutation(
-    _trpc.blog.transcribeRange.mutationOptions({
-      onSuccess() {
+  useEffect(() => {
+    chunkCacheRef.current = chunks;
+  }, [chunks]);
+
+  useEffect(() => {
+    pendingChunksRef.current = pendingChunks;
+  }, [pendingChunks]);
+
+  const { mutate: getTranscriptChunk } = useMutation(
+    _trpc.blog.getTranscriptChunk.mutationOptions({
+      onSuccess(data) {
+        failedChunksRef.current.delete(data.chunkStartSec);
+        setChunks((prev) => {
+          const next = {
+            ...prev,
+            [data.chunkStartSec]: data as TranscriptChunk,
+          };
+          chunkCacheRef.current = next;
+          return next;
+        });
+        setError(null);
         refetch();
+      },
+      onError(err, variables) {
+        const chunkStart = variables?.chunkStartSec ?? activeChunkStart;
+        failedChunksRef.current.add(chunkStart);
+        setError(
+          `${formatSec(chunkStart)} chunk failed: ${
+            err.message || "Transcription failed"
+          }`,
+        );
+      },
+      onSettled(_data, _err, variables) {
+        const chunkStart = variables?.chunkStartSec;
+        if (typeof chunkStart !== "number") return;
+        pendingChunksRef.current = pendingChunksRef.current.filter(
+          (value) => value !== chunkStart,
+        );
+        setPendingChunks(pendingChunksRef.current);
       },
     }),
   );
+  const getTranscriptChunkRef = useRef(getTranscriptChunk);
 
-  // ── No transcript yet ───────────────────────────────────────────────────────
-  if (!transcript || transcript.status === "failed") {
-    return (
+  useEffect(() => {
+    getTranscriptChunkRef.current = getTranscriptChunk;
+  }, [getTranscriptChunk]);
+
+  useEffect(() => {
+    if (transcriptionModel !== "whisper-local") {
+      setTranscriptionModel("whisper-local");
+    }
+  }, [setTranscriptionModel, transcriptionModel]);
+
+  const requestChunk = useCallback(
+    (chunkStartSec: number, options?: { force?: boolean }) => {
+      if (!telegramFileId) return;
+      if (TRANSCRIPT_CHUNK_CACHE_ENABLED && chunkCacheRef.current[chunkStartSec]) {
+        return;
+      }
+      if (pendingChunksRef.current.includes(chunkStartSec)) return;
+      if (!options?.force && failedChunksRef.current.has(chunkStartSec)) return;
+      if (!whisperAvailable) return;
+      failedChunksRef.current.delete(chunkStartSec);
+
+      pendingChunksRef.current = [
+        ...pendingChunksRef.current,
+        chunkStartSec,
+      ];
+      setPendingChunks(pendingChunksRef.current);
+      getTranscriptChunkRef.current({
+        mediaId,
+        fileId: telegramFileId,
+        chunkStartSec,
+        chunkDurationSec: TRANSCRIPT_CHUNK_SEC,
+        model: "whisper-local",
+        force: options?.force || !TRANSCRIPT_CHUNK_CACHE_ENABLED,
+        localTranscriberBaseUrl:
+          canCheckTranscriber ? transcriberUrl ?? undefined : undefined,
+      });
+    },
+    [
+      canCheckTranscriber,
+      mediaId,
+      telegramFileId,
+      transcriberUrl,
+      whisperAvailable,
+    ],
+  );
+
+  useEffect(() => {
+    requestChunk(0);
+  }, [requestChunk]);
+
+  useEffect(() => {
+    requestChunk(activeChunkStart);
+    if (positionSec - activeChunkStart >= TRANSCRIPT_PREFETCH_AT_SEC) {
+      requestChunk(activeChunkStart + TRANSCRIPT_CHUNK_SEC);
+    }
+  }, [activeChunkStart, positionSec, requestChunk]);
+
+  const segments = useMemo(() => {
+    const chunkSegments = Object.values(chunks)
+      .sort((a, b) => a.chunkStartSec - b.chunkStartSec)
+      .flatMap((chunk) => chunk.segments)
+      .map(normalizeSegment)
+      .sort((a, b) => a.startSec - b.startSec);
+
+    if (chunkSegments.length > 0) return chunkSegments;
+    return (transcript?.segments ?? []).map(normalizeSegment);
+  }, [chunks, transcript?.segments]);
+
+  const activeChunkPending = pendingChunks.includes(activeChunkStart);
+  const currentChunk = chunks[activeChunkStart];
+  const localWhisperBlocked = !whisperAvailable;
+
+  return (
+    <View style={{ flex: 1, gap: 12, paddingTop: 10 }}>
       <View
         style={{
-          flex: 1,
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 16,
-          paddingVertical: 48,
-          paddingHorizontal: 24,
+          marginHorizontal: 16,
+          borderRadius: 16,
+          borderWidth: 1,
+          borderColor: colors.border,
+          backgroundColor: colors.card,
+          padding: 14,
+          gap: 12,
         }}
       >
         <View
           style={{
-            width: 64,
-            height: 64,
-            borderRadius: 32,
-            backgroundColor: colors.muted,
+            flexDirection: "row",
             alignItems: "center",
-            justifyContent: "center",
+            justifyContent: "space-between",
+            gap: 12,
           }}
         >
-          <Icon name="FileText" size={28} className="text-muted-foreground" />
-        </View>
+          <View style={{ flex: 1, gap: 3 }}>
+            <Text
+              style={{
+                fontSize: 11,
+                fontWeight: "800",
+                color: colors.primary,
+                letterSpacing: 0,
+                textTransform: "uppercase",
+              }}
+            >
+              Live transcript
+            </Text>
+            <Text style={{ fontSize: 12, color: colors.mutedForeground }}>
+              {formatSec(positionSec)} · {formatSec(activeChunkStart)}-
+              {formatSec(activeChunkStart + TRANSCRIPT_CHUNK_SEC)}
+            </Text>
+          </View>
 
-        <View style={{ alignItems: "center", gap: 4 }}>
-          <Text
-            style={{
-              fontSize: 16,
-              fontWeight: "700",
-              color: colors.foreground,
-            }}
-          >
-            No transcript yet
-          </Text>
-          <Text
-            style={{
-              fontSize: 14,
-              color: colors.mutedForeground,
-              textAlign: "center",
-            }}
-          >
-            Select a range and model, then generate a transcript to read
-            along.
-          </Text>
-        </View>
-
-        {/* Range seek bar */}
-        <View style={{ width: "100%", gap: 10 }}>
-          <Text
-            style={{
-              fontSize: 12,
-              fontWeight: "600",
-              color: colors.mutedForeground,
-              textAlign: "center",
-            }}
-          >
-            Transcribe range
-          </Text>
-          <DualSeekBar
-            fromSec={fromSec}
-            toSec={toSec}
-            maxSec={durationSec || 300}
-            onFromChange={(sec) => setFromStr(formatSec(sec))}
-            onToChange={(sec) => setToStr(formatSec(sec))}
-          />
-          {/* Fine-tune inputs */}
-          <View
+          <Pressable
+            onPress={() => setModelSheetVisible(true)}
             style={{
               flexDirection: "row",
               alignItems: "center",
-              gap: 10,
-              justifyContent: "center",
+              gap: 6,
+              borderRadius: 999,
+              backgroundColor: colors.muted,
+              paddingHorizontal: 10,
+              paddingVertical: 7,
             }}
           >
-            <View style={{ alignItems: "center", gap: 4 }}>
-              <Text style={{ fontSize: 11, color: colors.mutedForeground }}>
-                From
-              </Text>
-              <TextInput
-                value={fromStr}
-                onChangeText={setFromStr}
-                placeholder="00:00"
-                placeholderTextColor={colors.mutedForeground}
-                keyboardType="numbers-and-punctuation"
-                style={{
-                  backgroundColor: colors.muted,
-                  borderRadius: 10,
-                  paddingHorizontal: 14,
-                  paddingVertical: 8,
-                  fontSize: 15,
-                  color: colors.foreground,
-                  textAlign: "center",
-                  width: 80,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                }}
-              />
-            </View>
+            <Icon name="Sparkles" size={14} className="text-primary" />
             <Text
               style={{
-                fontSize: 16,
-                color: colors.mutedForeground,
-                marginTop: 16,
-              }}
-            >
-              →
-            </Text>
-            <View style={{ alignItems: "center", gap: 4 }}>
-              <Text style={{ fontSize: 11, color: colors.mutedForeground }}>
-                To
-              </Text>
-              <TextInput
-                value={toStr}
-                onChangeText={setToStr}
-                placeholder="05:00"
-                placeholderTextColor={colors.mutedForeground}
-                keyboardType="numbers-and-punctuation"
-                style={{
-                  backgroundColor: colors.muted,
-                  borderRadius: 10,
-                  paddingHorizontal: 14,
-                  paddingVertical: 8,
-                  fontSize: 15,
-                  color: colors.foreground,
-                  textAlign: "center",
-                  width: 80,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                }}
-              />
-            </View>
-          </View>
-        </View>
-
-        {/* Model selector */}
-        <Pressable
-          onPress={() => setModelSheetVisible(true)}
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 8,
-            paddingHorizontal: 16,
-            paddingVertical: 10,
-            backgroundColor: colors.muted,
-            borderRadius: 12,
-            borderWidth: 1,
-            borderColor: colors.border,
-            width: "100%",
-            justifyContent: "space-between",
-          }}
-        >
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <Icon name="Sparkles" size={16} className="text-primary" />
-            <Text
-              style={{
-                fontSize: 14,
-                fontWeight: "500",
+                fontSize: 12,
+                fontWeight: "700",
                 color: colors.foreground,
               }}
+              numberOfLines={1}
             >
               {modelConfig.label}
             </Text>
-          </View>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-            <View
-              style={{
-                paddingHorizontal: 8,
-                paddingVertical: 2,
-                backgroundColor: colors.primary + "22",
-                borderRadius: 6,
-              }}
-            >
-              <Text
-                style={{
-                  fontSize: 11,
-                  fontWeight: "600",
-                  color: colors.primary,
-                }}
-              >
-                {formatTranscriptionCost(rangeSec, modelConfig.costPerMin)}
-              </Text>
-            </View>
-            <Icon
-              name="ChevronRight"
-              size={16}
-              className="text-muted-foreground"
-            />
-          </View>
-        </Pressable>
+          </Pressable>
+        </View>
 
-        {/* Transcribe button */}
-        <Pressable
-          onPress={() => {
-            if (!telegramFileId) return;
-            startTranscribe({
-              mediaId,
-              fileId: telegramFileId,
-              fromSec,
-              toSec,
-              model: transcriptionModel,
-              localTranscriberBaseUrl:
-                transcriptionModel === "whisper-local" && canCheckTranscriber
-                  ? transcriberUrl ?? undefined
-                  : undefined,
-            });
-          }}
-          disabled={
-            isTranscribing ||
-            !telegramFileId ||
-            rangeSec <= 0 ||
-            (transcriptionModel === "whisper-local" && !whisperAvailable)
-          }
+        <View
           style={{
-            paddingHorizontal: 24,
-            paddingVertical: 12,
-            borderRadius: 999,
-            backgroundColor: colors.primary,
-            opacity:
-              isTranscribing ||
-              !telegramFileId ||
-              rangeSec <= 0 ||
-              (transcriptionModel === "whisper-local" && !whisperAvailable)
-                ? 0.4
-                : 1,
-            width: "100%",
+            flexDirection: "row",
             alignItems: "center",
+            justifyContent: "space-between",
+            gap: 10,
           }}
         >
-          <Text
+          <Text style={{ flex: 1, fontSize: 12, color: colors.mutedForeground }}>
+            {localWhisperBlocked
+              ? "Local Whisper is not reachable"
+              : activeChunkPending
+                ? "Transcribing current chunk..."
+                : currentChunk?.cached
+                  ? "Current chunk loaded from DB"
+                  : `Chunk cost ${formatTranscriptionCost(
+                      rangeSec,
+                      modelConfig.costPerMin,
+                    )}`}
+          </Text>
+          <Pressable
+            disabled={activeChunkPending || localWhisperBlocked || !telegramFileId}
+            onPress={() => requestChunk(activeChunkStart, { force: true })}
             style={{
-              fontSize: 14,
-              fontWeight: "700",
-              color: colors.primaryForeground,
+              borderRadius: 999,
+              backgroundColor: colors.primary,
+              opacity:
+                activeChunkPending || localWhisperBlocked || !telegramFileId
+                  ? 0.45
+                  : 1,
+              paddingHorizontal: 13,
+              paddingVertical: 8,
             }}
           >
-            {isTranscribing ? "Transcribing…" : "Transcribe Audio"}
+            <Text
+              style={{
+                color: colors.primaryForeground,
+                fontSize: 12,
+                fontWeight: "800",
+              }}
+            >
+              {activeChunkPending ? "Loading" : "Load chunk"}
+            </Text>
+          </Pressable>
+        </View>
+
+        {pendingChunks.length > 0 && (
+          <Text style={{ fontSize: 11, color: colors.mutedForeground }}>
+            Pending:{" "}
+            {[...pendingChunks]
+              .sort((a, b) => a - b)
+              .map(formatSec)
+              .join(", ")}
           </Text>
-        </Pressable>
-
-        <ModelSheet
-          visible={modelSheetVisible}
-          selected={transcriptionModel}
-          whisperAvailable={whisperAvailable}
-          onSelect={setTranscriptionModel}
-          onClose={() => setModelSheetVisible(false)}
-        />
+        )}
+        {error && <Text style={{ fontSize: 12, color: "#ef4444" }}>{error}</Text>}
       </View>
-    );
-  }
 
-  // ── In progress ─────────────────────────────────────────────────────────────
-  if (transcript.status === "processing" || transcript.status === "pending") {
-    return (
-      <View
-        style={{
-          flex: 1,
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 12,
-          paddingVertical: 48,
-        }}
-      >
-        <Icon name="Loader" size={28} className="text-primary" />
-        <Text style={{ fontSize: 14, color: colors.mutedForeground }}>
-          Transcribing…
-        </Text>
-      </View>
-    );
-  }
+      {segments.length === 0 &&
+      (transcript?.status === "processing" || transcript?.status === "pending") ? (
+        <View
+          style={{
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 10,
+            paddingVertical: 36,
+          }}
+        >
+          <Icon name="Loader" size={26} className="text-primary" />
+          <Text style={{ fontSize: 14, color: colors.mutedForeground }}>
+            Transcribing...
+          </Text>
+        </View>
+      ) : (
+        <TranscriptSegments segments={segments} />
+      )}
 
-  // ── Done — show segments ───────────────────────────────────────────────────
-  const segments = transcript.segments ?? [];
-
-  return <TranscriptSegments segments={segments} />;
+      <ModelSheet
+        visible={modelSheetVisible}
+        selected={transcriptionModel}
+        whisperAvailable={whisperAvailable}
+        onSelect={setTranscriptionModel}
+        onClose={() => setModelSheetVisible(false)}
+      />
+    </View>
+  );
 }

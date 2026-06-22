@@ -48,6 +48,23 @@ type OpenAIVerboseSegment = {
   end?: number;
   text?: string;
 };
+type OpenAIVerboseWord = {
+  word?: string;
+  start?: number;
+  end?: number;
+};
+type TranscriptWord = {
+  word: string;
+  startSec: number;
+  endSec: number;
+};
+type TranscribedSegment = {
+  id: string;
+  from: number;
+  to: number;
+  text: string;
+  words?: TranscriptWord[];
+};
 
 export const transcriptionModelSchema = z.enum([
   "gpt-4o-transcribe",
@@ -66,8 +83,23 @@ export const transcribeRangeSchema = z.object({
   model: transcriptionModelSchema.optional(),
   localTranscriberBaseUrl: z.string().url().optional(),
   language: z.string().min(2).max(8).optional(),
+  force: z.boolean().optional(),
 });
 export type TranscribeRangeSchema = z.infer<typeof transcribeRangeSchema>;
+
+export const transcriptChunkSchema = z.object({
+  mediaId: z.number(),
+  fileId: z.string().min(1),
+  positionSec: z.number().min(0).optional(),
+  chunkStartSec: z.number().min(0).optional(),
+  chunkDurationSec: z.number().min(5).max(120).default(30),
+  provider: z.enum(["openai", "gemini", "whisper-local"]).optional(),
+  model: transcriptionModelSchema.optional(),
+  localTranscriberBaseUrl: z.string().url().optional(),
+  language: z.string().min(2).max(8).optional(),
+  force: z.boolean().optional(),
+});
+export type TranscriptChunkSchema = z.infer<typeof transcriptChunkSchema>;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -336,6 +368,83 @@ function overlapsRange(
   return segmentStart < toSec && segmentEnd > fromSec;
 }
 
+function normalizeChunkStart(input: {
+  positionSec?: number;
+  chunkStartSec?: number;
+  chunkDurationSec: number;
+}) {
+  const rawStart =
+    typeof input.chunkStartSec === "number"
+      ? input.chunkStartSec
+      : Math.floor((input.positionSec ?? 0) / input.chunkDurationSec) *
+        input.chunkDurationSec;
+  return Math.max(0, Math.floor(rawStart / input.chunkDurationSec) * input.chunkDurationSec);
+}
+
+function distributeWords(segment: {
+  text: string;
+  from: number;
+  to: number;
+}): TranscriptWord[] {
+  const tokens = segment.text.match(/\S+/g) ?? [];
+  if (tokens.length === 0 || segment.to <= segment.from) return [];
+
+  const duration = segment.to - segment.from;
+  return tokens.map((word, index) => {
+    const startSec = segment.from + (duration * index) / tokens.length;
+    const endSec = segment.from + (duration * (index + 1)) / tokens.length;
+    return { word, startSec, endSec };
+  });
+}
+
+function attachWordsToSegments(
+  segments: TranscribedSegment[],
+  words: TranscriptWord[],
+) {
+  return segments.map((segment) => {
+    const segmentWords = words.filter((word) =>
+      overlapsRange(word.startSec, word.endSec, segment.from, segment.to),
+    );
+
+    return {
+      ...segment,
+      words: segmentWords.length > 0 ? segmentWords : distributeWords(segment),
+    };
+  });
+}
+
+function normalizeDbWords(value: unknown): TranscriptWord[] {
+  const parsed = z
+    .array(
+      z.object({
+        word: z.string(),
+        startSec: z.number(),
+        endSec: z.number(),
+      }),
+    )
+    .safeParse(value);
+
+  return parsed.success ? parsed.data : [];
+}
+
+function normalizeDbSegment(segment: {
+  id: number;
+  startSec: number;
+  endSec: number;
+  text: string;
+  words?: unknown;
+}) {
+  return {
+    id: String(segment.id),
+    from: segment.startSec,
+    to: segment.endSec,
+    startSec: segment.startSec,
+    endSec: segment.endSec,
+    text: segment.text,
+    words: normalizeDbWords(segment.words),
+  };
+}
+
 async function transcribeWithOpenAi(input: {
   fileBlob: Blob;
   model: "gpt-4o-transcribe" | "gpt-4o-mini-transcribe";
@@ -352,6 +461,7 @@ async function transcribeWithOpenAi(input: {
   formData.append("model", input.model);
   formData.append("response_format", "verbose_json");
   formData.append("timestamp_granularities[]", "segment");
+  formData.append("timestamp_granularities[]", "word");
   if (input.language) formData.append("language", input.language);
   formData.append("file", input.fileBlob, "audio-input.mp3");
 
@@ -374,7 +484,20 @@ async function transcribeWithOpenAi(input: {
   const json = (await transcriptRes.json()) as {
     text?: string;
     segments?: OpenAIVerboseSegment[];
+    words?: OpenAIVerboseWord[];
   };
+  const words = (json.words ?? [])
+    .map((word) => ({
+      word: (word.word ?? "").trim(),
+      startSec: word.start ?? 0,
+      endSec: word.end ?? word.start ?? 0,
+    }))
+    .filter(
+      (word) =>
+        word.word.length > 0 &&
+        word.endSec > word.startSec &&
+        overlapsRange(word.startSec, word.endSec, input.fromSec, input.toSec),
+    );
 
   const segments = (json.segments ?? [])
     .filter((segment) => {
@@ -398,12 +521,13 @@ async function transcribeWithOpenAi(input: {
           from: Math.floor(input.fromSec),
           to: Math.ceil(input.toSec),
           text: json.text.trim(),
+          words: words.length > 0 ? words : undefined,
         },
       ],
     };
   }
 
-  return { segments };
+  return { segments: attachWordsToSegments(segments, words) };
 }
 
 async function transcribeWithGemini(input: {
@@ -497,15 +621,20 @@ async function transcribeWithGemini(input: {
     return { segments: [] as Array<{ id: string; from: number; to: number; text: string }> };
   }
 
-  return {
-    segments: parsed.data.segments
+  const segments = parsed.data.segments
       .map((segment, idx) => ({
         id: `gem-${idx}`,
         from: Math.max(input.fromSec, Math.floor(segment.from)),
         to: Math.min(input.toSec, Math.ceil(segment.to)),
         text: segment.text.trim(),
       }))
-      .filter((segment) => segment.text.length > 0 && segment.to > segment.from),
+      .filter((segment) => segment.text.length > 0 && segment.to > segment.from);
+
+  return {
+    segments: segments.map((segment) => ({
+      ...segment,
+      words: distributeWords(segment),
+    })),
   };
 }
 
@@ -529,6 +658,8 @@ function getLocalTranscriberBaseUrl(value?: string) {
   );
 }
 
+const transcriptChunkCacheEnabled = false;
+
 export async function checkLocalTranscriber(baseUrl?: string) {
   const normalizedUrl = getLocalTranscriberBaseUrl(baseUrl);
   const res = await fetch(`${normalizedUrl}/health`, { cache: "no-store" });
@@ -540,6 +671,10 @@ export async function checkLocalTranscriber(baseUrl?: string) {
     service?: string;
     model?: string;
     device?: string;
+    status?: string;
+    ready?: boolean;
+    error?: string | null;
+    loadSeconds?: number | null;
   };
 }
 
@@ -549,6 +684,7 @@ async function transcribeWithLocalWhisper(input: {
   fromSec: number;
   toSec: number;
   language?: string;
+  force?: boolean;
 }) {
   const baseUrl = getLocalTranscriberBaseUrl(input.baseUrl);
   const res = await fetch(`${baseUrl}/transcribe`, {
@@ -559,7 +695,8 @@ async function transcribeWithLocalWhisper(input: {
       from: input.fromSec,
       to: input.toSec,
       language: input.language ?? "ar",
-      force: false,
+      force: input.force ?? false,
+      wordTimestamps: true,
     }),
   });
 
@@ -585,6 +722,15 @@ async function transcribeWithLocalWhisper(input: {
           start: z.number(),
           end: z.number(),
           text: z.string(),
+          words: z
+            .array(
+              z.object({
+                word: z.string(),
+                start: z.number(),
+                end: z.number(),
+              }),
+            )
+            .optional(),
         }),
       ),
     })
@@ -592,16 +738,77 @@ async function transcribeWithLocalWhisper(input: {
 
   if (!parsed.success) return { segments: [] as Array<{ id: string; from: number; to: number; text: string }> };
 
-  return {
-    segments: parsed.data.segments
+  const segments = parsed.data.segments
       .map((segment, idx) => ({
         id: `whisper-${idx}`,
         from: Math.max(input.fromSec, segment.start),
         to: Math.min(input.toSec, segment.end),
         text: segment.text.trim(),
+        words: (segment.words ?? [])
+          .map((word) => ({
+            word: word.word.trim(),
+            startSec: Math.max(input.fromSec, word.start),
+            endSec: Math.min(input.toSec, word.end),
+          }))
+          .filter(
+            (word) =>
+              word.word.length > 0 &&
+              word.endSec > word.startSec &&
+              overlapsRange(word.startSec, word.endSec, input.fromSec, input.toSec),
+          ),
       }))
-      .filter((segment) => segment.text.length > 0 && segment.to > segment.from),
+      .filter((segment) => segment.text.length > 0 && segment.to > segment.from);
+
+  return {
+    segments: segments.map((segment) => ({
+      ...segment,
+      words: segment.words.length > 0 ? segment.words : distributeWords(segment),
+    })),
   };
+}
+
+async function persistTranscribedSegments(input: {
+  ctx: TRPCContext;
+  mediaId: number;
+  fromSec: number;
+  toSec: number;
+  segments: TranscribedSegment[];
+  model: TranscriptionModel;
+  chunkStartSec?: number;
+  chunkEndSec?: number;
+}) {
+  const db = input.ctx.db as any;
+  const transcript = await db.transcript.upsert({
+    where: { mediaId: input.mediaId },
+    create: { mediaId: input.mediaId, status: "done" },
+    update: { status: "done", updatedAt: new Date() },
+  });
+
+  await db.transcriptSegment.deleteMany({
+    where: {
+      transcriptId: transcript.id,
+      startSec: { gte: input.fromSec },
+      endSec: { lte: input.toSec },
+    },
+  });
+
+  if (input.segments.length > 0) {
+    await db.transcriptSegment.createMany({
+      data: input.segments.map((segment) => ({
+        transcriptId: transcript.id,
+        startSec: segment.from,
+        endSec: segment.to,
+        text: segment.text,
+        chunkStartSec: input.chunkStartSec ?? input.fromSec,
+        chunkEndSec: input.chunkEndSec ?? input.toSec,
+        status: "done",
+        words: segment.words ?? distributeWords(segment),
+        model: input.model,
+      })),
+    });
+  }
+
+  return transcript;
 }
 
 export async function transcribeRange(
@@ -620,12 +827,13 @@ export async function transcribeRange(
   const result =
     model === "whisper-local"
       ? await transcribeWithLocalWhisper({
-      audioUrl: telegramFileUrl,
-      baseUrl: input.localTranscriberBaseUrl,
-      fromSec,
-      toSec,
-      language,
-    })
+          audioUrl: telegramFileUrl,
+          baseUrl: input.localTranscriberBaseUrl,
+          fromSec,
+          toSec,
+          language,
+          force: input.force,
+        })
       : await (async () => {
           const upstreamRes = await fetch(telegramFileUrl, {
             cache: "no-store",
@@ -681,30 +889,122 @@ export async function transcribeRange(
         })();
 
   if (input.mediaId) {
-    const transcript = await ctx.db.transcript.upsert({
-      where: { mediaId: input.mediaId },
-      create: { mediaId: input.mediaId, status: "done" },
-      update: { status: "done", updatedAt: new Date() },
+    await persistTranscribedSegments({
+      ctx,
+      mediaId: input.mediaId,
+      fromSec,
+      toSec,
+      segments: result.segments,
+      model,
     });
-
-    if (result.segments.length > 0) {
-      await ctx.db.transcriptSegment.deleteMany({
-        where: {
-          transcriptId: transcript.id,
-          startSec: { gte: fromSec },
-          endSec: { lte: toSec },
-        },
-      });
-      await ctx.db.transcriptSegment.createMany({
-        data: result.segments.map((segment) => ({
-          transcriptId: transcript.id,
-          startSec: segment.from,
-          endSec: segment.to,
-          text: segment.text,
-        })),
-      });
-    }
   }
 
   return result;
+}
+
+export async function getOrTranscribeTranscriptChunk(
+  ctx: TRPCContext,
+  input: TranscriptChunkSchema,
+) {
+  const db = ctx.db as any;
+  const chunkStartSec = normalizeChunkStart(input);
+  const chunkEndSec = chunkStartSec + input.chunkDurationSec;
+  const model: TranscriptionModel = "whisper-local";
+
+  const transcript = await db.transcript.upsert({
+    where: { mediaId: input.mediaId },
+    create: { mediaId: input.mediaId, status: "pending" },
+    update: {},
+  });
+
+  const cachedSegments = !transcriptChunkCacheEnabled || input.force
+    ? []
+    : await db.transcriptSegment.findMany({
+        where: {
+          transcriptId: transcript.id,
+          startSec: { gte: chunkStartSec },
+          endSec: { lte: chunkEndSec },
+          status: "done",
+        },
+        orderBy: { startSec: "asc" },
+      });
+
+  if (cachedSegments.length > 0) {
+    return {
+      mediaId: input.mediaId,
+      chunkStartSec,
+      chunkEndSec,
+      status: "done" as const,
+      cached: true,
+      segments: cachedSegments.map(normalizeDbSegment),
+    };
+  }
+
+  try {
+    await db.transcript.update({
+      where: { mediaId: input.mediaId },
+      data: { status: "processing", updatedAt: new Date() },
+    });
+
+    const result = await transcribeRange(ctx, {
+      fileId: input.fileId,
+      fromSec: chunkStartSec,
+      toSec: chunkEndSec,
+      model,
+      localTranscriberBaseUrl: input.localTranscriberBaseUrl,
+      language: input.language,
+      force: input.force || !transcriptChunkCacheEnabled,
+    });
+
+    await persistTranscribedSegments({
+      ctx,
+      mediaId: input.mediaId,
+      fromSec: chunkStartSec,
+      toSec: chunkEndSec,
+      segments: result.segments,
+      model,
+      chunkStartSec,
+      chunkEndSec,
+    });
+
+    return {
+      mediaId: input.mediaId,
+      chunkStartSec,
+      chunkEndSec,
+      status: "done" as const,
+      cached: false,
+      segments: result.segments.map((segment) => ({
+        ...segment,
+        startSec: segment.from,
+        endSec: segment.to,
+      })),
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Transcription failed";
+    await db.transcript.update({
+      where: { mediaId: input.mediaId },
+      data: { status: "failed", updatedAt: new Date() },
+    });
+    await db.transcriptSegment.deleteMany({
+      where: {
+        transcriptId: transcript.id,
+        startSec: { gte: chunkStartSec },
+        endSec: { lte: chunkEndSec },
+      },
+    });
+    await db.transcriptSegment.create({
+      data: {
+        transcriptId: transcript.id,
+        startSec: chunkStartSec,
+        endSec: chunkEndSec,
+        text: "",
+        chunkStartSec,
+        chunkEndSec,
+        status: "failed",
+        model,
+        error: message,
+      },
+    });
+    throw err;
+  }
 }

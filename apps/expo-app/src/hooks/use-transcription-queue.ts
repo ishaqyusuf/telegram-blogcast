@@ -1,12 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { and, asc, eq, inArray } from "drizzle-orm";
-import { initLocalDb, localDb, withLocalDbRetry } from "@/db/local-db";
-import {
-  localTranscriptionJobs,
-  type LocalTranscriptionJob,
-} from "@/db/local-schema";
-import { transcribeAudio, type TranscribeResponse } from "@/lib/transcribe";
 import { getTelegramFileUrl } from "@/lib/get-telegram-file";
+import { transcribeAudio, type TranscribeResponse } from "@/lib/transcribe";
 import { vanillaTrpc } from "@/trpc/vanilla-client";
 
 type QueueInput = {
@@ -19,12 +13,27 @@ type QueueInput = {
   transcriberUrl?: string | null;
 };
 
-function makeLocalId() {
-  return `tx-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+type TranscriptionQueueOptions = {
+  autoLoad?: boolean;
+  reloadOnEnqueue?: boolean;
+};
+
+export type TranscriptionJob = Awaited<
+  ReturnType<typeof vanillaTrpc.blog.getTranscriptionJobs.query>
+>[number];
+
+export function getTranscriptionJobProgress(job: TranscriptionJob) {
+  if (job.status === "completed") return 100;
+  if (job.status === "running") return 50;
+  return 0;
 }
 
 function isReachableAudioUrl(value?: string | null) {
   return Boolean(value?.startsWith("http://") || value?.startsWith("https://"));
+}
+
+function getReachableAudioUrl(value?: string | null) {
+  return isReachableAudioUrl(value) ? value ?? null : null;
 }
 
 async function saveTranscript(mediaId: number, result: TranscribeResponse) {
@@ -39,11 +48,11 @@ async function saveTranscript(mediaId: number, result: TranscribeResponse) {
   });
 }
 
-async function runJob(job: LocalTranscriptionJob) {
-  let audioUrl = job.audioUrl;
+async function runJob(job: TranscriptionJob) {
+  let audioUrl = getReachableAudioUrl(job.audioUrl);
   if (!audioUrl && job.telegramFileId) {
     const resolved = await getTelegramFileUrl(job.telegramFileId);
-    audioUrl = resolved?.url ?? null;
+    audioUrl = getReachableAudioUrl(resolved?.url);
   }
 
   if (!isReachableAudioUrl(audioUrl)) {
@@ -65,127 +74,135 @@ async function runJob(job: LocalTranscriptionJob) {
   return result;
 }
 
-export function useTranscriptionQueue(mediaId?: number) {
-  const [jobs, setJobs] = useState<LocalTranscriptionJob[]>([]);
+export function useTranscriptionQueue(
+  mediaId?: number,
+  options: TranscriptionQueueOptions = {},
+) {
+  const autoLoad = options.autoLoad ?? true;
+  const reloadOnEnqueue = options.reloadOnEnqueue ?? true;
+  const [jobs, setJobs] = useState<TranscriptionJob[]>([]);
   const [isRunning, setIsRunning] = useState(false);
 
+  const updateLocalJob = useCallback(
+    (id: number, patch: Partial<TranscriptionJob>) => {
+      setJobs((current) =>
+        current.map((job) => (job.id === id ? { ...job, ...patch } : job)),
+      );
+    },
+    [],
+  );
+
   const reload = useCallback(async () => {
-    await initLocalDb();
-    const rows = await withLocalDbRetry(() =>
-      mediaId
-        ? localDb
-            .select()
-            .from(localTranscriptionJobs)
-            .where(eq(localTranscriptionJobs.mediaId, mediaId))
-            .orderBy(asc(localTranscriptionJobs.createdAt))
-        : localDb
-            .select()
-            .from(localTranscriptionJobs)
-            .orderBy(asc(localTranscriptionJobs.createdAt)),
-    );
+    const rows = await vanillaTrpc.blog.getTranscriptionJobs.query({
+      mediaId,
+    });
     setJobs(rows);
   }, [mediaId]);
 
-  const enqueue = useCallback(async (input: QueueInput) => {
-    const audioUrl = isReachableAudioUrl(input.audioUrl) ? input.audioUrl : null;
-    if (!audioUrl && !input.telegramFileId) {
-      throw new Error(
-        "Queued transcription requires a reachable audio URL or Telegram file ID.",
-      );
-    }
+  const enqueue = useCallback(
+    async (input: QueueInput) => {
+      const audioUrl = getReachableAudioUrl(input.audioUrl);
+      if (!audioUrl && !input.telegramFileId) {
+        throw new Error(
+          "Queued transcription requires a reachable audio URL or Telegram file ID.",
+        );
+      }
 
-    await initLocalDb();
-    const now = new Date();
-    const job: LocalTranscriptionJob = {
-      localId: makeLocalId(),
-      mediaId: input.mediaId,
-      telegramFileId: input.telegramFileId ?? null,
-      audioUrl,
-      fromSec: input.fromSec ?? null,
-      toSec: input.toSec ?? null,
-      language: input.language ?? "ar",
-      transcriberUrl: input.transcriberUrl ?? null,
-      status: "queued",
-      retryCount: 0,
-      errorMessage: null,
-      createdAt: now,
-      updatedAt: now,
-      completedAt: null,
-    };
-    await withLocalDbRetry(() => localDb.insert(localTranscriptionJobs).values(job));
-    await reload();
-    return job;
-  }, [reload]);
+      const job = await vanillaTrpc.blog.enqueueTranscriptionJob.mutate({
+        mediaId: input.mediaId,
+        telegramFileId: input.telegramFileId ?? null,
+        audioUrl,
+        fromSec: input.fromSec ?? null,
+        toSec: input.toSec ?? null,
+        language: input.language ?? "ar",
+        transcriberUrl: input.transcriberUrl ?? null,
+      });
+
+      if (reloadOnEnqueue) {
+        await reload();
+      } else {
+        setJobs((current) =>
+          current.some((currentJob) => currentJob.id === job.id)
+            ? current.map((currentJob) =>
+                currentJob.id === job.id ? job : currentJob,
+              )
+            : [job, ...current],
+        );
+      }
+
+      return job;
+    },
+    [reload, reloadOnEnqueue],
+  );
 
   const runQueued = useCallback(async () => {
     setIsRunning(true);
     try {
-      await initLocalDb();
-      const queued = await withLocalDbRetry(() =>
-        localDb
-          .select()
-          .from(localTranscriptionJobs)
-          .where(
-            mediaId
-              ? and(
-                  eq(localTranscriptionJobs.mediaId, mediaId),
-                  inArray(localTranscriptionJobs.status, ["queued", "failed"]),
-                )
-              : inArray(localTranscriptionJobs.status, ["queued", "failed"]),
-          )
-          .orderBy(asc(localTranscriptionJobs.createdAt)),
-      );
+      const queued = await vanillaTrpc.blog.getTranscriptionJobs.query({
+        mediaId,
+        statuses: ["queued", "failed"],
+      });
 
       for (const job of queued) {
         const now = new Date();
-        await withLocalDbRetry(() =>
-          localDb
-            .update(localTranscriptionJobs)
-            .set({ status: "running", updatedAt: now, errorMessage: null })
-            .where(eq(localTranscriptionJobs.localId, job.localId)),
-        );
+        await vanillaTrpc.blog.updateTranscriptionJob.mutate({
+          id: job.id,
+          status: "running",
+        });
+        updateLocalJob(job.id, {
+          status: "running",
+          updatedAt: now,
+          errorMessage: null,
+        });
 
         try {
           await runJob(job);
-          await withLocalDbRetry(() =>
-            localDb
-              .update(localTranscriptionJobs)
-              .set({
-                status: "completed",
-                updatedAt: new Date(),
-                completedAt: new Date(),
-                errorMessage: null,
-              })
-              .where(eq(localTranscriptionJobs.localId, job.localId)),
-          );
+          const completedAt = new Date();
+          await vanillaTrpc.blog.updateTranscriptionJob.mutate({
+            id: job.id,
+            status: "completed",
+          });
+          updateLocalJob(job.id, {
+            status: "completed",
+            updatedAt: completedAt,
+            completedAt,
+            errorMessage: null,
+          });
         } catch (error) {
-          await withLocalDbRetry(() =>
-            localDb
-              .update(localTranscriptionJobs)
-              .set({
-                status: "failed",
-                retryCount: job.retryCount + 1,
-                updatedAt: new Date(),
-                errorMessage:
-                  error instanceof Error ? error.message : "Transcription failed.",
-              })
-              .where(eq(localTranscriptionJobs.localId, job.localId)),
-          );
+          const failedAt = new Date();
+          const errorMessage =
+            error instanceof Error ? error.message : "Transcription failed.";
+          await vanillaTrpc.blog.updateTranscriptionJob.mutate({
+            id: job.id,
+            status: "failed",
+            errorMessage,
+          });
+          updateLocalJob(job.id, {
+            status: "failed",
+            retryCount: job.retryCount + 1,
+            updatedAt: failedAt,
+            errorMessage,
+          });
         }
       }
     } finally {
       setIsRunning(false);
       await reload();
     }
-  }, [mediaId, reload]);
+  }, [mediaId, reload, updateLocalJob]);
 
   useEffect(() => {
-    reload().catch((error) => console.warn("[TranscriptionQueue] load failed", error));
-  }, [reload]);
+    if (!autoLoad) return;
+    reload().catch((error) =>
+      console.warn("[TranscriptionQueue] load failed", error),
+    );
+  }, [autoLoad, reload]);
 
   return {
     jobs,
-    queuedCount: jobs.filter((job) => job.status === "queued" || job.status === "failed").length,
+    queuedCount: jobs.filter(
+      (job) => job.status === "queued" || job.status === "failed",
+    ).length,
     isRunning,
     enqueue,
     runQueued,

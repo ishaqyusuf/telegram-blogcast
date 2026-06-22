@@ -128,6 +128,18 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
             },
           },
           file: true,
+          transcript: {
+            select: {
+              status: true,
+              updatedAt: true,
+              segments: {
+                select: { endSec: true },
+                where: { status: "done" },
+                orderBy: { endSec: "desc" },
+                take: 1,
+              },
+            },
+          },
         },
       },
       _count: {
@@ -184,6 +196,14 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
               .join(" - ");
           }
         }
+        const durationSec = media.file.duration;
+        const transcriptMaxEndSec = media.transcript?.segments?.[0]?.endSec ?? null;
+        const isFullyTranscribed =
+          media.transcript?.status === "done" &&
+          Boolean(durationSec) &&
+          transcriptMaxEndSec != null &&
+          transcriptMaxEndSec >= durationSec - 3;
+
         return {
           title: media.title,
           mediaId: media.id,
@@ -198,6 +218,8 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
           authorName: media.album?.author?.name || media.author?.name,
           albumName: media.album?.name,
           albumId: media.albumId,
+          transcriptStatus: media.transcript?.status ?? null,
+          isTranscribed: isFullyTranscribed,
         };
       };
       const isType = <T>(t: BlogType, fn: T) =>

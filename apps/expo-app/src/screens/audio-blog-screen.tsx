@@ -1,7 +1,7 @@
 import { Pressable } from "@/components/ui/pressable";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Haptics from "expo-haptics";
 import {
   ActivityIndicator,
@@ -16,20 +16,17 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from "react-native";
 
-import { AudioTranscript } from "@/components/audio-blog-view/audio-transcript";
-import { LocalTranscribe } from "@/components/audio-blog-view/local-transcribe";
 import { useCommentsState } from "@/components/comments-sheet";
 import { CommentsHeader } from "@/components/comments-sheet/comments-header";
 import { CommentsAudioContext } from "@/components/comments-sheet/comments-audio-context";
 import { CommentsList } from "@/components/comments-sheet/comments-list";
 import { CommentInput } from "@/components/comments-sheet/comment-input";
 import { AddToPlaylistModal } from "@/components/channel-chat/add-to-playlist-modal";
-import {
-  SkipBack5Icon,
-  SkipForward5Icon,
-} from "@/components/global-audio-bar/skip-icons";
+import { AnimatedMarquee } from "@/components/ui/animated-marquee";
+import { KaraokeTranscript } from "@/components/audio-blog-view/karaoke-transcript";
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";
@@ -76,7 +73,41 @@ function formatPercent(value: number) {
   return `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`;
 }
 
-type Tab = "info" | "transcript" | "local";
+type Tab = "info" | "books";
+const TRANSCRIPT_CHUNK_SEC = 30;
+const TRANSCRIPT_PREFETCH_AT_SEC = 20;
+
+type CenterTranscriptSegment = {
+  id?: number | string;
+  from?: number;
+  to?: number;
+  startSec?: number;
+  endSec?: number;
+  text: string;
+  words?: Array<{ word: string; startSec: number; endSec: number }>;
+};
+
+function getTranscriptChunkStart(sec: number) {
+  return (
+    Math.floor(Math.max(0, sec) / TRANSCRIPT_CHUNK_SEC) *
+    TRANSCRIPT_CHUNK_SEC
+  );
+}
+
+function normalizeTranscriptSegment(
+  segment: CenterTranscriptSegment,
+  index: number,
+) {
+  const startSec = segment.startSec ?? segment.from ?? 0;
+  const endSec = segment.endSec ?? segment.to ?? startSec;
+  return {
+    id: segment.id ?? index,
+    startSec,
+    endSec,
+    text: segment.text,
+    words: segment.words,
+  };
+}
 
 function AudioBookReferences({
   mediaId,
@@ -155,7 +186,7 @@ function AudioBookReferences({
         setPageSearch("");
         setNote("");
       },
-      onError: (e) => Alert.alert("خطأ", e.message),
+      onError: (e) => Alert.alert("Error", e.message),
     }),
   );
   const { mutate: deleteReference, isPending: isDeletingReference } =
@@ -168,7 +199,7 @@ function AudioBookReferences({
             }),
           });
         },
-        onError: (e) => Alert.alert("خطأ", e.message),
+        onError: (e) => Alert.alert("Error", e.message),
       }),
     );
 
@@ -185,7 +216,7 @@ function AudioBookReferences({
   };
 
   return (
-    <View style={{ gap: 10, marginHorizontal: 24, marginTop: 14 }}>
+    <View style={{ gap: 10, marginTop: 14 }}>
       <View
         style={{
           flexDirection: "row",
@@ -680,7 +711,7 @@ function SleepTimerModal({
               marginBottom: 12,
             }}
           >
-            مؤقت النوم
+            Sleep timer
           </Text>
           <View
             style={{
@@ -713,7 +744,7 @@ function SleepTimerModal({
                     color: colors.mutedForeground,
                   }}
                 >
-                  {min} د
+                  {min} min
                 </Text>
               </Pressable>
             ))}
@@ -735,7 +766,7 @@ function SleepTimerModal({
               <Text
                 style={{ color: "#ef4444", fontWeight: "700", fontSize: 14 }}
               >
-                إلغاء المؤقت
+                Cancel timer
               </Text>
             </Pressable>
           )}
@@ -746,7 +777,13 @@ function SleepTimerModal({
   );
 }
 
-function PlayerSection() {
+function PlayerSection({
+  theme = "light",
+  onPlusPress,
+}: {
+  theme?: "light" | "dark";
+  onPlusPress?: () => void;
+}) {
   const colors = useColors();
   const isPlaying = useAudioStore((s) => s.isPlaying);
   const position = useAudioStore((s) => s.position);
@@ -758,6 +795,10 @@ function PlayerSection() {
   const seek = useAudioStore((s) => s.seek);
   const playbackRate = useAudioStore((s) => s.playbackRate);
   const setPlaybackRate = useAudioStore((s) => s.setPlaybackRate);
+
+  const fgColor = theme === "dark" ? "#ffffff" : colors.foreground;
+  const mutedFgColor = theme === "dark" ? "rgba(255,255,255,0.7)" : colors.mutedForeground;
+  const trackBgColor = theme === "dark" ? "rgba(255,255,255,0.2)" : colors.muted;
 
   const cycleSpeed = () => {
     const idx = SPEED_OPTIONS.findIndex(
@@ -871,12 +912,12 @@ function PlayerSection() {
           {...seekPanResponder.panHandlers}
         >
           {/* Track background */}
-          <View className="absolute w-full h-1.5 bg-muted rounded-full overflow-hidden">
+          <View className="absolute w-full h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: trackBgColor }}>
             {/* Animated fill — driven natively */}
             <Animated.View
               style={{
                 height: "100%",
-                backgroundColor: colors.primary,
+                backgroundColor: theme === "dark" ? "#ffffff" : colors.primary,
                 borderRadius: 9999,
                 width: fillWidth,
               }}
@@ -889,10 +930,10 @@ function PlayerSection() {
                 position: "absolute",
                 width: KNOB,
                 height: KNOB,
-                backgroundColor: colors.background,
+                backgroundColor: theme === "dark" ? "#ffffff" : colors.background,
                 borderRadius: 9999,
                 borderWidth: 2,
-                borderColor: colors.primary,
+                borderColor: theme === "dark" ? "#ffffff" : colors.primary,
                 zIndex: 20,
                 left: knobLeft,
               }}
@@ -904,7 +945,7 @@ function PlayerSection() {
                 key={i}
                 style={{
                   width: 4,
-                  backgroundColor: colors.foreground,
+                  backgroundColor: fgColor,
                   borderRadius: 9999,
                   height: h * 3,
                 }}
@@ -913,10 +954,10 @@ function PlayerSection() {
           </View>
         </View>
         <View className="flex-row justify-between mt-[-6px]">
-          <Text className="text-xs font-medium text-muted-foreground">
+          <Text style={{ color: mutedFgColor, fontSize: 12, fontWeight: "500" }}>
             {formatMs(labelMs)}
           </Text>
-          <Text className="text-xs font-medium text-muted-foreground">
+          <Text style={{ color: mutedFgColor, fontSize: 12, fontWeight: "500" }}>
             -{formatMs(Math.max(0, duration - labelMs))}
           </Text>
         </View>
@@ -926,9 +967,10 @@ function PlayerSection() {
       <View className="flex-row items-center justify-between">
         <Pressable
           onPress={cycleSpeed}
-          className="px-2 py-1 rounded-md bg-muted active:opacity-70"
+          className="px-2 py-1 rounded-md active:opacity-70"
+          style={{ backgroundColor: trackBgColor }}
         >
-          <Text className="text-xs font-bold text-muted-foreground">
+          <Text style={{ fontSize: 12, fontWeight: "700", color: mutedFgColor }}>
             {playbackRate}x
           </Text>
         </Pressable>
@@ -937,7 +979,7 @@ function PlayerSection() {
             className="p-2 active:opacity-50"
             onPress={() => seek(Math.max(0, position - 5000))}
           >
-            <SkipBack5Icon size={32} color={colors.foreground} />
+            <Icon name="Backward5" size={32} color={fgColor} />
           </Pressable>
           <AnimatedPlayButton
             isPlaying={isPlaying}
@@ -950,18 +992,29 @@ function PlayerSection() {
             className="p-2 active:opacity-50"
             onPress={() => seek(Math.min(duration, position + 5000))}
           >
-            <SkipForward5Icon size={32} color={colors.foreground} />
+            <Icon name="Forward5" size={32} color={fgColor} />
           </Pressable>
         </View>
-        <Pressable className="p-2 active:opacity-50">
-          <Icon name="Volume2" size={20} className="text-muted-foreground" />
+        <Pressable
+          className="p-2 active:opacity-50"
+          onPress={onPlusPress}
+          disabled={!onPlusPress}
+          style={{ opacity: onPlusPress ? 1 : 0.45 }}
+        >
+          <Icon name="Plus" size={22} color={mutedFgColor} />
         </Pressable>
       </View>
     </View>
   );
 }
 
-function FloatingPlayerWidget({ visible }: { visible: boolean }) {
+function FloatingPlayerWidget({
+  visible,
+  onPlusPress,
+}: {
+  visible: boolean;
+  onPlusPress?: () => void;
+}) {
   const colors = useColors();
   const isPlaying = useAudioStore((s) => s.isPlaying);
   const position = useAudioStore((s) => s.position);
@@ -971,6 +1024,16 @@ function FloatingPlayerWidget({ visible }: { visible: boolean }) {
   const downloadProgress = useAudioStore((s) => s.downloadProgress);
   const togglePlayPause = useAudioStore((s) => s.togglePlayPause);
   const seek = useAudioStore((s) => s.seek);
+  const playbackRate = useAudioStore((s) => s.playbackRate);
+  const setPlaybackRate = useAudioStore((s) => s.setPlaybackRate);
+
+  const cycleSpeed = () => {
+    const idx = SPEED_OPTIONS.findIndex(
+      (rate) => Math.abs(playbackRate - rate) < 0.01,
+    );
+    const next = SPEED_OPTIONS[(idx + 1) % SPEED_OPTIONS.length]!;
+    setPlaybackRate(next);
+  };
 
   if (!visible) return null;
 
@@ -996,10 +1059,24 @@ function FloatingPlayerWidget({ visible }: { visible: boolean }) {
         </View>
         <View className="flex-row items-center justify-between">
           <Pressable
+            onPress={cycleSpeed}
+            className="rounded-md bg-muted px-2 py-1 active:opacity-70"
+          >
+            <Text
+              style={{
+                color: colors.mutedForeground,
+                fontSize: 12,
+                fontWeight: "800",
+              }}
+            >
+              {playbackRate}x
+            </Text>
+          </Pressable>
+          <Pressable
             className="p-2 active:opacity-50"
             onPress={() => seek(Math.max(0, position - 5000))}
           >
-            <SkipBack5Icon size={24} color={colors.mutedForeground} />
+            <Icon name="Backward5" size={24} color={colors.mutedForeground} />
           </Pressable>
           <AnimatedPlayButton
             isPlaying={isPlaying}
@@ -1013,7 +1090,15 @@ function FloatingPlayerWidget({ visible }: { visible: boolean }) {
             className="p-2 active:opacity-50"
             onPress={() => seek(Math.min(duration, position + 5000))}
           >
-            <SkipForward5Icon size={24} color={colors.mutedForeground} />
+            <Icon name="Forward5" size={24} color={colors.mutedForeground} />
+          </Pressable>
+          <Pressable
+            className="p-2 active:opacity-50"
+            onPress={onPlusPress}
+            disabled={!onPlusPress}
+            style={{ opacity: onPlusPress ? 1 : 0.45 }}
+          >
+            <Icon name="Plus" size={22} color={colors.foreground} />
           </Pressable>
         </View>
       </View>
@@ -1207,7 +1292,7 @@ function MoreMenu({
                 fontWeight: "500",
               }}
             >
-              {hasAlbum ? "تغيير الألبوم" : "إضافة إلى ألبوم"}
+              {hasAlbum ? "Change album" : "Add to album"}
             </Text>
           </Pressable>
 
@@ -1232,7 +1317,7 @@ function MoreMenu({
                 fontWeight: "500",
               }}
             >
-              إضافة إلى قائمة تشغيل
+              Add to playlist
             </Text>
           </Pressable>
 
@@ -1259,7 +1344,7 @@ function MoreMenu({
                   fontWeight: "500",
                 }}
               >
-                عرض الألبوم
+                View album
               </Text>
             </Pressable>
           )}
@@ -1286,7 +1371,7 @@ function MoreMenu({
                 fontWeight: "500",
               }}
             >
-              مؤقت النوم
+              Sleep timer
             </Text>
           </Pressable>
 
@@ -1301,7 +1386,7 @@ function MoreMenu({
               paddingHorizontal: 8,
             }}
           >
-            <Icon name="Share2" size={22} className="text-foreground" />
+            <Icon name="Share" size={22} className="text-foreground" />
             <Text
               style={{
                 fontSize: 15,
@@ -1309,7 +1394,7 @@ function MoreMenu({
                 fontWeight: "500",
               }}
             >
-              مشاركة
+              Share
             </Text>
           </Pressable>
 
@@ -1407,7 +1492,7 @@ function AddToAlbumPicker({
                   color: colors.foreground,
                 }}
               >
-                إضافة إلى ألبوم
+                Add to album
               </Text>
               <View style={{ width: 20 }} />
             </View>
@@ -1422,7 +1507,7 @@ function AddToAlbumPicker({
             <View style={{ alignItems: "center", paddingVertical: 40, gap: 8 }}>
               <Icon name="Disc3" size={36} className="text-muted-foreground" />
               <Text style={{ color: colors.mutedForeground, fontSize: 14 }}>
-                لا توجد ألبومات
+                No albums yet
               </Text>
             </View>
           ) : (
@@ -1494,7 +1579,7 @@ function AddToAlbumPicker({
                           textAlign: "right",
                         }}
                       >
-                        {item._count?.medias ?? 0} مقطع
+                        {item._count?.medias ?? 0} tracks
                       </Text>
                     </View>
 
@@ -1545,85 +1630,12 @@ function AddToAlbumPicker({
                 color: colors.mutedForeground,
               }}
             >
-              إنشاء ألبوم جديد
+              Create new album
             </Text>
           </Pressable>
         </Pressable>
       </Pressable>
     </Modal>
-  );
-}
-
-// ── Album art section ─────────────────────────────────────────────────────────
-
-function AlbumArtSection({ media }: { media: any }) {
-  const hasAlbum = !!media?.album;
-  const color = albumColor(media?.albumId);
-
-  if (hasAlbum) {
-    return (
-      <View className="px-6">
-        <View
-          style={{
-            width: "100%",
-            aspectRatio: 1,
-            borderRadius: 20,
-            backgroundColor: color,
-            alignItems: "center",
-            justifyContent: "center",
-            shadowColor: color,
-            shadowOffset: { width: 0, height: 12 },
-            shadowOpacity: 0.6,
-            shadowRadius: 30,
-            elevation: 16,
-          }}
-        >
-          <Text
-            style={{
-              fontSize: 72,
-              fontWeight: "900",
-              color: "#fff",
-              opacity: 0.9,
-            }}
-          >
-            {getInitials(media.album.name)}
-          </Text>
-          <View style={{ position: "absolute", top: 16, right: 16 }}>
-            <View
-              style={{
-                paddingHorizontal: 12,
-                paddingVertical: 4,
-                backgroundColor: "rgba(0,0,0,0.4)",
-                borderRadius: 99,
-                borderWidth: 1,
-                borderColor: "rgba(255,255,255,0.15)",
-              }}
-            >
-              <Text style={{ fontSize: 11, fontWeight: "600", color: "#fff" }}>
-                Audio Blog
-              </Text>
-            </View>
-          </View>
-        </View>
-      </View>
-    );
-  }
-
-  return (
-    <View className="px-6">
-      <View className="w-full aspect-square rounded-2xl overflow-hidden bg-muted items-center justify-center shadow-2xl border border-border">
-        <Icon
-          name="AudioWaveform"
-          size={64}
-          className="text-muted-foreground"
-        />
-        <View className="absolute top-4 right-4">
-          <View className="px-3 py-1 bg-black/40 rounded-full border border-white/10">
-            <Text className="text-xs font-medium text-white">Audio Blog</Text>
-          </View>
-        </View>
-      </View>
-    </View>
   );
 }
 
@@ -1633,6 +1645,7 @@ export default function AudioBlogScreen() {
   const router = useRouter();
   const qc = useQueryClient();
   const colors = useColors();
+  const { height: windowHeight } = useWindowDimensions();
   const {
     blogId,
     openComments: openCommentsParam,
@@ -1656,9 +1669,19 @@ export default function AudioBlogScreen() {
   const [addedToAlbumName, setAddedToAlbumName] = useState<string | null>(null);
   const [controlsLayout, setControlsLayout] = useState({ y: 0, height: 0 });
   const [showFloatingControls, setShowFloatingControls] = useState(false);
+  const [transcriptChunks, setTranscriptChunks] = useState<
+    Record<number, { segments: CenterTranscriptSegment[] }>
+  >({});
+  const [pendingTranscriptChunks, setPendingTranscriptChunks] = useState<
+    number[]
+  >([]);
+  const [transcriptError, setTranscriptError] = useState<string | null>(null);
+  const pendingTranscriptChunksRef = useRef<number[]>([]);
+  const failedTranscriptChunksRef = useRef<Set<number>>(new Set());
 
   const loadAudio = useAudioStore((s) => s.loadAudio);
   const seekAudio = useAudioStore((s) => s.seek);
+  const positionMs = useAudioStore((s) => s.position);
   const sound = useAudioStore((s) => s.sound);
   const commentsState = useCommentsState(id);
   const loadedBlog = useAudioStore((s) => s.blog);
@@ -1673,6 +1696,116 @@ export default function AudioBlogScreen() {
     media?.file?.source === "vercel_blob" ? undefined : media?.file?.fileId;
   const mediaUrl = getMediaFileUrl(media?.file as any);
   const duration = media?.file?.duration;
+
+  const { data: transcriptData } = useQuery({
+    ..._trpc.blog.getTranscript.queryOptions({ mediaId: mediaId ?? 0 }),
+    enabled: !!mediaId,
+  });
+  const { mutate: getTranscriptChunk } = useMutation(
+    _trpc.blog.getTranscriptChunk.mutationOptions({
+      onSuccess(data) {
+        failedTranscriptChunksRef.current.delete(data.chunkStartSec);
+        setTranscriptChunks((prev) => ({
+          ...prev,
+          [data.chunkStartSec]: {
+            segments: data.segments as CenterTranscriptSegment[],
+          },
+        }));
+        setTranscriptError(null);
+      },
+      onError(error, variables) {
+        const chunkStart = variables?.chunkStartSec ?? 0;
+        failedTranscriptChunksRef.current.add(chunkStart);
+        setTranscriptError(error.message || "Could not load transcript.");
+      },
+      onSettled(_data, _error, variables) {
+        const chunkStart = variables?.chunkStartSec;
+        if (typeof chunkStart !== "number") return;
+        pendingTranscriptChunksRef.current =
+          pendingTranscriptChunksRef.current.filter(
+            (value) => value !== chunkStart,
+          );
+        setPendingTranscriptChunks(pendingTranscriptChunksRef.current);
+      },
+    }),
+  );
+  const getTranscriptChunkRef = useRef(getTranscriptChunk);
+
+  useEffect(() => {
+    getTranscriptChunkRef.current = getTranscriptChunk;
+  }, [getTranscriptChunk]);
+
+  useEffect(() => {
+    setTranscriptChunks({});
+    setPendingTranscriptChunks([]);
+    setTranscriptError(null);
+    pendingTranscriptChunksRef.current = [];
+    failedTranscriptChunksRef.current = new Set<number>();
+  }, [mediaId]);
+
+  const requestTranscriptChunk = useCallback(
+    (chunkStartSec: number) => {
+      if (!mediaId || !telegramFileId) return;
+      if (pendingTranscriptChunksRef.current.includes(chunkStartSec)) return;
+      if (transcriptChunks[chunkStartSec]) return;
+      if (failedTranscriptChunksRef.current.has(chunkStartSec)) return;
+
+      pendingTranscriptChunksRef.current = [
+        ...pendingTranscriptChunksRef.current,
+        chunkStartSec,
+      ];
+      setPendingTranscriptChunks(pendingTranscriptChunksRef.current);
+      getTranscriptChunkRef.current({
+        mediaId,
+        fileId: telegramFileId,
+        chunkStartSec,
+        chunkDurationSec: TRANSCRIPT_CHUNK_SEC,
+        model: "whisper-local",
+        force: true,
+      });
+    },
+    [mediaId, telegramFileId, transcriptChunks],
+  );
+
+  useEffect(() => {
+    if (!mediaId || !telegramFileId) return;
+    const positionSec = positionMs / 1000;
+    const activeChunkStart = getTranscriptChunkStart(positionSec);
+    requestTranscriptChunk(activeChunkStart);
+    if (positionSec - activeChunkStart >= TRANSCRIPT_PREFETCH_AT_SEC) {
+      requestTranscriptChunk(activeChunkStart + TRANSCRIPT_CHUNK_SEC);
+    }
+  }, [mediaId, positionMs, requestTranscriptChunk, telegramFileId]);
+
+  const transcriptSegments = useMemo(() => {
+    const segmentsByKey = new Map<
+      string,
+      ReturnType<typeof normalizeTranscriptSegment>
+    >();
+
+    (transcriptData?.segments ?? []).forEach((segment, index) => {
+      const normalized = normalizeTranscriptSegment(
+        segment as CenterTranscriptSegment,
+        index,
+      );
+      segmentsByKey.set(
+        `${normalized.startSec}:${normalized.endSec}:${normalized.text}`,
+        normalized,
+      );
+    });
+
+    Object.values(transcriptChunks)
+      .flatMap((chunk) => chunk.segments)
+      .forEach((segment, index) => {
+        const normalized = normalizeTranscriptSegment(segment, index);
+        segmentsByKey.set(`${normalized.startSec}:${normalized.endSec}:${normalized.text}`, normalized);
+      });
+
+    return [...segmentsByKey.values()].sort((a, b) => a.startSec - b.startSec);
+  }, [transcriptChunks, transcriptData?.segments]);
+
+  const channelName = blog?.channel?.title || blog?.channel?.username || "Unknown channel";
+  const dominantColor = media?.album ? albumColor(media.albumId) : colors.primary;
 
   usePlayHistorySync(mediaId);
 
@@ -1744,7 +1877,7 @@ export default function AudioBlogScreen() {
       },
       onError: (e) => {
         setAddingAlbumId(null);
-        Alert.alert("خطأ", e.message);
+        Alert.alert("Error", e.message);
       },
     }),
   );
@@ -1792,43 +1925,159 @@ export default function AudioBlogScreen() {
             />
           </KeyboardAvoidingView>
         ) : (
-          <>
-            {/* Header */}
-            <View className="flex-row items-center justify-between px-4 py-3">
-              <Pressable
-                onPress={() => router.back()}
-                className="size-10 items-center justify-center rounded-full active:bg-muted"
-              >
-                <Icon name="ArrowLeft" className="text-foreground" />
-              </Pressable>
-              <Text className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
-                Now Playing
-              </Text>
-              <View className="flex-row items-center gap-1">
-                <Pressable className="size-10 items-center justify-center rounded-full active:bg-muted">
-                  <Icon name="Share" className="text-foreground" />
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            scrollEventThrottle={16}
+            contentContainerStyle={{
+              paddingBottom: 120,
+              backgroundColor: colors.background,
+            }}
+            onScroll={(event) =>
+              updateFloatingControls(event.nativeEvent.contentOffset.y)
+            }
+          >
+            <View
+              style={{
+                backgroundColor: dominantColor,
+                minHeight: windowHeight,
+                paddingTop: 12,
+              }}
+            >
+              {/* Header */}
+              <View className="flex-row items-center justify-between px-4 py-3">
+                <Pressable
+                  onPress={() => router.back()}
+                  className="size-10 items-center justify-center rounded-full active:bg-black/20"
+                >
+                  <Icon name="ChevronDown" size={28} color="#ffffff" />
                 </Pressable>
                 <Pressable
-                  onPress={() => setMoreMenuVisible(true)}
-                  className="size-10 items-center justify-center rounded-full active:bg-muted"
+                  disabled={!media?.albumId}
+                  onPress={() => router.push(`/albums/${media?.albumId}` as any)}
+                  style={{ alignItems: "center", flex: 1 }}
                 >
-                  <Icon name="MoreHorizontal" className="text-foreground" />
+                  <Text style={{ fontSize: 11, fontWeight: "700", color: "rgba(255,255,255,0.7)", textTransform: "uppercase", letterSpacing: 1 }}>
+                    Playing from {media?.album ? "Album" : "Channel"}
+                  </Text>
+                  <Text style={{ fontSize: 13, fontWeight: "700", color: "#ffffff" }}>
+                    {media?.album?.name || channelName}
+                  </Text>
                 </Pressable>
+                <View className="flex-row items-center gap-1">
+                  <Pressable
+                    onPress={() => setMoreMenuVisible(true)}
+                    className="size-10 items-center justify-center rounded-full active:bg-black/20"
+                  >
+                    <Icon name="MoreHorizontal" color="#ffffff" />
+                  </Pressable>
+                </View>
+              </View>
+
+              {/* Transcript area */}
+              <View
+                style={{
+                  height: 380,
+                  marginHorizontal: 16,
+                  marginTop: 12,
+                  overflow: "hidden",
+                }}
+              >
+                {transcriptSegments.length > 0 ? (
+                  <KaraokeTranscript segments={transcriptSegments} />
+                ) : (
+                  <View
+                    style={{
+                      flex: 1,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      paddingHorizontal: 18,
+                      gap: 12,
+                    }}
+                  >
+                    {pendingTranscriptChunks.length > 0 ? (
+                      <ActivityIndicator color="#ffffff" />
+                    ) : (
+                      <Icon
+                        name={telegramFileId ? "Captions" : "AudioWaveform"}
+                        size={34}
+                        color="rgba(255,255,255,0.62)"
+                      />
+                    )}
+                    <Text
+                      style={{
+                        color: "rgba(255,255,255,0.72)",
+                        fontSize: 24,
+                        lineHeight: 32,
+                        fontWeight: "800",
+                        textAlign: "center",
+                      }}
+                    >
+                      {transcriptError
+                        ? "Transcript could not load"
+                        : !telegramFileId
+                          ? "Transcript unavailable for this audio"
+                          : pendingTranscriptChunks.length > 0
+                            ? "Loading transcript..."
+                            : "Transcript will appear here"}
+                    </Text>
+                    {transcriptError ? (
+                      <Text
+                        style={{
+                          color: "rgba(255,255,255,0.48)",
+                          fontSize: 13,
+                          textAlign: "center",
+                        }}
+                        numberOfLines={2}
+                      >
+                        {transcriptError}
+                      </Text>
+                    ) : null}
+                  </View>
+                )}
+              </View>
+
+              {/* Title & Small Album Art Marquee */}
+              <View className="flex-row items-center px-6 mt-6 gap-4">
+                <View style={{ width: 56, height: 56, borderRadius: 8, backgroundColor: media?.album ? albumColor(media.albumId) : "rgba(255,255,255,0.2)", alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={{ color: "#fff", fontWeight: "800", fontSize: 20 }}>
+                    {getInitials(media?.album?.name ?? blog?.content)}
+                  </Text>
+                </View>
+                <View style={{ flex: 1, overflow: 'hidden', justifyContent: 'center' }}>
+                  <AnimatedMarquee
+                    text={blog?.content ?? "Untitled Audio"}
+                    style={{ fontSize: 24, fontWeight: "800", color: "#fff" }}
+                  />
+                  <Text style={{ fontSize: 16, color: "rgba(255,255,255,0.7)", textAlign: "right", marginTop: 2 }}>
+                    {channelName}
+                  </Text>
+                </View>
+                <Pressable className="p-2 active:opacity-50" onPress={() => setAlbumPickerVisible(true)}>
+                  <Icon name="Plus" size={28} color="#fff" />
+                </Pressable>
+              </View>
+
+              {/* Player controls */}
+              <View
+                className="px-6 pt-6 pb-6"
+                onLayout={(event) => {
+                  const { y, height } = event.nativeEvent.layout;
+                  setControlsLayout({ y, height });
+                }}
+              >
+                <PlayerSection
+                  theme="dark"
+                  onPlusPress={() => setAlbumPickerVisible(true)}
+                />
+                {audioError ? (
+                  <Text className="pt-3 text-center text-xs text-destructive">
+                    {audioError}
+                  </Text>
+                ) : null}
               </View>
             </View>
 
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              scrollEventThrottle={16}
-              contentContainerStyle={{ paddingBottom: 120 }}
-              onScroll={(event) =>
-                updateFloatingControls(event.nativeEvent.contentOffset.y)
-              }
-            >
-              {/* Album art */}
-              <AlbumArtSection media={media} />
-
-              {/* Album strip */}
+              {/* Album strip below controls */}
               {media?.album && (
                 <Pressable
                   onPress={() => router.push(`/albums/${media.albumId}` as any)}
@@ -1837,7 +2086,7 @@ export default function AudioBlogScreen() {
                     alignItems: "center",
                     gap: 10,
                     marginHorizontal: 24,
-                    marginTop: 12,
+                    marginTop: 16,
                     paddingHorizontal: 14,
                     paddingVertical: 10,
                     backgroundColor: colors.card,
@@ -1862,7 +2111,7 @@ export default function AudioBlogScreen() {
                       <Text
                         style={{ fontSize: 11, color: colors.mutedForeground }}
                       >
-                        المقطع {media.albumAudioIndex.index}
+                        Track {media.albumAudioIndex.index}
                       </Text>
                     )}
                   </View>
@@ -1897,7 +2146,7 @@ export default function AudioBlogScreen() {
                   <Text
                     style={{ fontSize: 13, color: colors.success, flex: 1 }}
                   >
-                    تمت الإضافة إلى {addedToAlbumName}
+                    Added to {addedToAlbumName}
                   </Text>
                   <Pressable onPress={() => setAddedToAlbumName(null)}>
                     <Icon name="X" size={14} className="text-success" />
@@ -1905,46 +2154,10 @@ export default function AudioBlogScreen() {
                 </View>
               )}
 
-              {/* Category + duration */}
-              <View className="flex-row justify-between items-center px-6 pt-4">
-                <Text className="text-xs font-semibold tracking-wide text-primary uppercase">
-                  {blog?.blogTags?.[0]?.tags?.title ?? "Audio"}
-                </Text>
-                <View className="flex-row items-center gap-1">
-                  <Icon name="Headphones" size={14} className="text-primary" />
-                  <Text className="text-xs font-medium text-primary">
-                    {duration ? minuteToString(duration) : "—"}
-                  </Text>
-                </View>
-              </View>
-
-              {/* Player controls */}
-              <View
-                className="px-6 pt-2"
-                onLayout={(event) => {
-                  const { y, height } = event.nativeEvent.layout;
-                  setControlsLayout({ y, height });
-                }}
-              >
-                <PlayerSection />
-                {audioError ? (
-                  <Text className="pt-3 text-center text-xs text-destructive">
-                    {audioError}
-                  </Text>
-                ) : null}
-              </View>
-
-              {mediaId ? (
-                <AudioBookReferences
-                  mediaId={mediaId}
-                  albumId={media?.albumId}
-                />
-              ) : null}
-
               {/* Tabs */}
               <View className="mx-6 mt-4">
                 <View className="flex-row rounded-xl bg-muted p-1">
-                  {(["info", "transcript", "local"] as Tab[]).map((tab) => (
+                  {(["info", "books"] as Tab[]).map((tab) => (
                     <Pressable
                       key={tab}
                       onPress={() => setActiveTab(tab)}
@@ -1953,7 +2166,7 @@ export default function AudioBlogScreen() {
                       <Text
                         className={`text-sm font-bold capitalize ${activeTab === tab ? "text-foreground" : "text-muted-foreground"}`}
                       >
-                        {tab}
+                        {tab === "info" ? "Info" : "Books"}
                       </Text>
                     </Pressable>
                   ))}
@@ -1968,16 +2181,10 @@ export default function AudioBlogScreen() {
                     commentsState={commentsState}
                     onCommentsPress={() => setShowComments(true)}
                   />
-                ) : activeTab === "local" && mediaId ? (
-                  <LocalTranscribe
+                ) : activeTab === "books" && mediaId ? (
+                  <AudioBookReferences
                     mediaId={mediaId}
-                    telegramFileId={telegramFileId}
-                    audioUrl={mediaUrl}
-                  />
-                ) : activeTab === "transcript" && mediaId ? (
-                  <AudioTranscript
-                    mediaId={mediaId}
-                    telegramFileId={telegramFileId}
+                    albumId={media?.albumId}
                   />
                 ) : (
                   <View className="items-center justify-center py-12">
@@ -1988,11 +2195,15 @@ export default function AudioBlogScreen() {
                 )}
               </View>
             </ScrollView>
-          </>
         )}
       </SafeArea>
 
-      {!showComments && <FloatingPlayerWidget visible={showFloatingControls} />}
+      {!showComments && (
+        <FloatingPlayerWidget
+          visible={showFloatingControls}
+          onPlusPress={() => setAlbumPickerVisible(true)}
+        />
+      )}
 
       {/* More menu */}
       <MoreMenu
