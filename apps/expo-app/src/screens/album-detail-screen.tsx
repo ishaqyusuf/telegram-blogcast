@@ -19,6 +19,7 @@ import {
 	Alert,
 	FlatList,
 	Modal,
+	RefreshControl,
 	ScrollView,
 	Text,
 	TextInput,
@@ -1002,11 +1003,18 @@ export default function AlbumDetailScreen() {
 	const { albumId } = useLocalSearchParams<{ albumId: string }>();
 	const id = Number(albumId);
 
-	const { data: album, isLoading } = useQuery(
+	const {
+		data: album,
+		isFetching: isFetchingAlbum,
+		isLoading,
+		refetch: refetchAlbum,
+	} = useQuery(
 		_trpc.album.getAlbum.queryOptions({ id }),
 	);
-	const { data: albums = [] } = useQuery(_trpc.album.getAlbums.queryOptions());
-	const { data: booksData } = useQuery(
+	const { data: albums = [], refetch: refetchAlbums } = useQuery(
+		_trpc.album.getAlbums.queryOptions(),
+	);
+	const { data: booksData, refetch: refetchBooks } = useQuery(
 		_trpc.book.getBooks.queryOptions({ limit: 20 }),
 	);
 
@@ -1319,6 +1327,21 @@ export default function AlbumDetailScreen() {
 		void refetchSuggestedMedia();
 	}
 
+	const refreshAlbumScreen = useCallback(() => {
+		void Promise.all([
+			refetchAlbum(),
+			refetchAlbums(),
+			refetchBooks(),
+			suggestionsRequested ? refetchSuggestedMedia() : Promise.resolve(),
+		]);
+	}, [
+		refetchAlbum,
+		refetchAlbums,
+		refetchBooks,
+		refetchSuggestedMedia,
+		suggestionsRequested,
+	]);
+
 	async function addOneSuggestion(media: any) {
 		const mediaId = media.id;
 		if (addingSuggestionIds.has(mediaId)) return;
@@ -1478,6 +1501,15 @@ export default function AlbumDetailScreen() {
 					<ScrollView
 						showsVerticalScrollIndicator={false}
 						keyboardShouldPersistTaps="handled"
+						removeClippedSubviews={false}
+						refreshControl={
+							<RefreshControl
+								refreshing={isFetchingAlbum && !isLoading}
+								onRefresh={refreshAlbumScreen}
+								tintColor={colors.primary}
+								colors={[colors.primary]}
+							/>
+						}
 					>
 						{/* Hero */}
 						<View
@@ -2142,6 +2174,7 @@ export default function AlbumDetailScreen() {
 											data={displayedSuggestedMedia}
 											keyExtractor={(item) => String(item.id)}
 											scrollEnabled={false}
+											removeClippedSubviews={false}
 											renderItem={({ item }) => (
 												<SwipeDeleteRow
 													onDelete={() => dismissSuggestion(item.id)}

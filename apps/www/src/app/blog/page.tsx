@@ -1,6 +1,7 @@
 import { db } from "@acme/db";
 import { formatDistanceToNow } from "date-fns";
 import {
+    Album,
     Bookmark,
     FileText,
     Heart,
@@ -427,12 +428,30 @@ export default async function BlogPage({
                                 {posts.length} posts from Telegram channels
                             </p>
                         </div>
-                        <Link
-                            href="/dashboard"
-                            className="inline-flex h-10 items-center rounded-full border border-border bg-card px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted"
-                        >
-                            Telegram
-                        </Link>
+                        <div className="flex shrink-0 items-center gap-2">
+                            <Link
+                                href="/transcription-queue"
+                                aria-label="Open transcription queue"
+                                className="inline-flex size-10 items-center justify-center rounded-full border border-border bg-card text-foreground transition-colors hover:bg-muted"
+                                title="Transcription queue"
+                            >
+                                <FileText size={18} />
+                            </Link>
+                            <Link
+                                href="/albums"
+                                aria-label="Open albums"
+                                className="inline-flex size-10 items-center justify-center rounded-full border border-border bg-card text-foreground transition-colors hover:bg-muted"
+                                title="Albums"
+                            >
+                                <Album size={18} />
+                            </Link>
+                            <Link
+                                href="/dashboard"
+                                className="inline-flex h-10 items-center rounded-full border border-border bg-card px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted"
+                            >
+                                Telegram
+                            </Link>
+                        </div>
                     </div>
                     <BlogFilterArea />
                 </header>

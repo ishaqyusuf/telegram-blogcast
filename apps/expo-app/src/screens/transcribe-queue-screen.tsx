@@ -221,13 +221,21 @@ export default function TranscribeQueueScreen() {
                   const progress = getTranscriptionJobProgress(job);
                   const title = getQueueJobTitle(job);
                   const stage = formatJobStage(job);
+                  const blogId = job.media?.blog?.id;
                   return (
-                    <View
+                    <Pressable
                       key={job.id}
                       className="rounded-xl border border-border bg-card p-4"
+                      disabled={!blogId}
+                      onPress={() => {
+                        if (blogId) {
+                          router.push(`/blog-view-2/${blogId}` as any);
+                        }
+                      }}
                       style={{
                         backgroundColor: colors.card,
                         borderColor: colors.border,
+                        opacity: blogId ? 1 : 0.85,
                       }}
                     >
                       <View className="flex-row items-center gap-3">
@@ -286,6 +294,13 @@ export default function TranscribeQueueScreen() {
                           ) : null}
                         </View>
                         <View className="items-end gap-0.5">
+                          {blogId ? (
+                            <Icon
+                              name="ChevronRight"
+                              size={15}
+                              className="text-muted-foreground"
+                            />
+                          ) : null}
                           <Text
                             className="text-xs font-bold capitalize text-muted-foreground"
                             style={{ color: colors.mutedForeground }}
@@ -323,7 +338,7 @@ export default function TranscribeQueueScreen() {
                           {job.errorMessage}
                         </Text>
                       ) : null}
-                    </View>
+                    </Pressable>
                   );
                 })()
               ))}

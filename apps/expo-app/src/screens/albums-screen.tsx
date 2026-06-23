@@ -5,11 +5,12 @@ import {
   ActivityIndicator,
   FlatList,
   Modal,
+  RefreshControl,
   Text,
   TextInput,
   View,
 } from "react-native";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 import { _trpc } from "@/components/static-trpc";
 import { SafeArea } from "@/components/safe-area";
@@ -70,7 +71,12 @@ export default function AlbumsScreen() {
   const colors = useColors();
   const [createVisible, setCreateVisible] = useState(false);
   const [name, setName] = useState("");
-  const { data: albums = [], isLoading } = useQuery(
+  const {
+    data: albums = [],
+    isFetching,
+    isLoading,
+    refetch,
+  } = useQuery(
     _trpc.album.getAlbums.queryOptions(),
   );
   const createAlbum = useMutation(
@@ -89,6 +95,10 @@ export default function AlbumsScreen() {
     if (!trimmed || createAlbum.isPending) return;
     createAlbum.mutate({ name: trimmed });
   }
+
+  const handleRefresh = useCallback(() => {
+    void refetch();
+  }, [refetch]);
 
   return (
     <View
@@ -130,6 +140,18 @@ export default function AlbumsScreen() {
             numColumns={2}
             contentContainerClassName="px-3 pb-8"
             columnWrapperClassName="gap-3 mb-3"
+            removeClippedSubviews={false}
+            initialNumToRender={8}
+            maxToRenderPerBatch={8}
+            windowSize={7}
+            refreshControl={
+              <RefreshControl
+                refreshing={isFetching && !isLoading}
+                onRefresh={handleRefresh}
+                tintColor={colors.primary}
+                colors={[colors.primary]}
+              />
+            }
             renderItem={({ item, index }) => (
               <Pressable
                 onPress={() => router.push(`/albums/${item.id}` as any)}

@@ -13,7 +13,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Callable, Optional
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 import httpx
 from fastapi import FastAPI, HTTPException
@@ -739,6 +739,12 @@ def save_queue_chunk(
 def process_queue_job(client: httpx.Client, job: dict):
     job_id = int(job["id"])
     audio_url = job.get("audioUrl")
+    telegram_file_id = job.get("telegramFileId")
+    if not audio_url and telegram_file_id and TRANSCRIPTION_QUEUE_API_BASE_URL:
+        audio_url = (
+            f"{TRANSCRIPTION_QUEUE_API_BASE_URL}/api/telegram/file/"
+            f"{quote(str(telegram_file_id), safe='')}"
+        )
     if not audio_url:
         raise RuntimeError(
             "Queued transcription worker requires audioUrl; Telegram-only jobs must be resolved before enqueue."

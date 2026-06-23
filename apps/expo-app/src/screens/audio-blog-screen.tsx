@@ -857,7 +857,6 @@ function PlayerSection({
 
 	// Interpolated pixel positions — recalculated only when trackWidth changes
 	const KNOB = 22;
-	const TICK_HEIGHTS = [3, 6, 5, 8, 4, 7, 3, 9, 5, 7, 4, 8, 5, 6, 4, 7];
 	const fillWidth = useMemo(
 		() =>
 			progressAnim.interpolate({
@@ -927,35 +926,6 @@ function PlayerSection({
 					}}
 					{...seekPanResponder.panHandlers}
 				>
-					<View
-						pointerEvents="none"
-						style={{
-							position: "absolute",
-							left: 0,
-							right: 0,
-							height: 26,
-							flexDirection: "row",
-							alignItems: "center",
-							justifyContent: "space-between",
-							paddingHorizontal: 2,
-						}}
-					>
-						{TICK_HEIGHTS.map((h, i) => (
-							<View
-								key={`${h}-${i}`}
-								style={{
-									width: 4,
-									height: h * 3,
-									borderRadius: 9999,
-									backgroundColor:
-										theme === "dark"
-											? "rgba(255,255,255,0.22)"
-											: "rgba(0,0,0,0.16)",
-								}}
-							/>
-						))}
-					</View>
-
 					<View
 						pointerEvents="none"
 						style={{

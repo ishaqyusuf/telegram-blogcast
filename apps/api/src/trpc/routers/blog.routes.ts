@@ -34,7 +34,7 @@ const transcriptionJobInclude = {
       id: true,
       title: true,
       file: { select: { fileName: true } },
-      blog: { select: { content: true } },
+      blog: { select: { id: true, content: true } },
     },
   },
 };
