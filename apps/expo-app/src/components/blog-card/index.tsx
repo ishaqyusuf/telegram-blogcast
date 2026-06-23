@@ -26,17 +26,21 @@ import { useColors } from "@/hooks/use-color";
 import { CardFooter } from "./card-footer";
 import { CardHeader } from "./card-header";
 import { CardMedia } from "./card-media";
+import { TranscriptPreview } from "./transcript-preview";
 import type { BlogItem } from "./types";
 import { getBlogHref, getInlinePreviewText, resolveVariant } from "./utils";
+import { getAudioDisplayTitle } from "@/lib/audio-title";
 
 export type { BlogItem } from "./types";
 
 export function BlogCard({
   post,
   onDelete,
+  onAddToAlbum,
 }: {
   post: BlogItem;
   onDelete?: (post: BlogItem) => Promise<void> | void;
+  onAddToAlbum?: (post: BlogItem) => void;
 }) {
   const router = useRouter();
   const { width } = useWindowDimensions();
@@ -56,7 +60,7 @@ export function BlogCard({
   const handlePress = () => {
     markViewed({
       id: post.id,
-      title: post.caption || post.audio?.title || "Untitled",
+      title: getAudioDisplayTitle(post, "Untitled"),
       type: post.type ?? "text",
       date: post.date ? post.date.toISOString() : null,
     });
@@ -68,7 +72,7 @@ export function BlogCard({
     const optionsTitle =
       getInlinePreviewText(post.caption) ||
       getInlinePreviewText(post.content) ||
-      post.audio?.title ||
+      getAudioDisplayTitle(post, "") ||
       `Post #${post.id}`;
     router.push({
       pathname: "/blog-options/[blogId]",
@@ -196,7 +200,8 @@ export function BlogCard({
             onOpenOptions={handleOpenOptions}
           />
           <CardMedia post={post} variant={variant} />
-          <CardFooter post={post} />
+          <TranscriptPreview post={post} />
+          <CardFooter post={post} onAddToAlbum={onAddToAlbum} />
         </Pressable>
       </ReanimatedSwipeable>
     </Animated.View>

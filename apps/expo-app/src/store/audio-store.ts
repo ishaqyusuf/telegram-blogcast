@@ -8,6 +8,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
 import type { ItemProps } from "@/components/home-feed/home-feed-post-card";
+import { getAudioDisplayTitle } from "@/lib/audio-title";
 import { getTelegramFileUrl } from "@/lib/get-telegram-file";
 import { setupTrackPlayer } from "@/services/audio-player/setup-track-player";
 
@@ -93,7 +94,7 @@ async function ensureNotificationPermission() {
 }
 
 function getBlogTitle(blog: ItemProps | null | undefined) {
-  return blog?.audio?.title ?? blog?.caption ?? "Now Playing";
+  return getAudioDisplayTitle(blog, "Now Playing");
 }
 
 function getBlogArtist(blog: ItemProps | null | undefined) {

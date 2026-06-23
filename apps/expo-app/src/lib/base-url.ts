@@ -56,7 +56,7 @@ export const getBaseUrl = () => {
     return logResolvedUrl("baseUrl", envBaseUrl);
   }
 
-  const apiPort = process.env.EXPO_PUBLIC_API_PORT ?? "3006";
+  const apiPort = process.env.EXPO_PUBLIC_API_PORT ?? "3005";
   return logResolvedUrl("baseUrl", getLocalUrl(apiPort));
 };
 
@@ -72,16 +72,6 @@ export const getTrpcUrl = () => {
     process.env.EXPO_PUBLIC_TRPC_PORT ?? process.env.EXPO_PUBLIC_API_PORT;
 
   if (IS_DEV && trpcPort) {
-    if (
-      !process.env.EXPO_PUBLIC_TRPC_PORT &&
-      !envTrpcUrl &&
-      process.env.EXPO_PUBLIC_API_PORT === "3005"
-    ) {
-      console.warn(
-        "Using EXPO_PUBLIC_API_PORT=3005 as the Expo tRPC target. Prefer pointing Expo directly at apps/api on port 3006 unless you intentionally want to route through apps/www.",
-      );
-    }
-
     return logResolvedUrl("trpcUrl", appendPath(getLocalUrl(trpcPort), TRPC_PATH));
   }
 

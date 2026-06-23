@@ -17,6 +17,18 @@ export interface TranscriptWordData {
   endSec: number;
 }
 
+export function getTranscriptSegmentKey(
+  segment: TranscriptSegmentData,
+  index: number,
+) {
+  return [
+    segment.id ?? "segment",
+    index,
+    segment.startSec,
+    segment.endSec,
+  ].join(":");
+}
+
 function formatSec(sec: number) {
   const m = Math.floor(sec / 60);
   const s = Math.floor(sec % 60);
@@ -52,7 +64,7 @@ export function TranscriptSegments({ segments }: TranscriptSegmentsProps) {
         const isActive = index === activeIdx;
         return (
           <Pressable
-            key={seg.id ?? index}
+            key={getTranscriptSegmentKey(seg, index)}
             onPress={() => seek(seg.startSec * 1000)}
             style={{
               flexDirection: "row",
@@ -60,9 +72,7 @@ export function TranscriptSegments({ segments }: TranscriptSegmentsProps) {
               paddingHorizontal: 12,
               paddingVertical: 10,
               borderRadius: 12,
-              backgroundColor: isActive
-                ? colors.primary + "26"
-                : "transparent",
+              backgroundColor: isActive ? colors.primary + "26" : "transparent",
             }}
           >
             <View

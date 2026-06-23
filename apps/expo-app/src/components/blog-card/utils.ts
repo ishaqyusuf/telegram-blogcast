@@ -25,7 +25,11 @@ export function getChannelHandle(post: BlogItem) {
 }
 
 export function getPostDateLabel(post: BlogItem) {
-  return formatDate(post.date, "MMM D, YYYY");
+  const date = post.date ? new Date(post.date) : null;
+  const format = date?.getFullYear() === new Date().getFullYear()
+    ? "MMM DD"
+    : "MMM DD, YYYY";
+  return formatDate(post.date, format);
 }
 
 export function getBlogHref(post: Pick<BlogItem, "id" | "type">) {

@@ -10,6 +10,7 @@ import { Image, Linking, Text, View } from "react-native";
 
 import { Icon } from "@/components/ui/icon";
 import { useColors } from "@/hooks/use-color";
+import { getAudioDisplayTitle } from "@/lib/audio-title";
 import { useTranslation } from "@/lib/i18n";
 
 import type { BlogCardVariant, BlogItem } from "./types";
@@ -98,7 +99,9 @@ function LinkifiedText({
 function CardText({ post }: { post: BlogItem }) {
   const colors = useColors();
   const content =
-    getInlinePreviewText(post.content) || getInlinePreviewText(post.caption);
+    getInlinePreviewText(post.content) ||
+    getInlinePreviewText(post.caption) ||
+    (post.type === "audio" ? getAudioDisplayTitle(post, "") : "");
   if (!content) return null;
 
   return (

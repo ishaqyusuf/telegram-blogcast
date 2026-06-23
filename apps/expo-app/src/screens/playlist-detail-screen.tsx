@@ -3,6 +3,7 @@ import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";
 import { useColors } from "@/hooks/use-color";
+import { getAudioDisplayTitle } from "@/lib/audio-title";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { minuteToString } from "@/lib/utils";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -112,8 +113,10 @@ export default function PlaylistDetailScreen() {
             contentContainerClassName="px-4 pb-8"
             renderItem={({ item, index }) => {
               const media = item.episode;
-              const title =
-                media?.title || media?.blog?.content?.slice(0, 70) || "Audio";
+              const title = getAudioDisplayTitle({
+                content: media?.blog?.content?.slice(0, 70),
+                media,
+              });
               return (
                 <Pressable
                   onPress={() =>

@@ -146,3 +146,12 @@ Tracks larger implementation themes that may span multiple concrete tasks.
 - Plan File: brain/plans/2026-06-16-refactor-expo-performance-optimization.md
 - Intake File: brain/intake/2026-06-16-app-redesign-cleanup-dark-mode.md
 - Created Date: 2026-06-16
+
+### Fix Android Media Notification Controls
+- Priority: High
+- Description: Track plan in `brain/plans/2026-06-23-bug-fix-android-media-notification-controls.md`.
+- Related Feature: Audio playback
+- Status: Roadmap
+- Plan Status: Proposed
+- Plan File: brain/plans/2026-06-23-bug-fix-android-media-notification-controls.md
+- Created Date: 2026-06-23

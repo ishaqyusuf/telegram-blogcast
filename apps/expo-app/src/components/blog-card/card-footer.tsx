@@ -5,19 +5,17 @@ import { Text, View } from "react-native";
 import { Icon } from "@/components/ui/icon";
 import { useColors } from "@/hooks/use-color";
 import { withAlpha } from "@/lib/theme";
-import { minuteToString } from "@/lib/utils";
 import { useAudioStore } from "@/store/audio-store";
 
 import type { BlogItem } from "./types";
 
-function formatMediaSizeMb(size?: number | null) {
-  if (!size || !Number.isFinite(size) || size <= 0) return null;
-
-  const mb = size / (1024 * 1024);
-  return `${mb >= 10 ? Math.round(mb) : mb.toFixed(1)} MB`;
-}
-
-export function CardFooter({ post }: { post: BlogItem }) {
+export function CardFooter({
+  post,
+  onAddToAlbum,
+}: {
+  post: BlogItem;
+  onAddToAlbum?: (post: BlogItem) => void;
+}) {
   const tags = post.tags?.slice(0, 2) ?? [];
   const colors = useColors();
   const loadedBlogId = useAudioStore((s) => s.blog?.id);
@@ -32,11 +30,21 @@ export function CardFooter({ post }: { post: BlogItem }) {
   const isCurrent = loadedBlogId === post.id;
   const isPlaying = isCurrent && globalIsPlaying;
   const isLoading = isCurrent && globalIsLoading;
-  const durationLabel = post.audio?.duration
-    ? minuteToString(post.audio.duration)
-    : null;
-  const mediaSize = formatMediaSizeMb(post.audio?.size);
   const albumName = (post.audio as any)?.albumName as string | null | undefined;
+  const albumId = (post.audio as any)?.albumId as number | null | undefined;
+  const transcriptStatus = (post.audio as any)?.transcriptStatus as
+    | string
+    | null
+    | undefined;
+  const isFullyTranscribed = Boolean((post.audio as any)?.isTranscribed);
+  const isPartlyTranscribed =
+    !isFullyTranscribed &&
+    (transcriptStatus === "processing" || transcriptStatus === "done");
+  const showTranscriptBadge = isFullyTranscribed || isPartlyTranscribed;
+  const transcriptColor = isFullyTranscribed ? colors.success : colors.warn;
+  const canAddToAlbum = Boolean(
+    post.audio?.mediaId && !albumName && !albumId && onAddToAlbum,
+  );
 
   const playPause = useCallback(async () => {
     if (isPlaying) {
@@ -58,31 +66,13 @@ export function CardFooter({ post }: { post: BlogItem }) {
   if (hasAudioSource) {
     return (
       <View className="mt-3 flex-row items-center gap-1">
-        {durationLabel ? (
-          <Text
-            className="text-xs font-medium text-muted-foreground"
-            numberOfLines={1}
-            style={{
-              color: colors.mutedForeground,
-              includeFontPadding: false,
-              textAlignVertical: "center",
-            }}
+        {showTranscriptBadge ? (
+          <View
+            className="size-7 items-center justify-center rounded-full"
+            style={{ backgroundColor: withAlpha(transcriptColor, 0.14) }}
           >
-            {durationLabel}
-          </Text>
-        ) : null}
-        {mediaSize ? (
-          <Text
-            className="text-xs font-medium text-muted-foreground"
-            numberOfLines={1}
-            style={{
-              color: colors.mutedForeground,
-              includeFontPadding: false,
-              textAlignVertical: "center",
-            }}
-          >
-            {mediaSize}
-          </Text>
+            <Icon name="FileText" size={14} color={transcriptColor} />
+          </View>
         ) : null}
         {albumName ? (
           <View
@@ -101,6 +91,18 @@ export function CardFooter({ post }: { post: BlogItem }) {
               {albumName}
             </Text>
           </View>
+        ) : null}
+        {canAddToAlbum ? (
+          <Pressable
+            onPress={(e) => {
+              e.stopPropagation();
+              onAddToAlbum?.(post);
+            }}
+            className="size-7 items-center justify-center rounded-full bg-primary/10 active:opacity-70"
+            style={{ backgroundColor: withAlpha(colors.primary, 0.1) }}
+          >
+            <Icon name="Plus" size={14} className="text-primary" />
+          </Pressable>
         ) : null}
         <View className="flex-1" />
         <Pressable className="min-h-11 flex-row items-center gap-1 rounded-full px-2 active:bg-muted">

@@ -1,6 +1,6 @@
 // app/api/auth/verify-code/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { getClient } from "@telegram/telegram-client";
+import { getClient, saveCurrentSession } from "@telegram/telegram-client";
 import { setSessionCookie } from "@/lib/auth";
 import { pendingCodes } from "../send-code/route";
 
@@ -42,6 +42,7 @@ export async function POST(req: NextRequest) {
                 },
             },
         );
+        saveCurrentSession();
 
         pendingCodes.delete(phoneNumber);
 
@@ -59,4 +60,3 @@ export async function POST(req: NextRequest) {
         );
     }
 }
-

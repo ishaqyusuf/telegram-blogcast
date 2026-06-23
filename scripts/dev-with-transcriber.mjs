@@ -61,5 +61,4 @@ start("turbo", "node", [
   "./node_modules/turbo/bin/turbo",
   "dev",
   "--parallel",
-  "--filter=!@acme/api",
 ]);

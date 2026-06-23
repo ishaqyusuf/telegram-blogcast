@@ -133,10 +133,15 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
               status: true,
               updatedAt: true,
               segments: {
-                select: { endSec: true },
+                select: {
+                  id: true,
+                  startSec: true,
+                  endSec: true,
+                  text: true,
+                },
                 where: { status: "done" },
-                orderBy: { endSec: "desc" },
-                take: 1,
+                orderBy: { startSec: "asc" },
+                take: 240,
               },
             },
           },
@@ -197,7 +202,15 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
           }
         }
         const durationSec = media.file.duration;
-        const transcriptMaxEndSec = media.transcript?.segments?.[0]?.endSec ?? null;
+        const transcriptSegments =
+          media.transcript?.segments?.map((segment) => ({
+            id: segment.id,
+            startSec: segment.startSec,
+            endSec: segment.endSec,
+            text: segment.text,
+          })) ?? [];
+        const transcriptMaxEndSec =
+          transcriptSegments[transcriptSegments.length - 1]?.endSec ?? null;
         const isFullyTranscribed =
           media.transcript?.status === "done" &&
           Boolean(durationSec) &&
@@ -219,6 +232,7 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
           albumName: media.album?.name,
           albumId: media.albumId,
           transcriptStatus: media.transcript?.status ?? null,
+          transcriptSegments,
           isTranscribed: isFullyTranscribed,
         };
       };
@@ -262,7 +276,12 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
         likes: 0,
         coverImageUrl: null,
         artwork: null,
-        title: audio?.title || blogCaption(type, blog.content),
+        title: [
+          blogCaption(type, blog.content),
+          audio?.fileName || audio?.displayName || audio?.title,
+        ]
+          .filter(Boolean)
+          .join(" - "),
         _count: { comments: blog._count?.blogs ?? 0 },
         // images: blog.medias,
       };

@@ -9,6 +9,7 @@ import { getBlogHref } from "@/components/blog-card/utils";
 import { SafeArea } from "@/components/safe-area";
 import { Icon } from "@/components/ui/icon";
 import { useColors } from "@/hooks/use-color";
+import { getAudioDisplayTitle } from "@/lib/audio-title";
 import { useTranslation } from "@/lib/i18n";
 
 export default function SearchScreen() {
@@ -119,47 +120,72 @@ export default function SearchScreen() {
               keyExtractor={(item: any) => String(item.id)}
               contentContainerClassName="px-4 pb-8"
               ItemSeparatorComponent={() => <View className="h-2" />}
-              renderItem={({ item }: { item: any }) => (
-                <Pressable
-                  onPress={() =>
-                    router.push(
-                      getBlogHref({
-                        id: item.id,
-                        type: item.type,
-                      } as any) as any,
+              renderItem={({ item }: { item: any }) => {
+                const transcriptSnippets =
+                  item.medias
+                    ?.flatMap(
+                      (media: any) => media.transcript?.segments ?? [],
                     )
-                  }
-                  className="bg-card rounded-xl px-4 py-3 active:opacity-80"
-                >
-                  <View className="flex-row items-center gap-2 mb-1.5">
-                    <View className="px-2 py-0.5 rounded-md bg-muted">
-                      <Text className="text-[10px] font-medium text-muted-foreground capitalize">
-                        {item.type}
-                      </Text>
-                    </View>
-                  </View>
-                  <Text
-                    className="text-sm text-foreground leading-relaxed"
-                    numberOfLines={3}
+                    .map((segment: any) => segment.text)
+                    .filter(Boolean) ?? [];
+                const resultText =
+                  item.type === "audio"
+                    ? getAudioDisplayTitle(
+                        { content: item.content, media: item.medias },
+                        "Audio",
+                      )
+                    : item.content;
+
+                return (
+                  <Pressable
+                    onPress={() =>
+                      router.push(
+                        getBlogHref({
+                          id: item.id,
+                          type: item.type,
+                        } as any) as any,
+                      )
+                    }
+                    className="bg-card rounded-xl px-4 py-3 active:opacity-80"
                   >
-                    {item.content}
-                  </Text>
-                  {item.blogTags?.length > 0 && (
-                    <View className="flex-row gap-1.5 mt-2 flex-wrap">
-                      {item.blogTags.slice(0, 3).map((bt: any, i: number) => (
-                        <View
-                          key={i}
-                          className="px-2 py-0.5 rounded-md bg-muted"
-                        >
-                          <Text className="text-[10px] font-medium text-muted-foreground">
-                            #{bt.tags?.title}
-                          </Text>
-                        </View>
-                      ))}
+                    <View className="flex-row items-center gap-2 mb-1.5">
+                      <View className="px-2 py-0.5 rounded-md bg-muted">
+                        <Text className="text-[10px] font-medium text-muted-foreground capitalize">
+                          {item.type}
+                        </Text>
+                      </View>
                     </View>
-                  )}
-                </Pressable>
-              )}
+                    <Text
+                      className="text-sm text-foreground leading-relaxed"
+                      numberOfLines={3}
+                    >
+                      {resultText}
+                    </Text>
+                    {transcriptSnippets.length > 0 ? (
+                      <Text
+                        className="mt-2 text-xs text-muted-foreground leading-5"
+                        numberOfLines={2}
+                      >
+                        {transcriptSnippets.join(" ... ")}
+                      </Text>
+                    ) : null}
+                    {item.blogTags?.length > 0 && (
+                      <View className="flex-row gap-1.5 mt-2 flex-wrap">
+                        {item.blogTags.slice(0, 3).map((bt: any, i: number) => (
+                          <View
+                            key={i}
+                            className="px-2 py-0.5 rounded-md bg-muted"
+                          >
+                            <Text className="text-[10px] font-medium text-muted-foreground">
+                              #{bt.tags?.title}
+                            </Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                  </Pressable>
+                );
+              }}
             />
           )
         ) : (

@@ -7,6 +7,7 @@ import { FlatList, Text, View } from "react-native";
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";
+import { getAudioDisplayTitle } from "@/lib/audio-title";
 import { minuteToString } from "@/lib/utils";
 import { useColors } from "@/hooks/use-color";
 import { useTranslation } from "@/lib/i18n";
@@ -58,10 +59,10 @@ export default function PlayHistoryScreen() {
           contentContainerClassName="px-4 pb-8 gap-2"
           renderItem={({ item }) => {
             const duration = item.Media?.file?.duration;
-            const title =
-              item.Media?.title ||
-              item.Media?.blog?.content?.slice(0, 60) ||
-              "Audio";
+            const title = getAudioDisplayTitle({
+              content: item.Media?.blog?.content?.slice(0, 60),
+              media: item.Media,
+            });
             const progressPct =
               duration && duration > 0
                 ? Math.min((item.progress / 1000 / duration) * 100, 100)

@@ -31,6 +31,16 @@ function scoreTextAgainstTerms(value: string | null | undefined, terms: string[]
 	}, 0);
 }
 
+function getMediaSearchText(media: {
+	title?: string | null;
+	file?: { fileName?: string | null } | null;
+	blog?: { content?: string | null } | null;
+}) {
+	return [media.title, media.file?.fileName, media.blog?.content]
+		.filter(Boolean)
+		.join(" ");
+}
+
 export const albumRoutes = createTRPCRouter({
 	getAlbums: publicProcedure.query(async ({ ctx }) => {
 		return ctx.db.album.findMany({
@@ -141,6 +151,9 @@ export const albumRoutes = createTRPCRouter({
 				include: {
 					medias: {
 						include: {
+							file: {
+								select: { fileName: true },
+							},
 							blog: {
 								select: {
 									id: true,
@@ -161,6 +174,7 @@ export const albumRoutes = createTRPCRouter({
 			if (!channelId) return [];
 
 			const rawKeyword = input.keyword?.trim().toLowerCase();
+			const keywordFilter = rawKeyword ?? "";
 			const keywordTerms = rawKeyword
 				? tokenizeSearchText(rawKeyword).length > 0
 					? tokenizeSearchText(rawKeyword)
@@ -170,7 +184,7 @@ export const albumRoutes = createTRPCRouter({
 			const albumTitleTerms = hasKeyword ? keywordTerms : tokenizeSearchText(album.name);
 			const existingAudioTerms = hasKeyword ? [] : tokenizeSearchText(
 				album.medias
-					.map((media) => `${media.title ?? ""} ${media.blog?.content ?? ""}`)
+					.map(getMediaSearchText)
 					.join(" "),
 			);
 			const terms = Array.from(
@@ -183,13 +197,51 @@ export const albumRoutes = createTRPCRouter({
 				where: {
 					id: { notIn: albumMediaIds },
 					mimeType: { startsWith: "audio/" },
-					blog: {
-						is: {
-							deletedAt: null,
-							type: "audio",
-							channelId,
+					AND: [
+						{
+							blog: {
+								is: {
+									deletedAt: null,
+									type: "audio",
+									channelId,
+								},
+							},
 						},
-					},
+						...(hasKeyword
+							? [
+									{
+										OR: [
+											{
+												title: {
+													contains: keywordFilter,
+													mode: "insensitive" as const,
+												},
+											},
+											{
+												file: {
+													is: {
+														fileName: {
+															contains: keywordFilter,
+															mode: "insensitive" as const,
+														},
+													},
+												},
+											},
+											{
+												blog: {
+													is: {
+														content: {
+															contains: keywordFilter,
+															mode: "insensitive" as const,
+														},
+													},
+												},
+											},
+										],
+									},
+								]
+							: []),
+					],
 				},
 				include: {
 					file: true,
@@ -212,10 +264,13 @@ export const albumRoutes = createTRPCRouter({
 					const titleScore =
 						scoreTextAgainstTerms(media.title, albumTitleTerms) * 3 +
 						scoreTextAgainstTerms(media.title, existingAudioTerms) * 2;
+					const fileNameScore =
+						scoreTextAgainstTerms(media.file?.fileName, albumTitleTerms) * 3 +
+						scoreTextAgainstTerms(media.file?.fileName, existingAudioTerms) * 2;
 					const captionScore =
 						scoreTextAgainstTerms(media.blog?.content, albumTitleTerms) * 2 +
 						scoreTextAgainstTerms(media.blog?.content, existingAudioTerms);
-					const matchScore = titleScore + captionScore;
+					const matchScore = titleScore + fileNameScore + captionScore;
 
 					return {
 						id: media.id,
@@ -233,7 +288,7 @@ export const albumRoutes = createTRPCRouter({
 								}
 							: null,
 						matchingTerms: terms.filter((term) =>
-							`${media.title ?? ""} ${media.blog?.content ?? ""}`
+							getMediaSearchText(media)
 								.toLowerCase()
 								.includes(term),
 						),

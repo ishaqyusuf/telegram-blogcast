@@ -131,7 +131,6 @@ export async function saveBatch(ctx: TRPCContext, input: SaveBatchSchema) {
   const existingBlogs = await db.blog.findMany({
     where: {
       channelId,
-      deletedAt: null,
       meta: {
         equals: {
           propName: "telegramMessageId",

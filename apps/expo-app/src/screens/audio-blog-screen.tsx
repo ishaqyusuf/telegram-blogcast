@@ -34,6 +34,7 @@ import { useColors } from "@/hooks/use-color";
 import { usePlayHistorySync } from "@/hooks/use-play-history-sync";
 import { useAudioStore } from "@/store/audio-store";
 import { useRecentlyViewedStore } from "@/store/recently-viewed-store";
+import { getAudioDisplayTitle } from "@/lib/audio-title";
 import { getMediaFileUrl } from "@/lib/media-source";
 import { minuteToString } from "@/lib/utils";
 
@@ -1120,6 +1121,10 @@ function InfoTab({
   const colors = useColors();
   const tags =
     blog.blogTags?.map((bt: any) => bt.tags?.title).filter(Boolean) ?? [];
+  const title = getAudioDisplayTitle(
+    { content: blog.content, media: blog.medias?.[0] },
+    "Untitled",
+  );
   const channelName =
     blog.channel?.title || blog.channel?.username || "Unknown channel";
   const channelHandle = blog.channel?.username
@@ -1164,7 +1169,7 @@ function InfoTab({
             writingDirection: "rtl",
           }}
         >
-          {blog.content ?? "Untitled"}
+          {title}
         </Text>
         {tags.length > 0 && (
           <View className="flex-row flex-wrap gap-2 justify-end mt-1">
@@ -1696,6 +1701,10 @@ export default function AudioBlogScreen() {
     media?.file?.source === "vercel_blob" ? undefined : media?.file?.fileId;
   const mediaUrl = getMediaFileUrl(media?.file as any);
   const duration = media?.file?.duration;
+  const audioTitle = getAudioDisplayTitle(
+    { content: blog?.content, media: media as any },
+    "Untitled Audio",
+  );
 
   const { data: transcriptData } = useQuery({
     ..._trpc.blog.getTranscript.queryOptions({ mediaId: mediaId ?? 0 }),
@@ -1815,12 +1824,12 @@ export default function AudioBlogScreen() {
       const blogRecord = blog as any;
       markViewed({
         id: blog.id,
-        title: blogRecord.caption || blog.medias?.[0]?.title || "Untitled",
+        title: audioTitle,
         type: blog.type ?? "audio",
         date: blogRecord.date ?? blog.blogDate ?? null,
       });
     }
-  }, [blog?.id]);
+  }, [audioTitle, blog, markViewed]);
 
   useEffect(() => {
     if (!blog || blog.type !== "audio") return;
@@ -1833,7 +1842,7 @@ export default function AudioBlogScreen() {
     loadAudio({
       id: blog.id,
       type: "audio",
-      caption: blog.content ?? media.title ?? null,
+      caption: blog.content ?? file.fileName ?? media.title ?? null,
       content: null,
       date: blog.blogDate,
       audio: {
@@ -1845,7 +1854,7 @@ export default function AudioBlogScreen() {
         duration: file.duration,
       },
     } as any).catch(() => undefined);
-  }, [blog?.id, loadedBlog?.id, loadAudio, mediaUrl]);
+  }, [blog, loadedBlog?.id, loadAudio, mediaUrl]);
 
   useEffect(() => {
     seekAppliedRef.current = false;
@@ -2040,12 +2049,12 @@ export default function AudioBlogScreen() {
               <View className="flex-row items-center px-6 mt-6 gap-4">
                 <View style={{ width: 56, height: 56, borderRadius: 8, backgroundColor: media?.album ? albumColor(media.albumId) : "rgba(255,255,255,0.2)", alignItems: 'center', justifyContent: 'center' }}>
                   <Text style={{ color: "#fff", fontWeight: "800", fontSize: 20 }}>
-                    {getInitials(media?.album?.name ?? blog?.content)}
+                    {getInitials(media?.album?.name ?? audioTitle)}
                   </Text>
                 </View>
                 <View style={{ flex: 1, overflow: 'hidden', justifyContent: 'center' }}>
                   <AnimatedMarquee
-                    text={blog?.content ?? "Untitled Audio"}
+                    text={audioTitle}
                     style={{ fontSize: 24, fontWeight: "800", color: "#fff" }}
                   />
                   <Text style={{ fontSize: 16, color: "rgba(255,255,255,0.7)", textAlign: "right", marginTop: 2 }}>

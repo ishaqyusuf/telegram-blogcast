@@ -6,6 +6,7 @@ import { HomeFeedPostFooter } from "./home-feed-post-footer";
 import { HomeFeedAudioPlayer } from "./home-feed-audio-player";
 import { RouterOutputs } from "@api/trpc/routers/_app";
 import { formatDate } from "@acme/utils/dayjs";
+import { getAudioDisplayTitle } from "@/lib/audio-title";
 import { minuteToString } from "@/lib/utils";
 import { getBlogHref, getPrimaryImageUrl } from "@/components/blog-card/utils";
 import { Icon } from "@/components/ui/icon";
@@ -13,15 +14,15 @@ import { Icon } from "@/components/ui/icon";
 export type ItemProps = RouterOutputs["podcasts"]["posts"]["data"][number];
 
 function AudioPost({ post }: { post: ItemProps }) {
-  const audioTitle = post.audio?.title?.trim();
   const caption = post.caption?.trim();
-  const shouldShowCaption = Boolean(caption && caption !== audioTitle);
+  const title = getAudioDisplayTitle(post);
+  const shouldShowCaption = Boolean(caption && !title.startsWith(caption));
 
   return (
     <>
       <View className="mb-4">
         <Text className="text-xl font-bold text-foreground mb-2 leading-tight text-right">
-          {audioTitle || caption || "Audio"}
+          {title}
         </Text>
         {shouldShowCaption ? (
           <Text className="text-muted-foreground text-base leading-relaxed text-right">

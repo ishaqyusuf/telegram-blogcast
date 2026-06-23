@@ -29,6 +29,7 @@ import {
 import { Toast } from "@/components/ui/toast";
 import { useInfiniteLoader } from "@/components/infinite-loader";
 import { minuteToString } from "@/lib/utils";
+import { getAudioDisplayTitle } from "@/lib/audio-title";
 import { AddToAlbumModal } from "@/components/channel-chat/add-to-album-modal";
 import { AddToPlaylistModal } from "@/components/channel-chat/add-to-playlist-modal";
 import type { BlogItem } from "@/components/blog-card";
@@ -192,7 +193,7 @@ function AudioBubble({
   activeTag: string | null;
   onTagPress: (tag: string) => void;
 }) {
-  const title = post.caption || post.audio?.title || "Audio";
+  const title = getAudioDisplayTitle(post);
   const router = useRouter();
   const colors = useColors();
   return (

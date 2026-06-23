@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   LayoutAnimation,
+  Modal,
   Platform,
+  Pressable,
   Text,
   UIManager,
   View,
@@ -12,6 +14,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 import { BlogCard } from "@/components/blog-card";
+import { AddToAlbumModal } from "@/components/channel-chat/add-to-album-modal";
 import { BlogHomeAlbums } from "@/components/blog-home/blog-home-albums";
 import { BlogHomeAnalytics } from "@/components/blog-home/blog-home-analytics";
 import { BlogHomeBooks } from "@/components/blog-home/blog-home-books";
@@ -181,6 +184,9 @@ export default function BlogHomeScreen() {
   });
   const [hiddenPostIds, setHiddenPostIds] = useState<Set<number>>(new Set());
   const [isPullRefreshing, setIsPullRefreshing] = useState(false);
+  const [showAlbumModal, setShowAlbumModal] = useState(false);
+  const [albumMediaIds, setAlbumMediaIds] = useState<number[]>([]);
+  const [albumAuthorId, setAlbumAuthorId] = useState<number | undefined>();
   const deleteBlogMutation = useMutation(
     _trpc.blog.deleteBlog.mutationOptions({
       onSettled: () => {
@@ -272,6 +278,14 @@ export default function BlogHomeScreen() {
     [deleteBlogMutation, restoreBlogMutation],
   );
 
+  const handleAddToAlbum = useCallback((post: BlogItem) => {
+    const mediaId = post.audio?.mediaId;
+    if (!mediaId) return;
+    setAlbumMediaIds([mediaId]);
+    setAlbumAuthorId(post.audio?.authorId ?? undefined);
+    setShowAlbumModal(true);
+  }, []);
+
   useEffect(() => {
     setHiddenPostIds(new Set());
     refetch();
@@ -352,7 +366,11 @@ export default function BlogHomeScreen() {
             data={visiblePosts}
             renderItem={({ item }) => (
               <View>
-                <BlogCard post={item} onDelete={handleDeletePost} />
+                <BlogCard
+                  post={item}
+                  onDelete={handleDeletePost}
+                  onAddToAlbum={handleAddToAlbum}
+                />
               </View>
             )}
             keyExtractor={(item) => String(item.id)}
@@ -392,6 +410,32 @@ export default function BlogHomeScreen() {
           />
           <BlogHomeFab />
         </View>
+        {showAlbumModal && (
+          <Modal
+            transparent
+            animationType="slide"
+            onRequestClose={() => setShowAlbumModal(false)}
+          >
+            <Pressable
+              className="flex-1 justify-end bg-black/60"
+              onPress={() => setShowAlbumModal(false)}
+            >
+              <Pressable
+                onPress={(e) => e.stopPropagation()}
+                className="max-h-[70%]"
+              >
+                <AddToAlbumModal
+                  mediaIds={albumMediaIds}
+                  authorId={albumAuthorId}
+                  onClose={() => {
+                    setShowAlbumModal(false);
+                    invalidateQueries("infinite", ["blog.posts"]);
+                  }}
+                />
+              </Pressable>
+            </Pressable>
+          </Modal>
+        )}
       </SafeArea>
     </View>
   );

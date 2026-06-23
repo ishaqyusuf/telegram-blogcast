@@ -22,6 +22,12 @@ import {
   startRecentUpdateJobSchema,
 } from "../../queries/channel-recent-update";
 import {
+  sendTelegramLoginCode,
+  telegramSendCodeSchema,
+  telegramVerifyCodeSchema,
+  verifyTelegramLoginCode,
+} from "../../queries/telegram-auth";
+import {
   saveBatch,
   saveBatchSchema,
   getLatestMessageId,
@@ -99,6 +105,18 @@ export const channelRoutes = createTRPCRouter({
       };
     }
   }),
+
+  telegramSendCode: publicProcedure
+    .input(telegramSendCodeSchema)
+    .mutation(async (props) => {
+      return sendTelegramLoginCode(props.input);
+    }),
+
+  telegramVerifyCode: publicProcedure
+    .input(telegramVerifyCodeSchema)
+    .mutation(async (props) => {
+      return verifyTelegramLoginCode(props.input);
+    }),
 
   getUpdatePromptSummary: publicProcedure.query(async (props) => {
     return getUpdatePromptSummary(props.ctx);

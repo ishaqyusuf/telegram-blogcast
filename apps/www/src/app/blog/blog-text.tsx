@@ -3,19 +3,57 @@
 import { useMemo, useState } from "react";
 import { MAX_LINE, isArabicLine, splitTextLinesWithLinks } from "@acme/blog";
 
-export function BlogText({ content }: { content: string }) {
+function truncateUrlLabel(value: string) {
+    const trimmed = value.trim();
+    if (trimmed.length <= 34) return trimmed;
+
+    return `${trimmed.slice(0, 22)}...${trimmed.slice(-8)}`;
+}
+
+export function BlogText({
+    content,
+    inline = false,
+    size = "default",
+}: {
+    content: string;
+    inline?: boolean;
+    size?: "default" | "large";
+}) {
     const [expanded, setExpanded] = useState(false);
-    const lines = useMemo(() => splitTextLinesWithLinks(content), [content]);
-    const shouldTruncate = content.length > 280 || lines.length > MAX_LINE;
+    const displayContent = useMemo(
+        () =>
+            inline
+                ? content
+                      .replace(/[\r\n]+/g, " ")
+                      .replace(/[ \t\f\v]+/g, " ")
+                      .trim()
+                : content,
+        [content, inline],
+    );
+    const lines = useMemo(
+        () => splitTextLinesWithLinks(displayContent),
+        [displayContent],
+    );
+    const shouldTruncate =
+        displayContent.length > 280 || lines.length > MAX_LINE;
+    const maxLines = inline && size !== "large" ? 3 : MAX_LINE;
     const truncatedStyle = !expanded && shouldTruncate
-        ? { maxHeight: `${MAX_LINE * 2.1}rem` }
+        ? {
+              WebkitBoxOrient: "vertical" as const,
+              WebkitLineClamp: maxLines,
+              display: "-webkit-box",
+              maxHeight: `${maxLines * (size === "large" ? 2 : 1.5)}rem`,
+          }
         : undefined;
 
     return (
         <div>
             <div
                 className={[
-                    "space-y-1 text-[15px] leading-7 text-zinc-200",
+                    "space-y-1 text-foreground",
+                    size === "large"
+                        ? "text-lg leading-8"
+                        : "text-[15px] leading-6",
                     !expanded && shouldTruncate
                         ? "relative overflow-hidden"
                         : "",
@@ -42,9 +80,12 @@ export function BlogText({ content }: { content: string }) {
                                             href={segment.href}
                                             target="_blank"
                                             rel="noreferrer"
-                                            className="underline text-emerald-300 hover:text-emerald-200"
+                                            onClick={(event) => {
+                                                event.stopPropagation();
+                                            }}
+                                            className="font-semibold text-primary underline underline-offset-2 hover:opacity-80"
                                         >
-                                            {segment.text}
+                                            {truncateUrlLabel(segment.text)}
                                         </a>
                                     );
                                 }
@@ -59,15 +100,19 @@ export function BlogText({ content }: { content: string }) {
                     );
                 })}
                 {!expanded && shouldTruncate && (
-                    <div className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-[#0f1012] to-transparent" />
+                    <div className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-background to-transparent" />
                 )}
             </div>
 
             {shouldTruncate && (
                 <button
                     type="button"
-                    onClick={() => setExpanded((v) => !v)}
-                    className="mt-1 text-xs font-medium text-emerald-300 transition-colors hover:text-emerald-200"
+                    onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        setExpanded((v) => !v);
+                    }}
+                    className="mt-1 text-xs font-medium text-primary transition-opacity hover:opacity-80"
                 >
                     {expanded ? "Show less" : "Read more"}
                 </button>

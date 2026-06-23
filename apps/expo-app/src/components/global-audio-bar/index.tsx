@@ -1,6 +1,7 @@
 import { useAudioStore } from "@/store/audio-store";
 import { useGlobalAudioBarStore } from "@/store/global-audio-bar-store";
 import { useColors } from "@/hooks/use-color";
+import { getAudioDisplayTitle } from "@/lib/audio-title";
 import { usePathname, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { Animated, Easing, Pressable, Text, View } from "react-native";
@@ -197,7 +198,7 @@ export function GlobalAudioBar() {
     return null;
   }
 
-  const title = blog?.audio?.title ?? blog?.caption ?? "Now Playing";
+  const title = getAudioDisplayTitle(blog, "Now Playing");
   const blogId = blog?.id;
   const progress = duration > 0 ? position / duration : 0;
 

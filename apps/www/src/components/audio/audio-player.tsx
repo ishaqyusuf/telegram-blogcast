@@ -9,6 +9,7 @@ type AudioPlayerProps = {
     stopLinkNavigation?: boolean;
     className?: string;
     beforeControls?: ReactNode;
+    flush?: boolean;
 };
 
 export function AudioPlayer({
@@ -18,13 +19,17 @@ export function AudioPlayer({
     stopLinkNavigation = false,
     className = "",
     beforeControls,
+    flush = false,
 }: AudioPlayerProps) {
     const localAudioRef = useRef<HTMLAudioElement>(null);
     const resolvedAudioRef = audioRef ?? localAudioRef;
+    const rootClassName = [flush ? "" : "px-4 pb-4", className]
+        .filter(Boolean)
+        .join(" ");
 
     return (
         <div
-            className={`px-4 pb-4 ${className}`.trim()}
+            className={rootClassName}
             onClick={
                 stopLinkNavigation
                     ? (e) => {
@@ -32,10 +37,10 @@ export function AudioPlayer({
                           e.stopPropagation();
                       }
                     : undefined
-            }
+                }
         >
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-3">
-                <p className="mb-2 text-xs uppercase tracking-wide text-zinc-400">
+            <div className="rounded-xl border border-border bg-card p-3">
+                <p className="mb-2 line-clamp-2 text-xs font-medium text-muted-foreground">
                     {title}
                 </p>
                 {beforeControls}

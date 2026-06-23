@@ -3,24 +3,21 @@ import { Text, View } from "react-native";
 
 import { Icon } from "@/components/ui/icon";
 import { useColors } from "@/hooks/use-color";
-import { withAlpha } from "@/lib/theme";
+import { minuteToString } from "@/lib/utils";
 
 import type { BlogCardVariant, BlogItem } from "./types";
 import {
-  getChannelHandle,
   getChannelName,
   getInitials,
   getPostDateLabel,
 } from "./utils";
 
-const VARIANT_LABELS: Record<BlogCardVariant, string> = {
-  audio: "Audio",
-  "text+image": "Text + image",
-  image: "Image",
-  text: "Text",
-  video: "Video",
-  unknown: "Post",
-};
+function formatMediaSizeMb(size?: number | null) {
+  if (!size || !Number.isFinite(size) || size <= 0) return null;
+
+  const mb = size / (1024 * 1024);
+  return `${mb >= 10 ? Math.round(mb) : mb.toFixed(1)} MB`;
+}
 
 export function CardHeader({
   post,
@@ -33,11 +30,13 @@ export function CardHeader({
 }) {
   const colors = useColors();
   const channelName = getChannelName(post);
-  const channelHandle = getChannelHandle(post);
-  const subtitle = [channelHandle, getPostDateLabel(post)]
+  const durationLabel = post.audio?.duration
+    ? minuteToString(post.audio.duration)
+    : null;
+  const mediaSize = formatMediaSizeMb(post.audio?.size);
+  const subtitle = [getPostDateLabel(post), durationLabel, mediaSize]
     .filter(Boolean)
     .join(" · ");
-  const isTranscribed = Boolean((post.audio as any)?.isTranscribed);
 
   return (
     <View className="mb-3 flex-row items-center justify-between gap-3">
@@ -72,33 +71,6 @@ export function CardHeader({
       </View>
 
       <View className="flex-row items-center gap-2">
-        {variant === "audio" && isTranscribed ? (
-          <View
-            className="rounded-full border border-border bg-primary/10 px-2.5 py-1"
-            style={{
-              backgroundColor: withAlpha(colors.primary, 0.1),
-              borderColor: colors.border,
-            }}
-          >
-            <Text
-              className="text-[11px] font-semibold text-primary"
-              style={{ color: colors.primary }}
-            >
-              Transcribed
-            </Text>
-          </View>
-        ) : null}
-        <View
-          className="rounded-full border border-border bg-muted px-2.5 py-1"
-          style={{ backgroundColor: colors.muted, borderColor: colors.border }}
-        >
-          <Text
-            className="text-[11px] font-semibold text-muted-foreground"
-            style={{ color: colors.mutedForeground }}
-          >
-            {VARIANT_LABELS[variant]}
-          </Text>
-        </View>
         <Pressable
           className="min-h-11 min-w-11 items-center justify-center rounded-full active:bg-muted"
           onPress={(e) => {

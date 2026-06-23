@@ -942,6 +942,35 @@ export const blogRoutes = createTRPCRouter({
                 },
               },
             },
+            {
+              medias: {
+                some: {
+                  OR: [
+                    { title: { contains: input.q, mode: "insensitive" } },
+                    {
+                      file: {
+                        fileName: {
+                          contains: input.q,
+                          mode: "insensitive",
+                        },
+                      },
+                    },
+                    {
+                      transcript: {
+                        segments: {
+                          some: {
+                            text: {
+                              contains: input.q,
+                              mode: "insensitive",
+                            },
+                          },
+                        },
+                      },
+                    },
+                  ],
+                },
+              },
+            },
           ],
         },
         take: input.limit,
@@ -951,7 +980,23 @@ export const blogRoutes = createTRPCRouter({
           content: true,
           type: true,
           blogDate: true,
-          medias: { include: { file: true }, take: 1 },
+          medias: {
+            include: {
+              file: true,
+              transcript: {
+                select: {
+                  segments: {
+                    where: {
+                      text: { contains: input.q, mode: "insensitive" },
+                    },
+                    orderBy: { startSec: "asc" },
+                    take: 2,
+                  },
+                },
+              },
+            },
+            take: 1,
+          },
           blogTags: { include: { tags: true } },
         },
       });

@@ -161,7 +161,7 @@ const translations = {
     profile: "Profile",
     save: "Save",
     search: "Search",
-    searchPostsTags: "Search posts, tags...",
+    searchPostsTags: "Search posts, tags, audio, transcripts...",
     writeContentPlaceholder: "Start writing here...",
   },
   ar: {
@@ -322,7 +322,7 @@ const translations = {
     profile: "الملف الشخصي",
     save: "حفظ",
     search: "بحث",
-    searchPostsTags: "ابحث في المنشورات والوسوم...",
+    searchPostsTags: "ابحث في المنشورات والوسوم والصوت والنصوص...",
     writeContentPlaceholder: "ابدأ الكتابة هنا...",
   },
 } satisfies Record<AppLanguage, Record<string, string>>;

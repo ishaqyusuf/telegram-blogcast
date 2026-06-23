@@ -25,6 +25,13 @@ function saveSession(sessionString: string) {
 
 let client: TelegramClient | null = null;
 
+export function saveCurrentSession(): string {
+  if (!client) return "";
+  const sessionString = client.session.save() as unknown as string;
+  saveSession(sessionString);
+  return sessionString;
+}
+
 export async function getClient(): Promise<TelegramClient> {
   if (client?.connected) return client;
 
@@ -39,12 +46,12 @@ export async function getClient(): Promise<TelegramClient> {
   await client.connect();
 
   // 🧩 Save the post-handshake session string immediately after connect
-  saveSession(client.session.save() as unknown as string);
+  saveCurrentSession();
 
   // 🧩 Also re-save on disconnect/reconnect events in case keys rotated
   client.addEventHandler(() => {
     try {
-      saveSession(client!.session.save() as unknown as string);
+      saveCurrentSession();
     } catch {}
   });
 
