@@ -7,6 +7,7 @@ model Album {
     name        String
     albumType   String?
     description String?
+    suggestionKeywords String?
 
     albumAuthorId   Int?
     author          Author?           @relation(fields: [albumAuthorId], references: [id])

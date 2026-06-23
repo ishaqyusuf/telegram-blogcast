@@ -1,25 +1,9 @@
 // middleware.ts  (project root)
 //
-// Two responsibilities:
-//   1. Auth guard  — redirect unauthenticated users to /login
-//   2. API proxy   — forward /proxy/* requests to an external upstream
-//                    (useful if you want to shield env vars from the client)
+// API proxy — forward /proxy/* requests to an external upstream
+//             (useful if you want to shield env vars from the client)
 
 import { NextRequest, NextResponse } from "next/server";
-import { getSessionFromRequest } from "@/lib/auth";
-
-// ── Route config ──────────────────────────────────────────────────────────────
-
-// Paths that never require authentication
-const PUBLIC_PATHS = [
-    "/",
-    "/blog",
-    "/login",
-    "/api/auth/send-code",
-    "/api/auth/verify-code",
-    "/api/telegram/file",
-    "/api/trpc",
-];
 
 // Paths proxied to an upstream service
 const PROXY_UPSTREAM = process.env.PROXY_UPSTREAM_URL ?? ""; // e.g. https://api.example.com
@@ -31,14 +15,6 @@ export async function proxy(req: NextRequest) {
 
     // ── 1. Proxy ──────────────────────────────────────────────────────────────
     if (pathname.startsWith("/proxy/") && PROXY_UPSTREAM) {
-        const session = await getSessionFromRequest(req);
-        if (!session?.authenticated) {
-            return NextResponse.json(
-                { error: "Unauthorized" },
-                { status: 401 },
-            );
-        }
-
         const upstreamPath = pathname.replace(/^\/proxy/, "");
         const upstreamUrl = `${PROXY_UPSTREAM}${upstreamPath}${req.nextUrl.search}`;
 
@@ -50,28 +26,6 @@ export async function proxy(req: NextRequest) {
         return NextResponse.rewrite(upstreamUrl, {
             request: { headers: proxyHeaders },
         });
-    }
-
-    // ── 2. Auth guard ─────────────────────────────────────────────────────────
-    const isPublic = PUBLIC_PATHS.some(
-        (p) => pathname === p || pathname.startsWith(p + "/"),
-    );
-
-    if (!isPublic) {
-        const session = await getSessionFromRequest(req);
-        if (!session?.authenticated) {
-            const loginUrl = new URL("/login", req.url);
-            loginUrl.searchParams.set("from", pathname);
-            return NextResponse.redirect(loginUrl);
-        }
-    }
-
-    // Redirect already-authenticated users away from /login
-    if (pathname === "/login") {
-        const session = await getSessionFromRequest(req);
-        if (session?.authenticated) {
-            return NextResponse.redirect(new URL("/dashboard", req.url));
-        }
     }
 
     return NextResponse.next();

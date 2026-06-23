@@ -33,6 +33,9 @@ Tracks important request/response expectations and typed boundaries between clie
 - Supported transcription model values are `gpt-4o-transcribe`, `gpt-4o-mini-transcribe`, `gemini-2.0-flash`, and `whisper-local`. The legacy `provider` input is tolerated for older clients.
 - `blog.getTranscriptChunk` is local-only for audio transcript chunks. It uses `whisper-local`, calls the local transcriber service, requests word timestamps, persists returned segments/words, and must not route chunk transcription to hosted OpenAI/Gemini providers.
 - `blog.checkLocalTranscriber` checks a local Whisper service health endpoint and returns availability/model metadata for web transcript controls and mobile Settings/audio screens.
+- `blog.enqueueTranscriptionJob` stores DB-backed transcription queue rows. Enqueue clients should provide a reachable HTTP(S) `audioUrl`; Telegram file IDs should be resolved before enqueue when possible.
+- `blog.getTranscriptionJobs` returns queue rows with media title/file/blog fallback metadata plus persisted progress fields from `TranscriptionJob`.
+- Internal transcription worker endpoints under `/api/internal/transcription-jobs/*` are used by the local Python service, not by mobile UI. They claim jobs, persist progress/heartbeats, save completed transcript segments, and record failures/retries. If `TRANSCRIPTION_WORKER_TOKEN` is set, workers must send `Authorization: Bearer <token>`.
 
 ### Audio Organization Contracts
 - `album.addMediaToAlbum` accepts `{ albumId, mediaIds }`, requires audio media, rejects missing media, rejects mixed-channel candidate sets, and rejects cross-channel additions when the album already has a channel. Empty albums infer `channelId` from the first added audio blog.

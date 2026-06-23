@@ -1,12 +1,13 @@
 import { Pressable } from "@/components/ui/pressable";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from "react-native";
 
 import { _trpc } from "@/components/static-trpc";
@@ -35,12 +36,15 @@ interface Props {
   mediaIds: number[];
   authorId?: number;
   onClose: () => void;
+  onAdded?: (album: { id: number; name: string }) => void;
 }
 
-export function AddToAlbumModal({ mediaIds, authorId, onClose }: Props) {
+export function AddToAlbumModal({ mediaIds, authorId, onClose, onAdded }: Props) {
   const queryClient = useQueryClient();
   const colors = useColors();
+  const { height: windowHeight } = useWindowDimensions();
   const [newAlbumName, setNewAlbumName] = useState("");
+  const selectedAlbumRef = useRef<{ id: number; name: string } | null>(null);
 
   const { data: albums = [], isLoading } = useQuery(
     _trpc.album.getAlbums.queryOptions(),
@@ -50,6 +54,9 @@ export function AddToAlbumModal({ mediaIds, authorId, onClose }: Props) {
     _trpc.album.addMediaToAlbum.mutationOptions({
       onSuccess: () => {
         queryClient.invalidateQueries(_trpc.album.getAlbums.queryOptions());
+        if (selectedAlbumRef.current) {
+          onAdded?.(selectedAlbumRef.current);
+        }
         onClose();
       },
     }),
@@ -58,13 +65,15 @@ export function AddToAlbumModal({ mediaIds, authorId, onClose }: Props) {
   const createAlbum = useMutation(
     _trpc.album.createAlbum.mutationOptions({
       onSuccess: (newAlbum) => {
+        selectedAlbumRef.current = { id: newAlbum.id, name: newAlbum.name };
         addMedia.mutate({ albumId: newAlbum.id, mediaIds });
       },
     }),
   );
 
-  function handleSelectAlbum(albumId: number) {
-    addMedia.mutate({ albumId, mediaIds });
+  function handleSelectAlbum(album: { id: number; name: string }) {
+    selectedAlbumRef.current = { id: album.id, name: album.name };
+    addMedia.mutate({ albumId: album.id, mediaIds });
   }
 
   function handleCreate() {
@@ -77,8 +86,12 @@ export function AddToAlbumModal({ mediaIds, authorId, onClose }: Props) {
 
   return (
     <View
-      className="flex-1 bg-card rounded-t-3xl px-4 pt-4 pb-8"
-      style={{ backgroundColor: colors.card }}
+      className="bg-card rounded-t-3xl px-4 pt-4 pb-8"
+      style={{
+        backgroundColor: colors.card,
+        maxHeight: Math.min(Math.max(360, windowHeight * 0.7), windowHeight - 24),
+        width: "100%",
+      }}
     >
       {/* Handle */}
       <View
@@ -151,9 +164,10 @@ export function AddToAlbumModal({ mediaIds, authorId, onClose }: Props) {
           data={albums}
           keyExtractor={(item) => String(item.id)}
           showsVerticalScrollIndicator={false}
+          style={{ flexGrow: 0 }}
           renderItem={({ item, index }) => (
             <Pressable
-              onPress={() => handleSelectAlbum(item.id)}
+              onPress={() => handleSelectAlbum(item)}
               disabled={isBusy}
               className="flex-row items-center gap-3 py-3 border-b border-border active:opacity-70"
             >

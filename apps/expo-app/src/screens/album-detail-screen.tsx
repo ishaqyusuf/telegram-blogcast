@@ -57,7 +57,8 @@ const ALBUM_COLORS = [
 	"#be123c",
 	"#0369a1",
 ];
-const SUGGESTION_LIMIT = 25;
+const SUGGESTION_DISPLAY_LIMIT = 25;
+const SUGGESTION_POOL_LIMIT = 500;
 
 function getInitials(name?: string | null) {
 	if (!name) return "AL";
@@ -76,6 +77,18 @@ function formatMediaSizeMb(size?: number | null) {
 	if (!size || !Number.isFinite(size) || size <= 0) return null;
 	const mb = size / (1024 * 1024);
 	return `${mb >= 10 ? Math.round(mb) : mb.toFixed(1)} MB`;
+}
+
+function getMediaTelegramTime(media: any) {
+	const value = media?.blog?.blogDate ?? media?.blogDate ?? media?.date;
+	const time = value ? new Date(value).getTime() : Number.POSITIVE_INFINITY;
+	return Number.isFinite(time) ? time : Number.POSITIVE_INFINITY;
+}
+
+function sortMediaByTelegramDate(items: any[]) {
+	return [...items].sort(
+		(a, b) => getMediaTelegramTime(a) - getMediaTelegramTime(b),
+	);
 }
 
 function AlbumDetailSkeleton() {
@@ -335,7 +348,11 @@ function SwipeDeleteRow({
 
 	const handleSwipeWillOpen = useCallback(
 		(direction: SwipeDirection) => {
-			if (disabled || direction !== SwipeDirection.LEFT || isDeletingRef.current) {
+			if (
+				disabled ||
+				direction !== SwipeDirection.LEFT ||
+				isDeletingRef.current
+			) {
 				swipeRef.current?.close();
 				return;
 			}
@@ -429,13 +446,22 @@ function TrackRow({
 	media,
 	displayIndex,
 	onPress,
+	onActions,
+	isRemoving,
 }: {
 	media: any;
 	displayIndex: number;
 	onPress: () => void;
+	onActions: () => void;
+	isRemoving?: boolean;
 }) {
 	const colors = useColors();
 	const duration = media.file?.duration ?? media.duration;
+	const trackDate = media.blog?.blogDate ?? media.blogDate ?? media.date;
+	const metadata = [
+		duration != null ? minuteToString(duration) : null,
+		trackDate ? formatDate(trackDate, "MMM D, YYYY") : null,
+	].filter(Boolean);
 	return (
 		<Pressable
 			onPress={onPress}
@@ -471,7 +497,7 @@ function TrackRow({
 				>
 					{media.title || media.file?.name || "Untitled"}
 				</Text>
-				{duration != null && (
+				{metadata.length > 0 && (
 					<Text
 						style={{
 							fontSize: 12,
@@ -479,18 +505,230 @@ function TrackRow({
 							textAlign: "right",
 						}}
 					>
-						{minuteToString(duration)}
+						{metadata.join(" · ")}
 					</Text>
 				)}
 			</View>
-			<Pressable onPress={() => {}} hitSlop={8} style={{ padding: 6 }}>
-				<Icon
-					name="MoreHorizontal"
-					size={18}
-					className="text-muted-foreground"
-				/>
+			<Pressable
+				disabled={isRemoving}
+				onPress={(event) => {
+					event.stopPropagation();
+					onActions();
+				}}
+				hitSlop={8}
+				style={{ padding: 6, opacity: isRemoving ? 0.45 : 1 }}
+			>
+				<Icon name="MoreHorizontal" size={20} className="text-muted-foreground" />
 			</Pressable>
 		</Pressable>
+	);
+}
+
+function TrackActionsSheet({
+	visible,
+	media,
+	albums,
+	currentAlbumId,
+	isBusy,
+	onClose,
+	onRemove,
+	onMove,
+}: {
+	visible: boolean;
+	media: any | null;
+	albums: any[];
+	currentAlbumId: number;
+	isBusy?: boolean;
+	onClose: () => void;
+	onRemove: () => void;
+	onMove: (albumId: number) => void;
+}) {
+	const colors = useColors();
+	const { height: windowHeight } = useWindowDimensions();
+	const title =
+		media?.title || media?.file?.fileName || media?.blog?.content || "Track";
+	const targetAlbums = albums.filter((album) => album.id !== currentAlbumId);
+
+	return (
+		<Modal
+			visible={visible}
+			transparent
+			animationType="slide"
+			onRequestClose={onClose}
+		>
+			<Pressable
+				onPress={onClose}
+				style={{
+					flex: 1,
+					justifyContent: "flex-end",
+					backgroundColor: "rgba(0,0,0,0.6)",
+				}}
+			>
+				<Pressable
+					onPress={() => {}}
+					style={{
+						width: "100%",
+						maxHeight: Math.min(Math.max(360, windowHeight * 0.72), windowHeight - 24),
+						borderTopLeftRadius: 22,
+						borderTopRightRadius: 22,
+						backgroundColor: colors.card,
+						paddingHorizontal: 18,
+						paddingTop: 14,
+						paddingBottom: 28,
+					}}
+				>
+					<View
+						style={{
+							width: 42,
+							height: 4,
+							borderRadius: 999,
+							backgroundColor: colors.input,
+							alignSelf: "center",
+							marginBottom: 14,
+						}}
+					/>
+					<Text
+						style={{
+							fontSize: 15,
+							fontWeight: "800",
+							color: colors.foreground,
+							textAlign: "right",
+						}}
+						numberOfLines={1}
+					>
+						{title}
+					</Text>
+
+					<Pressable
+						disabled={isBusy}
+						onPress={onRemove}
+						style={{
+							marginTop: 16,
+							minHeight: 48,
+							borderRadius: 14,
+							backgroundColor: colors.muted,
+							flexDirection: "row-reverse",
+							alignItems: "center",
+							gap: 10,
+							paddingHorizontal: 14,
+							opacity: isBusy ? 0.5 : 1,
+						}}
+					>
+						<Icon name="X" size={18} className="text-destructive" />
+						<Text
+							style={{
+								flex: 1,
+								fontSize: 14,
+								fontWeight: "700",
+								color: colors.destructive,
+								textAlign: "right",
+							}}
+						>
+							Remove from album
+						</Text>
+					</Pressable>
+
+					<Text
+						style={{
+							marginTop: 18,
+							marginBottom: 8,
+							fontSize: 12,
+							fontWeight: "800",
+							letterSpacing: 0.5,
+							color: colors.mutedForeground,
+							textAlign: "right",
+							textTransform: "uppercase",
+						}}
+					>
+						Move to album
+					</Text>
+
+					{targetAlbums.length === 0 ? (
+						<Text
+							style={{
+								paddingVertical: 16,
+								fontSize: 13,
+								color: colors.mutedForeground,
+								textAlign: "center",
+							}}
+						>
+							No other albums available
+						</Text>
+					) : (
+						<FlatList
+							data={targetAlbums}
+							keyExtractor={(album) => String(album.id)}
+							style={{ flexGrow: 0 }}
+							showsVerticalScrollIndicator={false}
+							renderItem={({ item, index }) => (
+								<Pressable
+									disabled={isBusy}
+									onPress={() => onMove(item.id)}
+									style={{
+										minHeight: 52,
+										flexDirection: "row-reverse",
+										alignItems: "center",
+										gap: 12,
+										borderBottomWidth: 1,
+										borderBottomColor: colors.border,
+										opacity: isBusy ? 0.5 : 1,
+									}}
+								>
+									<View
+										style={{
+											width: 36,
+											height: 36,
+											borderRadius: 8,
+											alignItems: "center",
+											justifyContent: "center",
+											backgroundColor:
+												ALBUM_COLORS[index % ALBUM_COLORS.length],
+										}}
+									>
+										<Text
+											style={{
+												fontSize: 12,
+												fontWeight: "800",
+												color: "#fff",
+											}}
+										>
+											{getInitials(item.name)}
+										</Text>
+									</View>
+									<View style={{ flex: 1 }}>
+										<Text
+											style={{
+												fontSize: 14,
+												fontWeight: "700",
+												color: colors.foreground,
+												textAlign: "right",
+											}}
+											numberOfLines={1}
+										>
+											{item.name}
+										</Text>
+										<Text
+											style={{
+												fontSize: 12,
+												color: colors.mutedForeground,
+												textAlign: "right",
+											}}
+										>
+											{item._count?.medias ?? 0} tracks
+										</Text>
+									</View>
+									<Icon
+										name="ChevronLeft"
+										size={16}
+										className="text-muted-foreground"
+									/>
+								</Pressable>
+							)}
+						/>
+					)}
+				</Pressable>
+			</Pressable>
+		</Modal>
 	);
 }
 
@@ -513,6 +751,11 @@ function ReorderRow({
 }) {
 	const colors = useColors();
 	const duration = media.file?.duration ?? media.duration;
+	const trackDate = media.blog?.blogDate ?? media.blogDate ?? media.date;
+	const metadata = [
+		duration != null ? minuteToString(duration) : null,
+		trackDate ? formatDate(trackDate, "MMM D, YYYY") : null,
+	].filter(Boolean);
 	return (
 		<View
 			style={{
@@ -582,7 +825,7 @@ function ReorderRow({
 				>
 					{media.title || media.file?.name || "Untitled"}
 				</Text>
-				{duration != null && (
+				{metadata.length > 0 && (
 					<Text
 						style={{
 							fontSize: 12,
@@ -590,7 +833,7 @@ function ReorderRow({
 							textAlign: "right",
 						}}
 					>
-						{minuteToString(duration)}
+						{metadata.join(" · ")}
 					</Text>
 				)}
 			</View>
@@ -612,10 +855,14 @@ function SuggestedMediaRow({
 	media,
 	selected,
 	onPress,
+	onAdd,
+	isAdding,
 }: {
 	media: any;
 	selected: boolean;
 	onPress: () => void;
+	onAdd: () => void;
+	isAdding?: boolean;
 }) {
 	const colors = useColors();
 	const duration = media.file?.duration;
@@ -716,6 +963,30 @@ function SuggestedMediaRow({
 					{media.matchScore}
 				</Text>
 			</View>
+
+			<Pressable
+				disabled={isAdding}
+				onPress={(event) => {
+					event.stopPropagation();
+					onAdd();
+				}}
+				hitSlop={8}
+				style={{
+					width: 32,
+					height: 32,
+					borderRadius: 16,
+					backgroundColor: colors.primary,
+					alignItems: "center",
+					justifyContent: "center",
+					opacity: isAdding ? 0.55 : 1,
+				}}
+			>
+				{isAdding ? (
+					<ActivityIndicator size="small" color={colors.primaryForeground} />
+				) : (
+					<Icon name="Plus" size={16} className="text-primary-foreground" />
+				)}
+			</Pressable>
 		</Pressable>
 	);
 }
@@ -734,6 +1005,7 @@ export default function AlbumDetailScreen() {
 	const { data: album, isLoading } = useQuery(
 		_trpc.album.getAlbum.queryOptions({ id }),
 	);
+	const { data: albums = [] } = useQuery(_trpc.album.getAlbums.queryOptions());
 	const { data: booksData } = useQuery(
 		_trpc.book.getBooks.queryOptions({ limit: 20 }),
 	);
@@ -743,6 +1015,9 @@ export default function AlbumDetailScreen() {
 	const [reorderMode, setReorderMode] = useState(false);
 	const [editModalVisible, setEditModalVisible] = useState(false);
 	const [descExpanded, setDescExpanded] = useState(false);
+	const [selectedTrackForActions, setSelectedTrackForActions] = useState<
+		any | null
+	>(null);
 	const [selectedSuggestionIds, setSelectedSuggestionIds] = useState<
 		Set<number>
 	>(new Set());
@@ -751,8 +1026,16 @@ export default function AlbumDetailScreen() {
 	>(new Set());
 	const [suggestionsRequested, setSuggestionsRequested] = useState(false);
 	const [suggestionKeyword, setSuggestionKeyword] = useState("");
+	const [addingSuggestionIds, setAddingSuggestionIds] = useState<Set<number>>(
+		new Set(),
+	);
+	const autoLoadedSuggestionAlbumRef = useRef<number | null>(null);
 
-	const tracks: any[] = localTracks ?? album?.medias ?? [];
+	const rawTracks: any[] = localTracks ?? album?.medias ?? [];
+	const tracks = useMemo(
+		() => (reorderMode ? rawTracks : sortMediaByTelegramDate(rawTracks)),
+		[rawTracks, reorderMode],
+	);
 	const bgColor = albumColor(id);
 	const selectedSuggestionCount = selectedSuggestionIds.size;
 	const normalizedSuggestionKeyword = suggestionKeyword.trim();
@@ -765,23 +1048,34 @@ export default function AlbumDetailScreen() {
 	const attachedBookIds = new Set(
 		attachedBookReferences.map((reference) => reference.bookId),
 	);
-	const attachableBooks = libraryBooks.filter((book) => !attachedBookIds.has(book.id));
+	const attachableBooks = libraryBooks.filter(
+		(book) => !attachedBookIds.has(book.id),
+	);
 
 	const {
 		data: suggestedMedia = [],
 		isFetching: isFetchingSuggestions,
 		refetch: refetchSuggestedMedia,
 	} = useQuery({
-			..._trpc.album.getSuggestedMedia.queryOptions({
-				albumId: id,
-				limit: SUGGESTION_LIMIT,
-				keyword: normalizedSuggestionKeyword || undefined,
-			}),
-			enabled: false,
-		});
+		..._trpc.album.getSuggestedMedia.queryOptions({
+			albumId: id,
+			limit: SUGGESTION_POOL_LIMIT,
+			keyword: normalizedSuggestionKeyword || undefined,
+		}),
+		enabled: suggestionsRequested,
+	});
 	const visibleSuggestedMedia = suggestedMedia.filter(
 		(media: any) => !dismissedSuggestionIds.has(media.id),
 	);
+	const displayedSuggestedMedia = visibleSuggestedMedia.slice(
+		0,
+		SUGGESTION_DISPLAY_LIMIT,
+	);
+	const hasNoMoreSuggestions =
+		suggestionsRequested &&
+		!isFetchingSuggestions &&
+		suggestedMedia.length > 0 &&
+		visibleSuggestedMedia.length <= SUGGESTION_DISPLAY_LIMIT;
 
 	const { mutate: saveOrder, isPending: isSavingOrder } = useMutation(
 		_trpc.album.reorderTracks.mutationOptions({
@@ -811,7 +1105,7 @@ export default function AlbumDetailScreen() {
 	const { mutate: addSuggestedMedia, isPending: isAddingSuggestions } =
 		useMutation(
 			_trpc.album.addMediaToAlbum.mutationOptions({
-				onSuccess: (result) => {
+				onSuccess: (result, variables) => {
 					qc.invalidateQueries({
 						queryKey: _trpc.album.getAlbum.queryKey({ id }),
 					});
@@ -819,20 +1113,24 @@ export default function AlbumDetailScreen() {
 					qc.invalidateQueries({
 						queryKey: _trpc.album.getSuggestedMedia.queryKey({
 							albumId: id,
-							limit: SUGGESTION_LIMIT,
+							limit: SUGGESTION_POOL_LIMIT,
 							keyword: normalizedSuggestionKeyword || undefined,
 						}),
 					});
-					void refetchSuggestedMedia();
+					const addedIds = new Set(variables.mediaIds);
+					setDismissedSuggestionIds((prev) => new Set([...prev, ...addedIds]));
 					setSelectedSuggestionIds(new Set());
-					Alert.alert(
-						"Added to album",
-						`${result.added} audio item${result.added === 1 ? "" : "s"} added.`,
-					);
+					if (result.added > 1) {
+						Alert.alert("Added to album", `${result.added} audio items added.`);
+					}
 				},
 				onError: (e) => Alert.alert("Error", e.message),
 			}),
 		);
+
+	const { mutateAsync: addOneSuggestedMedia } = useMutation(
+		_trpc.album.addMediaToAlbum.mutationOptions(),
+	);
 
 	const { mutate: removeMediaFromAlbum, isPending: isRemovingMedia } =
 		useMutation(
@@ -842,7 +1140,9 @@ export default function AlbumDetailScreen() {
 						qc.invalidateQueries({
 							queryKey: _trpc.album.getAlbum.queryKey({ id }),
 						}),
-						qc.invalidateQueries({ queryKey: _trpc.album.getAlbums.queryKey() }),
+						qc.invalidateQueries({
+							queryKey: _trpc.album.getAlbums.queryKey(),
+						}),
 					]);
 					setLocalTracks(null);
 				},
@@ -852,6 +1152,39 @@ export default function AlbumDetailScreen() {
 				},
 			}),
 		);
+
+	const { mutate: moveMediaToAlbum, isPending: isMovingMedia } = useMutation(
+		_trpc.album.addMediaToAlbum.mutationOptions({
+			onSuccess: async (_result, variables) => {
+				await Promise.all([
+					qc.invalidateQueries({
+						queryKey: _trpc.album.getAlbum.queryKey({ id }),
+					}),
+					qc.invalidateQueries({
+						queryKey: _trpc.album.getAlbum.queryKey({ id: variables.albumId }),
+					}),
+					qc.invalidateQueries({ queryKey: _trpc.album.getAlbums.queryKey() }),
+				]);
+				setSelectedTrackForActions(null);
+				setLocalTracks(null);
+			},
+			onError: (e) => {
+				Alert.alert("Error", e.message);
+				setLocalTracks(null);
+			},
+		}),
+	);
+
+	const { mutate: saveSuggestionKeywords } = useMutation(
+		_trpc.album.updateSuggestionKeywords.mutationOptions({
+			onSuccess: () => {
+				qc.invalidateQueries({
+					queryKey: _trpc.album.getAlbum.queryKey({ id }),
+				});
+			},
+			onError: (e) => Alert.alert("Error", e.message),
+		}),
+	);
 
 	useEffect(() => {
 		if (selectedSuggestionCount > 0) {
@@ -878,6 +1211,17 @@ export default function AlbumDetailScreen() {
 		};
 	}, [setGlobalAudioBarHidden]);
 
+	useEffect(() => {
+		if (!album?.id || autoLoadedSuggestionAlbumRef.current === album.id) return;
+
+		const savedKeywords = ((album as any).suggestionKeywords ?? "").trim();
+		autoLoadedSuggestionAlbumRef.current = album.id;
+		setSuggestionKeyword(savedKeywords);
+		setSuggestionsRequested(Boolean(savedKeywords));
+		setSelectedSuggestionIds(new Set());
+		setDismissedSuggestionIds(new Set());
+	}, [album]);
+
 	const { mutate: attachBook, isPending: isAttachingBook } = useMutation(
 		_trpc.album.attachBook.mutationOptions({
 			onSuccess: () => {
@@ -902,7 +1246,7 @@ export default function AlbumDetailScreen() {
 
 	// When entering reorder mode, snapshot current server tracks into local state
 	function enterReorderMode() {
-		setLocalTracks([...(album?.medias ?? [])]);
+		setLocalTracks([...tracks]);
 		setReorderMode(true);
 	}
 
@@ -922,13 +1266,13 @@ export default function AlbumDetailScreen() {
 	const moveTrack = useCallback(
 		(fromIdx: number, toIdx: number) => {
 			setLocalTracks((prev) => {
-				const arr = [...(prev ?? album?.medias ?? [])];
+				const arr = [...(prev ?? tracks)];
 				const [item] = arr.splice(fromIdx, 1);
 				arr.splice(toIdx, 0, item);
 				return arr;
 			});
 		},
-		[album?.medias],
+		[tracks],
 	);
 
 	function toggleSuggestion(mediaId: number) {
@@ -942,11 +1286,19 @@ export default function AlbumDetailScreen() {
 
 	function selectAllSuggestions() {
 		setSelectedSuggestionIds(
-			new Set(visibleSuggestedMedia.map((media: any) => media.id)),
+			new Set(displayedSuggestedMedia.map((media: any) => media.id)),
 		);
 	}
 
 	function clearSuggestionSelection() {
+		setSelectedSuggestionIds(new Set());
+	}
+
+	function deleteSelectedSuggestions() {
+		if (selectedSuggestionCount === 0) return;
+		setDismissedSuggestionIds(
+			(prev) => new Set([...prev, ...selectedSuggestionIds]),
+		);
 		setSelectedSuggestionIds(new Set());
 	}
 
@@ -960,7 +1312,69 @@ export default function AlbumDetailScreen() {
 		setSuggestionsRequested(true);
 		setSelectedSuggestionIds(new Set());
 		setDismissedSuggestionIds(new Set());
+		saveSuggestionKeywords({
+			id,
+			suggestionKeywords: normalizedSuggestionKeyword,
+		});
 		void refetchSuggestedMedia();
+	}
+
+	async function addOneSuggestion(media: any) {
+		const mediaId = media.id;
+		if (addingSuggestionIds.has(mediaId)) return;
+
+		setAddingSuggestionIds((prev) => new Set(prev).add(mediaId));
+
+		try {
+			const result = await addOneSuggestedMedia({
+				albumId: id,
+				mediaIds: [mediaId],
+			});
+
+			if (result.added > 0) {
+				setLocalTracks((prev) => {
+					const base = prev ?? tracks;
+					if (base.some((track) => track.id === mediaId)) return base;
+					return sortMediaByTelegramDate([...base, media]);
+				});
+				qc.setQueryData(_trpc.album.getAlbums.queryKey(), (old: any) =>
+					Array.isArray(old)
+						? old.map((albumItem) =>
+								albumItem.id === id
+									? {
+											...albumItem,
+											_count: {
+												...albumItem._count,
+												medias: (albumItem._count?.medias ?? 0) + 1,
+											},
+										}
+									: albumItem,
+							)
+						: old,
+				);
+			}
+
+			setDismissedSuggestionIds((prev) => new Set(prev).add(mediaId));
+			setSelectedSuggestionIds((prev) => {
+				if (!prev.has(mediaId)) return prev;
+				const next = new Set(prev);
+				next.delete(mediaId);
+				return next;
+			});
+		} catch (error) {
+			Alert.alert(
+				"Add failed",
+				error instanceof Error
+					? error.message
+					: "Could not add this audio to the album.",
+			);
+		} finally {
+			setAddingSuggestionIds((prev) => {
+				const next = new Set(prev);
+				next.delete(mediaId);
+				return next;
+			});
+		}
 	}
 
 	function dismissSuggestion(mediaId: number) {
@@ -978,8 +1392,20 @@ export default function AlbumDetailScreen() {
 	}
 
 	function removeTrackFromAlbum(mediaId: number) {
-		setLocalTracks((prev) => (prev ?? tracks).filter((media) => media.id !== mediaId));
+		setLocalTracks((prev) =>
+			(prev ?? tracks).filter((media) => media.id !== mediaId),
+		);
+		setSelectedTrackForActions(null);
 		removeMediaFromAlbum({ albumId: id, mediaId });
+	}
+
+	function moveTrackToAlbum(targetAlbumId: number) {
+		const mediaId = selectedTrackForActions?.id;
+		if (!mediaId) return;
+		setLocalTracks((prev) =>
+			(prev ?? tracks).filter((media) => media.id !== mediaId),
+		);
+		moveMediaToAlbum({ albumId: targetAlbumId, mediaIds: [mediaId] });
 	}
 
 	return (
@@ -1049,7 +1475,10 @@ export default function AlbumDetailScreen() {
 						</Text>
 					</View>
 				) : (
-					<ScrollView showsVerticalScrollIndicator={false}>
+					<ScrollView
+						showsVerticalScrollIndicator={false}
+						keyboardShouldPersistTaps="handled"
+					>
 						{/* Hero */}
 						<View
 							style={{
@@ -1247,8 +1676,20 @@ export default function AlbumDetailScreen() {
 							</View>
 
 							<View style={{ width: "100%", gap: 10, marginTop: 8 }}>
-								<View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-									<Text style={{ fontSize: 14, fontWeight: "700", color: colors.foreground }}>
+								<View
+									style={{
+										flexDirection: "row",
+										alignItems: "center",
+										justifyContent: "space-between",
+									}}
+								>
+									<Text
+										style={{
+											fontSize: 14,
+											fontWeight: "700",
+											color: colors.foreground,
+										}}
+									>
 										Books
 									</Text>
 									<Text style={{ fontSize: 12, color: colors.mutedForeground }}>
@@ -1272,7 +1713,9 @@ export default function AlbumDetailScreen() {
 												}}
 											>
 												<Pressable
-													onPress={() => router.push(`/books/${reference.bookId}` as any)}
+													onPress={() =>
+														router.push(`/books/${reference.bookId}` as any)
+													}
 													style={{
 														flex: 1,
 														flexDirection: "row-reverse",
@@ -1280,7 +1723,11 @@ export default function AlbumDetailScreen() {
 														gap: 8,
 													}}
 												>
-													<Icon name="BookOpen" size={16} className="text-primary" />
+													<Icon
+														name="BookOpen"
+														size={16}
+														className="text-primary"
+													/>
 													<Text
 														style={{
 															flex: 1,
@@ -1292,7 +1739,9 @@ export default function AlbumDetailScreen() {
 														}}
 														numberOfLines={1}
 													>
-														{reference.book?.nameAr ?? reference.book?.nameEn ?? "Book"}
+														{reference.book?.nameAr ??
+															reference.book?.nameEn ??
+															"Book"}
 													</Text>
 												</Pressable>
 												<Pressable
@@ -1307,7 +1756,11 @@ export default function AlbumDetailScreen() {
 														opacity: isDetachingBook ? 0.45 : 1,
 													}}
 												>
-													<Icon name="Trash2" size={14} className="text-muted-foreground" />
+													<Icon
+														name="Trash2"
+														size={14}
+														className="text-muted-foreground"
+													/>
 												</Pressable>
 											</View>
 										))}
@@ -1315,12 +1768,18 @@ export default function AlbumDetailScreen() {
 								)}
 
 								{attachableBooks.length > 0 && (
-									<ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+									<ScrollView
+										horizontal
+										showsHorizontalScrollIndicator={false}
+										contentContainerStyle={{ gap: 8 }}
+									>
 										{attachableBooks.slice(0, 8).map((book) => (
 											<Pressable
 												key={book.id}
 												disabled={isAttachingBook}
-												onPress={() => attachBook({ albumId: id, bookId: book.id })}
+												onPress={() =>
+													attachBook({ albumId: id, bookId: book.id })
+												}
 												style={{
 													width: 150,
 													borderRadius: 10,
@@ -1469,21 +1928,18 @@ export default function AlbumDetailScreen() {
 								))
 							) : (
 								tracks.map((media, idx) => (
-									<SwipeDeleteRow
+									<TrackRow
 										key={media.id}
-										disabled={isRemovingMedia}
-										onDelete={() => removeTrackFromAlbum(media.id)}
-									>
-										<TrackRow
-											media={media}
-											displayIndex={idx + 1}
-											onPress={() => {
-												if (media.blog?.id) {
-													router.push(`/blog-view-2/${media.blog.id}` as any);
-												}
-											}}
-										/>
-									</SwipeDeleteRow>
+										media={media}
+										displayIndex={idx + 1}
+										isRemoving={isRemovingMedia || isMovingMedia}
+										onActions={() => setSelectedTrackForActions(media)}
+										onPress={() => {
+											if (media.blog?.id) {
+												router.push(`/blog-view-2/${media.blog.id}` as any);
+											}
+										}}
+									/>
 								))
 							)}
 
@@ -1530,7 +1986,9 @@ export default function AlbumDetailScreen() {
 												backgroundColor: colors.primary,
 												borderRadius: 8,
 												opacity:
-													isFetchingSuggestions || isAddingSuggestions ? 0.5 : 1,
+													isFetchingSuggestions || isAddingSuggestions
+														? 0.5
+														: 1,
 											}}
 										>
 											<Text
@@ -1543,31 +2001,37 @@ export default function AlbumDetailScreen() {
 												{suggestionsRequested ? "Refresh" : "Suggest more"}
 											</Text>
 										</Pressable>
-										{suggestionsRequested && visibleSuggestedMedia.length > 0 && (
-											<Pressable
-												onPress={
-													selectedSuggestionCount === visibleSuggestedMedia.length
-														? clearSuggestionSelection
-														: selectAllSuggestions
-												}
-												disabled={isAddingSuggestions}
-												style={{
-													paddingHorizontal: 10,
-													paddingVertical: 5,
-													backgroundColor: colors.muted,
-													borderRadius: 8,
-													opacity: isAddingSuggestions ? 0.5 : 1,
-												}}
-											>
-												<Text
-													style={{ fontSize: 12, color: colors.mutedForeground }}
+										{suggestionsRequested &&
+											displayedSuggestedMedia.length > 0 && (
+												<Pressable
+													onPress={
+														selectedSuggestionCount ===
+														displayedSuggestedMedia.length
+															? clearSuggestionSelection
+															: selectAllSuggestions
+													}
+													disabled={isAddingSuggestions}
+													style={{
+														paddingHorizontal: 10,
+														paddingVertical: 5,
+														backgroundColor: colors.muted,
+														borderRadius: 8,
+														opacity: isAddingSuggestions ? 0.5 : 1,
+													}}
 												>
-													{selectedSuggestionCount === visibleSuggestedMedia.length
-														? "Clear"
-														: "Mark all"}
-												</Text>
-											</Pressable>
-										)}
+													<Text
+														style={{
+															fontSize: 12,
+															color: colors.mutedForeground,
+														}}
+													>
+														{selectedSuggestionCount ===
+														displayedSuggestedMedia.length
+															? "Clear"
+															: "Mark all"}
+													</Text>
+												</Pressable>
+											)}
 									</View>
 								</View>
 
@@ -1577,8 +2041,9 @@ export default function AlbumDetailScreen() {
 										onChangeText={(value) => {
 											setSuggestionKeyword(value);
 											setSelectedSuggestionIds(new Set());
+											setDismissedSuggestionIds(new Set());
 										}}
-										placeholder="Keyword"
+										placeholder="Keyword, keyword"
 										placeholderTextColor={colors.mutedForeground}
 										autoCapitalize="none"
 										autoCorrect={false}
@@ -1617,14 +2082,28 @@ export default function AlbumDetailScreen() {
 												textAlign: "center",
 											}}
 										>
-											Enter a keyword or tap Suggest more to find related audios.
+											Enter a keyword or tap Suggest more to find related
+											audios.
 										</Text>
 									</View>
 								) : isFetchingSuggestions ? (
 									<View style={{ alignItems: "center", paddingVertical: 28 }}>
 										<ActivityIndicator color={colors.primary} />
 									</View>
-								) : visibleSuggestedMedia.length === 0 ? (
+								) : displayedSuggestedMedia.length === 0 &&
+									suggestedMedia.length > 0 ? (
+									<View style={{ alignItems: "center", paddingVertical: 36 }}>
+										<Text
+											style={{
+												fontSize: 13,
+												color: colors.mutedForeground,
+												textAlign: "center",
+											}}
+										>
+											No more result
+										</Text>
+									</View>
+								) : displayedSuggestedMedia.length === 0 ? (
 									<View
 										style={{
 											alignItems: "center",
@@ -1653,28 +2132,46 @@ export default function AlbumDetailScreen() {
 												textAlign: "center",
 											}}
 										>
-											Try another keyword or refresh the album-based suggestions.
+											Try another keyword or refresh the album-based
+											suggestions.
 										</Text>
 									</View>
 								) : (
 									<>
 										<FlatList
-											data={visibleSuggestedMedia}
+											data={displayedSuggestedMedia}
 											keyExtractor={(item) => String(item.id)}
 											scrollEnabled={false}
 											renderItem={({ item }) => (
 												<SwipeDeleteRow
 													onDelete={() => dismissSuggestion(item.id)}
-													disabled={isAddingSuggestions}
+													disabled={
+														isAddingSuggestions || addingSuggestionIds.has(item.id)
+													}
 												>
 													<SuggestedMediaRow
 														media={item}
 														selected={selectedSuggestionIds.has(item.id)}
 														onPress={() => toggleSuggestion(item.id)}
+														onAdd={() => void addOneSuggestion(item)}
+														isAdding={addingSuggestionIds.has(item.id)}
 													/>
 												</SwipeDeleteRow>
 											)}
 										/>
+										{hasNoMoreSuggestions && (
+											<Text
+												style={{
+													textAlign: "center",
+													fontSize: 12,
+													color: colors.mutedForeground,
+													paddingTop: 16,
+													paddingBottom: 6,
+												}}
+											>
+												No more result
+											</Text>
+										)}
 									</>
 								)}
 							</View>
@@ -1696,48 +2193,78 @@ export default function AlbumDetailScreen() {
 						elevation: 80,
 					}}
 				>
-					<Pressable
-						onPress={addSelectedSuggestions}
-						disabled={isAddingSuggestions}
+					<View
 						style={{
 							flexDirection: "row",
 							alignItems: "center",
-							justifyContent: "center",
 							gap: 8,
-							paddingHorizontal: 18,
-							paddingVertical: 13,
-							borderRadius: 999,
-							backgroundColor: colors.primary,
-							opacity: isAddingSuggestions ? 0.65 : 1,
-							shadowColor: "#000",
-							shadowOffset: { width: 0, height: 8 },
-							shadowOpacity: 0.3,
-							shadowRadius: 12,
-							elevation: 12,
 						}}
 					>
-						{isAddingSuggestions ? (
-							<ActivityIndicator
-								size="small"
-								color={colors.primaryForeground}
-							/>
-						) : (
-							<Icon
-								name="Plus"
-								size={16}
-								className="text-primary-foreground"
-							/>
-						)}
-						<Text
+						<Pressable
+							onPress={addSelectedSuggestions}
+							disabled={isAddingSuggestions}
 							style={{
-								fontSize: 14,
-								fontWeight: "800",
-								color: colors.primaryForeground,
+								flexDirection: "row",
+								alignItems: "center",
+								justifyContent: "center",
+								gap: 8,
+								paddingHorizontal: 18,
+								paddingVertical: 13,
+								borderRadius: 14,
+								backgroundColor: colors.primary,
+								opacity: isAddingSuggestions ? 0.65 : 1,
+								shadowColor: "#000",
+								shadowOffset: { width: 0, height: 8 },
+								shadowOpacity: 0.3,
+								shadowRadius: 12,
+								elevation: 12,
 							}}
 						>
-							Add selected to album ({selectedSuggestionCount})
-						</Text>
-					</Pressable>
+							{isAddingSuggestions ? (
+								<ActivityIndicator
+									size="small"
+									color={colors.primaryForeground}
+								/>
+							) : (
+								<Icon
+									name="Plus"
+									size={16}
+									className="text-primary-foreground"
+								/>
+							)}
+							<Text
+								style={{
+									fontSize: 14,
+									fontWeight: "800",
+									color: colors.primaryForeground,
+								}}
+							>
+								Add ({selectedSuggestionCount})
+							</Text>
+						</Pressable>
+						<Pressable
+							onPress={deleteSelectedSuggestions}
+							disabled={isAddingSuggestions}
+							style={{
+								width: 48,
+								height: 48,
+								borderRadius: 14,
+								alignItems: "center",
+								justifyContent: "center",
+								backgroundColor: colors.card,
+								borderWidth: 1,
+								borderColor: colors.border,
+								opacity: isAddingSuggestions ? 0.55 : 1,
+								shadowColor: "#000",
+								shadowOffset: { width: 0, height: 8 },
+								shadowOpacity: 0.2,
+								shadowRadius: 12,
+								elevation: 12,
+							}}
+						>
+							<Icon name="Trash2" size={18} className="text-destructive" />
+						</Pressable>
+					</View>
 				</View>
 			)}
 
@@ -1751,6 +2278,20 @@ export default function AlbumDetailScreen() {
 					isSaving={isUpdating}
 				/>
 			)}
+			<TrackActionsSheet
+				visible={Boolean(selectedTrackForActions)}
+				media={selectedTrackForActions}
+				albums={albums}
+				currentAlbumId={id}
+				isBusy={isRemovingMedia || isMovingMedia}
+				onClose={() => setSelectedTrackForActions(null)}
+				onRemove={() => {
+					if (selectedTrackForActions?.id) {
+						removeTrackFromAlbum(selectedTrackForActions.id);
+					}
+				}}
+				onMove={moveTrackToAlbum}
+			/>
 		</View>
 	);
 }

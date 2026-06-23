@@ -10,530 +10,557 @@ import type { ItemProps } from "@/components/home-feed/home-feed-post-card";
 import { getTelegramFileUrl } from "@/lib/get-telegram-file";
 
 const Paths = {
-  document: FileSystem.Paths.document,
+	document: FileSystem.Paths.document,
 };
 const CONTEXT_REWIND_MS = 1500;
 const STALE_AUDIO_MS = 12 * 60 * 60 * 1000;
 let positionInterval: ReturnType<typeof setInterval> | null = null;
 
 function joinDocumentPath(...parts: string[]) {
-  return parts
-    .map((part) => part.replace(/^\/+|\/+$/g, ""))
-    .filter(Boolean)
-    .join("/");
+	return parts
+		.map((part) => part.replace(/^\/+|\/+$/g, ""))
+		.filter(Boolean)
+		.join("/");
 }
 
 function uniqueUrls(urls: (string | null | undefined)[]) {
-  return urls.filter(
-    (url, index): url is string =>
-      Boolean(url) && urls.findIndex((candidate) => candidate === url) === index,
-  );
+	return urls.filter(
+		(url, index): url is string =>
+			Boolean(url) &&
+			urls.findIndex((candidate) => candidate === url) === index,
+	);
 }
 
 function isOlderThan(timestamp: number | null | undefined, maxAgeMs: number) {
-  return Boolean(timestamp && Date.now() - timestamp > maxAgeMs);
+	return Boolean(timestamp && Date.now() - timestamp > maxAgeMs);
 }
 
 interface AudioState {
-  sound: Audio.Sound | null;
-  isPlaying: boolean;
-  isLoading: boolean;
-  isDownloading: boolean;
-  downloadProgress: number;
-  duration: number;
-  position: number;
-  uri: string | null;
-  localPath: string | null;
-  error: string | null;
-  volume: number;
-  blog: ItemProps;
-  isSeeking: boolean;
-  playbackRate: number;
-  sleepTimerEnd: number | null;
-  pausedAt: number | null;
-  playedAt: number | null;
+	sound: Audio.Sound | null;
+	isPlaying: boolean;
+	isLoading: boolean;
+	isDownloading: boolean;
+	downloadProgress: number;
+	duration: number;
+	position: number;
+	uri: string | null;
+	localPath: string | null;
+	error: string | null;
+	volume: number;
+	blog: ItemProps;
+	isSeeking: boolean;
+	playbackRate: number;
+	sleepTimerEnd: number | null;
+	pausedAt: number | null;
+	playedAt: number | null;
 
-  loadAudio: (blog: ItemProps) => Promise<void>;
-  play: () => Promise<void>;
-  pause: () => Promise<void>;
-  stop: () => Promise<void>;
-  seek: (positionMillis: number) => Promise<void>;
-  setVolume: (volume: number) => Promise<void>;
-  togglePlayPause: () => Promise<void>;
-  unloadAudio: () => Promise<void>;
-  updatePosition: (position: number) => void;
-  restoreAudio: () => Promise<void>;
-  startPositionTracking: () => void;
-  stopPositionTracking: () => void;
-  setPlaybackRate: (rate: number) => Promise<void>;
-  setSleepTimer: (minutes: number) => void;
-  clearSleepTimer: () => void;
+	loadAudio: (blog: ItemProps) => Promise<void>;
+	play: () => Promise<void>;
+	pause: () => Promise<void>;
+	stop: () => Promise<void>;
+	seek: (positionMillis: number) => Promise<void>;
+	setVolume: (volume: number) => Promise<void>;
+	togglePlayPause: () => Promise<void>;
+	unloadAudio: () => Promise<void>;
+	updatePosition: (position: number) => void;
+	restoreAudio: () => Promise<void>;
+	startPositionTracking: () => void;
+	stopPositionTracking: () => void;
+	setPlaybackRate: (rate: number) => Promise<void>;
+	setSleepTimer: (minutes: number) => void;
+	clearSleepTimer: () => void;
 }
 
 export const useAudioStore = create<AudioState>()(
-  persist(
-    (set, get) => ({
-      sound: null,
-      isPlaying: false,
-      isLoading: false,
-      isDownloading: false,
-      downloadProgress: 0,
-      duration: 0,
-      position: 0,
-      uri: null,
-      localPath: null,
-      error: null,
-      volume: 1,
-      playbackRate: 1,
-      sleepTimerEnd: null,
-      pausedAt: null,
-      playedAt: null,
-      isSeeking: false,
-      blog: null!,
+	persist(
+		(set, get) => ({
+			sound: null,
+			isPlaying: false,
+			isLoading: false,
+			isDownloading: false,
+			downloadProgress: 0,
+			duration: 0,
+			position: 0,
+			uri: null,
+			localPath: null,
+			error: null,
+			volume: 1,
+			playbackRate: 1,
+			sleepTimerEnd: null,
+			pausedAt: null,
+			playedAt: null,
+			isSeeking: false,
+			blog: null!,
 
-      loadAudio: async (blog) => {
-        const directUrl = (blog?.audio as any)?.url as string | undefined;
-        const fileName = blog?.audio?.fileName;
+			loadAudio: async (blog) => {
+				const directUrl = (blog?.audio as any)?.url as string | undefined;
+				const fileName = blog?.audio?.fileName;
 
-        try {
-          if (!fileName) {
-            throw new Error("Audio file name is not available");
-          }
+				try {
+					const currentSound = get().sound;
+					const currentBlogId = get().blog?.id;
 
-          set({ isLoading: true, error: null });
+					if (currentSound && currentBlogId === blog?.id) {
+						const status = await currentSound.getStatusAsync();
+						set({
+							blog,
+							error: null,
+							isLoading: false,
+							isPlaying: status.isLoaded ? status.isPlaying : get().isPlaying,
+							duration: status.isLoaded
+								? status.durationMillis || get().duration
+								: get().duration,
+							position: status.isLoaded
+								? status.positionMillis || get().position
+								: get().position,
+						});
+						return;
+					}
 
-          const { sound: existingSound, stopPositionTracking } = get();
-          if (existingSound) {
-            stopPositionTracking();
-            await existingSound.unloadAsync();
-          }
+					if (!fileName) {
+						throw new Error("Audio file name is not available");
+					}
 
-          const folderPath = "al-ghurobaa/media";
-          const filePath = joinDocumentPath(folderPath, fileName);
-          const dir = new Directory(Paths.document, folderPath);
-          const folderInfo = dir.info();
-          if (!folderInfo.exists) {
-            await dir.create({ intermediates: true });
-          }
+					set({ isLoading: true, error: null });
 
-          const file = new File(Paths.document, filePath);
-          const fileInfo = file.info();
-          let audioSource: string;
+					const { sound: existingSound, stopPositionTracking } = get();
+					if (existingSound) {
+						stopPositionTracking();
+						await existingSound.unloadAsync();
+					}
 
-          if (fileInfo.exists) {
-            audioSource = file.uri;
-            set({ localPath: file.uri });
-          } else {
-            const telegramUrl = blog?.audio?.telegramFileId
-              ? (await getTelegramFileUrl(blog.audio.telegramFileId))?.url
-              : null;
-            const sourceUrls = uniqueUrls([directUrl, telegramUrl]);
+					const folderPath = "al-ghurobaa/media";
+					const filePath = joinDocumentPath(folderPath, fileName);
+					const dir = new Directory(Paths.document, folderPath);
+					const folderInfo = dir.info();
+					if (!folderInfo.exists) {
+						await dir.create({ intermediates: true });
+					}
 
-            if (sourceUrls.length === 0) {
-              throw new Error("Audio URL is not available");
-            }
+					const file = new File(Paths.document, filePath);
+					const fileInfo = file.info();
+					let audioSource: string;
 
-            audioSource = sourceUrls[0];
-            set({ localPath: null, downloadProgress: 0 });
-          }
+					if (fileInfo.exists) {
+						audioSource = file.uri;
+						set({ localPath: file.uri });
+					} else {
+						const telegramUrl = blog?.audio?.telegramFileId
+							? (await getTelegramFileUrl(blog.audio.telegramFileId))?.url
+							: null;
+						const sourceUrls = uniqueUrls([directUrl, telegramUrl]);
 
-          await Audio.setAudioModeAsync({
-            playsInSilentModeIOS: true,
-            staysActiveInBackground: false,
-          });
+						if (sourceUrls.length === 0) {
+							throw new Error("Audio URL is not available");
+						}
 
-          const onPlaybackStatusUpdate = (status: any) => {
-            if (status.isLoaded) {
-              set({
-                isPlaying: status.isPlaying,
-                duration: status.durationMillis || 0,
-                position: status.positionMillis || 0,
-              });
-            }
-          };
+						audioSource = sourceUrls[0];
+						set({ localPath: null, downloadProgress: 0 });
+					}
 
-          let sound: Audio.Sound | null = null;
-          let loadedSource = audioSource;
-          let loadError: unknown;
-          const sourceUrls =
-            audioSource === file.uri
-              ? [audioSource]
-              : uniqueUrls([
-                  audioSource,
-                  blog?.audio?.telegramFileId
-                    ? (await getTelegramFileUrl(blog.audio.telegramFileId))?.url
-                    : null,
-                ]);
+					await Audio.setAudioModeAsync({
+						playsInSilentModeIOS: true,
+						staysActiveInBackground: false,
+					});
 
-          for (const source of sourceUrls) {
-            try {
-              const result = await Audio.Sound.createAsync(
-                { uri: source },
-                { shouldPlay: false, volume: get().volume },
-                onPlaybackStatusUpdate,
-              );
-              sound = result.sound;
-              loadedSource = source;
-              break;
-            } catch (err) {
-              loadError = err;
-              console.warn("[audio] Failed to load source", source, err);
-            }
-          }
+					const onPlaybackStatusUpdate = (status: any) => {
+						if (status.isLoaded) {
+							set({
+								isPlaying: status.isPlaying,
+								duration: status.durationMillis || 0,
+								position: status.positionMillis || 0,
+							});
+						}
+					};
 
-          if (!sound) {
-            throw loadError instanceof Error
-              ? loadError
-              : new Error("Failed to load audio");
-          }
+					let sound: Audio.Sound | null = null;
+					let loadedSource = audioSource;
+					let loadError: unknown;
+					const sourceUrls =
+						audioSource === file.uri
+							? [audioSource]
+							: uniqueUrls([
+									audioSource,
+									blog?.audio?.telegramFileId
+										? (await getTelegramFileUrl(blog.audio.telegramFileId))?.url
+										: null,
+								]);
 
-          const status = await sound.getStatusAsync();
+					for (const source of sourceUrls) {
+						try {
+							const result = await Audio.Sound.createAsync(
+								{ uri: source },
+								{ shouldPlay: false, volume: get().volume },
+								onPlaybackStatusUpdate,
+							);
+							sound = result.sound;
+							loadedSource = source;
+							break;
+						} catch (err) {
+							loadError = err;
+							console.warn("[audio] Failed to load source", source, err);
+						}
+					}
 
-          set({
-            sound,
-            uri: loadedSource,
-            isLoading: false,
-            isPlaying: false,
-            pausedAt: null,
-            duration: status.isLoaded ? status.durationMillis || 0 : 0,
-            position: 0,
-            blog,
-          });
+					if (!sound) {
+						throw loadError instanceof Error
+							? loadError
+							: new Error("Failed to load audio");
+					}
 
-          if (loadedSource !== file.uri) {
-            set({ isDownloading: true, downloadProgress: 0 });
-            LegacyFileSystem.createDownloadResumable(
-              loadedSource,
-              file.uri,
-              {},
-              (progress) => {
-                const expected = progress.totalBytesExpectedToWrite;
-                const written = progress.totalBytesWritten;
-                if (expected > 0) {
-                  set({
-                    downloadProgress: Math.max(
-                      0,
-                      Math.min(1, written / expected),
-                    ),
-                  });
-                }
-              },
-            )
-              .downloadAsync()
-              .then((result) => {
-                if (result) {
-                  set({
-                    localPath: result.uri,
-                    isDownloading: false,
-                    downloadProgress: 1,
-                  });
-                } else {
-                  set({ isDownloading: false, downloadProgress: 0 });
-                }
-              })
-              .catch((err) => {
-                console.warn("[audio] Cache download failed:", err);
-                set({ isDownloading: false, downloadProgress: 0 });
-              });
-          }
-        } catch (err) {
-          set({
-            error: err instanceof Error ? err.message : "Failed to load audio",
-            isLoading: false,
-            isDownloading: false,
-          });
-        }
-      },
+					const status = await sound.getStatusAsync();
 
-      play: async () => {
-        const { sound, position, startPositionTracking } = get();
-        if (!sound) return;
+					set({
+						sound,
+						uri: loadedSource,
+						isLoading: false,
+						isPlaying: false,
+						pausedAt: null,
+						duration: status.isLoaded ? status.durationMillis || 0 : 0,
+						position: 0,
+						blog,
+					});
 
-        try {
-          const resumePos = Math.max(0, position - CONTEXT_REWIND_MS);
-          await sound.setPositionAsync(resumePos);
-          set({ position: resumePos });
-          await sound.playAsync();
-          set({
-            isPlaying: true,
-            error: null,
-            pausedAt: null,
-            playedAt: Date.now(),
-          });
-          startPositionTracking();
-        } catch (err) {
-          set({
-            error: err instanceof Error ? err.message : "Failed to play audio",
-          });
-        }
-      },
+					if (loadedSource !== file.uri) {
+						set({ isDownloading: true, downloadProgress: 0 });
+						LegacyFileSystem.createDownloadResumable(
+							loadedSource,
+							file.uri,
+							{},
+							(progress) => {
+								const expected = progress.totalBytesExpectedToWrite;
+								const written = progress.totalBytesWritten;
+								if (expected > 0) {
+									set({
+										downloadProgress: Math.max(
+											0,
+											Math.min(1, written / expected),
+										),
+									});
+								}
+							},
+						)
+							.downloadAsync()
+							.then((result) => {
+								if (result) {
+									set({
+										localPath: result.uri,
+										isDownloading: false,
+										downloadProgress: 1,
+									});
+								} else {
+									set({ isDownloading: false, downloadProgress: 0 });
+								}
+							})
+							.catch((err) => {
+								console.warn("[audio] Cache download failed:", err);
+								set({ isDownloading: false, downloadProgress: 0 });
+							});
+					}
+				} catch (err) {
+					set({
+						error: err instanceof Error ? err.message : "Failed to load audio",
+						isLoading: false,
+						isDownloading: false,
+					});
+				}
+			},
 
-      pause: async () => {
-        const { sound, stopPositionTracking } = get();
-        if (!sound) return;
+			play: async () => {
+				const { sound, position, startPositionTracking } = get();
+				if (!sound) return;
 
-        try {
-          await sound.pauseAsync();
-          set({ isPlaying: false, error: null, pausedAt: Date.now() });
-          stopPositionTracking();
-        } catch (err) {
-          set({
-            error: err instanceof Error ? err.message : "Failed to pause audio",
-          });
-        }
-      },
+				try {
+					const resumePos = Math.max(0, position - CONTEXT_REWIND_MS);
+					await sound.setPositionAsync(resumePos);
+					set({ position: resumePos });
+					await sound.playAsync();
+					set({
+						isPlaying: true,
+						error: null,
+						pausedAt: null,
+						playedAt: Date.now(),
+					});
+					startPositionTracking();
+				} catch (err) {
+					set({
+						error: err instanceof Error ? err.message : "Failed to play audio",
+					});
+				}
+			},
 
-      stop: async () => {
-        const { sound, stopPositionTracking } = get();
-        if (!sound) return;
+			pause: async () => {
+				const { sound, stopPositionTracking } = get();
+				if (!sound) return;
 
-        try {
-          await sound.stopAsync();
-          await sound.setPositionAsync(0);
-          set({
-            isPlaying: false,
-            position: 0,
-            error: null,
-            pausedAt: Date.now(),
-          });
-          stopPositionTracking();
-        } catch (err) {
-          set({
-            error: err instanceof Error ? err.message : "Failed to stop audio",
-          });
-        }
-      },
+				try {
+					await sound.pauseAsync();
+					set({ isPlaying: false, error: null, pausedAt: Date.now() });
+					stopPositionTracking();
+				} catch (err) {
+					set({
+						error: err instanceof Error ? err.message : "Failed to pause audio",
+					});
+				}
+			},
 
-      seek: async (positionMillis: number) => {
-        const { sound } = get();
-        if (!sound) return;
+			stop: async () => {
+				const { sound, stopPositionTracking } = get();
+				if (!sound) return;
 
-        try {
-          set({ position: positionMillis, isSeeking: true, error: null });
-          await sound.setPositionAsync(positionMillis);
-          set({ isSeeking: false });
-        } catch (err) {
-          set({
-            isSeeking: false,
-            error: err instanceof Error ? err.message : "Failed to seek",
-          });
-        }
-      },
+				try {
+					await sound.stopAsync();
+					await sound.setPositionAsync(0);
+					set({
+						isPlaying: false,
+						position: 0,
+						error: null,
+						pausedAt: Date.now(),
+					});
+					stopPositionTracking();
+				} catch (err) {
+					set({
+						error: err instanceof Error ? err.message : "Failed to stop audio",
+					});
+				}
+			},
 
-      setVolume: async (volume: number) => {
-        const { sound } = get();
-        const clampedVolume = Math.max(0, Math.min(1, volume));
+			seek: async (positionMillis: number) => {
+				const { sound } = get();
+				if (!sound) return;
 
-        if (sound) {
-          try {
-            await sound.setVolumeAsync(clampedVolume);
-          } catch (err) {
-            set({
-              error:
-                err instanceof Error ? err.message : "Failed to set volume",
-            });
-          }
-        }
+				try {
+					set({ position: positionMillis, isSeeking: true, error: null });
+					await sound.setPositionAsync(positionMillis);
+					set({ isSeeking: false });
+				} catch (err) {
+					set({
+						isSeeking: false,
+						error: err instanceof Error ? err.message : "Failed to seek",
+					});
+				}
+			},
 
-        set({ volume: clampedVolume });
-      },
+			setVolume: async (volume: number) => {
+				const { sound } = get();
+				const clampedVolume = Math.max(0, Math.min(1, volume));
 
-      togglePlayPause: async () => {
-        const { isPlaying, play, pause } = get();
-        if (isPlaying) {
-          await pause();
-        } else {
-          await play();
-        }
-      },
+				if (sound) {
+					try {
+						await sound.setVolumeAsync(clampedVolume);
+					} catch (err) {
+						set({
+							error:
+								err instanceof Error ? err.message : "Failed to set volume",
+						});
+					}
+				}
 
-      unloadAudio: async () => {
-        const { sound, stopPositionTracking } = get();
-        if (!sound) return;
+				set({ volume: clampedVolume });
+			},
 
-        try {
-          stopPositionTracking();
-          await sound.unloadAsync();
-          set({
-            sound: null,
-            isPlaying: false,
-            isDownloading: false,
-            downloadProgress: 0,
-            duration: 0,
-            pausedAt: null,
-            playedAt: null,
-            position: 0,
-            uri: null,
-            localPath: null,
-            error: null,
-          });
-        } catch (err) {
-          set({
-            error: err instanceof Error ? err.message : "Failed to unload audio",
-          });
-        }
-      },
+			togglePlayPause: async () => {
+				const { isPlaying, play, pause } = get();
+				if (isPlaying) {
+					await pause();
+				} else {
+					await play();
+				}
+			},
 
-      updatePosition: (position: number) => {
-        set({
-          position,
-          playedAt: get().isPlaying ? Date.now() : get().playedAt,
-        });
-      },
+			unloadAudio: async () => {
+				const { sound, stopPositionTracking } = get();
+				if (!sound) return;
 
-      restoreAudio: async () => {
-        const {
-          isPlaying: wasPlaying,
-          pausedAt,
-          playedAt,
-          position,
-          uri,
-          volume,
-        } = get();
+				try {
+					stopPositionTracking();
+					await sound.unloadAsync();
+					set({
+						sound: null,
+						isPlaying: false,
+						isDownloading: false,
+						downloadProgress: 0,
+						duration: 0,
+						pausedAt: null,
+						playedAt: null,
+						position: 0,
+						uri: null,
+						localPath: null,
+						error: null,
+					});
+				} catch (err) {
+					set({
+						error:
+							err instanceof Error ? err.message : "Failed to unload audio",
+					});
+				}
+			},
 
-        if (!uri) return;
+			updatePosition: (position: number) => {
+				set({
+					position,
+					playedAt: get().isPlaying ? Date.now() : get().playedAt,
+				});
+			},
 
-        const { localPath } = get();
-        const effectivePausedAt = wasPlaying ? pausedAt : pausedAt ?? Date.now();
-        const effectivePlayedAt = wasPlaying ? playedAt ?? Date.now() : playedAt;
-        const isStale =
-          (!wasPlaying && isOlderThan(effectivePausedAt, STALE_AUDIO_MS)) ||
-          (wasPlaying && isOlderThan(effectivePlayedAt, STALE_AUDIO_MS));
+			restoreAudio: async () => {
+				const {
+					isPlaying: wasPlaying,
+					pausedAt,
+					playedAt,
+					position,
+					uri,
+					volume,
+				} = get();
 
-        if (isStale) {
-          set({
-            duration: 0,
-            isPlaying: false,
-            localPath: null,
-            pausedAt: null,
-            playedAt: null,
-            position: 0,
-            sound: null,
-            uri: null,
-          });
-          return;
-        }
+				if (!uri) return;
 
-        try {
-          set({
-            isLoading: true,
-            error: null,
-            isPlaying: false,
-            pausedAt: wasPlaying ? Date.now() : effectivePausedAt,
-            playedAt: effectivePlayedAt,
-          });
+				const { localPath } = get();
+				const effectivePausedAt = wasPlaying
+					? pausedAt
+					: (pausedAt ?? Date.now());
+				const effectivePlayedAt = wasPlaying
+					? (playedAt ?? Date.now())
+					: playedAt;
+				const isStale =
+					(!wasPlaying && isOlderThan(effectivePausedAt, STALE_AUDIO_MS)) ||
+					(wasPlaying && isOlderThan(effectivePlayedAt, STALE_AUDIO_MS));
 
-          await Audio.setAudioModeAsync({
-            playsInSilentModeIOS: true,
-            staysActiveInBackground: false,
-          });
+				if (isStale) {
+					set({
+						duration: 0,
+						isPlaying: false,
+						localPath: null,
+						pausedAt: null,
+						playedAt: null,
+						position: 0,
+						sound: null,
+						uri: null,
+					});
+					return;
+				}
 
-          const audioSource = localPath || uri;
+				try {
+					set({
+						isLoading: true,
+						error: null,
+						isPlaying: false,
+						pausedAt: wasPlaying ? Date.now() : effectivePausedAt,
+						playedAt: effectivePlayedAt,
+					});
 
-          const { sound } = await Audio.Sound.createAsync(
-            { uri: audioSource },
-            {
-              shouldPlay: false,
-              volume,
-              positionMillis: position,
-            },
-            (status) => {
-              if (status.isLoaded) {
-                set({
-                  isPlaying: status.isPlaying,
-                  pausedAt: status.isPlaying ? null : Date.now(),
-                  playedAt: status.isPlaying ? Date.now() : get().playedAt,
-                  duration: status.durationMillis || 0,
-                  position: status.positionMillis || 0,
-                });
-              }
-            },
-          );
+					await Audio.setAudioModeAsync({
+						playsInSilentModeIOS: true,
+						staysActiveInBackground: false,
+					});
 
-          await sound.setPositionAsync(position);
+					const audioSource = localPath || uri;
 
-          const status = await sound.getStatusAsync();
+					const { sound } = await Audio.Sound.createAsync(
+						{ uri: audioSource },
+						{
+							shouldPlay: false,
+							volume,
+							positionMillis: position,
+						},
+						(status) => {
+							if (status.isLoaded) {
+								set({
+									isPlaying: status.isPlaying,
+									pausedAt: status.isPlaying ? null : Date.now(),
+									playedAt: status.isPlaying ? Date.now() : get().playedAt,
+									duration: status.durationMillis || 0,
+									position: status.positionMillis || 0,
+								});
+							}
+						},
+					);
 
-          set({
-            sound,
-            isLoading: false,
-            duration: status.isLoaded ? status.durationMillis || 0 : 0,
-            isPlaying: false,
-            pausedAt: wasPlaying ? Date.now() : effectivePausedAt,
-          });
-        } catch (err) {
-          set({
-            error: err instanceof Error ? err.message : "Failed to restore audio",
-            isLoading: false,
-          });
-        }
-      },
+					await sound.setPositionAsync(position);
 
-      startPositionTracking: () => {
-        if (positionInterval) {
-          clearInterval(positionInterval);
-        }
+					const status = await sound.getStatusAsync();
 
-        positionInterval = setInterval(async () => {
-          const { sound, isPlaying, isSeeking } = get();
-          if (sound && isPlaying && !isSeeking) {
-            try {
-              const status = await sound.getStatusAsync();
-              if (status.isLoaded) {
-                set({
-                  position: status.positionMillis,
-                  duration: status.durationMillis || get().duration,
-                  playedAt: Date.now(),
-                });
-              }
-            } catch (err) {
-              console.error("Failed to get position:", err);
-            }
-          }
-        }, 100);
-      },
+					set({
+						sound,
+						isLoading: false,
+						duration: status.isLoaded ? status.durationMillis || 0 : 0,
+						isPlaying: false,
+						pausedAt: wasPlaying ? Date.now() : effectivePausedAt,
+					});
+				} catch (err) {
+					set({
+						error:
+							err instanceof Error ? err.message : "Failed to restore audio",
+						isLoading: false,
+					});
+				}
+			},
 
-      stopPositionTracking: () => {
-        if (positionInterval) {
-          clearInterval(positionInterval);
-          positionInterval = null;
-        }
-      },
+			startPositionTracking: () => {
+				if (positionInterval) {
+					clearInterval(positionInterval);
+				}
 
-      setPlaybackRate: async (rate: number) => {
-        const { sound } = get();
-        set({ playbackRate: rate });
-        if (sound) {
-          try {
-            await (sound as any).setRateAsync(rate, true);
-          } catch (err) {
-            console.warn("[audio] setRateAsync error", err);
-          }
-        }
-      },
+				positionInterval = setInterval(async () => {
+					const { sound, isPlaying, isSeeking } = get();
+					if (sound && isPlaying && !isSeeking) {
+						try {
+							const status = await sound.getStatusAsync();
+							if (status.isLoaded) {
+								set({
+									position: status.positionMillis,
+									duration: status.durationMillis || get().duration,
+									playedAt: Date.now(),
+								});
+							}
+						} catch (err) {
+							console.error("Failed to get position:", err);
+						}
+					}
+				}, 100);
+			},
 
-      setSleepTimer: (minutes: number) => {
-        set({ sleepTimerEnd: Date.now() + minutes * 60 * 1000 });
-      },
+			stopPositionTracking: () => {
+				if (positionInterval) {
+					clearInterval(positionInterval);
+					positionInterval = null;
+				}
+			},
 
-      clearSleepTimer: () => {
-        set({ sleepTimerEnd: null });
-      },
-    }),
-    {
-      name: "audio-storage",
-      storage: createJSONStorage(() => AsyncStorage),
-      partialize: (state) => ({
-        uri: state.uri,
-        localPath: state.localPath,
-        pausedAt: state.pausedAt,
-        playedAt: state.playedAt,
-        position: state.position,
-        volume: state.volume,
-        isPlaying: state.isPlaying,
-        duration: state.duration,
-        playbackRate: state.playbackRate,
-      }),
-    },
-  ),
+			setPlaybackRate: async (rate: number) => {
+				const { sound } = get();
+				set({ playbackRate: rate });
+				if (sound) {
+					try {
+						await (sound as any).setRateAsync(rate, true);
+					} catch (err) {
+						console.warn("[audio] setRateAsync error", err);
+					}
+				}
+			},
+
+			setSleepTimer: (minutes: number) => {
+				set({ sleepTimerEnd: Date.now() + minutes * 60 * 1000 });
+			},
+
+			clearSleepTimer: () => {
+				set({ sleepTimerEnd: null });
+			},
+		}),
+		{
+			name: "audio-storage",
+			storage: createJSONStorage(() => AsyncStorage),
+			partialize: (state) => ({
+				uri: state.uri,
+				localPath: state.localPath,
+				pausedAt: state.pausedAt,
+				playedAt: state.playedAt,
+				position: state.position,
+				volume: state.volume,
+				isPlaying: state.isPlaying,
+				duration: state.duration,
+				playbackRate: state.playbackRate,
+			}),
+		},
+	),
 );

@@ -657,7 +657,7 @@ function getLocalTranscriberBaseUrl(value?: string) {
   );
 }
 
-const transcriptChunkCacheEnabled = false;
+const transcriptChunkCacheEnabled = true;
 
 export async function checkLocalTranscriber(baseUrl?: string) {
   const normalizedUrl = getLocalTranscriberBaseUrl(baseUrl);

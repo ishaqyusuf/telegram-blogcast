@@ -13,6 +13,8 @@ import { useTranscriptionQueue } from "@/hooks/use-transcription-queue";
 import { useAppSettingsStore } from "@/store/app-settings-store";
 import { getDefaultTranscriberUrl } from "@/lib/transcribe";
 import { Toast } from "@/components/ui/toast";
+import { updateBlogPostInCache } from "@/lib/blog-post-cache";
+import { getTelegramFileUrl } from "@/lib/get-telegram-file";
 
 type Props = {
   blogId: string;
@@ -149,7 +151,7 @@ export function BlogCardOptionsSheet({
 
   const onQueueTranscription = async () => {
     if (!canQueueTranscription) return;
-    const reachableAudioUrl =
+    let reachableAudioUrl =
       audioUrl?.startsWith("http://") || audioUrl?.startsWith("https://")
         ? audioUrl
         : null;
@@ -163,6 +165,19 @@ export function BlogCardOptionsSheet({
     }
 
     try {
+      if (!reachableAudioUrl && audioTelegramFileId) {
+        const resolved = await getTelegramFileUrl(audioTelegramFileId);
+        reachableAudioUrl =
+          resolved?.url?.startsWith("http://") ||
+          resolved?.url?.startsWith("https://")
+            ? resolved.url
+            : null;
+      }
+
+      if (!reachableAudioUrl) {
+        throw new Error("Could not resolve a reachable audio URL for this job.");
+      }
+
       await enqueue({
         mediaId: numericAudioMediaId,
         telegramFileId: audioTelegramFileId ?? null,
@@ -170,6 +185,17 @@ export function BlogCardOptionsSheet({
         language: "ar",
         transcriberUrl,
       });
+      if (Number.isFinite(numericBlogId)) {
+        updateBlogPostInCache(numericBlogId, (post) => ({
+          ...post,
+          audio: post.audio
+            ? {
+                ...post.audio,
+                transcriptionJobStatus: "queued",
+              }
+            : post.audio,
+        }));
+      }
       Toast.show("Added to transcription queue", {
         type: "success",
         position: "bottom",

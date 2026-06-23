@@ -30,6 +30,7 @@ import { Toast } from "@/components/ui/toast";
 import { useInfiniteLoader } from "@/components/infinite-loader";
 import { minuteToString } from "@/lib/utils";
 import { getAudioDisplayTitle } from "@/lib/audio-title";
+import { updateBlogPostByMediaIdInCache } from "@/lib/blog-post-cache";
 import { AddToAlbumModal } from "@/components/channel-chat/add-to-album-modal";
 import { AddToPlaylistModal } from "@/components/channel-chat/add-to-playlist-modal";
 import type { BlogItem } from "@/components/blog-card";
@@ -875,6 +876,24 @@ export default function ChannelChatScreen() {
     if (mediaId) openAlbumModal([mediaId], post.audio?.authorId ?? undefined);
   }
 
+  const handleAlbumAdded = useCallback(
+    (album: { id: number; name: string }) => {
+      for (const mediaId of albumMediaIds) {
+        updateBlogPostByMediaIdInCache(mediaId, (post) => ({
+          ...post,
+          audio: post.audio
+            ? {
+                ...post.audio,
+                albumId: album.id,
+                albumName: album.name,
+              }
+            : post.audio,
+        }));
+      }
+    },
+    [albumMediaIds],
+  );
+
   function openPlaylistModal(mediaIds: number[]) {
     setPlaylistMediaIds(mediaIds);
     setShowPlaylistModal(true);
@@ -1130,11 +1149,12 @@ export default function ChannelChatScreen() {
           >
             <Pressable
               onPress={(e) => e.stopPropagation()}
-              className="max-h-[70%]"
+              style={{ width: "100%" }}
             >
               <AddToAlbumModal
                 mediaIds={albumMediaIds}
                 authorId={albumAuthorId}
+                onAdded={handleAlbumAdded}
                 onClose={() => {
                   setShowAlbumModal(false);
                   clearSelection();

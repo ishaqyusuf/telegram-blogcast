@@ -4,7 +4,7 @@ import { z } from "zod";
 
 const suggestedMediaInput = z.object({
 	albumId: z.number(),
-	limit: z.number().int().min(1).max(100).optional().default(25),
+	limit: z.number().int().min(1).max(500).optional().default(25),
 	keyword: z.string().trim().optional(),
 });
 
@@ -14,15 +14,29 @@ function uniqueNumbers(values: number[]) {
 
 function tokenizeSearchText(value?: string | null) {
 	return Array.from(
+		new Set((value ?? "").toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? []),
+	);
+}
+
+function parseKeywordTerms(value?: string | null) {
+	const directTerms = (value ?? "")
+		.split(",")
+		.map((term) => term.trim().toLowerCase())
+		.filter(Boolean);
+	const tokenizedTerms = tokenizeSearchText(value);
+	return Array.from(
 		new Set(
-			(value ?? "")
-				.toLowerCase()
-				.match(/[\p{L}\p{N}]{3,}/gu) ?? [],
+			directTerms.length > 0
+				? [...directTerms, ...tokenizedTerms]
+				: tokenizedTerms,
 		),
 	);
 }
 
-function scoreTextAgainstTerms(value: string | null | undefined, terms: string[]) {
+function scoreTextAgainstTerms(
+	value: string | null | undefined,
+	terms: string[],
+) {
 	const text = (value ?? "").toLowerCase();
 	if (!text || terms.length === 0) return 0;
 	return terms.reduce((score, term) => {
@@ -174,19 +188,14 @@ export const albumRoutes = createTRPCRouter({
 			if (!channelId) return [];
 
 			const rawKeyword = input.keyword?.trim().toLowerCase();
-			const keywordFilter = rawKeyword ?? "";
-			const keywordTerms = rawKeyword
-				? tokenizeSearchText(rawKeyword).length > 0
-					? tokenizeSearchText(rawKeyword)
-					: [rawKeyword]
-				: [];
+			const keywordTerms = rawKeyword ? parseKeywordTerms(rawKeyword) : [];
 			const hasKeyword = Boolean(rawKeyword);
-			const albumTitleTerms = hasKeyword ? keywordTerms : tokenizeSearchText(album.name);
-			const existingAudioTerms = hasKeyword ? [] : tokenizeSearchText(
-				album.medias
-					.map(getMediaSearchText)
-					.join(" "),
-			);
+			const albumTitleTerms = hasKeyword
+				? keywordTerms
+				: tokenizeSearchText(album.name);
+			const existingAudioTerms = hasKeyword
+				? []
+				: tokenizeSearchText(album.medias.map(getMediaSearchText).join(" "));
 			const terms = Array.from(
 				new Set([...albumTitleTerms, ...existingAudioTerms]),
 			).slice(0, 80);
@@ -210,7 +219,7 @@ export const albumRoutes = createTRPCRouter({
 						...(hasKeyword
 							? [
 									{
-										OR: [
+										OR: keywordTerms.flatMap((keywordFilter) => [
 											{
 												title: {
 													contains: keywordFilter,
@@ -237,7 +246,7 @@ export const albumRoutes = createTRPCRouter({
 													},
 												},
 											},
-										],
+										]),
 									},
 								]
 							: []),
@@ -288,9 +297,7 @@ export const albumRoutes = createTRPCRouter({
 								}
 							: null,
 						matchingTerms: terms.filter((term) =>
-							getMediaSearchText(media)
-								.toLowerCase()
-								.includes(term),
+							getMediaSearchText(media).toLowerCase().includes(term),
 						),
 						matchScore,
 					};
@@ -346,10 +353,16 @@ export const albumRoutes = createTRPCRouter({
 				const channelIds = uniqueNumbers(
 					itemsToAdd
 						.map((media) => media.blog?.channelId)
-						.filter((channelId): channelId is number => typeof channelId === "number"),
+						.filter(
+							(channelId): channelId is number => typeof channelId === "number",
+						),
 				);
 
-				if (itemsToAdd.some((media) => !media.mimeType?.toLowerCase().startsWith("audio/"))) {
+				if (
+					itemsToAdd.some(
+						(media) => !media.mimeType?.toLowerCase().startsWith("audio/"),
+					)
+				) {
 					throw new TRPCError({
 						code: "BAD_REQUEST",
 						message: "Only audio media can be added to an album.",
@@ -374,9 +387,7 @@ export const albumRoutes = createTRPCRouter({
 					});
 				}
 
-				const inferredChannelId =
-					album.channelId ??
-					channelIds[0];
+				const inferredChannelId = album.channelId ?? channelIds[0];
 
 				if (!album.channelId && inferredChannelId) {
 					await tx.album.update({
@@ -554,7 +565,11 @@ export const albumRoutes = createTRPCRouter({
 				select: { id: true, bookId: true },
 			});
 
-			if (input.endSec != null && input.startSec != null && input.endSec < input.startSec) {
+			if (
+				input.endSec != null &&
+				input.startSec != null &&
+				input.endSec < input.startSec
+			) {
 				throw new TRPCError({
 					code: "BAD_REQUEST",
 					message: "Reference end time cannot be before the start time.",
@@ -612,11 +627,13 @@ export const albumRoutes = createTRPCRouter({
 				name: z.string().min(1).optional(),
 				description: z.string().optional(),
 				albumType: z.string().optional(),
+				suggestionKeywords: z.string().optional(),
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
 			const { id, ...data } = input;
-			return ctx.db.album.update({
+			const db = ctx.db as any;
+			return db.album.update({
 				where: { id },
 				data: {
 					...(data.name !== undefined ? { name: data.name } : {}),
@@ -626,7 +643,25 @@ export const albumRoutes = createTRPCRouter({
 					...(data.albumType !== undefined
 						? { albumType: data.albumType }
 						: {}),
+					...(data.suggestionKeywords !== undefined
+						? { suggestionKeywords: data.suggestionKeywords }
+						: {}),
 				},
+			});
+		}),
+
+	updateSuggestionKeywords: publicProcedure
+		.input(
+			z.object({
+				id: z.number(),
+				suggestionKeywords: z.string(),
+			}),
+		)
+		.mutation(async ({ ctx, input }) => {
+			const db = ctx.db as any;
+			return db.album.update({
+				where: { id: input.id },
+				data: { suggestionKeywords: input.suggestionKeywords.trim() },
 			});
 		}),
 

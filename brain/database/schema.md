@@ -37,3 +37,4 @@ Summarizes where the database schema lives and which major data domains exist.
 - Book source/editability metadata distinguishes user-created editable books from imported read-only Shamela books.
 - Offline/local book metadata includes Shamela source URL fields so downloaded books can preserve their refresh/redownload source.
 - Cross-domain book/audio references are modeled with `AlbumBookReference` and `MediaBookPageReference`.
+- `TranscriptionJob` owns DB-backed queue state for local Whisper work, including progress percentage, stage, worker ID, lock time, heartbeat, optional chunk counters, retry count, and error message.

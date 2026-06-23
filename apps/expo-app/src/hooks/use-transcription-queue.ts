@@ -1,6 +1,4 @@
 import { useCallback, useEffect, useState } from "react";
-import { getTelegramFileUrl } from "@/lib/get-telegram-file";
-import { transcribeAudio, type TranscribeResponse } from "@/lib/transcribe";
 import { vanillaTrpc } from "@/trpc/vanilla-client";
 
 type QueueInput = {
@@ -24,7 +22,10 @@ export type TranscriptionJob = Awaited<
 
 export function getTranscriptionJobProgress(job: TranscriptionJob) {
   if (job.status === "completed") return 100;
-  if (job.status === "running") return 50;
+  const progress =
+    typeof job.progressPercent === "number" ? job.progressPercent : 0;
+  if (job.status === "running") return Math.max(1, Math.min(progress, 99));
+  if (job.status === "failed") return Math.min(progress, 99);
   return 0;
 }
 
@@ -36,44 +37,6 @@ function getReachableAudioUrl(value?: string | null) {
   return isReachableAudioUrl(value) ? value ?? null : null;
 }
 
-async function saveTranscript(mediaId: number, result: TranscribeResponse) {
-  if (!result.segments?.length) return;
-  await vanillaTrpc.blog.saveTranscript.mutate({
-    mediaId,
-    segments: result.segments.map((segment) => ({
-      startSec: segment.start,
-      endSec: segment.end,
-      text: segment.text,
-    })),
-  });
-}
-
-async function runJob(job: TranscriptionJob) {
-  let audioUrl = getReachableAudioUrl(job.audioUrl);
-  if (!audioUrl && job.telegramFileId) {
-    const resolved = await getTelegramFileUrl(job.telegramFileId);
-    audioUrl = getReachableAudioUrl(resolved?.url);
-  }
-
-  if (!isReachableAudioUrl(audioUrl)) {
-    throw new Error(
-      "Queued transcription requires a reachable audio URL or Telegram file ID.",
-    );
-  }
-
-  const result = await transcribeAudio(
-    {
-      audioUrl,
-      from: job.fromSec ?? undefined,
-      to: job.toSec ?? undefined,
-      language: job.language || "ar",
-    },
-    job.transcriberUrl ?? undefined,
-  );
-  await saveTranscript(job.mediaId, result);
-  return result;
-}
-
 export function useTranscriptionQueue(
   mediaId?: number,
   options: TranscriptionQueueOptions = {},
@@ -82,15 +45,6 @@ export function useTranscriptionQueue(
   const reloadOnEnqueue = options.reloadOnEnqueue ?? true;
   const [jobs, setJobs] = useState<TranscriptionJob[]>([]);
   const [isRunning, setIsRunning] = useState(false);
-
-  const updateLocalJob = useCallback(
-    (id: number, patch: Partial<TranscriptionJob>) => {
-      setJobs((current) =>
-        current.map((job) => (job.id === id ? { ...job, ...patch } : job)),
-      );
-    },
-    [],
-  );
 
   const reload = useCallback(async () => {
     const rows = await vanillaTrpc.blog.getTranscriptionJobs.query({
@@ -138,58 +92,11 @@ export function useTranscriptionQueue(
   const runQueued = useCallback(async () => {
     setIsRunning(true);
     try {
-      const queued = await vanillaTrpc.blog.getTranscriptionJobs.query({
-        mediaId,
-        statuses: ["queued", "failed"],
-      });
-
-      for (const job of queued) {
-        const now = new Date();
-        await vanillaTrpc.blog.updateTranscriptionJob.mutate({
-          id: job.id,
-          status: "running",
-        });
-        updateLocalJob(job.id, {
-          status: "running",
-          updatedAt: now,
-          errorMessage: null,
-        });
-
-        try {
-          await runJob(job);
-          const completedAt = new Date();
-          await vanillaTrpc.blog.updateTranscriptionJob.mutate({
-            id: job.id,
-            status: "completed",
-          });
-          updateLocalJob(job.id, {
-            status: "completed",
-            updatedAt: completedAt,
-            completedAt,
-            errorMessage: null,
-          });
-        } catch (error) {
-          const failedAt = new Date();
-          const errorMessage =
-            error instanceof Error ? error.message : "Transcription failed.";
-          await vanillaTrpc.blog.updateTranscriptionJob.mutate({
-            id: job.id,
-            status: "failed",
-            errorMessage,
-          });
-          updateLocalJob(job.id, {
-            status: "failed",
-            retryCount: job.retryCount + 1,
-            updatedAt: failedAt,
-            errorMessage,
-          });
-        }
-      }
+      await reload();
     } finally {
       setIsRunning(false);
-      await reload();
     }
-  }, [mediaId, reload, updateLocalJob]);
+  }, [reload]);
 
   useEffect(() => {
     if (!autoLoad) return;
@@ -197,6 +104,21 @@ export function useTranscriptionQueue(
       console.warn("[TranscriptionQueue] load failed", error),
     );
   }, [autoLoad, reload]);
+
+  useEffect(() => {
+    if (!autoLoad) return;
+    const hasActiveJobs = jobs.some(
+      (job) => job.status === "queued" || job.status === "running",
+    );
+    if (!hasActiveJobs) return;
+
+    const timer = setInterval(() => {
+      reload().catch((error) =>
+        console.warn("[TranscriptionQueue] poll failed", error),
+      );
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [autoLoad, jobs, reload]);
 
   return {
     jobs,

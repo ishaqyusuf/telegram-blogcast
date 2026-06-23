@@ -1,5 +1,11 @@
-import { useMemo } from "react";
-import { ActivityIndicator, ScrollView, Text, View } from "react-native";
+import { useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  RefreshControl,
+  ScrollView,
+  Text,
+  View,
+} from "react-native";
 import { useRouter } from "expo-router";
 
 import { SafeArea } from "@/components/safe-area";
@@ -28,11 +34,39 @@ function formatDate(value?: Date | null) {
   });
 }
 
+function cleanTitle(value?: string | null) {
+  const trimmed = value?.replace(/\s+/g, " ").trim();
+  return trimmed ? trimmed : null;
+}
+
+function getQueueJobTitle(
+  job: ReturnType<typeof useTranscriptionQueue>["jobs"][number],
+) {
+  return (
+    cleanTitle(job.media?.title) ??
+    cleanTitle(job.media?.file?.fileName) ??
+    cleanTitle(job.media?.blog?.content) ??
+    `Media #${job.mediaId}`
+  );
+}
+
+function formatJobStage(
+  job: ReturnType<typeof useTranscriptionQueue>["jobs"][number],
+) {
+  const stage = cleanTitle(job.stage)?.replace(/_/g, " ");
+  const chunk =
+    job.currentChunk && job.totalChunks
+      ? `Chunk ${job.currentChunk}/${job.totalChunks}`
+      : null;
+  return [stage, chunk].filter(Boolean).join(" · ");
+}
+
 export default function TranscribeQueueScreen() {
   const router = useRouter();
   const colors = useColors();
   const { jobs, queuedCount, isRunning, runQueued, reload } =
     useTranscriptionQueue();
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const counts = useMemo(
     () =>
       jobs.reduce(
@@ -52,6 +86,14 @@ export default function TranscribeQueueScreen() {
     );
     return Math.round(total / jobs.length);
   }, [jobs]);
+  const refresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await reload();
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   return (
     <View
@@ -77,32 +119,28 @@ export default function TranscribeQueueScreen() {
               className="text-xs font-medium text-muted-foreground"
               style={{ color: colors.mutedForeground }}
             >
-              {jobs.length} jobs · {queuedCount} ready · {overallProgress}%
+              {jobs.length} jobs · {queuedCount} waiting · {overallProgress}%
             </Text>
           </View>
           <Pressable
             className="min-h-11 rounded-full bg-primary px-4 items-center justify-center active:opacity-80"
-            disabled={isRunning || queuedCount === 0}
+            disabled={isRunning}
             onPress={() => {
-              void runQueued().then(reload);
+              void runQueued();
             }}
             style={{
-              backgroundColor:
-                isRunning || queuedCount === 0
-                  ? colors.muted
-                  : colors.primary,
+              backgroundColor: isRunning ? colors.muted : colors.primary,
             }}
           >
             <Text
               className="text-sm font-bold"
               style={{
-                color:
-                  isRunning || queuedCount === 0
-                    ? colors.mutedForeground
-                    : colors.primaryForeground,
+                color: isRunning
+                  ? colors.mutedForeground
+                  : colors.primaryForeground,
               }}
             >
-              {isRunning ? "Running" : "Run"}
+              {isRunning ? "Refreshing" : "Refresh"}
             </Text>
           </Pressable>
         </View>
@@ -144,6 +182,16 @@ export default function TranscribeQueueScreen() {
         <ScrollView
           className="flex-1"
           contentContainerStyle={{ paddingBottom: 40 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={() => {
+                void refresh();
+              }}
+              tintColor={colors.primary}
+              colors={[colors.primary]}
+            />
+          }
         >
           {jobs.length === 0 ? (
             <View className="items-center justify-center px-8 py-16">
@@ -171,6 +219,8 @@ export default function TranscribeQueueScreen() {
               {jobs.map((job) => (
                 (() => {
                   const progress = getTranscriptionJobProgress(job);
+                  const title = getQueueJobTitle(job);
+                  const stage = formatJobStage(job);
                   return (
                     <View
                       key={job.id}
@@ -212,9 +262,10 @@ export default function TranscribeQueueScreen() {
                         <View className="min-w-0 flex-1">
                           <Text
                             className="text-sm font-bold text-foreground"
+                            numberOfLines={1}
                             style={{ color: colors.foreground }}
                           >
-                            Media #{job.mediaId}
+                            {title}
                           </Text>
                           <Text
                             className="mt-0.5 text-xs text-muted-foreground"
@@ -224,6 +275,15 @@ export default function TranscribeQueueScreen() {
                             {formatRange(job.fromSec, job.toSec)} ·{" "}
                             {formatDate(job.createdAt)}
                           </Text>
+                          {stage ? (
+                            <Text
+                              className="mt-0.5 text-xs capitalize text-muted-foreground"
+                              numberOfLines={1}
+                              style={{ color: colors.mutedForeground }}
+                            >
+                              {stage}
+                            </Text>
+                          ) : null}
                         </View>
                         <View className="items-end gap-0.5">
                           <Text

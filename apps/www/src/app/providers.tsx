@@ -4,8 +4,6 @@ import { ThemeProvider } from "@/providers/theme-provider";
 
 import { TRPCReactProvider } from "@/trpc/client";
 import { ReactNode } from "react";
-import { Provider } from "react-redux";
-import { SessionProvider } from "next-auth/react";
 import { NuqsAdapter } from "nuqs/adapters/next/app";
 
 type Props = {
@@ -13,15 +11,12 @@ type Props = {
 };
 export function Providers({ children }: Props) {
     return (
-        <SessionProvider>
-            <NuqsAdapter>
-                <TRPCReactProvider>
-                    <ThemeProvider attribute="class" defaultTheme="light">
-                        {children}
-                    </ThemeProvider>
-                </TRPCReactProvider>
-            </NuqsAdapter>
-        </SessionProvider>
+        <NuqsAdapter>
+            <TRPCReactProvider>
+                <ThemeProvider attribute="class" defaultTheme="light">
+                    {children}
+                </ThemeProvider>
+            </TRPCReactProvider>
+        </NuqsAdapter>
     );
 }
-

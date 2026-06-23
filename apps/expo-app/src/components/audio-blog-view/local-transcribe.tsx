@@ -105,11 +105,28 @@ export function LocalTranscribe({
       );
       return;
     }
+
+    let queueAudioUrl = reachableAudioUrl;
+    if (!queueAudioUrl && telegramFileId) {
+      setResolvingUrl(true);
+      try {
+        const resolved = await getTelegramFileUrl(telegramFileId);
+        queueAudioUrl = getReachableAudioUrl(resolved?.url);
+      } finally {
+        setResolvingUrl(false);
+      }
+    }
+
+    if (!queueAudioUrl) {
+      setError("Could not resolve a reachable audio URL for this queued job.");
+      return;
+    }
+
     try {
       await enqueue({
         mediaId,
         telegramFileId,
-        audioUrl: reachableAudioUrl,
+        audioUrl: queueAudioUrl,
         fromSec: fromSec > 0 ? fromSec : null,
         toSec: toSec < durationSec ? toSec : null,
         language: "ar",
@@ -117,7 +134,7 @@ export function LocalTranscribe({
       });
       setError(null);
       setQueueMessage(
-        "Added to transcription queue. Run queued jobs when your local transcriber is available.",
+        "Added to transcription queue. The local service will process it when online.",
       );
     } catch (error) {
       setError(
@@ -489,7 +506,9 @@ export function LocalTranscribe({
           <Text
             style={{ fontSize: 13, fontWeight: "700", color: colors.foreground }}
           >
-            {isRunningQueue ? "Running queued jobs..." : `Run queued transcriptions (${queuedCount})`}
+            {isRunningQueue
+              ? "Refreshing queue..."
+              : `Refresh queue (${queuedCount})`}
           </Text>
         </Pressable>
       )}
@@ -497,7 +516,7 @@ export function LocalTranscribe({
         <Text
           style={{ fontSize: 12, color: colors.destructive, textAlign: "center" }}
         >
-          {failedQueueJobs.length} queued transcription failed. Check the local transcriber and run again.
+          {failedQueueJobs.length} queued transcription failed. Check the local service and refresh.
         </Text>
       ) : null}
 

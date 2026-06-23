@@ -12,7 +12,7 @@ import subprocess
 import threading
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 from urllib.parse import urlparse
 
 import httpx
@@ -38,6 +38,23 @@ REQUEST_TIMEOUT_SECONDS = int(os.getenv("REQUEST_TIMEOUT_SECONDS", "60"))
 ALLOWED_HOSTS = os.getenv("ALLOWED_AUDIO_HOSTS", "*")
 PRELOAD_WHISPER = os.getenv("PRELOAD_WHISPER", "0") == "1"
 TRANSCRIPT_CACHE_ENABLED = os.getenv("TRANSCRIPT_CACHE_ENABLED", "0") == "1"
+TRANSCRIPTION_QUEUE_API_BASE_URL = os.getenv(
+    "TRANSCRIPTION_QUEUE_API_BASE_URL",
+    "",
+).rstrip("/")
+TRANSCRIPTION_QUEUE_WORKER_ENABLED = (
+    os.getenv("TRANSCRIPTION_QUEUE_WORKER_ENABLED", "1") == "1"
+)
+TRANSCRIPTION_QUEUE_WORKER_ID = os.getenv(
+    "TRANSCRIPTION_QUEUE_WORKER_ID",
+    f"local-transcriber-{os.getpid()}",
+)
+TRANSCRIPTION_QUEUE_POLL_SECONDS = float(os.getenv("TRANSCRIPTION_QUEUE_POLL_SECONDS", "5"))
+TRANSCRIPTION_WORKER_TOKEN = os.getenv("TRANSCRIPTION_WORKER_TOKEN", "")
+TRANSCRIPTION_QUEUE_CHUNKS = max(
+    1,
+    int(os.getenv("TRANSCRIPTION_QUEUE_CHUNKS", "10")),
+)
 
 AUDIO_CACHE = CACHE_DIR / "audio"
 CLIP_CACHE = CACHE_DIR / "clips"
@@ -302,7 +319,86 @@ def download_audio(audio_url: str, dest_path: Path) -> Path:
         )
 
 
+def get_or_download_audio(audio_url: str) -> Path:
+    audio_hash = hashlib.sha256(audio_url.encode()).hexdigest()[:16]
+    download_path = AUDIO_CACHE / audio_hash
+    existing = list(AUDIO_CACHE.glob(f"{audio_hash}.*"))
+    if download_path.exists():
+        return download_path
+    if existing:
+        return existing[0]
+    return download_audio(audio_url, download_path)
+
+
 # ── ffmpeg ──────────────────────────────────────────────────────────────────────
+
+def probe_audio_duration_seconds(input_path: Path) -> float:
+    cmd = [
+        "ffprobe",
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
+        str(input_path),
+    ]
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        if result.returncode != 0:
+            raise HTTPException(
+                status_code=500,
+                detail={
+                    "ok": False,
+                    "error": {
+                        "code": "FFPROBE_FAILED",
+                        "message": result.stderr.strip()[:500] or "ffprobe duration probe failed",
+                    },
+                },
+            )
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "ok": False,
+                "error": {
+                    "code": "FFPROBE_NOT_FOUND",
+                    "message": "ffprobe is not installed or not in PATH",
+                },
+            },
+        )
+    except subprocess.TimeoutExpired:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "ok": False,
+                "error": {
+                    "code": "FFPROBE_TIMEOUT",
+                    "message": "ffprobe duration probe timed out",
+                },
+            },
+        )
+
+    try:
+        duration = float(result.stdout.strip())
+    except ValueError:
+        duration = 0.0
+
+    if duration <= 0:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "ok": False,
+                "error": {
+                    "code": "AUDIO_DURATION_UNKNOWN",
+                    "message": "Could not determine audio duration for queued transcription",
+                },
+            },
+        )
+
+    return duration
+
 
 def run_ffmpeg(input_path: Path, output_path: Path, from_sec: Optional[float] = None, to_sec: Optional[float] = None) -> Path:
     output_path = output_path.with_suffix(".wav")
@@ -431,8 +527,15 @@ def health():
     }
 
 
-@app.post("/transcribe")
-def transcribe(req: TranscribeRequest):
+ProgressCallback = Callable[[int, str], None]
+
+
+def perform_transcription(req: TranscribeRequest, progress: Optional[ProgressCallback] = None):
+    def report(percent: int, stage: str):
+        if progress:
+            progress(percent, stage)
+
+    report(2, "validating")
     validate_audio_url(req.audioUrl)
 
     if _whisper_status != "ready":
@@ -447,6 +550,7 @@ def transcribe(req: TranscribeRequest):
             },
         )
 
+    report(5, "cache_check")
     cache_key = make_cache_key(
         audio_url=req.audioUrl,
         from_sec=req.from_,
@@ -462,25 +566,23 @@ def transcribe(req: TranscribeRequest):
         if cached:
             cached["ok"] = True
             cached["cached"] = True
+            report(100, "completed")
             return cached
 
     t0 = time.time()
 
     # Download
-    audio_hash = hashlib.sha256(req.audioUrl.encode()).hexdigest()[:16]
-    download_path = AUDIO_CACHE / audio_hash
-    if not download_path.exists() and not any(AUDIO_CACHE.glob(f"{audio_hash}.*")):
-        download_path = download_audio(req.audioUrl, download_path)
-    else:
-        existing = list(AUDIO_CACHE.glob(f"{audio_hash}.*"))
-        download_path = existing[0] if existing else download_audio(req.audioUrl, download_path)
+    report(15, "downloading")
+    download_path = get_or_download_audio(req.audioUrl)
 
     # Build clip
+    report(35, "clipping")
     clip_hash = cache_key[:16]
     clip_path = CLIP_CACHE / clip_hash
     clip_path = run_ffmpeg(download_path, clip_path, req.from_, req.to)
 
     # Transcribe
+    report(55, "transcribing")
     try:
         with _inference_lock:
             text, segments = transcribe_clip(
@@ -522,7 +624,241 @@ def transcribe(req: TranscribeRequest):
     if TRANSCRIPT_CACHE_ENABLED:
         save_cached_transcript(cache_key, response_data)
 
+    report(100, "completed")
     return response_data
+
+
+@app.post("/transcribe")
+def transcribe(req: TranscribeRequest):
+    return perform_transcription(req)
+
+
+# ── DB-backed queue worker ──────────────────────────────────────────────────────
+
+def queue_headers() -> dict[str, str]:
+    headers = {"content-type": "application/json"}
+    if TRANSCRIPTION_WORKER_TOKEN:
+        headers["authorization"] = f"Bearer {TRANSCRIPTION_WORKER_TOKEN}"
+    return headers
+
+
+def queue_post(client: httpx.Client, path: str, payload: dict) -> dict:
+    url = f"{TRANSCRIPTION_QUEUE_API_BASE_URL}{path}"
+    response = client.post(
+        url,
+        json=payload,
+        headers=queue_headers(),
+        timeout=REQUEST_TIMEOUT_SECONDS,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def job_error_message(exc: Exception) -> str:
+    if isinstance(exc, HTTPException):
+        detail = exc.detail
+        if isinstance(detail, dict):
+            error = detail.get("error")
+            if isinstance(error, dict) and error.get("message"):
+                return str(error["message"])[:500]
+        return str(detail)[:500]
+    return str(exc)[:500] or "Transcription failed."
+
+
+def report_queue_progress(
+    client: httpx.Client,
+    job_id: int,
+    percent: int,
+    stage: str,
+    current_chunk: int = 0,
+    total_chunks: int = 0,
+):
+    queue_post(
+        client,
+        f"/api/internal/transcription-jobs/{job_id}/progress",
+        {
+            "workerId": TRANSCRIPTION_QUEUE_WORKER_ID,
+            "progressPercent": percent,
+            "stage": stage,
+            "currentChunk": current_chunk,
+            "totalChunks": total_chunks,
+        },
+    )
+
+
+def queue_chunk_progress_percent(completed_chunks: int, total_chunks: int) -> int:
+    if total_chunks <= 0:
+        return 55
+    return min(100, 55 + round((completed_chunks / total_chunks) * 45))
+
+
+def build_queue_chunks(from_sec: float, to_sec: float) -> list[tuple[float, float]]:
+    if to_sec <= from_sec:
+        raise RuntimeError("Queued transcription requires toSec to be greater than fromSec.")
+
+    duration = to_sec - from_sec
+    chunk_count = TRANSCRIPTION_QUEUE_CHUNKS
+    chunk_duration = duration / chunk_count
+    chunks: list[tuple[float, float]] = []
+
+    for index in range(chunk_count):
+        chunk_start = from_sec + (chunk_duration * index)
+        chunk_end = to_sec if index == chunk_count - 1 else from_sec + (chunk_duration * (index + 1))
+        chunks.append((round(chunk_start, 3), round(chunk_end, 3)))
+
+    return chunks
+
+
+def save_queue_chunk(
+    client: httpx.Client,
+    job_id: int,
+    chunk_start_sec: float,
+    chunk_end_sec: float,
+    segments: list[dict],
+    progress_percent: int,
+    current_chunk: int,
+    total_chunks: int,
+):
+    queue_post(
+        client,
+        f"/api/internal/transcription-jobs/{job_id}/chunk",
+        {
+            "workerId": TRANSCRIPTION_QUEUE_WORKER_ID,
+            "chunkStartSec": chunk_start_sec,
+            "chunkEndSec": chunk_end_sec,
+            "segments": segments,
+            "progressPercent": progress_percent,
+            "stage": "chunk_completed",
+            "currentChunk": current_chunk,
+            "totalChunks": total_chunks,
+            "model": "whisper-local",
+        },
+    )
+
+
+def process_queue_job(client: httpx.Client, job: dict):
+    job_id = int(job["id"])
+    audio_url = job.get("audioUrl")
+    if not audio_url:
+        raise RuntimeError(
+            "Queued transcription worker requires audioUrl; Telegram-only jobs must be resolved before enqueue."
+        )
+
+    last_progress = {"percent": int(job.get("progressPercent") or 0)}
+
+    def progress(percent: int, stage: str, current_chunk: int = 0, total_chunks: int = 0):
+        last_progress["percent"] = percent
+        report_queue_progress(client, job_id, percent, stage, current_chunk, total_chunks)
+
+    try:
+        progress(2, "validating")
+        validate_audio_url(audio_url)
+
+        from_sec = float(job.get("fromSec") or 0)
+        if job.get("toSec") is None:
+            progress(15, "downloading")
+            download_path = get_or_download_audio(audio_url)
+            progress(35, "probing")
+            to_sec = probe_audio_duration_seconds(download_path)
+        else:
+            progress(35, "chunkifying")
+            to_sec = float(job.get("toSec"))
+
+        chunks = build_queue_chunks(from_sec, to_sec)
+        total_chunks = len(chunks)
+        progress(55, "transcribing", 0, total_chunks)
+
+        for index, (chunk_start, chunk_end) in enumerate(chunks, start=1):
+            req = TranscribeRequest(
+                audioUrl=audio_url,
+                from_=chunk_start,
+                to=chunk_end,
+                language=job.get("language") or DEFAULT_LANGUAGE,
+                wordTimestamps=True,
+            )
+            result = perform_transcription(req)
+            progress_percent = queue_chunk_progress_percent(index, total_chunks)
+            save_queue_chunk(
+                client=client,
+                job_id=job_id,
+                chunk_start_sec=chunk_start,
+                chunk_end_sec=chunk_end,
+                segments=result.get("segments", []),
+                progress_percent=progress_percent,
+                current_chunk=index,
+                total_chunks=total_chunks,
+            )
+            last_progress["percent"] = progress_percent
+    except Exception as exc:
+        setattr(exc, "queue_progress_percent", last_progress["percent"])
+        raise
+
+    queue_post(
+        client,
+        f"/api/internal/transcription-jobs/{job_id}/complete",
+        {
+            "workerId": TRANSCRIPTION_QUEUE_WORKER_ID,
+        },
+    )
+
+
+def queue_worker_loop():
+    log.info(
+        "Transcription queue worker enabled (api=%s, worker=%s)",
+        TRANSCRIPTION_QUEUE_API_BASE_URL,
+        TRANSCRIPTION_QUEUE_WORKER_ID,
+    )
+
+    with httpx.Client(follow_redirects=True) as client:
+        while True:
+            try:
+                if _whisper_status != "ready":
+                    ensure_whisper_model_ready()
+
+                claimed = queue_post(
+                    client,
+                    "/api/internal/transcription-jobs/claim",
+                    {"workerId": TRANSCRIPTION_QUEUE_WORKER_ID},
+                )
+                job = claimed.get("job")
+                if not job:
+                    time.sleep(TRANSCRIPTION_QUEUE_POLL_SECONDS)
+                    continue
+
+                log.info("Claimed transcription job %s", job.get("id"))
+                try:
+                    process_queue_job(client, job)
+                    log.info("Completed transcription job %s", job.get("id"))
+                except Exception as job_exc:
+                    message = job_error_message(job_exc)
+                    progress_percent = getattr(
+                        job_exc,
+                        "queue_progress_percent",
+                        job.get("progressPercent") or 0,
+                    )
+                    log.exception(
+                        "Failed transcription job %s: %s",
+                        job.get("id"),
+                        message,
+                    )
+                    queue_post(
+                        client,
+                        f"/api/internal/transcription-jobs/{job.get('id')}/fail",
+                        {
+                            "workerId": TRANSCRIPTION_QUEUE_WORKER_ID,
+                            "progressPercent": progress_percent,
+                            "errorMessage": message,
+                        },
+                    )
+            except Exception as loop_exc:
+                log.warning("Transcription queue worker idle after error: %s", loop_exc)
+                time.sleep(TRANSCRIPTION_QUEUE_POLL_SECONDS)
+
+
+@app.on_event("startup")
+def start_transcription_queue_worker():
+    if TRANSCRIPTION_QUEUE_WORKER_ENABLED and TRANSCRIPTION_QUEUE_API_BASE_URL:
+        threading.Thread(target=queue_worker_loop, daemon=True).start()
 
 
 # ── Entrypoint ──────────────────────────────────────────────────────────────────

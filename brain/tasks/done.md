@@ -11,6 +11,7 @@ Tracks completed work that is still useful as project memory.
 ## Template
 
 ### Completed
+- **Worker-owned transcription queue** — moved queued transcription execution out of Expo and into API/local-service worker ownership; added DB progress/heartbeat fields, internal worker endpoints, Python polling worker, mobile observer queue UI, disposable DB/route smoke tests, and Brain ADR/review docs. Plan: `brain/plans/2026-06-23-feature-worker-owned-transcription-queue.md`.
 - **Expo development build branding** — made the development Android EAS profile load local env values and switch to `DEV`-badged app icon/adaptive icon/iOS icon/splash assets through `APP_VARIANT=development`.
 - **Expo EAS build scripts** — renamed the preview Android build shortcut to `eas-build:preview` and added `eas-build:dev` for the development Android EAS profile from the repo root while preserving the EAS account helper flow.
 - **Expo Android native shortcut and splash logo polish** — added root `bun run android` to best-effort uninstall `com.alghurobaa.podcast` through the Android SDK `adb` path before delegating to the Expo app Android build via `bun run --cwd apps/expo-app android`, added cropped splash/loading logo assets, and simplified Android adaptive icon layering so the logo is not reused as its own background.

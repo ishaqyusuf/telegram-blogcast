@@ -9,6 +9,7 @@ const config = {
         ignoreBuildErrors: true,
     },
     devIndicators: false,
+    allowedDevOrigins: ["podcast.localhost", "*.podcast.localhost"],
     images: {
         // loader: "custom",
         // loaderFile: "./image-loader.ts",

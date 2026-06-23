@@ -135,6 +135,25 @@ Audio files, trimmed clips, and transcript JSON are cached in `cache/`. The cach
 - Audio transcript chunks use this local service only. Start it before transcribing with `bun run transcriber:dev`.
 - Chunk requests should set `"wordTimestamps": true`; the app uses returned word timings for active word highlighting and falls back to approximate word timings only when the local model omits words.
 
+## Queue Worker
+
+The service can also process DB-backed transcription queue jobs. Set the API base URL before starting the service:
+
+```bash
+TRANSCRIPTION_QUEUE_API_BASE_URL=http://YOUR_API_HOST:3000 bun run transcriber:dev
+```
+
+Optional queue settings:
+
+```env
+TRANSCRIPTION_QUEUE_WORKER_ENABLED=1
+TRANSCRIPTION_QUEUE_WORKER_ID=my-mac-transcriber
+TRANSCRIPTION_QUEUE_POLL_SECONDS=5
+TRANSCRIPTION_WORKER_TOKEN=shared-secret-if-api-uses-one
+```
+
+When enabled, the service claims one queued job at a time from `/api/internal/transcription-jobs/claim`, downloads or reuses the cached source media, clips the requested `from`/`to` range with ffmpeg, transcribes that whole requested range, reports progress stages, then saves transcript segments through the API.
+
 ## Troubleshooting
 
 ### "Connection refused" from Expo/device

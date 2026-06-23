@@ -5,6 +5,7 @@ const PREVIEW_OR_FORCED_BASE_URL =
   process.env.EXPO_PUBLIC_FORCE_BASE_URL === "true";
 const IS_DEV = typeof __DEV__ !== "undefined" && __DEV__;
 const TRPC_PATH = "/api/trpc";
+const DEFAULT_API_PORT = "3005";
 
 export const getLocalNetworkHost = () => {
   const debuggerHost = Constants.expoConfig?.hostUri;
@@ -56,7 +57,7 @@ export const getBaseUrl = () => {
     return logResolvedUrl("baseUrl", envBaseUrl);
   }
 
-  const apiPort = process.env.EXPO_PUBLIC_API_PORT ?? "3005";
+  const apiPort = process.env.EXPO_PUBLIC_API_PORT ?? DEFAULT_API_PORT;
   return logResolvedUrl("baseUrl", getLocalUrl(apiPort));
 };
 
@@ -69,7 +70,9 @@ export const getTrpcUrl = () => {
   }
 
   const trpcPort =
-    process.env.EXPO_PUBLIC_TRPC_PORT ?? process.env.EXPO_PUBLIC_API_PORT;
+    process.env.EXPO_PUBLIC_TRPC_PORT ??
+    process.env.EXPO_PUBLIC_API_PORT ??
+    DEFAULT_API_PORT;
 
   if (IS_DEV && trpcPort) {
     return logResolvedUrl("trpcUrl", appendPath(getLocalUrl(trpcPort), TRPC_PATH));

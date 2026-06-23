@@ -23,6 +23,12 @@ High-level map of the API surface and where endpoint logic lives.
 - Podcasts
 - App/root router composition
 
+### Internal Worker Endpoints
+- `POST /api/internal/transcription-jobs/claim`: local transcriber claims the next queued, retryable failed, or stale running transcription job.
+- `POST /api/internal/transcription-jobs/:id/progress`: worker updates DB-backed queue progress, stage, chunk counters, worker ID, and heartbeat.
+- `POST /api/internal/transcription-jobs/:id/complete`: worker saves returned transcript segments and marks the job completed.
+- `POST /api/internal/transcription-jobs/:id/fail`: worker records an error, marks the job failed, and increments retry count.
+
 ### Books Router Highlights
 - `book.syncBookFromShamela`: imports or re-imports a Shamela book URL, stores `BookImportHistory`, refreshes metadata, and syncs TOC chapter stubs.
 - `book.getBookImportHistory`: returns recent book import attempts for the fetch screen/history UI.

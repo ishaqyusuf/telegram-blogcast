@@ -28,6 +28,16 @@ const transcriptionJobRangeSchema = z.object({
   language: z.string().default("ar"),
   transcriberUrl: z.string().nullish(),
 });
+const transcriptionJobInclude = {
+  media: {
+    select: {
+      id: true,
+      title: true,
+      file: { select: { fileName: true } },
+      blog: { select: { content: true } },
+    },
+  },
+};
 const blogMediaUploadSchema = z.object({
   url: z.string().url(),
   downloadUrl: z.string().url().optional(),
@@ -686,6 +696,7 @@ export const blogRoutes = createTRPCRouter({
             ? { status: { in: input.statuses } }
             : {}),
         },
+        include: transcriptionJobInclude,
         orderBy: { createdAt: "asc" },
       });
     }),
@@ -714,6 +725,7 @@ export const blogRoutes = createTRPCRouter({
           toSec,
           status: { in: ["queued", "running"] },
         },
+        include: transcriptionJobInclude,
         orderBy: { createdAt: "desc" },
       });
       if (existing) return existing;
@@ -728,7 +740,17 @@ export const blogRoutes = createTRPCRouter({
           language: input.language || "ar",
           transcriberUrl: input.transcriberUrl || null,
           status: "queued",
+          progressPercent: 0,
+          stage: "queued",
+          workerId: null,
+          lockedAt: null,
+          heartbeatAt: null,
+          currentChunk: null,
+          totalChunks: null,
+          completedAt: null,
+          errorMessage: null,
         },
+        include: transcriptionJobInclude,
       });
     }),
 
@@ -738,16 +760,39 @@ export const blogRoutes = createTRPCRouter({
         id: z.number(),
         status: transcriptionJobStatusSchema,
         errorMessage: z.string().nullish(),
+        progressPercent: z.number().int().min(0).max(100).optional(),
+        stage: z.string().nullish(),
+        currentChunk: z.number().int().positive().nullish(),
+        totalChunks: z.number().int().positive().nullish(),
       }),
     )
     .mutation(async ({ ctx, input }) => {
       const db = ctx.db as any;
+      const progressPercent =
+        input.progressPercent ??
+        (input.status === "completed"
+          ? 100
+          : input.status === "queued"
+            ? 0
+            : undefined);
       return db.transcriptionJob.update({
         where: { id: input.id },
         data: {
           status: input.status,
+          progressPercent,
+          stage:
+            input.stage === undefined
+              ? input.status === "completed"
+                ? "completed"
+                : input.status === "failed"
+                  ? "failed"
+                  : undefined
+              : input.stage,
+          currentChunk: input.currentChunk,
+          totalChunks: input.totalChunks,
           updatedAt: new Date(),
           completedAt: input.status === "completed" ? new Date() : undefined,
+          heartbeatAt: input.status === "running" ? new Date() : undefined,
           errorMessage:
             input.status === "failed" ? input.errorMessage || null : null,
           retryCount:

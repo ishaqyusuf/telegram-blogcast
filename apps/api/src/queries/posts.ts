@@ -145,6 +145,12 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
               },
             },
           },
+          transcriptionJobs: {
+            where: { status: { in: ["queued", "running"] } },
+            orderBy: { createdAt: "desc" },
+            take: 1,
+            select: { status: true },
+          },
         },
       },
       _count: {
@@ -232,6 +238,7 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
           albumName: media.album?.name,
           albumId: media.albumId,
           transcriptStatus: media.transcript?.status ?? null,
+          transcriptionJobStatus: media.transcriptionJobs[0]?.status ?? null,
           transcriptSegments,
           isTranscribed: isFullyTranscribed,
         };

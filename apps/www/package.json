@@ -5,13 +5,19 @@
     "scripts": {
         "--dev": "TZ=UTC next dev --turbopack -p 8083",
         "clean": "git clean -xdf .next .turbo node_modules",
-        "dev": "bunx next dev -p 3005",
+        "dev": "portless",
+        "dev:app": "bunx next dev -p 3005",
         "dev:prod": "bunx env-cmd -f .env.production env TZ=UTC next dev -p 3005",
         "build": "NODE_ENV=production next build --turbopack",
         "start": "next start",
         "lint": "next lint",
         "typecheck": "tsc --noEmit",
         "dump-tsc": "tsc temp.ts --declaration --emitDeclarationOnly"
+    },
+    "portless": {
+        "name": "podcast",
+        "script": "dev:app",
+        "appPort": 3005
     },
     "dependencies": {
         "@actions/core": "^1.11.1",

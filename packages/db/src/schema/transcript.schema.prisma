@@ -43,10 +43,18 @@ model TranscriptionJob {
   transcriberUrl String?
   // queued | running | completed | failed
   status         String    @default("queued")
+  progressPercent Int      @default(0)
+  stage          String?
+  workerId       String?
+  lockedAt       DateTime?
+  heartbeatAt    DateTime?
+  currentChunk   Int?
+  totalChunks    Int?
   retryCount     Int       @default(0)
   errorMessage   String?
 
   @@index([mediaId])
   @@index([status])
+  @@index([status, heartbeatAt])
   @@index([mediaId, status])
 }
