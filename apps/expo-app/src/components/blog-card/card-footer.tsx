@@ -1,10 +1,12 @@
 import { Pressable } from "@/components/ui/pressable";
+import { useRouter } from "expo-router";
 import { useCallback } from "react";
 import { Text, View } from "react-native";
 
 import { Icon } from "@/components/ui/icon";
 import { useColors } from "@/hooks/use-color";
 import { withAlpha } from "@/lib/theme";
+import { getTranscriptionBadgeState } from "@/lib/transcription-status";
 import { useAudioStore } from "@/store/audio-store";
 
 import type { BlogItem } from "./types";
@@ -17,6 +19,7 @@ export function CardFooter({
 	onAddToAlbum?: (post: BlogItem) => void;
 }) {
 	const tags = post.tags?.slice(0, 2) ?? [];
+	const router = useRouter();
 	const colors = useColors();
 	const loadedBlogId = useAudioStore((s) => s.blog?.id);
 	const globalIsPlaying = useAudioStore((s) => s.isPlaying);
@@ -32,32 +35,15 @@ export function CardFooter({
 	const isLoading = isCurrent && globalIsLoading;
 	const albumName = (post.audio as any)?.albumName as string | null | undefined;
 	const albumId = (post.audio as any)?.albumId as number | null | undefined;
-	const transcriptStatus = (post.audio as any)?.transcriptStatus as
-		| string
-		| null
-		| undefined;
-	const transcriptionJobStatus = (post.audio as any)?.transcriptionJobStatus as
-		| string
-		| null
-		| undefined;
-	const isQueuedForTranscription = transcriptionJobStatus === "queued";
-	const isRunningTranscription = transcriptionJobStatus === "running";
-	const isFullyTranscribed = Boolean((post.audio as any)?.isTranscribed);
-	const isPartlyTranscribed =
-		!isFullyTranscribed &&
-		(transcriptStatus === "processing" || transcriptStatus === "done");
-	const showTranscriptBadge =
-		isFullyTranscribed ||
-		isPartlyTranscribed ||
-		isQueuedForTranscription ||
-		isRunningTranscription;
-	const transcriptColor = isFullyTranscribed
-		? colors.success
-		: isPartlyTranscribed
-			? colors.warn
-			: isQueuedForTranscription
-				? colors.mutedForeground
-				: colors.primary;
+	const transcriptBadge = getTranscriptionBadgeState(post.audio as any);
+	const transcriptColor =
+		transcriptBadge.tone === "success"
+			? colors.success
+			: transcriptBadge.tone === "warn"
+				? colors.warn
+				: transcriptBadge.tone === "muted"
+					? colors.mutedForeground
+					: colors.primary;
 	const canAddToAlbum = Boolean(
 		post.audio?.mediaId && !albumName && !albumId && onAddToAlbum,
 	);
@@ -82,7 +68,7 @@ export function CardFooter({
 	if (hasAudioSource) {
 		return (
 			<View className="mt-3 flex-row items-center gap-1">
-				{showTranscriptBadge ? (
+				{transcriptBadge.show ? (
 					<View
 						className="size-7 items-center justify-center rounded-full"
 						style={{ backgroundColor: withAlpha(transcriptColor, 0.14) }}
@@ -91,7 +77,14 @@ export function CardFooter({
 					</View>
 				) : null}
 				{albumName ? (
-					<View
+					<Pressable
+						disabled={!albumId}
+						onPress={(e) => {
+							e.stopPropagation();
+							if (albumId) {
+								router.push(`/albums/${albumId}` as any);
+							}
+						}}
 						className="max-w-[108px] rounded-full bg-primary/10 px-2 py-0.5"
 						style={{ backgroundColor: withAlpha(colors.primary, 0.1) }}
 					>
@@ -106,7 +99,7 @@ export function CardFooter({
 						>
 							{albumName}
 						</Text>
-					</View>
+					</Pressable>
 				) : null}
 				{canAddToAlbum ? (
 					<Pressable

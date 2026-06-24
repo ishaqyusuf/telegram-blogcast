@@ -17,7 +17,7 @@ source .venv311/bin/activate
 pip install -r requirements.txt
 ```
 
-Root dev uses `.venv311` by default. The first run will download the configured Whisper model. The dev script defaults to `mlx-community/whisper-tiny` for fast smoke tests; set `WHISPER_MODEL=mlx-community/whisper-large-v3-turbo` when you want the larger model.
+Root dev uses `.venv311` by default. The first run will download the configured Whisper model. The dev script defaults to `mlx-community/whisper-large-v3-turbo`; set `WHISPER_MODEL=mlx-community/whisper-tiny` when you want faster smoke tests.
 
 ## Run
 
@@ -76,7 +76,7 @@ curl -X POST http://localhost:8787/transcribe \
 {
   "ok": true,
   "service": "al-ghurobaa-local-transcriber",
-  "model": "mlx-community/whisper-tiny",
+  "model": "mlx-community/whisper-large-v3-turbo",
   "device": "apple-silicon-local"
 }
 ```
@@ -107,7 +107,7 @@ Response:
   "from": 0,
   "to": 300,
   "language": "ar",
-  "model": "mlx-community/whisper-tiny",
+  "model": "mlx-community/whisper-large-v3-turbo",
   "text": "النص العربي هنا...",
   "segments": [
     {
@@ -166,7 +166,7 @@ When enabled, the service claims one queued job at a time from `/api/internal/tr
 - Or disable firewall temporarily: System Settings → Network → Firewall
 
 ### First request is slow
-- The first request downloads the configured Whisper model. `mlx-community/whisper-tiny` is fast for smoke tests; `mlx-community/whisper-large-v3-turbo` is much larger (~1.6 GB) and slower to download.
+- The first request downloads the configured Whisper model. `mlx-community/whisper-large-v3-turbo` is the default; `mlx-community/whisper-tiny` is available for fast smoke tests.
 
 ### High RAM usage
 - `whisper-large-v3-turbo` uses significant RAM. With 16GB RAM, transcription should work but close memory-heavy apps.

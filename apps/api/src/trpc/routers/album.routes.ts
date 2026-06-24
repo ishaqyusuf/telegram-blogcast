@@ -1,6 +1,7 @@
-import { createTRPCRouter, publicProcedure } from "../init";
+import { Prisma } from "@acme/db";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { createTRPCRouter, publicProcedure } from "../init";
 
 const suggestedMediaInput = z.object({
 	albumId: z.number(),
@@ -128,6 +129,23 @@ export const albumRoutes = createTRPCRouter({
 										include: { tags: { select: { id: true, title: true } } },
 									},
 								},
+							},
+							transcript: {
+								select: {
+									status: true,
+									segments: {
+										select: { endSec: true },
+										where: { status: "done" },
+										orderBy: { endSec: "desc" },
+										take: 1,
+									},
+								},
+							},
+							transcriptionJobs: {
+								where: { status: { in: ["queued", "running"] } },
+								orderBy: { createdAt: "desc" },
+								take: 1,
+								select: { status: true },
 							},
 							albumAudioIndex: true,
 						},
@@ -321,73 +339,77 @@ export const albumRoutes = createTRPCRouter({
 		)
 		.mutation(async ({ ctx, input }) => {
 			const { db } = ctx;
-			return db.$transaction(async (tx) => {
-				const mediaIds = uniqueNumbers(input.mediaIds);
-				const mediaItems = await tx.media.findMany({
-					where: { id: { in: mediaIds } },
-					include: { blog: { select: { channelId: true } } },
+			const mediaIds = uniqueNumbers(input.mediaIds);
+			const mediaItems = await db.media.findMany({
+				where: { id: { in: mediaIds } },
+				include: { blog: { select: { channelId: true } } },
+			});
+			const mediaById = new Map(mediaItems.map((media) => [media.id, media]));
+			const orderedMediaItems = mediaIds
+				.map((id) => mediaById.get(id))
+				.filter((media): media is (typeof mediaItems)[number] =>
+					Boolean(media),
+				);
+			const itemsToAdd = orderedMediaItems.filter(
+				(media) => media.albumId !== input.albumId,
+			);
+			const missingIds = mediaIds.filter((id) => !mediaById.has(id));
+			if (missingIds.length > 0) {
+				throw new TRPCError({
+					code: "NOT_FOUND",
+					message: `Media not found: ${missingIds.join(", ")}`,
 				});
-				const itemsToAdd = mediaItems.filter(
-					(media) => media.albumId !== input.albumId,
-				);
-				const missingIds = mediaIds.filter(
-					(id) => !mediaItems.some((media) => media.id === id),
-				);
-				if (missingIds.length > 0) {
-					throw new TRPCError({
-						code: "NOT_FOUND",
-						message: `Media not found: ${missingIds.join(", ")}`,
-					});
-				}
+			}
 
+			const album = await db.album.findFirstOrThrow({
+				where: { id: input.albumId, deletedAt: null },
+				select: { channelId: true },
+			});
+			const channelIds = uniqueNumbers(
+				itemsToAdd
+					.map((media) => media.blog?.channelId)
+					.filter(
+						(channelId): channelId is number => typeof channelId === "number",
+					),
+			);
+
+			if (
+				itemsToAdd.some(
+					(media) => !media.mimeType?.toLowerCase().startsWith("audio/"),
+				)
+			) {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: "Only audio media can be added to an album.",
+				});
+			}
+
+			if (channelIds.length > 1) {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: "Album media must come from one channel.",
+				});
+			}
+
+			if (
+				album.channelId &&
+				channelIds.length > 0 &&
+				channelIds.some((channelId) => channelId !== album.channelId)
+			) {
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: "This album only accepts media from its original channel.",
+				});
+			}
+
+			const inferredChannelId = album.channelId ?? channelIds[0];
+
+			return db.$transaction(async (tx) => {
 				const maxIdx = await tx.albumAudioIndex.aggregate({
 					where: { albumId: input.albumId },
 					_max: { index: true },
 				});
-				let nextIndex = (maxIdx._max.index ?? 0) + 1;
-
-				const album = await tx.album.findFirstOrThrow({
-					where: { id: input.albumId, deletedAt: null },
-					select: { channelId: true },
-				});
-				const channelIds = uniqueNumbers(
-					itemsToAdd
-						.map((media) => media.blog?.channelId)
-						.filter(
-							(channelId): channelId is number => typeof channelId === "number",
-						),
-				);
-
-				if (
-					itemsToAdd.some(
-						(media) => !media.mimeType?.toLowerCase().startsWith("audio/"),
-					)
-				) {
-					throw new TRPCError({
-						code: "BAD_REQUEST",
-						message: "Only audio media can be added to an album.",
-					});
-				}
-
-				if (channelIds.length > 1) {
-					throw new TRPCError({
-						code: "BAD_REQUEST",
-						message: "Album media must come from one channel.",
-					});
-				}
-
-				if (
-					album.channelId &&
-					channelIds.length > 0 &&
-					channelIds.some((channelId) => channelId !== album.channelId)
-				) {
-					throw new TRPCError({
-						code: "BAD_REQUEST",
-						message: "This album only accepts media from its original channel.",
-					});
-				}
-
-				const inferredChannelId = album.channelId ?? channelIds[0];
+				const nextIndex = (maxIdx._max.index ?? 0) + 1;
 
 				if (!album.channelId && inferredChannelId) {
 					await tx.album.update({
@@ -396,31 +418,34 @@ export const albumRoutes = createTRPCRouter({
 					});
 				}
 
-				for (const media of itemsToAdd) {
-					const mediaIndexId = media.mediaIndexId ?? media.id;
-					await tx.media.update({
-						where: { id: media.id },
-						data: { albumId: input.albumId, mediaIndexId },
-					});
+				if (itemsToAdd.length > 0) {
+					const itemIds = itemsToAdd.map((media) => media.id);
+					const indexRows = itemsToAdd.map((media, offset) => ({
+						blogAudioId: media.mediaIndexId ?? media.id,
+						index: nextIndex + offset,
+					}));
 
-					const existing = await tx.albumAudioIndex.findUnique({
-						where: { blogAudioId: mediaIndexId },
-					});
+					await tx.$executeRaw`
+						UPDATE "Media" AS media
+						SET "albumId" = ${input.albumId},
+							"mediaIndexId" = COALESCE(media."mediaIndexId", media."id")
+						WHERE media."id" IN (${Prisma.join(itemIds)})
+					`;
 
-					if (existing) {
-						await tx.albumAudioIndex.update({
-							where: { blogAudioId: mediaIndexId },
-							data: { albumId: input.albumId, index: nextIndex++ },
-						});
-					} else {
-						await tx.albumAudioIndex.create({
-							data: {
-								albumId: input.albumId,
-								blogAudioId: mediaIndexId,
-								index: nextIndex++,
-							},
-						});
-					}
+					await tx.$executeRaw`
+						INSERT INTO "AlbumAudioIndex" ("albumId", "blogAudioId", "index", "updatedAt")
+						VALUES ${Prisma.join(
+							indexRows.map(
+								(row) =>
+									Prisma.sql`(${input.albumId}, ${row.blogAudioId}, ${row.index}, CURRENT_TIMESTAMP)`,
+							),
+						)}
+						ON CONFLICT ("blogAudioId")
+						DO UPDATE SET
+							"albumId" = EXCLUDED."albumId",
+							"index" = EXCLUDED."index",
+							"updatedAt" = CURRENT_TIMESTAMP
+					`;
 				}
 
 				return {

@@ -1,18 +1,18 @@
 import { Pressable } from "@/components/ui/pressable";
 import {
-	getSwipeDeleteThreshold,
 	SwipeDeleteAction,
+	getSwipeDeleteThreshold,
 } from "@/components/ui/swipe-delete-action";
-import { formatDate } from "@acme/utils/dayjs";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
+import { formatDate } from "@acme/utils/dayjs";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
+	type ReactNode,
 	useCallback,
 	useEffect,
 	useMemo,
 	useRef,
 	useState,
-	type ReactNode,
 } from "react";
 import {
 	ActivityIndicator,
@@ -21,10 +21,11 @@ import {
 	Modal,
 	RefreshControl,
 	ScrollView,
+	Share,
 	Text,
 	TextInput,
-	useWindowDimensions,
 	View,
+	useWindowDimensions,
 } from "react-native";
 import ReanimatedSwipeable, {
 	SwipeDirection,
@@ -40,12 +41,20 @@ import Animated, {
 	type SharedValue,
 } from "react-native-reanimated";
 
-import { _trpc } from "@/components/static-trpc";
 import { SafeArea } from "@/components/safe-area";
-import { Icon } from "@/components/ui/icon";
+import { _trpc } from "@/components/static-trpc";
+import { Icon, type IconKeys } from "@/components/ui/icon";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useColors } from "@/hooks/use-color";
+import { useTranscriptionQueue } from "@/hooks/use-transcription-queue";
+import { getWebUrl } from "@/lib/base-url";
+import { getTelegramFileUrl } from "@/lib/get-telegram-file";
+import { getMediaFileUrl } from "@/lib/media-source";
+import { withAlpha } from "@/lib/theme";
+import { getDefaultTranscriberUrl } from "@/lib/transcribe";
+import { getTranscriptionBadgeState } from "@/lib/transcription-status";
 import { minuteToString } from "@/lib/utils";
+import { useAppSettingsStore } from "@/store/app-settings-store";
 import { useGlobalAudioBarStore } from "@/store/global-audio-bar-store";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -82,14 +91,23 @@ function formatMediaSizeMb(size?: number | null) {
 
 function getMediaTelegramTime(media: any) {
 	const value = media?.blog?.blogDate ?? media?.blogDate ?? media?.date;
-	const time = value ? new Date(value).getTime() : Number.POSITIVE_INFINITY;
-	return Number.isFinite(time) ? time : Number.POSITIVE_INFINITY;
+	const time = value ? new Date(value).getTime() : Number.NEGATIVE_INFINITY;
+	return Number.isFinite(time) ? time : Number.NEGATIVE_INFINITY;
 }
 
 function sortMediaByTelegramDate(items: any[]) {
 	return [...items].sort(
-		(a, b) => getMediaTelegramTime(a) - getMediaTelegramTime(b),
+		(a, b) => getMediaTelegramTime(b) - getMediaTelegramTime(a),
 	);
+}
+
+function getTrackBlogHref(media: any) {
+	const blogId = media?.blog?.id ?? media?.blogId;
+	const type = media?.blog?.type;
+	if (!blogId) return null;
+	if (type === "text") return `/blog-view-text/${blogId}`;
+	if (type === "audio") return `/blog-view-2/${blogId}`;
+	return `/blog-view/${blogId}`;
 }
 
 function AlbumDetailSkeleton() {
@@ -459,6 +477,15 @@ function TrackRow({
 	const colors = useColors();
 	const duration = media.file?.duration ?? media.duration;
 	const trackDate = media.blog?.blogDate ?? media.blogDate ?? media.date;
+	const transcriptBadge = getTranscriptionBadgeState(media);
+	const transcriptColor =
+		transcriptBadge.tone === "success"
+			? colors.success
+			: transcriptBadge.tone === "warn"
+				? colors.warn
+				: transcriptBadge.tone === "muted"
+					? colors.mutedForeground
+					: colors.primary;
 	const metadata = [
 		duration != null ? minuteToString(duration) : null,
 		trackDate ? formatDate(trackDate, "MMM D, YYYY") : null,
@@ -487,17 +514,42 @@ function TrackRow({
 				{displayIndex}
 			</Text>
 			<View style={{ flex: 1, gap: 2 }}>
-				<Text
+				<View
 					style={{
-						fontSize: 14,
-						fontWeight: "600",
-						color: colors.foreground,
-						textAlign: "right",
+						flexDirection: "row-reverse",
+						alignItems: "center",
+						gap: 8,
+						minWidth: 0,
 					}}
-					numberOfLines={1}
 				>
-					{media.title || media.file?.name || "Untitled"}
-				</Text>
+					<Text
+						style={{
+							flex: 1,
+							fontSize: 14,
+							fontWeight: "600",
+							color: colors.foreground,
+							textAlign: "right",
+						}}
+						numberOfLines={1}
+					>
+						{media.title || media.file?.name || "Untitled"}
+					</Text>
+					{transcriptBadge.show ? (
+						<View
+							accessibilityLabel={transcriptBadge.label}
+							style={{
+								width: 24,
+								height: 24,
+								borderRadius: 999,
+								alignItems: "center",
+								justifyContent: "center",
+								backgroundColor: withAlpha(transcriptColor, 0.14),
+							}}
+						>
+							<Icon name="FileText" size={13} color={transcriptColor} />
+						</View>
+					) : null}
+				</View>
 				{metadata.length > 0 && (
 					<Text
 						style={{
@@ -519,8 +571,89 @@ function TrackRow({
 				hitSlop={8}
 				style={{ padding: 6, opacity: isRemoving ? 0.45 : 1 }}
 			>
-				<Icon name="MoreHorizontal" size={20} className="text-muted-foreground" />
+				<Icon
+					name="MoreHorizontal"
+					size={20}
+					className="text-muted-foreground"
+				/>
 			</Pressable>
+		</Pressable>
+	);
+}
+
+function TrackActionRow({
+	label,
+	description,
+	icon,
+	onPress,
+	disabled,
+	danger,
+}: {
+	label: string;
+	description: string;
+	icon: IconKeys;
+	onPress: () => void;
+	disabled?: boolean;
+	danger?: boolean;
+}) {
+	const colors = useColors();
+	const actionColor = danger ? colors.destructive : colors.foreground;
+
+	return (
+		<Pressable
+			disabled={disabled}
+			onPress={onPress}
+			style={{
+				minHeight: 56,
+				borderRadius: 14,
+				flexDirection: "row-reverse",
+				alignItems: "center",
+				gap: 12,
+				paddingHorizontal: 12,
+				opacity: disabled ? 0.5 : 1,
+			}}
+		>
+			<View
+				style={{
+					width: 38,
+					height: 38,
+					borderRadius: 999,
+					alignItems: "center",
+					justifyContent: "center",
+					backgroundColor: danger
+						? withAlpha(colors.destructive, 0.12)
+						: colors.muted,
+				}}
+			>
+				<Icon
+					name={icon}
+					size={18}
+					color={danger ? colors.destructive : colors.foreground}
+				/>
+			</View>
+			<View style={{ flex: 1 }}>
+				<Text
+					style={{
+						fontSize: 14,
+						fontWeight: "700",
+						color: actionColor,
+						textAlign: "right",
+					}}
+				>
+					{label}
+				</Text>
+				<Text
+					style={{
+						marginTop: 2,
+						fontSize: 12,
+						color: colors.mutedForeground,
+						textAlign: "right",
+					}}
+					numberOfLines={1}
+				>
+					{description}
+				</Text>
+			</View>
 		</Pressable>
 	);
 }
@@ -528,27 +661,40 @@ function TrackRow({
 function TrackActionsSheet({
 	visible,
 	media,
-	albums,
-	currentAlbumId,
 	isBusy,
 	onClose,
+	onMoveRequest,
+	onOpenPost,
+	onShare,
+	onComment,
+	onTranscribe,
+	onResetTranscription,
 	onRemove,
-	onMove,
 }: {
 	visible: boolean;
 	media: any | null;
-	albums: any[];
-	currentAlbumId: number;
 	isBusy?: boolean;
 	onClose: () => void;
+	onMoveRequest: () => void;
+	onOpenPost: () => void;
+	onShare: () => void;
+	onComment: () => void;
+	onTranscribe: () => void;
+	onResetTranscription: () => void;
 	onRemove: () => void;
-	onMove: (albumId: number) => void;
 }) {
 	const colors = useColors();
 	const { height: windowHeight } = useWindowDimensions();
 	const title =
 		media?.title || media?.file?.fileName || media?.blog?.content || "Track";
-	const targetAlbums = albums.filter((album) => album.id !== currentAlbumId);
+	const canOpenPost = Boolean(getTrackBlogHref(media));
+	const onComingSoon = () => {
+		Alert.alert("Coming soon", "This action is not connected yet.");
+	};
+	const runAndClose = (fn: () => void) => {
+		onClose();
+		setTimeout(fn, 250);
+	};
 
 	return (
 		<Modal
@@ -569,7 +715,10 @@ function TrackActionsSheet({
 					onPress={() => {}}
 					style={{
 						width: "100%",
-						maxHeight: Math.min(Math.max(360, windowHeight * 0.72), windowHeight - 24),
+						maxHeight: Math.min(
+							Math.max(360, windowHeight * 0.72),
+							windowHeight - 24,
+						),
 						borderTopLeftRadius: 22,
 						borderTopRightRadius: 22,
 						backgroundColor: colors.card,
@@ -600,34 +749,23 @@ function TrackActionsSheet({
 						{title}
 					</Text>
 
-					<Pressable
-						disabled={isBusy}
-						onPress={onRemove}
-						style={{
-							marginTop: 16,
-							minHeight: 48,
-							borderRadius: 14,
-							backgroundColor: colors.muted,
-							flexDirection: "row-reverse",
-							alignItems: "center",
-							gap: 10,
-							paddingHorizontal: 14,
-							opacity: isBusy ? 0.5 : 1,
-						}}
-					>
-						<Icon name="X" size={18} className="text-destructive" />
-						<Text
-							style={{
-								flex: 1,
-								fontSize: 14,
-								fontWeight: "700",
-								color: colors.destructive,
-								textAlign: "right",
-							}}
-						>
-							Remove from album
-						</Text>
-					</Pressable>
+					<View style={{ marginTop: 14 }}>
+						<TrackActionRow
+							label="Remove from album"
+							description="Keep the post but remove this track here"
+							icon="X"
+							disabled={isBusy}
+							danger
+							onPress={onRemove}
+						/>
+						<TrackActionRow
+							label="Move to album"
+							description="Choose another album for this track"
+							icon="ListMusic"
+							disabled={isBusy}
+							onPress={() => runAndClose(onMoveRequest)}
+						/>
+					</View>
 
 					<Text
 						style={{
@@ -641,9 +779,145 @@ function TrackActionsSheet({
 							textTransform: "uppercase",
 						}}
 					>
-						Move to album
+						Post options
 					</Text>
 
+					<View>
+						<TrackActionRow
+							label="Open post"
+							description="View the full post and media"
+							icon="FileText"
+							disabled={!canOpenPost}
+							onPress={() => runAndClose(onOpenPost)}
+						/>
+						<TrackActionRow
+							label="Share"
+							description="Send a web link to this post"
+							icon="Share"
+							onPress={() => runAndClose(onShare)}
+						/>
+						<TrackActionRow
+							label="Comment"
+							description="Open the discussion for this post"
+							icon="MessageSquare"
+							disabled={!canOpenPost}
+							onPress={() => runAndClose(onComment)}
+						/>
+						<TrackActionRow
+							label="Transcribe"
+							description="Queue this audio for local Whisper"
+							icon="Captions"
+							disabled={isBusy || !media?.id}
+							onPress={() => runAndClose(onTranscribe)}
+						/>
+						<TrackActionRow
+							label="Reset transcribe"
+							description="Clear transcript and queue jobs"
+							icon="RotateCcw"
+							disabled={isBusy || !media?.id}
+							onPress={() => runAndClose(onResetTranscription)}
+						/>
+						<TrackActionRow
+							label="Save"
+							description="Keep this post in saved items"
+							icon="Bookmark"
+							onPress={() => runAndClose(onComingSoon)}
+						/>
+						<TrackActionRow
+							label="Like"
+							description="Add this post to liked items"
+							icon="Heart"
+							onPress={() => runAndClose(onComingSoon)}
+						/>
+						<TrackActionRow
+							label="Delete post"
+							description="Remove this post from the blog list"
+							icon="Trash2"
+							danger
+							onPress={() => runAndClose(onComingSoon)}
+						/>
+					</View>
+				</Pressable>
+			</Pressable>
+		</Modal>
+	);
+}
+
+function TrackMoveAlbumSheet({
+	visible,
+	media,
+	albums,
+	currentAlbumId,
+	isBusy,
+	onClose,
+	onMove,
+}: {
+	visible: boolean;
+	media: any | null;
+	albums: any[];
+	currentAlbumId: number;
+	isBusy?: boolean;
+	onClose: () => void;
+	onMove: (albumId: number) => void;
+}) {
+	const colors = useColors();
+	const { height: windowHeight } = useWindowDimensions();
+	const title =
+		media?.title || media?.file?.fileName || media?.blog?.content || "Track";
+	const targetAlbums = albums.filter((album) => album.id !== currentAlbumId);
+
+	return (
+		<Modal
+			visible={visible}
+			transparent
+			animationType="slide"
+			onRequestClose={onClose}
+		>
+			<Pressable
+				onPress={onClose}
+				style={{
+					flex: 1,
+					justifyContent: "flex-end",
+					backgroundColor: "rgba(0,0,0,0.6)",
+				}}
+			>
+				<Pressable
+					onPress={() => {}}
+					style={{
+						width: "100%",
+						maxHeight: Math.min(
+							Math.max(320, windowHeight * 0.62),
+							windowHeight - 24,
+						),
+						borderTopLeftRadius: 22,
+						borderTopRightRadius: 22,
+						backgroundColor: colors.card,
+						paddingHorizontal: 18,
+						paddingTop: 14,
+						paddingBottom: 28,
+					}}
+				>
+					<View
+						style={{
+							width: 42,
+							height: 4,
+							borderRadius: 999,
+							backgroundColor: colors.input,
+							alignSelf: "center",
+							marginBottom: 14,
+						}}
+					/>
+					<Text
+						style={{
+							fontSize: 15,
+							fontWeight: "800",
+							color: colors.foreground,
+							textAlign: "right",
+						}}
+						numberOfLines={1}
+					>
+						Move {title}
+					</Text>
 					{targetAlbums.length === 0 ? (
 						<Text
 							style={{
@@ -999,6 +1273,14 @@ export default function AlbumDetailScreen() {
 	const qc = useQueryClient();
 	const colors = useColors();
 	const setGlobalAudioBarHidden = useGlobalAudioBarStore((s) => s.setHidden);
+	const localTranscriberBaseUrl = useAppSettingsStore(
+		(s) => s.localTranscriberBaseUrl,
+	);
+	const transcriberUrl = getDefaultTranscriberUrl(localTranscriberBaseUrl);
+	const { enqueue: enqueueTranscription } = useTranscriptionQueue(undefined, {
+		autoLoad: false,
+		reloadOnEnqueue: false,
+	});
 	const previousGlobalAudioHiddenRef = useRef<boolean | null>(null);
 	const { albumId } = useLocalSearchParams<{ albumId: string }>();
 	const id = Number(albumId);
@@ -1008,9 +1290,7 @@ export default function AlbumDetailScreen() {
 		isFetching: isFetchingAlbum,
 		isLoading,
 		refetch: refetchAlbum,
-	} = useQuery(
-		_trpc.album.getAlbum.queryOptions({ id }),
-	);
+	} = useQuery(_trpc.album.getAlbum.queryOptions({ id }));
 	const { data: albums = [], refetch: refetchAlbums } = useQuery(
 		_trpc.album.getAlbums.queryOptions(),
 	);
@@ -1026,6 +1306,7 @@ export default function AlbumDetailScreen() {
 	const [selectedTrackForActions, setSelectedTrackForActions] = useState<
 		any | null
 	>(null);
+	const [trackMoveTarget, setTrackMoveTarget] = useState<any | null>(null);
 	const [selectedSuggestionIds, setSelectedSuggestionIds] = useState<
 		Set<number>
 	>(new Set());
@@ -1182,6 +1463,19 @@ export default function AlbumDetailScreen() {
 			},
 		}),
 	);
+
+	const { mutate: resetTrackTranscription, isPending: isResettingTrack } =
+		useMutation(
+			_trpc.blog.resetTranscript.mutationOptions({
+				onSuccess: async () => {
+					await qc.invalidateQueries({
+						queryKey: _trpc.album.getAlbum.queryKey({ id }),
+					});
+					setSelectedTrackForActions(null);
+				},
+				onError: (e) => Alert.alert("Error", e.message),
+			}),
+		);
 
 	const { mutate: saveSuggestionKeywords } = useMutation(
 		_trpc.album.updateSuggestionKeywords.mutationOptions({
@@ -1423,12 +1717,111 @@ export default function AlbumDetailScreen() {
 	}
 
 	function moveTrackToAlbum(targetAlbumId: number) {
-		const mediaId = selectedTrackForActions?.id;
+		const mediaId = trackMoveTarget?.id ?? selectedTrackForActions?.id;
 		if (!mediaId) return;
 		setLocalTracks((prev) =>
 			(prev ?? tracks).filter((media) => media.id !== mediaId),
 		);
+		setTrackMoveTarget(null);
+		setSelectedTrackForActions(null);
 		moveMediaToAlbum({ albumId: targetAlbumId, mediaIds: [mediaId] });
+	}
+
+	function openTrackMovePicker() {
+		setTrackMoveTarget(selectedTrackForActions);
+	}
+
+	function openSelectedTrackPost(openComments = false) {
+		const href = getTrackBlogHref(selectedTrackForActions);
+		if (!href) return;
+		if (openComments) {
+			router.push({ pathname: href as any, params: { openComments: "1" } });
+			return;
+		}
+		router.push(href as any);
+	}
+
+	async function shareSelectedTrackPost() {
+		const blogId =
+			selectedTrackForActions?.blog?.id ?? selectedTrackForActions?.blogId;
+		if (!blogId) return;
+		const webUrl = `${getWebUrl()}/blog/${encodeURIComponent(String(blogId))}`;
+		await Share.share({
+			message: `Check out this post: ${webUrl}`,
+			url: webUrl,
+		});
+	}
+
+	async function queueSelectedTrackTranscription() {
+		const media = selectedTrackForActions;
+		if (!media?.id) return;
+		const telegramFileId =
+			media.file?.source === "vercel_blob" ? null : media.file?.fileId;
+		let reachableAudioUrl = getMediaFileUrl(media.file);
+		reachableAudioUrl =
+			reachableAudioUrl?.startsWith("http://") ||
+			reachableAudioUrl?.startsWith("https://")
+				? reachableAudioUrl
+				: null;
+
+		if (!telegramFileId && !reachableAudioUrl) {
+			Alert.alert(
+				"Cannot transcribe yet",
+				"This audio does not have a reachable file source to queue.",
+			);
+			return;
+		}
+
+		try {
+			if (!reachableAudioUrl && telegramFileId) {
+				const resolved = await getTelegramFileUrl(telegramFileId);
+				reachableAudioUrl =
+					resolved?.url?.startsWith("http://") ||
+					resolved?.url?.startsWith("https://")
+						? resolved.url
+						: null;
+			}
+
+			if (!reachableAudioUrl) {
+				throw new Error(
+					"Could not resolve a reachable audio URL for this job.",
+				);
+			}
+
+			await enqueueTranscription({
+				mediaId: media.id,
+				telegramFileId: telegramFileId ?? null,
+				audioUrl: reachableAudioUrl,
+				language: "ar",
+				transcriberUrl,
+			});
+			await refetchAlbum();
+			Alert.alert("Queued", "Added to transcription queue.");
+		} catch (error) {
+			Alert.alert(
+				"Could not queue transcription",
+				error instanceof Error
+					? error.message
+					: "This audio could not be added to the transcription queue.",
+			);
+		}
+	}
+
+	function resetSelectedTrackTranscription() {
+		const mediaId = selectedTrackForActions?.id;
+		if (!mediaId) return;
+		Alert.alert(
+			"Reset transcription?",
+			"Clear the saved transcript and queued jobs for this track.",
+			[
+				{ text: "Cancel", style: "cancel" },
+				{
+					text: "Reset",
+					style: "destructive",
+					onPress: () => resetTrackTranscription({ mediaId }),
+				},
+			],
+		);
 	}
 
 	return (
@@ -2179,7 +2572,8 @@ export default function AlbumDetailScreen() {
 												<SwipeDeleteRow
 													onDelete={() => dismissSuggestion(item.id)}
 													disabled={
-														isAddingSuggestions || addingSuggestionIds.has(item.id)
+														isAddingSuggestions ||
+														addingSuggestionIds.has(item.id)
 													}
 												>
 													<SuggestedMediaRow
@@ -2314,15 +2708,31 @@ export default function AlbumDetailScreen() {
 			<TrackActionsSheet
 				visible={Boolean(selectedTrackForActions)}
 				media={selectedTrackForActions}
-				albums={albums}
-				currentAlbumId={id}
-				isBusy={isRemovingMedia || isMovingMedia}
+				isBusy={isRemovingMedia || isMovingMedia || isResettingTrack}
 				onClose={() => setSelectedTrackForActions(null)}
+				onMoveRequest={openTrackMovePicker}
+				onOpenPost={() => openSelectedTrackPost(false)}
+				onShare={() => {
+					void shareSelectedTrackPost();
+				}}
+				onComment={() => openSelectedTrackPost(true)}
+				onTranscribe={() => {
+					void queueSelectedTrackTranscription();
+				}}
+				onResetTranscription={resetSelectedTrackTranscription}
 				onRemove={() => {
 					if (selectedTrackForActions?.id) {
 						removeTrackFromAlbum(selectedTrackForActions.id);
 					}
 				}}
+			/>
+			<TrackMoveAlbumSheet
+				visible={Boolean(trackMoveTarget)}
+				media={trackMoveTarget}
+				albums={albums}
+				currentAlbumId={id}
+				isBusy={isMovingMedia}
+				onClose={() => setTrackMoveTarget(null)}
 				onMove={moveTrackToAlbum}
 			/>
 		</View>

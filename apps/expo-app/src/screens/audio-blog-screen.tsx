@@ -1,50 +1,56 @@
 import { Pressable } from "@/components/ui/pressable";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
-import { LinearGradient } from "expo-linear-gradient";
-import { StatusBar } from "expo-status-bar";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Haptics from "expo-haptics";
+import { LinearGradient } from "expo-linear-gradient";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { StatusBar } from "expo-status-bar";
 import * as SystemUI from "expo-system-ui";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
 	ActivityIndicator,
-	Animated,
 	Alert,
+	Animated,
+	Clipboard,
 	FlatList,
 	KeyboardAvoidingView,
 	Modal,
 	PanResponder,
 	Platform,
 	ScrollView,
+	Share,
 	Text,
 	TextInput,
 	View,
 	useWindowDimensions,
 } from "react-native";
 
-import { useCommentsState } from "@/components/comments-sheet";
-import { CommentsHeader } from "@/components/comments-sheet/comments-header";
-import { CommentsAudioContext } from "@/components/comments-sheet/comments-audio-context";
-import { CommentsList } from "@/components/comments-sheet/comments-list";
-import { CommentInput } from "@/components/comments-sheet/comment-input";
-import { AddToPlaylistModal } from "@/components/channel-chat/add-to-playlist-modal";
-import { AnimatedMarquee } from "@/components/ui/animated-marquee";
 import { KaraokeTranscript } from "@/components/audio-blog-view/karaoke-transcript";
+import type { TranscriptSegmentData } from "@/components/audio-blog-view/transcript-segments";
+import { AddToPlaylistModal } from "@/components/channel-chat/add-to-playlist-modal";
+import { useCommentsState } from "@/components/comments-sheet";
+import { CommentInput } from "@/components/comments-sheet/comment-input";
+import { CommentsAudioContext } from "@/components/comments-sheet/comments-audio-context";
+import { CommentsHeader } from "@/components/comments-sheet/comments-header";
+import { CommentsList } from "@/components/comments-sheet/comments-list";
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
-import { Icon } from "@/components/ui/icon";
+import { AnimatedMarquee } from "@/components/ui/animated-marquee";
+import { Icon, type IconKeys } from "@/components/ui/icon";
 import { useColors } from "@/hooks/use-color";
 import { usePlayHistorySync } from "@/hooks/use-play-history-sync";
-import { useAudioStore } from "@/store/audio-store";
-import { useAppSettingsStore } from "@/store/app-settings-store";
-import { useRecentlyViewedStore } from "@/store/recently-viewed-store";
+import { useTranscriptionQueue } from "@/hooks/use-transcription-queue";
 import { getAudioDisplayTitle } from "@/lib/audio-title";
+import { getWebUrl } from "@/lib/base-url";
+import { getTelegramFileUrl } from "@/lib/get-telegram-file";
 import { getMediaFileUrl } from "@/lib/media-source";
 import {
 	getDefaultTranscriberUrl,
 	isHttpTranscriberUrl,
 } from "@/lib/transcribe";
 import { minuteToString } from "@/lib/utils";
+import { useAppSettingsStore } from "@/store/app-settings-store";
+import { useAudioStore } from "@/store/audio-store";
+import { useRecentlyViewedStore } from "@/store/recently-viewed-store";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -1253,6 +1259,10 @@ function MoreMenu({
 	hasAlbum,
 	albumId,
 	onClose,
+	onComment,
+	onShare,
+	onTranscribe,
+	onResetTranscription,
 	onAddToAlbum,
 	onAddToPlaylist,
 	onViewAlbum,
@@ -1262,12 +1272,67 @@ function MoreMenu({
 	hasAlbum: boolean;
 	albumId?: number | null;
 	onClose: () => void;
+	onComment: () => void;
+	onShare: () => void;
+	onTranscribe: () => void;
+	onResetTranscription: () => void;
 	onAddToAlbum: () => void;
 	onAddToPlaylist: () => void;
 	onViewAlbum: () => void;
 	onSleepTimer: () => void;
 }) {
 	const colors = useColors();
+	const onComingSoon = () => {
+		Alert.alert("Coming soon", "This action is not connected yet.");
+	};
+	const menuAction = ({
+		icon,
+		label,
+		description,
+		onPress,
+	}: {
+		icon: IconKeys;
+		label: string;
+		description: string;
+		onPress: () => void;
+	}) => (
+		<Pressable
+			onPress={() => {
+				onClose();
+				setTimeout(onPress, 250);
+			}}
+			style={{
+				flexDirection: "row",
+				alignItems: "center",
+				gap: 14,
+				paddingVertical: 14,
+				paddingHorizontal: 8,
+			}}
+		>
+			<Icon name={icon} size={22} className="text-foreground" />
+			<View style={{ flex: 1 }}>
+				<Text
+					style={{
+						fontSize: 15,
+						color: colors.foreground,
+						fontWeight: "500",
+					}}
+				>
+					{label}
+				</Text>
+				<Text
+					style={{
+						marginTop: 2,
+						fontSize: 12,
+						color: colors.mutedForeground,
+					}}
+					numberOfLines={1}
+				>
+					{description}
+				</Text>
+			</View>
+		</Pressable>
+	);
 	return (
 		<Modal
 			visible={visible}
@@ -1304,133 +1369,72 @@ function MoreMenu({
 						}}
 					/>
 
-					{/* Add / Change Album */}
-					<Pressable
-						onPress={() => {
-							onClose();
-							setTimeout(onAddToAlbum, 250);
-						}}
-						style={{
-							flexDirection: "row",
-							alignItems: "center",
-							gap: 14,
-							paddingVertical: 14,
-							paddingHorizontal: 8,
-						}}
-					>
-						<Icon name="ListMusic" size={22} className="text-foreground" />
-						<Text
-							style={{
-								fontSize: 15,
-								color: colors.foreground,
-								fontWeight: "500",
-							}}
-						>
-							{hasAlbum ? "Change album" : "Add to album"}
-						</Text>
-					</Pressable>
-
-					<Pressable
-						onPress={() => {
-							onClose();
-							setTimeout(onAddToPlaylist, 250);
-						}}
-						style={{
-							flexDirection: "row",
-							alignItems: "center",
-							gap: 14,
-							paddingVertical: 14,
-							paddingHorizontal: 8,
-						}}
-					>
-						<Icon name="ListMusic" size={22} className="text-foreground" />
-						<Text
-							style={{
-								fontSize: 15,
-								color: colors.foreground,
-								fontWeight: "500",
-							}}
-						>
-							Add to playlist
-						</Text>
-					</Pressable>
+					{menuAction({
+						icon: "Share",
+						label: "Share",
+						description: "Send a web link to this audio",
+						onPress: onShare,
+					})}
+					{menuAction({
+						icon: "MessageSquare",
+						label: "Comment",
+						description: "Open the discussion for this post",
+						onPress: onComment,
+					})}
+					{menuAction({
+						icon: "Captions",
+						label: "Transcribe",
+						description: "Queue this audio for local Whisper",
+						onPress: onTranscribe,
+					})}
+					{menuAction({
+						icon: "RotateCcw",
+						label: "Reset transcribe",
+						description: "Clear transcript and queue jobs",
+						onPress: onResetTranscription,
+					})}
+					{menuAction({
+						icon: "Bookmark",
+						label: "Save",
+						description: "Keep this post in saved items",
+						onPress: onComingSoon,
+					})}
+					{menuAction({
+						icon: "Heart",
+						label: "Like",
+						description: "Add this post to liked items",
+						onPress: onComingSoon,
+					})}
+					{menuAction({
+						icon: "ListMusic",
+						label: hasAlbum ? "Change album" : "Add to album",
+						description: hasAlbum
+							? "Move this audio to another album"
+							: "Add this audio to an album",
+						onPress: onAddToAlbum,
+					})}
+					{menuAction({
+						icon: "ListMusic",
+						label: "Add to playlist",
+						description: "Save this audio in a playlist",
+						onPress: onAddToPlaylist,
+					})}
 
 					{/* View album (only if already in one) */}
-					{hasAlbum && (
-						<Pressable
-							onPress={() => {
-								onClose();
-								setTimeout(onViewAlbum, 250);
-							}}
-							style={{
-								flexDirection: "row",
-								alignItems: "center",
-								gap: 14,
-								paddingVertical: 14,
-								paddingHorizontal: 8,
-							}}
-						>
-							<Icon name="Disc3" size={22} className="text-foreground" />
-							<Text
-								style={{
-									fontSize: 15,
-									color: colors.foreground,
-									fontWeight: "500",
-								}}
-							>
-								View album
-							</Text>
-						</Pressable>
-					)}
-
-					{/* Sleep timer */}
-					<Pressable
-						onPress={() => {
-							onClose();
-							setTimeout(onSleepTimer, 250);
-						}}
-						style={{
-							flexDirection: "row",
-							alignItems: "center",
-							gap: 14,
-							paddingVertical: 14,
-							paddingHorizontal: 8,
-						}}
-					>
-						<Icon name="Timer" size={22} className="text-foreground" />
-						<Text
-							style={{
-								fontSize: 15,
-								color: colors.foreground,
-								fontWeight: "500",
-							}}
-						>
-							Sleep timer
-						</Text>
-					</Pressable>
-
-					{/* Share */}
-					<Pressable
-						onPress={onClose}
-						style={{
-							flexDirection: "row",
-							alignItems: "center",
-							gap: 14,
-							paddingVertical: 14,
-							paddingHorizontal: 8,
-						}}
-					>
-						<Icon name="Share" size={22} className="text-foreground" />
-						<Text
-							style={{
-								fontSize: 15,
-								color: colors.foreground,
-								fontWeight: "500",
-							}}
-						>
-							Share
-						</Text>
-					</Pressable>
+					{hasAlbum
+						? menuAction({
+								icon: "Disc3",
+								label: "View album",
+								description: "Open this album",
+								onPress: onViewAlbum,
+							})
+						: null}
+					{menuAction({
+						icon: "Timer",
+						label: "Sleep timer",
+						description: "Stop playback automatically",
+						onPress: onSleepTimer,
+					})}
 
 					<View style={{ height: 20 }} />
 				</Pressable>
@@ -1703,6 +1707,13 @@ export default function AudioBlogScreen() {
 	const [addedToAlbumName, setAddedToAlbumName] = useState<string | null>(null);
 	const [controlsLayout, setControlsLayout] = useState({ y: 0, height: 0 });
 	const [showFloatingControls, setShowFloatingControls] = useState(false);
+	const [transcriptModalVisible, setTranscriptModalVisible] = useState(false);
+	const [transcriptHighlightPaused, setTranscriptHighlightPaused] =
+		useState(false);
+	const [frozenTranscriptPositionSec, setFrozenTranscriptPositionSec] =
+		useState(0);
+	const [markedTranscriptSegment, setMarkedTranscriptSegment] =
+		useState<TranscriptSegmentData | null>(null);
 	const [transcriptChunks, setTranscriptChunks] = useState<
 		Record<number, { segments: CenterTranscriptSegment[] }>
 	>({});
@@ -1712,11 +1723,16 @@ export default function AudioBlogScreen() {
 	const [transcriptError, setTranscriptError] = useState<string | null>(null);
 	const pendingTranscriptChunksRef = useRef<number[]>([]);
 	const failedTranscriptChunksRef = useRef<Set<number>>(new Set());
+	const lastTranscriptTapRef = useRef(0);
 	const localTranscriberBaseUrl = useAppSettingsStore(
 		(s) => s.localTranscriberBaseUrl,
 	);
 	const transcriberUrl = getDefaultTranscriberUrl(localTranscriberBaseUrl);
 	const canCheckTranscriber = isHttpTranscriberUrl(transcriberUrl);
+	const { enqueue: enqueueTranscription } = useTranscriptionQueue(undefined, {
+		autoLoad: false,
+		reloadOnEnqueue: false,
+	});
 
 	const loadAudio = useAudioStore((s) => s.loadAudio);
 	const seekAudio = useAudioStore((s) => s.seek);
@@ -1790,6 +1806,9 @@ export default function AudioBlogScreen() {
 		setTranscriptChunks({});
 		setPendingTranscriptChunks([]);
 		setTranscriptError(null);
+		setMarkedTranscriptSegment(null);
+		setTranscriptModalVisible(false);
+		setTranscriptHighlightPaused(false);
 		pendingTranscriptChunksRef.current = [];
 		failedTranscriptChunksRef.current = new Set<number>();
 	}, [mediaId]);
@@ -1963,11 +1982,174 @@ export default function AudioBlogScreen() {
 		}),
 	);
 
+	const { mutate: resetCurrentTranscript } = useMutation(
+		_trpc.blog.resetTranscript.mutationOptions({
+			onSuccess: async () => {
+				setTranscriptChunks({});
+				setPendingTranscriptChunks([]);
+				setTranscriptError(null);
+				setMarkedTranscriptSegment(null);
+				pendingTranscriptChunksRef.current = [];
+				failedTranscriptChunksRef.current = new Set<number>();
+				await Promise.all([
+					qc.invalidateQueries({
+						queryKey: _trpc.blog.getTranscript.queryKey({
+							mediaId: mediaId ?? 0,
+						}),
+					}),
+					qc.invalidateQueries({
+						queryKey: _trpc.blog.getBlog.queryKey({ id }),
+					}),
+				]);
+				Alert.alert("Reset", "Transcription was reset.");
+			},
+			onError: (e) => Alert.alert("Could not reset transcription", e.message),
+		}),
+	);
+
+	const { mutate: addTranscriptComment, isPending: isAddingTranscriptComment } =
+		useMutation(
+			_trpc.blog.addComment.mutationOptions({
+				onSuccess: async () => {
+					await Promise.all([
+						qc.invalidateQueries({
+							queryKey: _trpc.blog.getComments.queryKey({ blogId: id }),
+						}),
+						qc.invalidateQueries({
+							queryKey: _trpc.blog.getBlog.queryKey({ id }),
+						}),
+					]);
+					commentsState.refetch();
+					Alert.alert("Comment added", "Marked transcript text was commented.");
+				},
+				onError: (e) => Alert.alert("Could not add comment", e.message),
+			}),
+		);
+
 	function handlePickAlbum(albumId: number, albumName: string) {
 		if (!mediaId) return;
 		setAddingAlbumId(albumId);
 		setAddedToAlbumName(albumName);
 		addToAlbum({ albumId, mediaIds: [mediaId] });
+	}
+
+	async function shareAudioPost() {
+		const webUrl = `${getWebUrl()}/blog/${encodeURIComponent(String(id))}`;
+		await Share.share({
+			message: `Check out this post: ${webUrl}`,
+			url: webUrl,
+		});
+	}
+
+	async function queueCurrentTranscription() {
+		if (!mediaId) return;
+		let reachableAudioUrl =
+			mediaUrl?.startsWith("http://") || mediaUrl?.startsWith("https://")
+				? mediaUrl
+				: null;
+
+		if (!telegramFileId && !reachableAudioUrl) {
+			Alert.alert(
+				"Cannot transcribe yet",
+				"This audio does not have a reachable file source to queue.",
+			);
+			return;
+		}
+
+		try {
+			if (!reachableAudioUrl && telegramFileId) {
+				const resolved = await getTelegramFileUrl(telegramFileId);
+				reachableAudioUrl =
+					resolved?.url?.startsWith("http://") ||
+					resolved?.url?.startsWith("https://")
+						? resolved.url
+						: null;
+			}
+
+			if (!reachableAudioUrl) {
+				throw new Error(
+					"Could not resolve a reachable audio URL for this job.",
+				);
+			}
+
+			await enqueueTranscription({
+				mediaId,
+				telegramFileId: telegramFileId ?? null,
+				audioUrl: reachableAudioUrl,
+				language: "ar",
+				transcriberUrl,
+			});
+			Alert.alert("Queued", "Added to transcription queue.");
+		} catch (error) {
+			Alert.alert(
+				"Could not queue transcription",
+				error instanceof Error
+					? error.message
+					: "This audio could not be added to the transcription queue.",
+			);
+		}
+	}
+
+	function resetCurrentTranscription() {
+		if (!mediaId) return;
+		Alert.alert(
+			"Reset transcription?",
+			"Clear the saved transcript and queued jobs for this audio.",
+			[
+				{ text: "Cancel", style: "cancel" },
+				{
+					text: "Reset",
+					style: "destructive",
+					onPress: () => resetCurrentTranscript({ mediaId }),
+				},
+			],
+		);
+	}
+
+	function handleTranscriptAreaPress() {
+		const now = Date.now();
+		if (now - lastTranscriptTapRef.current < 300) {
+			setFrozenTranscriptPositionSec(positionMs / 1000);
+			setTranscriptHighlightPaused(false);
+			setTranscriptModalVisible(true);
+			Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+		}
+		lastTranscriptTapRef.current = now;
+	}
+
+	function toggleTranscriptHighlightPause() {
+		if (!transcriptHighlightPaused) {
+			setFrozenTranscriptPositionSec(positionMs / 1000);
+		}
+		setTranscriptHighlightPaused((value) => !value);
+	}
+
+	function gotoCurrentTranscriptPosition() {
+		setFrozenTranscriptPositionSec(positionMs / 1000);
+		setTranscriptHighlightPaused(false);
+	}
+
+	function markTranscriptSegment(segment: TranscriptSegmentData) {
+		setMarkedTranscriptSegment(segment);
+		Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+	}
+
+	function copyMarkedTranscriptText() {
+		const text = markedTranscriptSegment?.text?.trim();
+		if (!text) return;
+		Clipboard.setString(text);
+		Alert.alert("Copied", "Marked transcript text copied.");
+	}
+
+	function commentMarkedTranscriptText() {
+		const segment = markedTranscriptSegment;
+		const text = segment?.text?.trim();
+		if (!segment || !text || isAddingTranscriptComment) return;
+		addTranscriptComment({
+			blogId: id,
+			content: text,
+			timestampSeconds: Math.max(0, Math.floor(segment.startSec)),
+		});
 	}
 
 	function updateFloatingControls(scrollY: number) {
@@ -2095,7 +2277,8 @@ export default function AudioBlogScreen() {
 									</View>
 
 									{/* Transcript area */}
-									<View
+									<Pressable
+										onPress={handleTranscriptAreaPress}
 										style={{
 											flex: 1,
 											minHeight: 0,
@@ -2157,7 +2340,7 @@ export default function AudioBlogScreen() {
 												) : null}
 											</View>
 										)}
-									</View>
+									</Pressable>
 
 									<View
 										style={{
@@ -2388,6 +2571,14 @@ export default function AudioBlogScreen() {
 				hasAlbum={!!media?.album}
 				albumId={media?.albumId}
 				onClose={() => setMoreMenuVisible(false)}
+				onComment={() => setShowComments(true)}
+				onShare={() => {
+					void shareAudioPost();
+				}}
+				onTranscribe={() => {
+					void queueCurrentTranscription();
+				}}
+				onResetTranscription={resetCurrentTranscription}
 				onAddToAlbum={() => setAlbumPickerVisible(true)}
 				onAddToPlaylist={() => {
 					if (mediaId) setPlaylistPickerVisible(true);
@@ -2395,6 +2586,133 @@ export default function AudioBlogScreen() {
 				onViewAlbum={() => router.push(`/albums/${media?.albumId}` as any)}
 				onSleepTimer={() => setSleepTimerVisible(true)}
 			/>
+
+			<Modal
+				visible={transcriptModalVisible}
+				animationType="slide"
+				onRequestClose={() => setTranscriptModalVisible(false)}
+			>
+				<View style={{ flex: 1, backgroundColor: "#080807" }}>
+					<SafeArea style={{ flex: 1, backgroundColor: "#080807" }}>
+						<View className="flex-row items-center justify-between px-4 py-3">
+							<Pressable
+								onPress={() => setTranscriptModalVisible(false)}
+								className="size-11 items-center justify-center rounded-full active:bg-white/10"
+							>
+								<Icon name="ChevronDown" size={26} color="#ffffff" />
+							</Pressable>
+							<Text
+								className="min-w-0 flex-1 px-3 text-center text-sm font-bold"
+								numberOfLines={1}
+								style={{ color: "rgba(255,255,255,0.82)" }}
+							>
+								{audioTitle}
+							</Text>
+							<View className="flex-row items-center gap-2">
+								<Pressable
+									onPress={toggleTranscriptHighlightPause}
+									className="size-11 items-center justify-center rounded-full active:bg-white/10"
+									accessibilityLabel={
+										transcriptHighlightPaused
+											? "Continue read highlight"
+											: "Pause read highlight"
+									}
+								>
+									<Icon
+										name={transcriptHighlightPaused ? "Play" : "Pause"}
+										size={20}
+										color="#ffffff"
+									/>
+								</Pressable>
+								<Pressable
+									onPress={gotoCurrentTranscriptPosition}
+									className="size-11 items-center justify-center rounded-full active:bg-white/10"
+									accessibilityLabel="Go to current position"
+								>
+									<Icon name="Compass" size={20} color="#ffffff" />
+								</Pressable>
+							</View>
+						</View>
+						<View style={{ flex: 1 }}>
+							<KaraokeTranscript
+								segments={transcriptSegments}
+								autoScroll={!transcriptHighlightPaused}
+								selectable
+								positionSecOverride={
+									transcriptHighlightPaused
+										? frozenTranscriptPositionSec
+										: undefined
+								}
+								onSegmentLongPress={markTranscriptSegment}
+							/>
+						</View>
+						<View
+							style={{
+								borderTopWidth: 1,
+								borderTopColor: "rgba(255,255,255,0.12)",
+								paddingHorizontal: 16,
+								paddingTop: 10,
+								paddingBottom: 18,
+								backgroundColor: "rgba(0,0,0,0.72)",
+							}}
+						>
+							{markedTranscriptSegment ? (
+								<>
+									<Text
+										selectable
+										numberOfLines={2}
+										style={{
+											color: "rgba(255,255,255,0.82)",
+											fontSize: 14,
+											lineHeight: 20,
+											textAlign: "right",
+											writingDirection: "rtl",
+										}}
+									>
+										{markedTranscriptSegment.text}
+									</Text>
+									<View className="mt-3 flex-row items-center gap-2">
+										<Pressable
+											onPress={copyMarkedTranscriptText}
+											className="h-11 flex-1 flex-row items-center justify-center gap-2 rounded-full bg-white/10 active:opacity-75"
+										>
+											<Icon name="Copy" size={16} color="#ffffff" />
+											<Text className="text-sm font-bold text-white">Copy</Text>
+										</Pressable>
+										<Pressable
+											onPress={commentMarkedTranscriptText}
+											disabled={isAddingTranscriptComment}
+											className="h-11 flex-1 flex-row items-center justify-center gap-2 rounded-full bg-white active:opacity-75"
+											style={{ opacity: isAddingTranscriptComment ? 0.55 : 1 }}
+										>
+											<Icon name="MessageSquare" size={16} color="#111111" />
+											<Text
+												style={{
+													fontSize: 14,
+													fontWeight: "800",
+													color: "#111111",
+												}}
+											>
+												Comment
+											</Text>
+										</Pressable>
+									</View>
+								</>
+							) : (
+								<Text
+									style={{
+										color: "rgba(255,255,255,0.54)",
+										fontSize: 12,
+										textAlign: "center",
+									}}
+								>
+									No marked text
+								</Text>
+							)}
+						</View>
+					</SafeArea>
+				</View>
+			</Modal>
 
 			<SleepTimerModal
 				visible={sleepTimerVisible}

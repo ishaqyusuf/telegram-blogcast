@@ -9,6 +9,7 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 
 import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";
@@ -39,7 +40,12 @@ interface Props {
   onAdded?: (album: { id: number; name: string }) => void;
 }
 
-export function AddToAlbumModal({ mediaIds, authorId, onClose, onAdded }: Props) {
+export function AddToAlbumModal({
+  mediaIds,
+  authorId,
+  onClose,
+  onAdded,
+}: Props) {
   const queryClient = useQueryClient();
   const colors = useColors();
   const { height: windowHeight } = useWindowDimensions();
@@ -85,144 +91,158 @@ export function AddToAlbumModal({ mediaIds, authorId, onClose, onAdded }: Props)
   const isBusy = addMedia.isPending || createAlbum.isPending;
 
   return (
-    <View
-      className="bg-card rounded-t-3xl px-4 pt-4 pb-8"
-      style={{
-        backgroundColor: colors.card,
-        maxHeight: Math.min(Math.max(360, windowHeight * 0.7), windowHeight - 24),
-        width: "100%",
-      }}
+    <KeyboardAvoidingView
+      behavior="translate-with-padding"
+      style={{ width: "100%" }}
     >
-      {/* Handle */}
       <View
-        className="w-10 h-1 rounded-full bg-muted self-center mb-4"
-        style={{ backgroundColor: colors.muted }}
-      />
-
-      <Text
-        className="text-base font-bold text-foreground mb-4"
-        style={{ color: colors.foreground }}
+        className="bg-card rounded-t-3xl px-4 pt-4 pb-8"
+        style={{
+          backgroundColor: colors.card,
+          maxHeight: Math.min(
+            Math.max(360, windowHeight * 0.7),
+            windowHeight - 24,
+          ),
+          width: "100%",
+        }}
       >
-        Add to album
-      </Text>
-
-      {/* Create new album */}
-      <View className="flex-row gap-2 mb-5">
+        {/* Handle */}
         <View
-          className="flex-1 flex-row items-center bg-muted rounded-xl px-3 h-10 gap-2"
+          className="w-10 h-1 rounded-full bg-muted self-center mb-4"
           style={{ backgroundColor: colors.muted }}
-        >
-          <Icon name="Plus" size={16} className="text-muted-foreground" />
-          <TextInput
-            placeholder="New album name..."
-            placeholderTextColor={colors.mutedForeground}
-            value={newAlbumName}
-            onChangeText={setNewAlbumName}
-            style={{
-              flex: 1,
-              fontSize: 14,
-              color: colors.foreground,
-              paddingVertical: 0,
-            }}
-          />
-        </View>
-        <Pressable
-          onPress={handleCreate}
-          disabled={!newAlbumName.trim() || isBusy}
-          className={`px-4 h-10 rounded-xl bg-primary items-center justify-center active:opacity-80 ${!newAlbumName.trim() || isBusy ? "opacity-50" : "opacity-100"}`}
-        >
-          {isBusy ? (
-            <ActivityIndicator size="small" color={colors.primaryForeground} />
-          ) : (
-            <Text className="text-xs font-bold text-primary-foreground">
-              Create
-            </Text>
-          )}
-        </Pressable>
-      </View>
-
-      <Text
-        className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3"
-        style={{ color: colors.mutedForeground }}
-      >
-        Existing Albums
-      </Text>
-
-      {isLoading ? (
-        <View className="py-6 items-center">
-          <ActivityIndicator color={colors.primary} />
-        </View>
-      ) : albums.length === 0 ? (
-        <Text
-          className="text-sm text-muted-foreground text-center py-6"
-          style={{ color: colors.mutedForeground }}
-        >
-          No albums yet — create one above
-        </Text>
-      ) : (
-        <FlatList
-          data={albums}
-          keyExtractor={(item) => String(item.id)}
-          showsVerticalScrollIndicator={false}
-          style={{ flexGrow: 0 }}
-          renderItem={({ item, index }) => (
-            <Pressable
-              onPress={() => handleSelectAlbum(item)}
-              disabled={isBusy}
-              className="flex-row items-center gap-3 py-3 border-b border-border active:opacity-70"
-            >
-              <View
-                style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 8,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flexShrink: 0,
-                  backgroundColor: ALBUM_COLORS[index % ALBUM_COLORS.length],
-                }}
-              >
-                <Text className="text-sm font-bold text-white">
-                  {getInitials(item.name)}
-                </Text>
-              </View>
-              <View className="flex-1">
-                <Text
-                  className="text-sm font-semibold text-foreground"
-                  style={{ color: colors.foreground }}
-                >
-                  {item.name}
-                </Text>
-                <Text
-                  className="text-xs text-muted-foreground"
-                  style={{ color: colors.mutedForeground }}
-                >
-                  {item._count.medias} tracks
-                </Text>
-              </View>
-              <Icon
-                name="ChevronRight"
-                size={16}
-                className="text-muted-foreground"
-              />
-            </Pressable>
-          )}
         />
-      )}
 
-      {/* Cancel */}
-      <Pressable
-        onPress={onClose}
-        className="mt-4 h-11 rounded-xl bg-muted items-center justify-center active:opacity-70"
-        style={{ backgroundColor: colors.muted }}
-      >
         <Text
-          className="text-sm font-semibold text-foreground"
+          className="text-base font-bold text-foreground mb-4"
           style={{ color: colors.foreground }}
         >
-          Cancel
+          Add to album
         </Text>
-      </Pressable>
-    </View>
+
+        {/* Create new album */}
+        <View className="flex-row gap-2 mb-5">
+          <View
+            className="flex-1 flex-row items-center bg-muted rounded-xl px-3 h-10 gap-2"
+            style={{ backgroundColor: colors.muted }}
+          >
+            <Icon name="Plus" size={16} className="text-muted-foreground" />
+            <TextInput
+              placeholder="New album name..."
+              placeholderTextColor={colors.mutedForeground}
+              value={newAlbumName}
+              onChangeText={setNewAlbumName}
+              returnKeyType="done"
+              onSubmitEditing={handleCreate}
+              style={{
+                flex: 1,
+                fontSize: 14,
+                color: colors.foreground,
+                paddingVertical: 0,
+              }}
+            />
+          </View>
+          <Pressable
+            onPress={handleCreate}
+            disabled={!newAlbumName.trim() || isBusy}
+            className={`px-4 h-10 rounded-xl bg-primary items-center justify-center active:opacity-80 ${!newAlbumName.trim() || isBusy ? "opacity-50" : "opacity-100"}`}
+          >
+            {isBusy ? (
+              <ActivityIndicator
+                size="small"
+                color={colors.primaryForeground}
+              />
+            ) : (
+              <Text className="text-xs font-bold text-primary-foreground">
+                Create
+              </Text>
+            )}
+          </Pressable>
+        </View>
+
+        <Text
+          className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3"
+          style={{ color: colors.mutedForeground }}
+        >
+          Existing Albums
+        </Text>
+
+        {isLoading ? (
+          <View className="py-6 items-center">
+            <ActivityIndicator color={colors.primary} />
+          </View>
+        ) : albums.length === 0 ? (
+          <Text
+            className="text-sm text-muted-foreground text-center py-6"
+            style={{ color: colors.mutedForeground }}
+          >
+            No albums yet — create one above
+          </Text>
+        ) : (
+          <FlatList
+            data={albums}
+            keyExtractor={(item) => String(item.id)}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            style={{ flexGrow: 0 }}
+            renderItem={({ item, index }) => (
+              <Pressable
+                onPress={() => handleSelectAlbum(item)}
+                disabled={isBusy}
+                className="flex-row items-center gap-3 py-3 border-b border-border active:opacity-70"
+              >
+                <View
+                  style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 8,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                    backgroundColor: ALBUM_COLORS[index % ALBUM_COLORS.length],
+                  }}
+                >
+                  <Text className="text-sm font-bold text-white">
+                    {getInitials(item.name)}
+                  </Text>
+                </View>
+                <View className="flex-1">
+                  <Text
+                    className="text-sm font-semibold text-foreground"
+                    style={{ color: colors.foreground }}
+                  >
+                    {item.name}
+                  </Text>
+                  <Text
+                    className="text-xs text-muted-foreground"
+                    style={{ color: colors.mutedForeground }}
+                  >
+                    {item._count.medias} tracks
+                  </Text>
+                </View>
+                <Icon
+                  name="ChevronRight"
+                  size={16}
+                  className="text-muted-foreground"
+                />
+              </Pressable>
+            )}
+          />
+        )}
+
+        {/* Cancel */}
+        <Pressable
+          onPress={onClose}
+          className="mt-4 h-11 rounded-xl bg-muted items-center justify-center active:opacity-70"
+          style={{ backgroundColor: colors.muted }}
+        >
+          <Text
+            className="text-sm font-semibold text-foreground"
+            style={{ color: colors.foreground }}
+          >
+            Cancel
+          </Text>
+        </Pressable>
+      </View>
+    </KeyboardAvoidingView>
   );
 }

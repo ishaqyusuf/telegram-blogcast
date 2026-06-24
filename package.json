@@ -23,7 +23,7 @@
     "db:generate": "node ./node_modules/turbo/bin/turbo -F @acme/db prisma-generate",
     "db:push-reset": "node ./node_modules/turbo/bin/turbo -F @acme/db push-reset",
     "db:compact-shamela-urls": "node ./node_modules/turbo/bin/turbo -F @acme/db compact-shamela-urls",
-    "dev": "bun run kill:ports && node ./scripts/dev-with-transcriber.mjs",
+    "dev": "bun run kill:ports && node ./node_modules/turbo/bin/turbo dev --parallel --filter=!@acme/api",
     "kill:ports": "node ./scripts/kill-dev-ports.mjs",
     "terminal": "bash ./scripts/open-bun-script-terminal.sh",
     "dev:terminal": "bun run terminal dev",
