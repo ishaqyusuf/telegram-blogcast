@@ -53,6 +53,19 @@ type OpenAIVerboseWord = {
   start?: number;
   end?: number;
 };
+type XaiSttWord = {
+  text?: string;
+  start?: number;
+  end?: number;
+};
+type TranscriptionUsage = {
+  provider: "local" | "openai" | "gemini" | "xai";
+  model: TranscriptionModel;
+  audioSeconds?: number;
+  billableSeconds?: number;
+  fileBytes?: number;
+  requestCount: number;
+};
 type TranscriptWord = {
   word: string;
   startSec: number;
@@ -70,16 +83,21 @@ export const transcriptionModelSchema = z.enum([
   "gpt-4o-transcribe",
   "gpt-4o-mini-transcribe",
   "gemini-2.0-flash",
+  "grok-whisper",
   "whisper-local",
 ]);
 export type TranscriptionModel = z.infer<typeof transcriptionModelSchema>;
+type TranscriptionResult = {
+  segments: TranscribedSegment[];
+  usage?: TranscriptionUsage;
+};
 
 export const transcribeRangeSchema = z.object({
   mediaId: z.number().optional(),
   fileId: z.string().min(1),
   fromSec: z.number().min(0),
   toSec: z.number().min(0),
-  provider: z.enum(["openai", "gemini", "whisper-local"]).optional(),
+  provider: z.enum(["openai", "gemini", "grok", "whisper-local"]).optional(),
   model: transcriptionModelSchema.optional(),
   localTranscriberBaseUrl: z.string().url().optional(),
   language: z.string().min(2).max(8).optional(),
@@ -93,7 +111,7 @@ export const transcriptChunkSchema = z.object({
   positionSec: z.number().min(0).optional(),
   chunkStartSec: z.number().min(0).optional(),
   chunkDurationSec: z.number().min(5).max(120).default(30),
-  provider: z.enum(["openai", "gemini", "whisper-local"]).optional(),
+  provider: z.enum(["openai", "gemini", "grok", "whisper-local"]).optional(),
   model: transcriptionModelSchema.optional(),
   localTranscriberBaseUrl: z.string().url().optional(),
   language: z.string().min(2).max(8).optional(),
@@ -412,6 +430,47 @@ function attachWordsToSegments(
   });
 }
 
+function groupWordsIntoSegments(input: {
+  words: TranscriptWord[];
+  fromSec: number;
+  toSec: number;
+  idPrefix: string;
+}) {
+  const segments: TranscribedSegment[] = [];
+  let pending: TranscriptWord[] = [];
+  let lastEnd = input.fromSec;
+
+  const flush = () => {
+    if (pending.length === 0) return;
+    const first = pending[0]!;
+    const last = pending[pending.length - 1]!;
+    const from = Math.max(input.fromSec, first.startSec);
+    const to = Math.min(input.toSec, last.endSec);
+    if (to > from) {
+      segments.push({
+        id: `${input.idPrefix}-${segments.length}`,
+        from,
+        to,
+        text: pending.map((word) => word.word).join(" ").trim(),
+        words: pending,
+      });
+    }
+    pending = [];
+  };
+
+  for (const word of input.words) {
+    const gap = word.startSec - lastEnd;
+    if (pending.length > 0 && (gap > 1.25 || pending.length >= 24)) {
+      flush();
+    }
+    pending.push(word);
+    lastEnd = word.endSec;
+  }
+
+  flush();
+  return segments;
+}
+
 function normalizeDbWords(value: unknown): TranscriptWord[] {
   const parsed = z
     .array(
@@ -637,9 +696,104 @@ async function transcribeWithGemini(input: {
   };
 }
 
+async function transcribeWithGrokWhisper(input: {
+  fileBlob: Blob;
+  fileBytes: number;
+  fromSec: number;
+  toSec: number;
+  language?: string;
+}) {
+  const xaiKey = process.env.XAI_API_KEY;
+  if (!xaiKey) {
+    throw new Error("XAI_API_KEY is not configured");
+  }
+
+  const baseUrl = (process.env.XAI_STT_BASE_URL ?? "https://api.x.ai/v1").replace(
+    /\/+$/,
+    "",
+  );
+  const formData = new FormData();
+  if (input.language) {
+    formData.append("language", input.language);
+    formData.append("format", "true");
+  }
+  formData.append("file", input.fileBlob, "audio-input.mp3");
+
+  const res = await fetch(`${baseUrl}/stt`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${xaiKey}`,
+    },
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Grok Whisper transcription failed: ${errText}`);
+  }
+
+  const json = (await res.json()) as {
+    text?: string;
+    duration?: number;
+    words?: XaiSttWord[];
+    channels?: Array<{ words?: XaiSttWord[] }>;
+  };
+  const rawWords =
+    json.words ??
+    json.channels?.flatMap((channel) => channel.words ?? []) ??
+    [];
+  const words = rawWords
+    .map((word) => ({
+      word: (word.text ?? "").trim(),
+      startSec: word.start ?? 0,
+      endSec: word.end ?? word.start ?? 0,
+    }))
+    .filter(
+      (word) =>
+        word.word.length > 0 &&
+        word.endSec > word.startSec &&
+        overlapsRange(word.startSec, word.endSec, input.fromSec, input.toSec),
+    );
+
+  const segments = groupWordsIntoSegments({
+    words,
+    fromSec: input.fromSec,
+    toSec: input.toSec,
+    idPrefix: "grok",
+  });
+
+  if (segments.length === 0 && json.text?.trim() && rawWords.length === 0) {
+    segments.push({
+      id: "grok-full",
+      from: Math.floor(input.fromSec),
+      to: Math.ceil(input.toSec),
+      text: json.text.trim(),
+      words: distributeWords({
+        text: json.text.trim(),
+        from: input.fromSec,
+        to: input.toSec,
+      }),
+    });
+  }
+
+  const audioSeconds = json.duration ?? input.toSec - input.fromSec;
+  return {
+    segments,
+    usage: {
+      provider: "xai",
+      model: "grok-whisper",
+      audioSeconds,
+      billableSeconds: audioSeconds,
+      fileBytes: input.fileBytes,
+      requestCount: 1,
+    } satisfies TranscriptionUsage,
+  };
+}
+
 function resolveTranscriptionModel(input: TranscribeRangeSchema): TranscriptionModel {
   if (input.model) return input.model;
   if (input.provider === "gemini") return "gemini-2.0-flash";
+  if (input.provider === "grok") return "grok-whisper";
   if (input.provider === "whisper-local") return "whisper-local";
   return "gpt-4o-transcribe";
 }
@@ -813,7 +967,7 @@ async function persistTranscribedSegments(input: {
 export async function transcribeRange(
   ctx: TRPCContext,
   input: TranscribeRangeSchema,
-) {
+): Promise<TranscriptionResult> {
   const { fileId, fromSec, toSec, language } = input;
   const model = resolveTranscriptionModel(input);
   if (toSec <= fromSec) {
@@ -864,6 +1018,20 @@ export async function transcribeRange(
               "Audio file is too large for Gemini inline transcription (>19MB). Use a shorter source audio.",
             );
           }
+          if (model === "grok-whisper" && fileSize > 500 * 1024 * 1024) {
+            throw new Error(
+              "Audio file is too large for Grok Whisper transcription (>500MB). Use a shorter source audio.",
+            );
+          }
+          if (model === "grok-whisper") {
+            return transcribeWithGrokWhisper({
+              fileBlob,
+              fileBytes: fileSize,
+              fromSec,
+              toSec,
+              language,
+            });
+          }
           if (model === "gemini-2.0-flash") {
             return transcribeWithGemini({
               fileBase64: Buffer.from(fileBuffer).toString("base64"),
@@ -908,7 +1076,7 @@ export async function getOrTranscribeTranscriptChunk(
   const db = ctx.db as any;
   const chunkStartSec = normalizeChunkStart(input);
   const chunkEndSec = chunkStartSec + input.chunkDurationSec;
-  const model: TranscriptionModel = "whisper-local";
+  const model: TranscriptionModel = input.model ?? "whisper-local";
 
   const transcript = await db.transcript.upsert({
     where: { mediaId: input.mediaId },
@@ -935,6 +1103,7 @@ export async function getOrTranscribeTranscriptChunk(
       chunkEndSec,
       status: "done" as const,
       cached: true,
+      model: cachedSegments[0]?.model ?? model,
       segments: cachedSegments.map(normalizeDbSegment),
     };
   }
@@ -972,6 +1141,8 @@ export async function getOrTranscribeTranscriptChunk(
       chunkEndSec,
       status: "done" as const,
       cached: false,
+      model,
+      usage: result.usage,
       segments: result.segments.map((segment) => ({
         ...segment,
         startSec: segment.from,

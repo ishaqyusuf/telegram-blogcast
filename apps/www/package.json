@@ -7,8 +7,8 @@
         "clean": "git clean -xdf .next .turbo node_modules",
         "dev": "portless",
         "dev:app": "node ./scripts/dev-with-transcriber.mjs",
-        "dev:next:app": "bunx next dev -p 3005",
-        "dev:prod": "bunx env-cmd -f .env.production env TZ=UTC next dev -p 3005",
+        "dev:next:app": "bunx next dev -p 3501",
+        "dev:prod": "bunx env-cmd -f .env.production env TZ=UTC next dev -p 3501",
         "build": "NODE_ENV=production next build --turbopack",
         "start": "next start",
         "lint": "next lint",
@@ -18,7 +18,7 @@
     "portless": {
         "name": "podcast",
         "script": "dev:app",
-        "appPort": 3005
+        "appPort": 3501
     },
     "dependencies": {
         "@actions/core": "^1.11.1",

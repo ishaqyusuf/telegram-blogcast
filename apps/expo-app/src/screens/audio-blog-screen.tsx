@@ -47,6 +47,8 @@ import {
 	getDefaultTranscriberUrl,
 	isHttpTranscriberUrl,
 } from "@/lib/transcribe";
+import { getTranscriptionBadgeState } from "@/lib/transcription-status";
+import { withAlpha } from "@/lib/theme";
 import { minuteToString } from "@/lib/utils";
 import { useAppSettingsStore } from "@/store/app-settings-store";
 import { useAudioStore } from "@/store/audio-store";
@@ -795,9 +797,11 @@ function SleepTimerModal({
 function PlayerSection({
 	theme = "light",
 	onPlusPress,
+	onReadPress,
 }: {
 	theme?: "light" | "dark";
 	onPlusPress?: () => void;
+	onReadPress?: () => void;
 }) {
 	const colors = useColors();
 	const isPlaying = useAudioStore((s) => s.isPlaying);
@@ -999,17 +1003,30 @@ function PlayerSection({
 
 			{/* Controls */}
 			<View className="flex-row items-center justify-between">
-				<Pressable
-					onPress={cycleSpeed}
-					className="px-2 py-1 rounded-md active:opacity-70"
-					style={{ backgroundColor: trackBgColor }}
-				>
-					<Text
-						style={{ fontSize: 12, fontWeight: "700", color: mutedFgColor }}
+				<View className="flex-row items-center gap-2">
+					<Pressable
+						onPress={onReadPress}
+						className="size-10 items-center justify-center rounded-full active:opacity-70"
+						disabled={!onReadPress}
+						style={{
+							backgroundColor: trackBgColor,
+							opacity: onReadPress ? 1 : 0.45,
+						}}
 					>
-						{playbackRate}x
-					</Text>
-				</Pressable>
+						<Icon name="BookOpen" size={20} color={mutedFgColor} />
+					</Pressable>
+					<Pressable
+						onPress={cycleSpeed}
+						className="rounded-md px-2 py-1 active:opacity-70"
+						style={{ backgroundColor: trackBgColor }}
+					>
+						<Text
+							style={{ fontSize: 12, fontWeight: "700", color: mutedFgColor }}
+						>
+							{playbackRate}x
+						</Text>
+					</Pressable>
+				</View>
 				<View className="flex-row items-center gap-6">
 					<Pressable
 						className="p-2 active:opacity-50"
@@ -1729,10 +1746,7 @@ export default function AudioBlogScreen() {
 	);
 	const transcriberUrl = getDefaultTranscriberUrl(localTranscriberBaseUrl);
 	const canCheckTranscriber = isHttpTranscriberUrl(transcriberUrl);
-	const { enqueue: enqueueTranscription } = useTranscriptionQueue(undefined, {
-		autoLoad: false,
-		reloadOnEnqueue: false,
-	});
+	const lastCompletedTranscriptJobRef = useRef<number | null>(null);
 
 	const loadAudio = useAudioStore((s) => s.loadAudio);
 	const seekAudio = useAudioStore((s) => s.seek);
@@ -1760,6 +1774,48 @@ export default function AudioBlogScreen() {
 		..._trpc.blog.getTranscript.queryOptions({ mediaId: mediaId ?? 0 }),
 		enabled: !!mediaId,
 	});
+	const {
+		enqueue: enqueueTranscription,
+		jobs: transcriptionJobs,
+		reload: reloadTranscriptionJobs,
+	} = useTranscriptionQueue(mediaId, {
+		autoLoad: !!mediaId,
+		reloadOnEnqueue: false,
+	});
+	const mediaTranscriptionJobs = useMemo(
+		() => transcriptionJobs.filter((job) => job.mediaId === mediaId),
+		[mediaId, transcriptionJobs],
+	);
+	const latestTranscriptionJob = mediaTranscriptionJobs[0];
+	const latestTranscriptionStatus =
+		latestTranscriptionJob?.status === "completed"
+			? "done"
+			: latestTranscriptionJob?.status;
+	const transcriptBadge = getTranscriptionBadgeState({
+		...(media as any),
+		transcript: transcriptData
+			? {
+					status: transcriptData.status,
+					segments: transcriptData.segments,
+				}
+			: (media as any)?.transcript,
+		transcriptStatus:
+			transcriptData?.status ??
+			(media as any)?.transcriptStatus ??
+			latestTranscriptionStatus,
+		transcriptionJobStatus:
+			latestTranscriptionJob?.status ?? (media as any)?.transcriptionJobStatus,
+		transcriptionJobs: mediaTranscriptionJobs,
+		duration: duration ?? (media as any)?.duration ?? null,
+	});
+	const transcriptBadgeColor =
+		transcriptBadge.tone === "success"
+			? colors.success
+			: transcriptBadge.tone === "warn"
+				? colors.warn
+				: transcriptBadge.tone === "muted"
+					? "rgba(255,255,255,0.66)"
+					: colors.primary;
 	const { data: localTranscriberHealth } = useQuery({
 		..._trpc.blog.checkLocalTranscriber.queryOptions({
 			baseUrl: canCheckTranscriber ? (transcriberUrl ?? undefined) : undefined,
@@ -1832,7 +1888,6 @@ export default function AudioBlogScreen() {
 				chunkStartSec,
 				chunkDurationSec: TRANSCRIPT_CHUNK_SEC,
 				model: "whisper-local",
-				force: true,
 				localTranscriberBaseUrl: canCheckTranscriber
 					? (transcriberUrl ?? undefined)
 					: undefined,
@@ -1857,6 +1912,22 @@ export default function AudioBlogScreen() {
 			requestTranscriptChunk(activeChunkStart + TRANSCRIPT_CHUNK_SEC);
 		}
 	}, [mediaId, positionMs, requestTranscriptChunk, telegramFileId]);
+
+	useEffect(() => {
+		if (!mediaId) return;
+		const completedJob = mediaTranscriptionJobs.find(
+			(job) => job.status === "completed",
+		);
+		if (!completedJob) return;
+		if (lastCompletedTranscriptJobRef.current === completedJob.id) return;
+		lastCompletedTranscriptJobRef.current = completedJob.id;
+		void Promise.all([
+			qc.invalidateQueries({
+				queryKey: _trpc.blog.getTranscript.queryKey({ mediaId }),
+			}),
+			qc.invalidateQueries({ queryKey: _trpc.blog.getBlog.queryKey({ id }) }),
+		]);
+	}, [id, mediaId, mediaTranscriptionJobs, qc]);
 
 	const transcriptSegments = useMemo(() => {
 		const segmentsByKey = new Map<
@@ -2001,7 +2072,15 @@ export default function AudioBlogScreen() {
 						queryKey: _trpc.blog.getBlog.queryKey({ id }),
 					}),
 				]);
-				Alert.alert("Reset", "Transcription was reset.");
+				Alert.alert("Queue for transcribing", undefined, [
+					{ text: "No", style: "cancel" },
+					{
+						text: "Yes",
+						onPress: () => {
+							void queueCurrentTranscription();
+						},
+					},
+				]);
 			},
 			onError: (e) => Alert.alert("Could not reset transcription", e.message),
 		}),
@@ -2079,6 +2158,7 @@ export default function AudioBlogScreen() {
 				language: "ar",
 				transcriberUrl,
 			});
+			await reloadTranscriptionJobs();
 			Alert.alert("Queued", "Added to transcription queue.");
 		} catch (error) {
 			Alert.alert(
@@ -2106,13 +2186,17 @@ export default function AudioBlogScreen() {
 		);
 	}
 
+	function openTranscriptModal() {
+		setFrozenTranscriptPositionSec(positionMs / 1000);
+		setTranscriptHighlightPaused(false);
+		setTranscriptModalVisible(true);
+		Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+	}
+
 	function handleTranscriptAreaPress() {
 		const now = Date.now();
 		if (now - lastTranscriptTapRef.current < 300) {
-			setFrozenTranscriptPositionSec(positionMs / 1000);
-			setTranscriptHighlightPaused(false);
-			setTranscriptModalVisible(true);
-			Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+			openTranscriptModal();
 		}
 		lastTranscriptTapRef.current = now;
 	}
@@ -2267,6 +2351,40 @@ export default function AudioBlogScreen() {
 											</Text>
 										</Pressable>
 										<View className="flex-row items-center gap-1">
+											{transcriptBadge.show ? (
+												<View
+													accessibilityLabel={transcriptBadge.label}
+													style={{
+														maxWidth: 168,
+														minHeight: 32,
+														flexDirection: "row",
+														alignItems: "center",
+														gap: 6,
+														borderRadius: 999,
+														paddingHorizontal: 10,
+														backgroundColor: withAlpha(
+															transcriptBadgeColor,
+															0.18,
+														),
+													}}
+												>
+													<Icon
+														name="FileText"
+														size={14}
+														color={transcriptBadgeColor}
+													/>
+													<Text
+														numberOfLines={1}
+														style={{
+															color: transcriptBadgeColor,
+															fontSize: 11,
+															fontWeight: "800",
+														}}
+													>
+														{transcriptBadge.label}
+													</Text>
+												</View>
+											) : null}
 											<Pressable
 												onPress={() => setMoreMenuVisible(true)}
 												className="size-10 items-center justify-center rounded-full active:bg-black/20"
@@ -2289,7 +2407,10 @@ export default function AudioBlogScreen() {
 										}}
 									>
 										{transcriptSegments.length > 0 ? (
-											<KaraokeTranscript segments={transcriptSegments} />
+											<KaraokeTranscript
+												segments={transcriptSegments}
+												contentPaddingVertical={34}
+											/>
 										) : (
 											<View
 												style={{
@@ -2420,6 +2541,7 @@ export default function AudioBlogScreen() {
 											<PlayerSection
 												theme="dark"
 												onPlusPress={() => setAlbumPickerVisible(true)}
+												onReadPress={openTranscriptModal}
 											/>
 											{audioError ? (
 												<Text className="pt-3 text-center text-xs text-destructive">

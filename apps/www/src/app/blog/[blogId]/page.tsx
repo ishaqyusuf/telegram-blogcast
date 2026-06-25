@@ -103,7 +103,62 @@ interface TranscriptChunk {
     chunkEndSec: number;
     cached: boolean;
     status: "done";
+    model?: string;
+    usage?: TranscriptUsage;
     segments: TranscriptSegment[];
+}
+
+interface TranscriptUsage {
+    provider?: string;
+    model?: string;
+    audioSeconds?: number;
+    billableSeconds?: number;
+    fileBytes?: number;
+    requestCount?: number;
+}
+
+interface GrokWhisperUsage {
+    requestCount: number;
+    chunkSeconds: number;
+    audioSeconds: number;
+    billableSeconds: number;
+    approvedAt?: string;
+    lastUsedAt?: string;
+}
+
+const GROK_WHISPER_USAGE_KEY = "al-ghurobaa:grok-whisper-usage";
+
+function emptyGrokWhisperUsage(): GrokWhisperUsage {
+    return {
+        requestCount: 0,
+        chunkSeconds: 0,
+        audioSeconds: 0,
+        billableSeconds: 0,
+    };
+}
+
+function loadGrokWhisperUsage(): GrokWhisperUsage {
+    if (typeof window === "undefined") return emptyGrokWhisperUsage();
+    try {
+        const raw = window.localStorage.getItem(GROK_WHISPER_USAGE_KEY);
+        if (!raw) return emptyGrokWhisperUsage();
+        const parsed = JSON.parse(raw) as Partial<GrokWhisperUsage>;
+        return {
+            ...emptyGrokWhisperUsage(),
+            ...parsed,
+            requestCount: Number(parsed.requestCount) || 0,
+            chunkSeconds: Number(parsed.chunkSeconds) || 0,
+            audioSeconds: Number(parsed.audioSeconds) || 0,
+            billableSeconds: Number(parsed.billableSeconds) || 0,
+        };
+    } catch {
+        return emptyGrokWhisperUsage();
+    }
+}
+
+function formatUsageMinutes(seconds: number) {
+    if (seconds <= 0) return "0.0m";
+    return `${(seconds / 60).toFixed(1)}m`;
 }
 
 function getTranscriptChunkStart(sec: number) {
@@ -144,9 +199,12 @@ function TranscriptSection({
     const [testResult, setTestResult] = useState<{
         segments: TranscriptSegment[];
         elapsedMs: number;
+        usage?: TranscriptUsage;
     } | null>(null);
     const [testElapsedMs, setTestElapsedMs] = useState(0);
     const [testError, setTestError] = useState<string | null>(null);
+    const [grokFallbackApproved, setGrokFallbackApproved] = useState(false);
+    const [grokUsage, setGrokUsage] = useState(emptyGrokWhisperUsage);
     const chunkCacheRef = useRef(chunks);
     const pendingChunksRef = useRef(pendingChunks);
     const failedChunksRef = useRef<Set<number>>(new Set());
@@ -160,6 +218,54 @@ function TranscriptSection({
     const localWhisperOnline = Boolean(localTranscriberHealth?.ok);
     const localWhisperStatus = localTranscriberHealth?.status ?? "checking";
 
+    useEffect(() => {
+        setGrokUsage(loadGrokWhisperUsage());
+    }, []);
+
+    const saveGrokUsage = useCallback(
+        (updater: (usage: GrokWhisperUsage) => GrokWhisperUsage) => {
+            setGrokUsage((current) => {
+                const next = updater(current);
+                if (typeof window !== "undefined") {
+                    window.localStorage.setItem(
+                        GROK_WHISPER_USAGE_KEY,
+                        JSON.stringify(next),
+                    );
+                }
+                return next;
+            });
+        },
+        [],
+    );
+
+    const approveGrokFallback = useCallback(() => {
+        setGrokFallbackApproved(true);
+        saveGrokUsage((current) => ({
+            ...current,
+            approvedAt: new Date().toISOString(),
+        }));
+    }, [saveGrokUsage]);
+
+    const recordGrokUsage = useCallback(
+        (usage: TranscriptUsage | undefined, chunkSeconds: number) => {
+            if (usage?.provider !== "xai" && usage?.model !== "grok-whisper") {
+                return;
+            }
+            saveGrokUsage((current) => ({
+                ...current,
+                requestCount: current.requestCount + (usage.requestCount ?? 1),
+                chunkSeconds: current.chunkSeconds + chunkSeconds,
+                audioSeconds:
+                    current.audioSeconds + (usage.audioSeconds ?? chunkSeconds),
+                billableSeconds:
+                    current.billableSeconds +
+                    (usage.billableSeconds ?? usage.audioSeconds ?? chunkSeconds),
+                lastUsedAt: new Date().toISOString(),
+            }));
+        },
+        [saveGrokUsage],
+    );
+
     const testTranscript = useMutation(
         _trpc.blog.testTranscriptRange.mutationOptions({
             onMutate() {
@@ -172,7 +278,12 @@ function TranscriptSection({
                 setTestResult({
                     segments: data.segments as TranscriptSegment[],
                     elapsedMs: data.elapsedMs,
+                    usage: data.usage as TranscriptUsage | undefined,
                 });
+                recordGrokUsage(
+                    data.usage as TranscriptUsage | undefined,
+                    20,
+                );
             },
             onError(err) {
                 setTestError(err.message || "Transcription test failed.");
@@ -214,6 +325,10 @@ function TranscriptSection({
                     chunkCacheRef.current = next;
                     return next;
                 });
+                recordGrokUsage(
+                    data.usage as TranscriptUsage | undefined,
+                    data.chunkEndSec - data.chunkStartSec,
+                );
                 setError(null);
             },
             onError(err, variables) {
@@ -242,9 +357,16 @@ function TranscriptSection({
     }, [getTranscriptChunk]);
 
     const requestChunk = useCallback(
-        (chunkStartSec: number, options?: { force?: boolean }) => {
+        (
+            chunkStartSec: number,
+            options?: { force?: boolean; allowRemote?: boolean },
+        ) => {
             if (chunkStartSec < 0) return;
-            if (!localWhisperOnline) return;
+            const useGrokFallback =
+                !localWhisperOnline &&
+                grokFallbackApproved &&
+                options?.allowRemote === true;
+            if (!localWhisperOnline && !useGrokFallback) return;
             if (
                 TRANSCRIPT_CHUNK_CACHE_ENABLED &&
                 !options?.force &&
@@ -268,11 +390,11 @@ function TranscriptSection({
                 fileId,
                 chunkStartSec,
                 chunkDurationSec: TRANSCRIPT_CHUNK_SEC,
-                model: "whisper-local",
+                model: useGrokFallback ? "grok-whisper" : "whisper-local",
                 force: options?.force || !TRANSCRIPT_CHUNK_CACHE_ENABLED,
             });
         },
-        [fileId, localWhisperOnline, mediaId],
+        [fileId, grokFallbackApproved, localWhisperOnline, mediaId],
     );
 
     useEffect(() => {
@@ -333,13 +455,19 @@ function TranscriptSection({
 
     const activeChunk = chunks[activeChunkStart];
     const activeChunkPending = pendingChunks.includes(activeChunkStart);
+    const activeChunkUsesGrok =
+        !localWhisperOnline && grokFallbackApproved;
     const testText =
         testResult?.segments.map((segment) => segment.text).join("\n").trim() ??
         "";
     const chunkButtonLabel = checkingLocalWhisper
         ? "checking local…"
         : !localWhisperOnline
-          ? "local offline"
+          ? !grokFallbackApproved
+            ? "approve Grok"
+            : activeChunkPending
+              ? "Grok running…"
+              : "use Grok chunk"
           : activeChunkPending
             ? "transcribing…"
             : activeChunk?.cached
@@ -350,8 +478,31 @@ function TranscriptSection({
         : checkingLocalWhisper
           ? "checking"
           : !localWhisperOnline
-            ? "waiting"
+            ? !grokFallbackApproved
+              ? "approve Grok"
+              : "test Grok 0-20s"
             : "test 0-20s";
+    const handleChunkButtonClick = () => {
+        if (!localWhisperOnline && !grokFallbackApproved) {
+            approveGrokFallback();
+            return;
+        }
+        requestChunk(activeChunkStart, {
+            force: true,
+            allowRemote: !localWhisperOnline,
+        });
+    };
+    const handleTestButtonClick = () => {
+        if (!localWhisperOnline && !grokFallbackApproved) {
+            approveGrokFallback();
+            return;
+        }
+        testTranscript.mutate({
+            fileId,
+            language: "ar",
+            model: localWhisperOnline ? "whisper-local" : "grok-whisper",
+        });
+    };
     const compactTranscriptText = visibleTranscriptSegments
         .map((segment) => segment.text)
         .join(" ")
@@ -428,13 +579,10 @@ function TranscriptSection({
                         </div>
                         <button
                             type="button"
-                            onClick={() =>
-                                requestChunk(activeChunkStart, { force: true })
-                            }
+                            onClick={handleChunkButtonClick}
                             disabled={
                                 activeChunkPending ||
-                                checkingLocalWhisper ||
-                                !localWhisperOnline
+                                checkingLocalWhisper
                             }
                             className="rounded-lg border border-emerald-800 bg-emerald-950/60 px-3 py-1.5 font-mono text-xs text-emerald-300 transition-colors hover:bg-emerald-900/60 disabled:opacity-50"
                         >
@@ -459,12 +607,26 @@ function TranscriptSection({
                                           ? ` (${localTranscriberHealth.loadSeconds.toFixed(1)}s)`
                                           : ""
                                   }.`
-                                : "Local Whisper is required."}{" "}
-                            Run{" "}
-                            <code className="rounded bg-zinc-800 px-1 py-0.5 font-mono text-[11px] text-amber-200">
-                                bun run transcriber:dev
-                            </code>{" "}
-                            and retry when ready.
+                                : "Local Whisper is offline."}{" "}
+                            {!grokFallbackApproved ? (
+                                <>
+                                    Approve Grok before sending any audio to
+                                    xAI STT.
+                                </>
+                            ) : (
+                                <>
+                                    Grok is approved for manual chunk requests.
+                                </>
+                            )}{" "}
+                            Usage: {grokUsage.requestCount} requests ·{" "}
+                            {formatUsageMinutes(grokUsage.billableSeconds)}{" "}
+                            billable audio.
+                        </p>
+                    )}
+                    {activeChunkUsesGrok && (
+                        <p className="mt-2 text-xs text-zinc-500">
+                            Grok fallback is manual only; playback will not
+                            prefetch remote chunks.
                         </p>
                     )}
                     {error && <p className="mt-2 text-xs text-red-400">{error}</p>}
@@ -483,16 +645,10 @@ function TranscriptSection({
                         </div>
                         <button
                             type="button"
-                            onClick={() =>
-                                testTranscript.mutate({
-                                    fileId,
-                                    language: "ar",
-                                })
-                            }
+                            onClick={handleTestButtonClick}
                             disabled={
                                 testTranscript.isPending ||
-                                checkingLocalWhisper ||
-                                !localWhisperOnline
+                                checkingLocalWhisper
                             }
                             className="rounded-lg border border-sky-800 bg-sky-950/60 px-3 py-1.5 font-mono text-xs text-sky-300 transition-colors hover:bg-sky-900/60 disabled:opacity-50"
                         >

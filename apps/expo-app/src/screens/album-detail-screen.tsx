@@ -749,94 +749,100 @@ function TrackActionsSheet({
 						{title}
 					</Text>
 
-					<View style={{ marginTop: 14 }}>
-						<TrackActionRow
-							label="Remove from album"
-							description="Keep the post but remove this track here"
-							icon="X"
-							disabled={isBusy}
-							danger
-							onPress={onRemove}
-						/>
-						<TrackActionRow
-							label="Move to album"
-							description="Choose another album for this track"
-							icon="ListMusic"
-							disabled={isBusy}
-							onPress={() => runAndClose(onMoveRequest)}
-						/>
-					</View>
-
-					<Text
-						style={{
-							marginTop: 18,
-							marginBottom: 8,
-							fontSize: 12,
-							fontWeight: "800",
-							letterSpacing: 0.5,
-							color: colors.mutedForeground,
-							textAlign: "right",
-							textTransform: "uppercase",
-						}}
+					<ScrollView
+						style={{ marginTop: 14 }}
+						contentContainerStyle={{ paddingBottom: 8 }}
+						showsVerticalScrollIndicator={false}
 					>
-						Post options
-					</Text>
+						<View>
+							<TrackActionRow
+								label="Remove from album"
+								description="Keep the post but remove this track here"
+								icon="X"
+								disabled={isBusy}
+								danger
+								onPress={onRemove}
+							/>
+							<TrackActionRow
+								label="Move to album"
+								description="Choose another album for this track"
+								icon="ListMusic"
+								disabled={isBusy}
+								onPress={() => runAndClose(onMoveRequest)}
+							/>
+						</View>
 
-					<View>
-						<TrackActionRow
-							label="Open post"
-							description="View the full post and media"
-							icon="FileText"
-							disabled={!canOpenPost}
-							onPress={() => runAndClose(onOpenPost)}
-						/>
-						<TrackActionRow
-							label="Share"
-							description="Send a web link to this post"
-							icon="Share"
-							onPress={() => runAndClose(onShare)}
-						/>
-						<TrackActionRow
-							label="Comment"
-							description="Open the discussion for this post"
-							icon="MessageSquare"
-							disabled={!canOpenPost}
-							onPress={() => runAndClose(onComment)}
-						/>
-						<TrackActionRow
-							label="Transcribe"
-							description="Queue this audio for local Whisper"
-							icon="Captions"
-							disabled={isBusy || !media?.id}
-							onPress={() => runAndClose(onTranscribe)}
-						/>
-						<TrackActionRow
-							label="Reset transcribe"
-							description="Clear transcript and queue jobs"
-							icon="RotateCcw"
-							disabled={isBusy || !media?.id}
-							onPress={() => runAndClose(onResetTranscription)}
-						/>
-						<TrackActionRow
-							label="Save"
-							description="Keep this post in saved items"
-							icon="Bookmark"
-							onPress={() => runAndClose(onComingSoon)}
-						/>
-						<TrackActionRow
-							label="Like"
-							description="Add this post to liked items"
-							icon="Heart"
-							onPress={() => runAndClose(onComingSoon)}
-						/>
-						<TrackActionRow
-							label="Delete post"
-							description="Remove this post from the blog list"
-							icon="Trash2"
-							danger
-							onPress={() => runAndClose(onComingSoon)}
-						/>
-					</View>
+						<Text
+							style={{
+								marginTop: 18,
+								marginBottom: 8,
+								fontSize: 12,
+								fontWeight: "800",
+								letterSpacing: 0.5,
+								color: colors.mutedForeground,
+								textAlign: "right",
+								textTransform: "uppercase",
+							}}
+						>
+							Post options
+						</Text>
+
+						<View>
+							<TrackActionRow
+								label="Open post"
+								description="View the full post and media"
+								icon="FileText"
+								disabled={!canOpenPost}
+								onPress={() => runAndClose(onOpenPost)}
+							/>
+							<TrackActionRow
+								label="Share"
+								description="Send a web link to this post"
+								icon="Share"
+								onPress={() => runAndClose(onShare)}
+							/>
+							<TrackActionRow
+								label="Comment"
+								description="Open the discussion for this post"
+								icon="MessageSquare"
+								disabled={!canOpenPost}
+								onPress={() => runAndClose(onComment)}
+							/>
+							<TrackActionRow
+								label="Transcribe"
+								description="Queue this audio for local Whisper"
+								icon="Captions"
+								disabled={isBusy || !media?.id}
+								onPress={() => runAndClose(onTranscribe)}
+							/>
+							<TrackActionRow
+								label="Reset transcribe"
+								description="Clear transcript and queue jobs"
+								icon="RotateCcw"
+								disabled={isBusy || !media?.id}
+								onPress={() => runAndClose(onResetTranscription)}
+							/>
+							<TrackActionRow
+								label="Save"
+								description="Keep this post in saved items"
+								icon="Bookmark"
+								onPress={() => runAndClose(onComingSoon)}
+							/>
+							<TrackActionRow
+								label="Like"
+								description="Add this post to liked items"
+								icon="Heart"
+								onPress={() => runAndClose(onComingSoon)}
+							/>
+							<TrackActionRow
+								label="Delete post"
+								description="Remove this post from the blog list"
+								icon="Trash2"
+								danger
+								onPress={() => runAndClose(onComingSoon)}
+							/>
+						</View>
+					</ScrollView>
 				</Pressable>
 			</Pressable>
 		</Modal>
@@ -1319,6 +1325,7 @@ export default function AlbumDetailScreen() {
 		new Set(),
 	);
 	const autoLoadedSuggestionAlbumRef = useRef<number | null>(null);
+	const resetQueueTrackRef = useRef<any | null>(null);
 
 	const rawTracks: any[] = localTracks ?? album?.medias ?? [];
 	const tracks = useMemo(
@@ -1472,8 +1479,22 @@ export default function AlbumDetailScreen() {
 						queryKey: _trpc.album.getAlbum.queryKey({ id }),
 					});
 					setSelectedTrackForActions(null);
+					const media = resetQueueTrackRef.current;
+					resetQueueTrackRef.current = null;
+					Alert.alert("Queue for transcribing", undefined, [
+						{ text: "No", style: "cancel" },
+						{
+							text: "Yes",
+							onPress: () => {
+								void queueTrackTranscription(media);
+							},
+						},
+					]);
 				},
-				onError: (e) => Alert.alert("Error", e.message),
+				onError: (e) => {
+					resetQueueTrackRef.current = null;
+					Alert.alert("Error", e.message);
+				},
 			}),
 		);
 
@@ -1752,8 +1773,7 @@ export default function AlbumDetailScreen() {
 		});
 	}
 
-	async function queueSelectedTrackTranscription() {
-		const media = selectedTrackForActions;
+	async function queueTrackTranscription(media: any | null) {
 		if (!media?.id) return;
 		const telegramFileId =
 			media.file?.source === "vercel_blob" ? null : media.file?.fileId;
@@ -1807,8 +1827,13 @@ export default function AlbumDetailScreen() {
 		}
 	}
 
+	async function queueSelectedTrackTranscription() {
+		await queueTrackTranscription(selectedTrackForActions);
+	}
+
 	function resetSelectedTrackTranscription() {
-		const mediaId = selectedTrackForActions?.id;
+		const media = selectedTrackForActions;
+		const mediaId = media?.id;
 		if (!mediaId) return;
 		Alert.alert(
 			"Reset transcription?",
@@ -1818,7 +1843,10 @@ export default function AlbumDetailScreen() {
 				{
 					text: "Reset",
 					style: "destructive",
-					onPress: () => resetTrackTranscription({ mediaId }),
+					onPress: () => {
+						resetQueueTrackRef.current = media;
+						resetTrackTranscription({ mediaId });
+					},
 				},
 			],
 		);

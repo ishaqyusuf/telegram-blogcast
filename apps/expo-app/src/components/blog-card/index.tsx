@@ -102,7 +102,8 @@ export function BlogCard({
 	}, [onDelete, post]);
 
 	const handleSwipeWillOpen = async (direction: SwipeDirection) => {
-		if (direction !== SwipeDirection.LEFT || isDeletingRef.current) return;
+		if (!onDelete || direction !== SwipeDirection.LEFT || isDeletingRef.current)
+			return;
 
 		isDeletingRef.current = true;
 		deleteProgress.value = withTiming(
@@ -181,6 +182,7 @@ export function BlogCard({
 		>
 			<ReanimatedSwipeable
 				ref={swipeRef}
+				enabled={Boolean(onDelete)}
 				friction={1.15}
 				overshootFriction={8}
 				overshootRight={false}

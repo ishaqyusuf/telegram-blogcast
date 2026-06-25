@@ -259,7 +259,19 @@ export function BlogCardOptionsSheet({
 								type: "success",
 								position: "bottom",
 							});
-							router.back();
+							Alert.alert("Queue for transcribing", undefined, [
+								{
+									text: "No",
+									style: "cancel",
+									onPress: () => router.back(),
+								},
+								{
+									text: "Yes",
+									onPress: () => {
+										void onQueueTranscription();
+									},
+								},
+							]);
 						} catch (error) {
 							Alert.alert(
 								"Could not reset transcription",

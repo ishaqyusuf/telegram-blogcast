@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 
-const ports = [3005, 8085, 8787];
+const ports = [3501, 8085, 8787];
 
 function findPortPids() {
   const found = new Set();

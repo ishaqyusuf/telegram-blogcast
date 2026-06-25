@@ -1,3 +1,4 @@
+import type { Prisma } from "@acme/db";
 import { consoleLog } from "@acme/utils";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -34,6 +35,15 @@ const transcriptionJobInclude = {
 			id: true,
 			title: true,
 			file: { select: { fileName: true } },
+			transcript: {
+				select: {
+					segments: {
+						orderBy: { id: "desc" },
+						take: 1,
+						select: { model: true },
+					},
+				},
+			},
 			blog: { select: { id: true, content: true } },
 		},
 	},
@@ -92,6 +102,71 @@ function inferBlogType(
 		return "pdf";
 	}
 	return "text";
+}
+
+function buildBlogSearchWhere(q: string): Prisma.BlogWhereInput {
+	const term = q.trim();
+	if (!term) return {};
+
+	return {
+		OR: [
+			{ content: { contains: term, mode: "insensitive" } },
+			{
+				channel: {
+					is: {
+						OR: [
+							{ title: { contains: term, mode: "insensitive" } },
+							{ username: { contains: term, mode: "insensitive" } },
+						],
+					},
+				},
+			},
+			{
+				blogTags: {
+					some: {
+						tags: { title: { contains: term, mode: "insensitive" } },
+					},
+				},
+			},
+			{
+				medias: {
+					some: {
+						OR: [
+							{ title: { contains: term, mode: "insensitive" } },
+							{
+								file: {
+									fileName: {
+										contains: term,
+										mode: "insensitive",
+									},
+								},
+							},
+							{
+								file: {
+									blobPathname: {
+										contains: term,
+										mode: "insensitive",
+									},
+								},
+							},
+							{
+								transcript: {
+									segments: {
+										some: {
+											text: {
+												contains: term,
+												mode: "insensitive",
+											},
+										},
+									},
+								},
+							},
+						],
+					},
+				},
+			},
+		],
+	};
 }
 
 async function attachTagsToBlog(
@@ -625,6 +700,7 @@ export const blogRoutes = createTRPCRouter({
 				fileId: z.string().min(1),
 				localTranscriberBaseUrl: z.string().url().optional(),
 				language: z.string().min(2).max(8).optional(),
+				model: z.enum(["whisper-local", "grok-whisper"]).optional(),
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
@@ -633,7 +709,7 @@ export const blogRoutes = createTRPCRouter({
 				fileId: input.fileId,
 				fromSec: 0,
 				toSec: 20,
-				model: "whisper-local",
+				model: input.model ?? "whisper-local",
 				localTranscriberBaseUrl: input.localTranscriberBaseUrl,
 				language: input.language,
 			});
@@ -761,7 +837,7 @@ export const blogRoutes = createTRPCRouter({
 						: {}),
 				},
 				include: transcriptionJobInclude,
-				orderBy: { createdAt: "asc" },
+				orderBy: { createdAt: "desc" },
 			});
 		}),
 
@@ -1035,51 +1111,34 @@ export const blogRoutes = createTRPCRouter({
 	// ── Search ───────────────────────────────────────────────────────────────
 
 	search: publicProcedure
-		.input(z.object({ q: z.string().min(1), limit: z.number().default(20) }))
+		.input(
+			z.object({
+				q: z.string().default(""),
+				limit: z.number().default(20),
+				channelIds: z.array(z.number()).optional(),
+				album: z.enum(["in", "not"]).optional(),
+			}),
+		)
 		.query(async ({ ctx, input }) => {
 			const { db } = ctx;
+			const q = input.q.trim();
+			const searchWhere = buildBlogSearchWhere(q);
+			const channelWhere: Prisma.BlogWhereInput = input.channelIds?.length
+				? { channelId: { in: input.channelIds } }
+				: {};
+			const albumWhere: Prisma.BlogWhereInput =
+				input.album === "in"
+					? { medias: { some: { albumId: { not: null } } } }
+					: input.album === "not"
+						? { medias: { some: { albumId: null } } }
+						: {};
+
 			return db.blog.findMany({
 				where: {
 					deletedAt: null,
-					OR: [
-						{ content: { contains: input.q, mode: "insensitive" } },
-						{
-							blogTags: {
-								some: {
-									tags: { title: { contains: input.q, mode: "insensitive" } },
-								},
-							},
-						},
-						{
-							medias: {
-								some: {
-									OR: [
-										{ title: { contains: input.q, mode: "insensitive" } },
-										{
-											file: {
-												fileName: {
-													contains: input.q,
-													mode: "insensitive",
-												},
-											},
-										},
-										{
-											transcript: {
-												segments: {
-													some: {
-														text: {
-															contains: input.q,
-															mode: "insensitive",
-														},
-													},
-												},
-											},
-										},
-									],
-								},
-							},
-						},
-					],
+					...searchWhere,
+					...channelWhere,
+					...albumWhere,
 				},
 				take: input.limit,
 				orderBy: { blogDate: "desc" },
@@ -1093,21 +1152,90 @@ export const blogRoutes = createTRPCRouter({
 							file: true,
 							transcript: {
 								select: {
+									status: true,
 									segments: {
-										where: {
-											text: { contains: input.q, mode: "insensitive" },
-										},
+										...(q
+											? {
+													where: {
+														text: { contains: q, mode: "insensitive" },
+													},
+												}
+											: {}),
 										orderBy: { startSec: "asc" },
 										take: 2,
 									},
 								},
 							},
+							transcriptionJobs: {
+								select: { status: true },
+								orderBy: { createdAt: "desc" },
+								take: 1,
+							},
 						},
-						take: 1,
 					},
 					blogTags: { include: { tags: true } },
+					channel: { select: { id: true, title: true, username: true } },
 				},
 			});
+		}),
+
+	searchChannels: publicProcedure
+		.input(
+			z.object({
+				q: z.string().default(""),
+				limit: z.number().min(1).max(50).default(20),
+			}),
+		)
+		.query(async ({ ctx, input }) => {
+			const { db } = ctx;
+			const q = input.q.trim();
+			if (!q) return [];
+
+			const searchWhere = buildBlogSearchWhere(q);
+			const where: Prisma.BlogWhereInput = {
+				deletedAt: null,
+				channelId: { not: null },
+				...searchWhere,
+			};
+
+			const rows = await db.blog.findMany({
+				where,
+				distinct: ["channelId"],
+				take: input.limit,
+				orderBy: { blogDate: "desc" },
+				select: {
+					channel: { select: { id: true, title: true, username: true } },
+				},
+			});
+
+			const channels = rows
+				.map((row) => row.channel)
+				.filter(
+					(
+						channel,
+					): channel is {
+						id: number;
+						title: string | null;
+						username: string;
+					} => Boolean(channel),
+				);
+
+			const counts = await Promise.all(
+				channels.map((channel) =>
+					db.blog.count({
+						where: {
+							deletedAt: null,
+							channelId: channel.id,
+							...searchWhere,
+						},
+					}),
+				),
+			);
+
+			return channels.map((channel, index) => ({
+				...channel,
+				count: counts[index] ?? 0,
+			}));
 		}),
 
 	// ── Create / Update text blogs ────────────────────────────────────────────

@@ -297,11 +297,64 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
 }
 function wherePosts(query: PostsSchema) {
   const category = query?.category;
+  const q = query?.q?.trim();
   const where = {
     deletedAt: null,
     AND: [hasContentOrMediaWhere],
     ...(query.channelId ? { channelId: query.channelId } : {}),
   } as any;
+
+  if (q) {
+    where.AND.push({
+      OR: [
+        { content: { contains: q, mode: "insensitive" } },
+        {
+          blogTags: {
+            some: {
+              tags: { title: { contains: q, mode: "insensitive" } },
+            },
+          },
+        },
+        {
+          medias: {
+            some: {
+              OR: [
+                { title: { contains: q, mode: "insensitive" } },
+                {
+                  file: {
+                    fileName: {
+                      contains: q,
+                      mode: "insensitive",
+                    },
+                  },
+                },
+                {
+                  file: {
+                    blobPathname: {
+                      contains: q,
+                      mode: "insensitive",
+                    },
+                  },
+                },
+                {
+                  transcript: {
+                    segments: {
+                      some: {
+                        text: {
+                          contains: q,
+                          mode: "insensitive",
+                        },
+                      },
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        },
+      ],
+    });
+  }
 
   if (!category || category === "all") {
     return where;

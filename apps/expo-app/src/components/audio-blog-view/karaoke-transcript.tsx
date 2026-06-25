@@ -13,6 +13,7 @@ interface KaraokeTranscriptProps {
 	autoScroll?: boolean;
 	onSegmentLongPress?: (segment: TranscriptSegmentData) => void;
 	selectable?: boolean;
+	contentPaddingVertical?: number;
 }
 
 export function KaraokeTranscript({
@@ -21,6 +22,7 @@ export function KaraokeTranscript({
 	autoScroll = true,
 	onSegmentLongPress,
 	selectable = false,
+	contentPaddingVertical = 120,
 }: KaraokeTranscriptProps) {
 	const livePositionSec = useAudioStore((s) => s.position) / 1000;
 	const positionSec = positionSecOverride ?? livePositionSec;
@@ -65,7 +67,7 @@ export function KaraokeTranscript({
 			showsVerticalScrollIndicator={false}
 			contentContainerStyle={{
 				paddingHorizontal: 24,
-				paddingVertical: 120, // Add padding to allow scrolling past edges
+				paddingVertical: contentPaddingVertical,
 				gap: 16,
 			}}
 			onScrollToIndexFailed={(info) => {

@@ -709,6 +709,31 @@ def build_queue_chunks(from_sec: float, to_sec: float) -> list[tuple[float, floa
     return chunks
 
 
+def queue_chunk_key(chunk_start_sec: float, chunk_end_sec: float) -> str:
+    return f"{round(float(chunk_start_sec), 3):.3f}:{round(float(chunk_end_sec), 3):.3f}"
+
+
+def saved_queue_chunk_keys(job: dict) -> set[str]:
+    media = job.get("media") or {}
+    transcript = media.get("transcript") or {}
+    segments = transcript.get("segments") or []
+    keys: set[str] = set()
+
+    for segment in segments:
+        if not isinstance(segment, dict) or segment.get("status") == "failed":
+            continue
+        try:
+            chunk_start = float(segment.get("chunkStartSec"))
+            chunk_end = float(segment.get("chunkEndSec"))
+        except (TypeError, ValueError):
+            continue
+        if chunk_end <= chunk_start:
+            continue
+        keys.add(queue_chunk_key(chunk_start, chunk_end))
+
+    return keys
+
+
 def save_queue_chunk(
     client: httpx.Client,
     job_id: int,
@@ -772,9 +797,38 @@ def process_queue_job(client: httpx.Client, job: dict):
 
         chunks = build_queue_chunks(from_sec, to_sec)
         total_chunks = len(chunks)
-        progress(55, "transcribing", 0, total_chunks)
+        saved_chunk_keys = saved_queue_chunk_keys(job)
+        saved_chunk_count = sum(
+            1 for chunk_start, chunk_end in chunks
+            if queue_chunk_key(chunk_start, chunk_end) in saved_chunk_keys
+        )
+        if saved_chunk_count > 0:
+            progress(
+                queue_chunk_progress_percent(saved_chunk_count, total_chunks),
+                "resuming",
+                saved_chunk_count,
+                total_chunks,
+            )
+            log.info(
+                "Resuming transcription job %s with %s/%s chunks already saved",
+                job_id,
+                saved_chunk_count,
+                total_chunks,
+            )
+        else:
+            progress(55, "transcribing", 0, total_chunks)
 
         for index, (chunk_start, chunk_end) in enumerate(chunks, start=1):
+            if queue_chunk_key(chunk_start, chunk_end) in saved_chunk_keys:
+                log.info(
+                    "Skipping saved transcription job %s chunk %s/%s (%s-%s)",
+                    job_id,
+                    index,
+                    total_chunks,
+                    chunk_start,
+                    chunk_end,
+                )
+                continue
             req = TranscribeRequest(
                 audioUrl=audio_url,
                 from_=chunk_start,

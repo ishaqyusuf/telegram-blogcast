@@ -4,6 +4,22 @@ export const transcriptionWorkerJobInclude = {
       id: true,
       title: true,
       file: { select: { fileName: true } },
+      transcript: {
+        select: {
+          segments: {
+            where: {
+              chunkStartSec: { not: null },
+              chunkEndSec: { not: null },
+            },
+            select: {
+              chunkStartSec: true,
+              chunkEndSec: true,
+              status: true,
+            },
+            orderBy: { chunkStartSec: "asc" },
+          },
+        },
+      },
       blog: { select: { id: true, content: true } },
     },
   },

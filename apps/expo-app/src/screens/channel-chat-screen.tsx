@@ -2,13 +2,14 @@ import { Pressable } from "@/components/ui/pressable";
 import { formatDate } from "@acme/utils/dayjs";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   LayoutAnimation,
   Modal,
   Platform,
   Text,
+  TextInput,
   UIManager,
   useWindowDimensions,
   View,
@@ -595,6 +596,10 @@ export default function ChannelChatScreen() {
   const id = Number(channelId);
 
   const listRef = useRef<any>(null);
+  const searchInputRef = useRef<TextInput>(null);
+  const [isSearchActive, setIsSearchActive] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const trimmedSearchQuery = searchQuery.trim();
 
   const { data: channel } = useQuery(
     _trpc.channel.getChannel.queryOptions({ id }),
@@ -608,6 +613,7 @@ export default function ChannelChatScreen() {
   } = useInfiniteLoader({
     route: _trpc?.blog.posts,
     input: { channelId: id },
+    filter: { q: trimmedSearchQuery || undefined },
     queryOptions: { staleTime: 5 * 60 * 1000, gcTime: 10 * 60 * 1000 },
   });
 
@@ -624,6 +630,12 @@ export default function ChannelChatScreen() {
     () => getSwipeDeleteThreshold(width),
     [width],
   );
+
+  useEffect(() => {
+    if (!isSearchActive) return;
+    const timer = setTimeout(() => searchInputRef.current?.focus(), 80);
+    return () => clearTimeout(timer);
+  }, [isSearchActive]);
 
   // ── Tag scroll ────────────────────────────────────────────────────────────
   const [activeTag, setActiveTag] = useState<string | null>(null);
@@ -678,6 +690,18 @@ export default function ChannelChatScreen() {
     setActiveTag(null);
     setTagMatchIndices([]);
     setTagMatchIdx(0);
+  }
+
+  useEffect(() => {
+    if (trimmedSearchQuery == null) return;
+    setActiveTag(null);
+    setTagMatchIndices([]);
+    setTagMatchIdx(0);
+  }, [trimmedSearchQuery]);
+
+  function closeSearch() {
+    setIsSearchActive(false);
+    setSearchQuery("");
   }
 
   // ── Long-press context menu ───────────────────────────────────────────────
@@ -945,9 +969,10 @@ export default function ChannelChatScreen() {
           <Pressable
             onPress={() => {
               if (isSelectMode) clearSelection();
+              else if (isSearchActive) closeSearch();
               else router.back();
             }}
-            className="size-10 items-center justify-center rounded-full active:bg-muted"
+            className="size-11 items-center justify-center rounded-full active:bg-muted"
           >
             <Icon
               name={isSelectMode ? "X" : "ArrowLeft"}
@@ -959,6 +984,37 @@ export default function ChannelChatScreen() {
             <Text className="flex-1 text-sm font-bold text-foreground">
               {selectedIds.size} selected
             </Text>
+          ) : isSearchActive ? (
+            <View
+              className="h-11 flex-1 flex-row items-center gap-2 rounded-xl bg-card px-3"
+              style={{ backgroundColor: colors.card }}
+            >
+              <Icon name="Search" size={16} className="text-muted-foreground" />
+              <TextInput
+                ref={searchInputRef}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholder="Search this channel"
+                placeholderTextColor={colors.mutedForeground}
+                returnKeyType="search"
+                autoCapitalize="none"
+                autoCorrect={false}
+                style={{
+                  flex: 1,
+                  color: colors.foreground,
+                  fontSize: 14,
+                  paddingVertical: 0,
+                }}
+              />
+              {searchQuery.length > 0 && (
+                <Pressable
+                  onPress={() => setSearchQuery("")}
+                  className="min-h-11 min-w-11 items-end justify-center active:opacity-70"
+                >
+                  <Icon name="X" size={16} className="text-muted-foreground" />
+                </Pressable>
+              )}
+            </View>
           ) : (
             <>
               <View className="size-10 rounded-full bg-primary/20 items-center justify-center">
@@ -978,9 +1034,14 @@ export default function ChannelChatScreen() {
             </>
           )}
 
-          <Pressable className="size-10 items-center justify-center rounded-full active:bg-muted">
-            <Icon name="Search" className="text-muted-foreground" />
-          </Pressable>
+          {!isSelectMode && !isSearchActive && (
+            <Pressable
+              onPress={() => setIsSearchActive(true)}
+              className="size-11 items-center justify-center rounded-full active:bg-muted"
+            >
+              <Icon name="Search" className="text-muted-foreground" />
+            </Pressable>
+          )}
         </View>
 
         {/* Active tag navigation bar */}
@@ -1055,7 +1116,11 @@ export default function ChannelChatScreen() {
                 className="text-muted-foreground mb-3"
               />
               <Text className="text-sm text-muted-foreground">
-                {isFetching ? "Loading messages…" : "No messages yet"}
+                {isFetching
+                  ? "Loading messages…"
+                  : trimmedSearchQuery
+                    ? "No messages match this search"
+                    : "No messages yet"}
               </Text>
             </View>
           }

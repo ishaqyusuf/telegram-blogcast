@@ -42,7 +42,7 @@
     "gen": "node ./node_modules/turbo/bin/turbo gen --config 'turbo/generators/config.ts'",
     "knip": "knip",
     "transcriber:install": "cd services/transcriber && python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt",
-    "transcriber:dev": "cd services/transcriber && . .venv311/bin/activate && WHISPER_MODEL=${WHISPER_MODEL:-mlx-community/whisper-large-v3-turbo} PRELOAD_WHISPER=1 TRANSCRIPTION_QUEUE_API_BASE_URL=${TRANSCRIPTION_QUEUE_API_BASE_URL:-http://127.0.0.1:3005} uvicorn main:app --host 0.0.0.0 --port 8787",
+    "transcriber:dev": "cd services/transcriber && . .venv311/bin/activate && WHISPER_MODEL=${WHISPER_MODEL:-mlx-community/whisper-large-v3-turbo} PRELOAD_WHISPER=1 TRANSCRIPTION_QUEUE_API_BASE_URL=${TRANSCRIPTION_QUEUE_API_BASE_URL:-http://127.0.0.1:3501} uvicorn main:app --host 0.0.0.0 --port 8787",
     "android": "PATH=/Users/M1PRO/Library/Android/sdk/platform-tools:$PATH /Users/M1PRO/Library/Android/sdk/platform-tools/adb uninstall com.alghurobaa.podcast 2>/dev/null || true && PATH=/Users/M1PRO/Library/Android/sdk/platform-tools:$PATH bun run --cwd apps/expo-app android"
   },
   "overrides": {

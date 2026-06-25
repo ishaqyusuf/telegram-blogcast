@@ -64,6 +64,23 @@ function formatJobStage(
 	return [stage, chunk].filter(Boolean).join(" · ");
 }
 
+function cleanModelName(value?: string | null) {
+	const trimmed = value?.trim();
+	if (!trimmed) return null;
+	return trimmed.replace(/^mlx-community\//, "");
+}
+
+function getQueueJobModel(
+	job: ReturnType<typeof useTranscriptionQueue>["jobs"][number],
+) {
+	const segmentModel = cleanModelName(
+		job.media?.transcript?.segments?.[0]?.model,
+	);
+	if (segmentModel) return segmentModel;
+	if (job.transcriberUrl) return "whisper-local";
+	return null;
+}
+
 export default function TranscribeQueueScreen() {
 	const router = useRouter();
 	const colors = useColors();
@@ -103,7 +120,8 @@ export default function TranscribeQueueScreen() {
 
 	const resetSelectedJob = () => {
 		if (!selectedJob) return;
-		const mediaId = selectedJob.mediaId;
+		const jobToReset = selectedJob;
+		const mediaId = jobToReset.mediaId;
 		Alert.alert(
 			"Reset transcription?",
 			"This will clear the saved transcript and queued jobs for this audio.",
@@ -117,6 +135,33 @@ export default function TranscribeQueueScreen() {
 							await vanillaTrpc.blog.resetTranscript.mutate({ mediaId });
 							setSelectedJob(null);
 							await reload();
+							Alert.alert("Queue for transcribing", undefined, [
+								{ text: "No", style: "cancel" },
+								{
+									text: "Yes",
+									onPress: async () => {
+										try {
+											await vanillaTrpc.blog.enqueueTranscriptionJob.mutate({
+												mediaId,
+												telegramFileId: jobToReset.telegramFileId ?? null,
+												audioUrl: jobToReset.audioUrl ?? null,
+												fromSec: jobToReset.fromSec ?? null,
+												toSec: jobToReset.toSec ?? null,
+												language: jobToReset.language ?? "ar",
+												transcriberUrl: jobToReset.transcriberUrl ?? null,
+											});
+											await reload();
+										} catch (error) {
+											Alert.alert(
+												"Could not queue transcription",
+												error instanceof Error
+													? error.message
+													: "This audio could not be queued.",
+											);
+										}
+									},
+								},
+							]);
 						} catch (error) {
 							Alert.alert(
 								"Could not reset transcription",
@@ -257,6 +302,7 @@ export default function TranscribeQueueScreen() {
 									const progress = getTranscriptionJobProgress(job);
 									const title = getQueueJobTitle(job);
 									const stage = formatJobStage(job);
+									const model = getQueueJobModel(job);
 									const blogId = job.media?.blog?.id;
 									return (
 										<Pressable
@@ -326,6 +372,15 @@ export default function TranscribeQueueScreen() {
 															style={{ color: colors.mutedForeground }}
 														>
 															{stage}
+														</Text>
+													) : null}
+													{model ? (
+														<Text
+															className="mt-0.5 text-xs text-muted-foreground"
+															numberOfLines={1}
+															style={{ color: colors.mutedForeground }}
+														>
+															Model: {model}
 														</Text>
 													) : null}
 												</View>
