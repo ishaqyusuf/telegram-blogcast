@@ -1,15 +1,16 @@
 import { Pressable } from "@/components/ui/pressable";
 import { useRouter } from "expo-router";
 import { useEffect } from "react";
-import { Alert, Share, Text, View } from "react-native";
+import { Alert, Clipboard, Share, Text, View } from "react-native";
 
+import { FloatingBottomSheet } from "@/components/ui/floating-bottom-sheet";
 import { Icon, type IconKeys } from "@/components/ui/icon";
 import { Toast } from "@/components/ui/toast";
 import { useColors } from "@/hooks/use-color";
 import { useTranscriptionQueue } from "@/hooks/use-transcription-queue";
-import { getWebUrl } from "@/lib/base-url";
 import { updateBlogPostInCache } from "@/lib/blog-post-cache";
 import { getTelegramFileUrl } from "@/lib/get-telegram-file";
+import { getBlogShareUrl } from "@/lib/share-links";
 import { withAlpha } from "@/lib/theme";
 import { getDefaultTranscriberUrl } from "@/lib/transcribe";
 import { useAppSettingsStore } from "@/store/app-settings-store";
@@ -136,11 +137,24 @@ export function BlogCardOptionsSheet({
 		const id = encodeURIComponent(blogId);
 		let webUrl = `https://alghurobaa.com/blog/${id}`;
 		try {
-			webUrl = `${getWebUrl()}/blog/${id}`;
+			webUrl = getBlogShareUrl(id);
 		} catch {}
 		await Share.share({
 			message: `Check out this post: ${webUrl}`,
 			url: webUrl,
+		});
+	};
+
+	const onCopyLink = () => {
+		const id = encodeURIComponent(blogId);
+		let webUrl = `https://alghurobaa.com/blog/${id}`;
+		try {
+			webUrl = getBlogShareUrl(id);
+		} catch {}
+		Clipboard.setString(webUrl);
+		Toast.show("Link copied", {
+			type: "success",
+			position: "bottom",
 		});
 	};
 
@@ -155,11 +169,13 @@ export function BlogCardOptionsSheet({
 			Number.isFinite(numericAudioMediaId) &&
 			numericAudioMediaId > 0,
 	);
+	const isAudioAlreadyTranscribed = Boolean(
+		audioIsTranscribed ||
+			audioTranscriptStatus === "done" ||
+			audioTranscriptionJobStatus === "completed",
+	);
 	const canResetTranscription = Boolean(
-		canQueueTranscription &&
-			(audioIsTranscribed ||
-				audioTranscriptStatus === "done" ||
-				audioTranscriptionJobStatus === "completed"),
+		canQueueTranscription && isAudioAlreadyTranscribed,
 	);
 
 	const onQueueTranscription = async () => {
@@ -226,6 +242,27 @@ export function BlogCardOptionsSheet({
 		}
 	};
 
+	const onTranscribePress = () => {
+		if (!isAudioAlreadyTranscribed) {
+			void onQueueTranscription();
+			return;
+		}
+
+		Alert.alert(
+			"Already transcribed",
+			"This audio already has a transcript. Do you want to retranscribe it?",
+			[
+				{ text: "No", style: "cancel" },
+				{
+					text: "Retranscribe",
+					onPress: () => {
+						void onQueueTranscription();
+					},
+				},
+			],
+		);
+	};
+
 	const onResetTranscription = () => {
 		if (!canResetTranscription) return;
 		Alert.alert(
@@ -287,31 +324,12 @@ export function BlogCardOptionsSheet({
 	};
 
 	return (
-		<View
-			className="flex-1 justify-end"
-			style={{ backgroundColor: withAlpha(colors.foreground, 0.4) }}
+		<FloatingBottomSheet
+			visible
+			onClose={() => router.back()}
+			accessibilityLabel="Post options"
 		>
-			<Pressable
-				accessibilityRole="button"
-				accessibilityLabel="Close post options"
-				className="flex-1"
-				onPress={() => router.back()}
-			/>
-			<View
-				className="rounded-t-[28px] border border-border bg-card px-4 pb-8 shadow-lg"
-				style={{
-					backgroundColor: colors.card,
-					borderColor: colors.border,
-					maxHeight: "82%",
-				}}
-			>
-				<View className="items-center py-3.5">
-					<View
-						className="h-1 w-11 rounded-full bg-muted"
-						style={{ backgroundColor: colors.muted }}
-					/>
-				</View>
-
+			<View className="px-4 pb-8">
 				<View className="pb-4">
 					<View className="mb-3 flex-row items-center gap-2">
 						<View
@@ -369,6 +387,12 @@ export function BlogCardOptionsSheet({
 						onPress={onShare}
 					/>
 					<ActionRow
+						label="Copy link"
+						description="Paste it in comments to show a preview"
+						icon="Copy"
+						onPress={onCopyLink}
+					/>
+					<ActionRow
 						label="Comment"
 						description="Open the discussion for this post"
 						icon="MessageSquare"
@@ -387,9 +411,7 @@ export function BlogCardOptionsSheet({
 							label="Transcribe"
 							description="Queue this audio for local Whisper"
 							icon="Captions"
-							onPress={() => {
-								void onQueueTranscription();
-							}}
+							onPress={onTranscribePress}
 						/>
 					) : null}
 					{canResetTranscription ? (
@@ -427,6 +449,6 @@ export function BlogCardOptionsSheet({
 					onPress={onComingSoon}
 				/>
 			</View>
-		</View>
+		</FloatingBottomSheet>
 	);
 }

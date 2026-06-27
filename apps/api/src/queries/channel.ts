@@ -1,16 +1,20 @@
+import { consoleLog } from "@acme/utils";
 // apps/api/src/db/queries/channel.ts
 import type { TRPCContext } from "@api/trpc/init";
-import { z } from "zod";
-import { getClient } from "@telegram/telegram-client";
 import {
-  messageFetcher,
   type FetchedMessage,
   type FetcherEvent,
+  messageFetcher,
 } from "@telegram/message-fetcher";
+import {
+  fetchMessageById,
+  parseTelegramMessageLink,
+} from "@telegram/message-service";
+import { getClient } from "@telegram/telegram-client";
 import { Api } from "telegram";
-import { saveBatch, type IncomingMessage } from "./blog";
-import { consoleLog } from "@acme/utils";
-import { type BlogMeta } from "../type";
+import { z } from "zod";
+import type { BlogMeta } from "../type";
+import { type IncomingMessage, saveBatch, saveIncomingMessages } from "./blog";
 
 let persistFetcherEventHandler:
   | ((event: FetcherEvent) => void | Promise<void>)
@@ -337,6 +341,103 @@ export const startFetchSchema = z.object({
   maxTotalFetch: z.number().positive().optional(), // 🧩 added
 });
 export type StartFetchSchema = z.infer<typeof startFetchSchema>;
+
+export const importTelegramAudioLinkSchema = z.object({
+  url: z.string().min(1),
+});
+export type ImportTelegramAudioLinkSchema = z.infer<
+  typeof importTelegramAudioLinkSchema
+>;
+
+function isAudioMessage(message: FetchedMessage) {
+  const mediaType = message.media?.type;
+  const mimeType = message.media?.mimeType?.toLowerCase() ?? "";
+  return (
+    mediaType === "audio" ||
+    mediaType === "voice" ||
+    mimeType.startsWith("audio/")
+  );
+}
+
+function getEntityTitle(entity: unknown) {
+  if (typeof entity !== "object" || entity === null || !("title" in entity)) {
+    return null;
+  }
+
+  const title = (entity as { title?: unknown }).title;
+  return typeof title === "string" ? title : null;
+}
+
+export async function importTelegramAudioLink(
+  ctx: TRPCContext,
+  input: ImportTelegramAudioLinkSchema,
+) {
+  const { db } = ctx;
+  const parsed = parseTelegramMessageLink(input.url);
+  const client = await getClient();
+  const entity = await client.getEntity(`t.me/${parsed.channelUsername}`);
+  const title = getEntityTitle(entity);
+
+  const message = await fetchMessageById(
+    parsed.channelUsername,
+    parsed.messageId,
+    {
+      resolveFiles: true,
+    },
+  );
+
+  if (!message) {
+    throw new Error("Telegram message was not found");
+  }
+
+  if (!isAudioMessage(message)) {
+    throw new Error("Telegram post is not an audio message");
+  }
+
+  if (!message.media?.file) {
+    throw new Error("Telegram audio file could not be resolved");
+  }
+
+  const channel = await db.channel.upsert({
+    where: { username: parsed.channelUsername },
+    create: {
+      username: parsed.channelUsername,
+      title: title ?? parsed.channelUsername,
+      isFetchable: false,
+    },
+    update: {
+      title: title ?? undefined,
+    },
+  });
+
+  const saved = await saveIncomingMessages(ctx, {
+    channelId: channel.id,
+    messages: [
+      {
+        id: message.id,
+        text: message.text,
+        date: message.date,
+        media: message.media,
+      },
+    ],
+  });
+  const result = saved.results[0];
+
+  if (!result) {
+    throw new Error("Telegram audio import did not produce a saved record");
+  }
+
+  return {
+    ok: true,
+    status: result.status,
+    channelId: channel.id,
+    blogId: result.blogId,
+    mediaId: result.mediaId,
+    telegramMessageId: result.telegramMessageId,
+    normalizedUrl: parsed.normalizedUrl,
+  };
+}
+
 /**
  * Resolves the resume cursor then starts the background fetcher.
  * Wires fetcher "messages" event → saveBatch() so each batch is persisted
@@ -354,6 +455,7 @@ export async function startFetch(ctx: TRPCContext, input: StartFetchSchema) {
       allFetched: true,
       blogs: {
         select: {
+          telegramMessageId: true,
           meta: true,
         },
       },
@@ -362,13 +464,14 @@ export async function startFetch(ctx: TRPCContext, input: StartFetchSchema) {
   const channelMessageIds = channel.blogs
     .map(
       (b) =>
-        (b.meta as any as BlogMeta)?.telegramMessageId as number | undefined,
+        b.telegramMessageId ??
+        ((b.meta as BlogMeta | null)?.telegramMessageId as number | undefined),
     )
     .filter((id): id is number => typeof id === "number")
     .sort((a, b) => a - b); // asc
 
   // Resolve cursor — channel.lastMessageId first, Blog.meta as fallback
-  let lastMessageId = channel.lastMessageId ?? channelMessageIds?.[0] ?? null;
+  const lastMessageId = channel.lastMessageId ?? channelMessageIds?.[0] ?? null;
 
   // Re-wire only the persistence listener on every start. Other listeners,
   // like the dashboard SSE stream, must stay attached so live logs keep flowing.
@@ -410,7 +513,10 @@ export async function startFetch(ctx: TRPCContext, input: StartFetchSchema) {
     const result = await saveBatch(ctx, {
       channelId: channel.id,
       messages: mapped,
-    }).catch((err) => consoleLog("[startFetch] saveBatch failed:", err));
+    }).catch((err) => {
+      consoleLog("[startFetch] saveBatch failed:", err);
+      throw err;
+    });
     if (result && "created" in result && result.created) {
       mapped.forEach((m) => {
         // messageFetcher exposes addKnownIds for this purpose

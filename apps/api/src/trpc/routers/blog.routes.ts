@@ -1150,6 +1150,8 @@ export const blogRoutes = createTRPCRouter({
 					medias: {
 						include: {
 							file: true,
+							album: { select: { id: true, name: true } },
+							albumAudioIndex: { select: { index: true } },
 							transcript: {
 								select: {
 									status: true,
@@ -1236,6 +1238,68 @@ export const blogRoutes = createTRPCRouter({
 				...channel,
 				count: counts[index] ?? 0,
 			}));
+		}),
+
+	suggestSearchKeywords: publicProcedure
+		.input(
+			z.object({
+				q: z.string().trim().default(""),
+				limit: z.number().int().min(1).max(20).default(8),
+			}),
+		)
+		.query(async ({ ctx, input }) => {
+			const q = input.q.trim();
+			if (q.length < 2) return [];
+
+			const [recent, tags, blogs] = await Promise.all([
+				ctx.db.search.findMany({
+					where: { searchTerm: { contains: q, mode: "insensitive" } },
+					distinct: ["searchTerm"],
+					orderBy: { createdAt: "desc" },
+					take: input.limit,
+					select: { searchTerm: true },
+				}),
+				ctx.db.tags.findMany({
+					where: {
+						deletedAt: null,
+						title: { contains: q, mode: "insensitive" },
+					},
+					orderBy: { title: "asc" },
+					take: input.limit,
+					select: { title: true },
+				}),
+				ctx.db.blog.findMany({
+					where: {
+						deletedAt: null,
+						content: { contains: q, mode: "insensitive" },
+					},
+					orderBy: { blogDate: "desc" },
+					take: input.limit,
+					select: { content: true },
+				}),
+			]);
+
+			const suggestions = new Map<string, { keyword: string; source: string }>();
+			const add = (keyword?: string | null, source = "suggestion") => {
+				const normalized = keyword?.trim().replace(/\s+/g, " ");
+				if (!normalized || normalized.length < 2) return;
+				const key = normalized.toLowerCase();
+				if (!suggestions.has(key)) {
+					suggestions.set(key, { keyword: normalized.slice(0, 80), source });
+				}
+			};
+
+			recent.forEach((item) => add(item.searchTerm, "recent"));
+			tags.forEach((tag) => add(tag.title, "tag"));
+			blogs.forEach((blog) => {
+				const content = blog.content ?? "";
+				const idx = content.toLowerCase().indexOf(q.toLowerCase());
+				if (idx === -1) return;
+				const start = Math.max(0, idx - 24);
+				add(content.slice(start, idx + q.length + 36), "post");
+			});
+
+			return Array.from(suggestions.values()).slice(0, input.limit);
 		}),
 
 	// ── Create / Update text blogs ────────────────────────────────────────────

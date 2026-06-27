@@ -201,6 +201,13 @@ export function GlobalAudioBar() {
   const title = getAudioDisplayTitle(blog, "Now Playing");
   const blogId = blog?.id;
   const progress = duration > 0 ? position / duration : 0;
+  const albumName = (blog?.audio as any)?.albumName as string | undefined;
+  const albumTrackIndex = (blog?.audio as any)?.albumTrackIndex as
+    | number
+    | undefined;
+  const timeLabel = `${formatTime(position)} / ${formatTime(duration)}`;
+  const indexLabel =
+    albumName && albumTrackIndex ? `Track ${albumTrackIndex} · ${albumName}` : null;
 
   const cycleSpeed = () => {
     const idx = SPEED_OPTIONS.findIndex(
@@ -308,7 +315,9 @@ export function GlobalAudioBar() {
             >
               {sleepRemaining != null
                 ? `💤 ${formatSleepRemaining(sleepRemaining)}`
-                : `${formatTime(position)} / ${formatTime(duration)}`}
+                : indexLabel
+                  ? `${timeLabel} · ${indexLabel}`
+                  : timeLabel}
             </Text>
           </Pressable>
 

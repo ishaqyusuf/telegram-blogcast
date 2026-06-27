@@ -23,6 +23,9 @@ High-level map of the API surface and where endpoint logic lives.
 - Podcasts
 - App/root router composition
 
+### Channels Router Highlights
+- `channel.importTelegramAudioLink`: imports one public Telegram audio post link into the same Blog/File/Media shape used by the channel fetcher. Duplicate channel/message imports return the existing blog instead of creating a second record.
+
 ### Internal Worker Endpoints
 - `POST /api/internal/transcription-jobs/claim`: local transcriber claims the next queued, retryable failed, or stale running transcription job.
 - `POST /api/internal/transcription-jobs/:id/progress`: worker updates DB-backed queue progress, stage, chunk counters, worker ID, and heartbeat.

@@ -237,6 +237,7 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
           authorName: media.album?.author?.name || media.author?.name,
           albumName: media.album?.name,
           albumId: media.albumId,
+          albumTrackIndex: media.albumAudioIndex?.index ?? undefined,
           transcriptStatus: media.transcript?.status ?? null,
           transcriptionJobStatus: media.transcriptionJobs[0]?.status ?? null,
           transcriptSegments,

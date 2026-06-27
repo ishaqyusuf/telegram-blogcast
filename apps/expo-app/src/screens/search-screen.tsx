@@ -1,13 +1,16 @@
 import { Pressable } from "@/components/ui/pressable";
-import { useMutation, useQuery } from "@/lib/react-query";
+import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FlatList, ScrollView, Text, TextInput, View } from "react-native";
+import { FlatList, Modal, ScrollView, Text, TextInput, View } from "react-native";
 
 import { BlogCard, type BlogItem } from "@/components/blog-card";
+import { AddToAlbumModal } from "@/components/channel-chat/add-to-album-modal";
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";
+import { ScrollToTopButton } from "@/components/ui/scroll-to-top-button";
+import { useScrollChrome } from "@/hooks/use-scroll-chrome";
 import { useColors } from "@/hooks/use-color";
 import { useTranslation } from "@/lib/i18n";
 
@@ -78,6 +81,19 @@ type SearchMedia = {
 		}[];
 	} | null;
 	transcriptionJobs?: { status?: string | null }[];
+	album?: {
+		id?: number | null;
+		name?: string | null;
+	} | null;
+	albumId?: number | null;
+	albumAudioIndex?: {
+		index?: number | null;
+	} | null;
+};
+
+type KeywordSuggestion = {
+	keyword: string;
+	source?: string | null;
 };
 
 function getBlogTags(item: SearchResultItem) {
@@ -115,12 +131,20 @@ function mediaMatchesType(media: SearchMedia, type: "audio" | "image") {
 	return mimeType.startsWith(`${type}/`);
 }
 
-function toBlogCardPost(item: SearchResultItem): BlogItem {
+function toBlogCardPost(
+	item: SearchResultItem,
+	localAlbumMembership?: Map<number, { id: number; name: string }>,
+): BlogItem {
 	const type = (item.type || "text") as BlogItem["type"];
 	const medias = item.medias ?? [];
 	const audioMedia =
 		medias.find((media) => mediaMatchesType(media, "audio")) ?? medias[0];
 	const audioFile = audioMedia?.file;
+	const localAlbum =
+		audioMedia?.id != null ? localAlbumMembership?.get(audioMedia.id) : null;
+	const mediaAlbum = localAlbum
+		? { id: localAlbum.id, name: localAlbum.name }
+		: audioMedia?.album;
 	const transcriptSegments =
 		audioMedia?.transcript?.segments?.map((segment) => ({
 			id: segment.id ?? `${segment.startSec ?? 0}-${segment.endSec ?? 0}`,
@@ -151,8 +175,9 @@ function toBlogCardPost(item: SearchResultItem): BlogItem {
 					duration: durationSec,
 					authorId: undefined,
 					authorName: undefined,
-					albumName: undefined,
-					albumId: undefined,
+					albumName: mediaAlbum?.name ?? undefined,
+					albumId: mediaAlbum?.id ?? audioMedia.albumId ?? undefined,
+					albumTrackIndex: audioMedia.albumAudioIndex?.index ?? undefined,
 					transcriptStatus: audioMedia.transcript?.status ?? null,
 					transcriptionJobStatus:
 						audioMedia.transcriptionJobs?.[0]?.status ?? null,
@@ -313,6 +338,7 @@ function SearchEmptyState({
 
 export default function SearchScreen() {
 	const router = useRouter();
+	const queryClient = useQueryClient();
 	const colors = useColors();
 	const { t } = useTranslation();
 	const [query, setQuery] = useState("");
@@ -320,13 +346,28 @@ export default function SearchScreen() {
 	const [selectedChannelId, setSelectedChannelId] = useState<number | null>(
 		null,
 	);
+	const [albumMediaIds, setAlbumMediaIds] = useState<number[]>([]);
+	const [showAlbumModal, setShowAlbumModal] = useState(false);
+	const [localAlbumMembership, setLocalAlbumMembership] = useState(
+		() => new Map<number, { id: number; name: string }>(),
+	);
 	const inputRef = useRef<TextInput>(null);
+	const resultsScroll = useScrollChrome<FlatList<BlogItem>>();
+	const emptyScroll = useScrollChrome<ScrollView>();
+	const suggestionKeyword = query.trim();
 
 	const { data: recentSearches = [] } = useQuery(
 		_trpc.blog.getRecentSearches.queryOptions({ limit: 10 }),
 	);
 
 	const { data: tags = [] } = useQuery(_trpc.blog.getTags.queryOptions());
+
+	const { data: keywordSuggestions = [] } = useQuery(
+		_trpc.blog.suggestSearchKeywords.queryOptions(
+			{ q: suggestionKeyword, limit: 8 },
+			{ enabled: suggestionKeyword.length >= 2 },
+		),
+	);
 
 	const { data: results = [], isFetching: isSearching } = useQuery(
 		_trpc.blog.search.queryOptions(
@@ -346,8 +387,11 @@ export default function SearchScreen() {
 	);
 
 	const blogPosts = useMemo(
-		() => (results as SearchResultItem[]).map(toBlogCardPost),
-		[results],
+		() =>
+			(results as SearchResultItem[]).map((item) =>
+				toBlogCardPost(item, localAlbumMembership),
+			),
+		[localAlbumMembership, results],
 	);
 
 	useEffect(() => {
@@ -380,7 +424,31 @@ export default function SearchScreen() {
 		handleSubmit(term);
 	}
 
+	function handleSuggestionPress(item: KeywordSuggestion) {
+		setQuery(item.keyword);
+		handleSubmit(item.keyword);
+	}
+
+	function handleAddToAlbum(post: BlogItem) {
+		const mediaId = post.audio?.mediaId;
+		if (!mediaId) return;
+		setAlbumMediaIds([mediaId]);
+		setShowAlbumModal(true);
+	}
+
+	function handleAlbumAdded(album: { id: number; name: string }) {
+		setLocalAlbumMembership((prev) => {
+			const next = new Map(prev);
+			for (const mediaId of albumMediaIds) {
+				next.set(mediaId, album);
+			}
+			return next;
+		});
+		queryClient.invalidateQueries(_trpc.blog.search.queryOptions({ q: submitted }));
+	}
+
 	const showResults = submitted.length > 0;
+	const isTypingNewKeyword = suggestionKeyword.length > 0 && suggestionKeyword !== submitted;
 
 	return (
 		<View
@@ -403,7 +471,12 @@ export default function SearchScreen() {
 							placeholder={t("searchPostsTags")}
 							placeholderTextColor={colors.mutedForeground}
 							value={query}
-							onChangeText={setQuery}
+							onChangeText={(value) => {
+								setQuery(value);
+								if (value.trim() !== submitted) {
+									setSelectedChannelId(null);
+								}
+							}}
 							onSubmitEditing={() => handleSubmit(query)}
 							autoFocus
 							returnKeyType="search"
@@ -447,22 +520,65 @@ export default function SearchScreen() {
 							/>
 						) : (
 							<FlatList
+								ref={resultsScroll.ref}
 								style={{ backgroundColor: colors.background }}
 								data={blogPosts}
 								keyExtractor={(item) => String(item.id)}
 								contentContainerClassName="pb-8"
-								renderItem={({ item }) => <BlogCard post={item} />}
+								onScroll={resultsScroll.onScroll}
+								scrollEventThrottle={resultsScroll.scrollEventThrottle}
+								renderItem={({ item }) => (
+									<BlogCard post={item} onAddToAlbum={handleAddToAlbum} />
+								)}
 							/>
 						)}
+						<ScrollToTopButton
+							visible={resultsScroll.showScrollTop}
+							onPress={resultsScroll.scrollToTop}
+						/>
 					</View>
 				) : (
 					<ScrollView
+						ref={emptyScroll.ref}
 						showsVerticalScrollIndicator={false}
 						style={{ backgroundColor: colors.background }}
 						contentContainerClassName="pb-8"
+						onScroll={emptyScroll.onScroll}
+						scrollEventThrottle={emptyScroll.scrollEventThrottle}
 					>
+						{isTypingNewKeyword && (
+							<View className="px-4 pt-4">
+								<Text className="mb-3 text-base font-bold text-foreground">
+									Suggestions
+								</Text>
+								<View className="gap-1">
+									{(keywordSuggestions as KeywordSuggestion[]).length > 0 ? (
+										(keywordSuggestions as KeywordSuggestion[]).map((item) => (
+											<Pressable
+												key={`${item.source ?? "suggestion"}-${item.keyword}`}
+												onPress={() => handleSuggestionPress(item)}
+												className="flex-row items-center gap-3 py-2.5 active:opacity-70"
+											>
+												<Icon
+													name="Search"
+													size={16}
+													className="text-muted-foreground"
+												/>
+												<Text className="flex-1 text-sm text-foreground">
+													{item.keyword}
+												</Text>
+											</Pressable>
+										))
+									) : (
+										<Text className="py-2 text-sm text-muted-foreground">
+											Keep typing to search this keyword
+										</Text>
+									)}
+								</View>
+							</View>
+						)}
 						{/* Recent Searches */}
-						{recentSearches.length > 0 && (
+						{!isTypingNewKeyword && recentSearches.length > 0 && (
 							<View className="px-4 pt-4">
 								<View className="flex-row items-center justify-between mb-3">
 									<Text className="text-base font-bold text-foreground">
@@ -519,6 +635,34 @@ export default function SearchScreen() {
 							</View>
 						)}
 					</ScrollView>
+				)}
+				<ScrollToTopButton
+					visible={!showResults && emptyScroll.showScrollTop}
+					onPress={emptyScroll.scrollToTop}
+				/>
+				{showAlbumModal && (
+					<Modal
+						transparent
+						animationType="slide"
+						statusBarTranslucent
+						onRequestClose={() => setShowAlbumModal(false)}
+					>
+						<Pressable
+							className="flex-1 justify-end bg-black/60"
+							onPress={() => setShowAlbumModal(false)}
+						>
+							<Pressable
+								onPress={(event) => event.stopPropagation()}
+								style={{ width: "100%" }}
+							>
+								<AddToAlbumModal
+									mediaIds={albumMediaIds}
+									onAdded={handleAlbumAdded}
+									onClose={() => setShowAlbumModal(false)}
+								/>
+							</Pressable>
+						</Pressable>
+					</Modal>
 				)}
 			</SafeArea>
 		</View>

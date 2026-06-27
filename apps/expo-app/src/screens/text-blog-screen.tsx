@@ -4,7 +4,9 @@ import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";
 import { Pressable } from "@/components/ui/pressable";
+import { ScrollToTopButton } from "@/components/ui/scroll-to-top-button";
 import { useColors } from "@/hooks/use-color";
+import { useScrollChrome } from "@/hooks/use-scroll-chrome";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { withAlpha } from "@/lib/theme";
 import { cn } from "@/lib/utils";
@@ -31,6 +33,7 @@ export default function TextBlogScreen() {
   const insets = useSafeAreaInsets();
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const numericBlogId = Number(blogId);
+  const scrollChrome = useScrollChrome<ScrollView>();
 
   const { data: blog, isLoading } = useQuery(
     _trpc.blog.getBlog.queryOptions({ id: numericBlogId }),
@@ -112,10 +115,13 @@ export default function TextBlogScreen() {
         </View>
 
         <ScrollView
+          ref={scrollChrome.ref}
           style={{ backgroundColor: colors.background }}
           contentContainerStyle={{ paddingBottom: 120 }}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          onScroll={scrollChrome.onScroll}
+          scrollEventThrottle={scrollChrome.scrollEventThrottle}
         >
           <View className="items-end gap-1.5 px-5 pt-6 pb-4">
             {date && (
@@ -183,6 +189,11 @@ export default function TextBlogScreen() {
             <CommentContent blogId={numericBlogId} />
           </View>
         </ScrollView>
+        <ScrollToTopButton
+          visible={scrollChrome.showScrollTop}
+          onPress={scrollChrome.scrollToTop}
+          bottom={88}
+        />
 
         <View
           className="absolute inset-x-0 z-50"

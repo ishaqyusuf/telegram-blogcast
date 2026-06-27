@@ -6,6 +6,7 @@ model Blog {
     publishedAt DateTime?
     status      String?
     meta        Json?
+    telegramMessageId Int?
 
     blogDate DateTime?
 
@@ -33,6 +34,8 @@ model Blog {
     blogLocation   BlogLocation? @relation(fields: [blogLocationId], references: [id])
     blogLocationId Int?
     book           Book?
+
+    @@unique([channelId, telegramMessageId])
 }
 
 model BlogComments {

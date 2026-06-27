@@ -4,19 +4,23 @@ import { useRouter } from "expo-router";
 import {
   ActivityIndicator,
   FlatList,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   RefreshControl,
   Text,
   TextInput,
   View,
 } from "react-native";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { _trpc } from "@/components/static-trpc";
 import { SafeArea } from "@/components/safe-area";
 import { Icon } from "@/components/ui/icon";
+import { ScrollToTopButton } from "@/components/ui/scroll-to-top-button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useColors } from "@/hooks/use-color";
+import { useScrollChrome } from "@/hooks/use-scroll-chrome";
 
 const ALBUM_COLORS = [
   "#1e40af",
@@ -71,6 +75,8 @@ export default function AlbumsScreen() {
   const colors = useColors();
   const [createVisible, setCreateVisible] = useState(false);
   const [name, setName] = useState("");
+  const [search, setSearch] = useState("");
+  const albumScroll = useScrollChrome<FlatList<any>>();
   const {
     data: albums = [],
     isFetching,
@@ -99,6 +105,26 @@ export default function AlbumsScreen() {
   const handleRefresh = useCallback(() => {
     void refetch();
   }, [refetch]);
+  const filteredAlbums = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const sorted = [...albums].sort((a, b) => {
+      const aText = `${a.name ?? ""} ${a.channel?.title ?? ""} ${a.channel?.username ?? ""}`.toLowerCase();
+      const bText = `${b.name ?? ""} ${b.channel?.title ?? ""} ${b.channel?.username ?? ""}`.toLowerCase();
+      if (!q) {
+        return new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime();
+      }
+      const aStarts = aText.startsWith(q) ? 0 : 1;
+      const bStarts = bText.startsWith(q) ? 0 : 1;
+      if (aStarts !== bStarts) return aStarts - bStarts;
+      return a.name.localeCompare(b.name);
+    });
+    if (!q) return sorted;
+    return sorted.filter((album) =>
+      `${album.name ?? ""} ${album.channel?.title ?? ""} ${album.channel?.username ?? ""}`
+        .toLowerCase()
+        .includes(q),
+    );
+  }, [albums, search]);
 
   return (
     <View
@@ -125,17 +151,48 @@ export default function AlbumsScreen() {
           </Pressable>
         </View>
 
+        <View className="px-4 pb-3">
+          <View className="h-11 flex-row items-center gap-2 rounded-xl border border-border bg-card px-3">
+            <Icon name="Search" size={16} className="text-muted-foreground" />
+            <TextInput
+              value={search}
+              onChangeText={setSearch}
+              placeholder="Search albums..."
+              placeholderTextColor={colors.mutedForeground}
+              autoCapitalize="none"
+              style={{
+                flex: 1,
+                color: colors.foreground,
+                fontSize: 14,
+                paddingVertical: 0,
+              }}
+            />
+            {search.length > 0 && (
+              <Pressable onPress={() => setSearch("")} hitSlop={8}>
+                <Icon name="X" size={15} className="text-muted-foreground" />
+              </Pressable>
+            )}
+          </View>
+        </View>
+
         {isLoading ? (
           <AlbumGridSkeleton />
-        ) : albums.length === 0 ? (
+        ) : filteredAlbums.length === 0 ? (
           <View className="flex-1 items-center justify-center gap-3">
-            <Icon name="Music2" size={48} className="text-muted-foreground" />
-            <Text className="text-muted-foreground">No albums yet</Text>
+            <Icon
+              name={search.trim() ? "SearchX" : "Music2"}
+              size={48}
+              className="text-muted-foreground"
+            />
+            <Text className="text-muted-foreground">
+              {search.trim() ? "No matching albums" : "No albums yet"}
+            </Text>
           </View>
         ) : (
           <FlatList
+            ref={albumScroll.ref}
             style={{ backgroundColor: colors.background }}
-            data={albums}
+            data={filteredAlbums}
             keyExtractor={(item) => String(item.id)}
             numColumns={2}
             contentContainerClassName="px-3 pb-8"
@@ -152,6 +209,8 @@ export default function AlbumsScreen() {
                 colors={[colors.primary]}
               />
             }
+            onScroll={albumScroll.onScroll}
+            scrollEventThrottle={albumScroll.scrollEventThrottle}
             renderItem={({ item, index }) => (
               <Pressable
                 onPress={() => router.push(`/albums/${item.id}` as any)}
@@ -180,12 +239,17 @@ export default function AlbumsScreen() {
                 </Text>
                 <Text className="text-xs text-muted-foreground mt-0.5">
                   {item._count.medias} tracks
+                  {item.channel?.title ? ` · ${item.channel.title}` : ""}
                 </Text>
               </Pressable>
             )}
           />
         )}
       </SafeArea>
+      <ScrollToTopButton
+        visible={albumScroll.showScrollTop}
+        onPress={albumScroll.scrollToTop}
+      />
 
       <Modal
         visible={createVisible}
@@ -195,60 +259,65 @@ export default function AlbumsScreen() {
       >
         <Pressable
           onPress={() => setCreateVisible(false)}
-          className="flex-1 justify-center bg-black/60 px-5"
+          className="flex-1 justify-end bg-black/60 px-5 pb-6"
         >
-          <Pressable
-            onPress={(event) => event.stopPropagation()}
-            className="rounded-2xl bg-card p-4"
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={{ width: "100%" }}
           >
-            <Text className="mb-3 text-base font-bold text-foreground">
-              Create album
-            </Text>
-            <View className="mb-4 flex-row items-center gap-2 rounded-xl border border-border bg-muted px-3">
-              <Icon name="Disc3" size={16} className="text-muted-foreground" />
-              <TextInput
-                value={name}
-                onChangeText={setName}
-                placeholder="New album name..."
-                placeholderTextColor={colors.mutedForeground}
-                autoFocus
-                returnKeyType="done"
-                onSubmitEditing={handleCreateAlbum}
-                style={{
-                  flex: 1,
-                  color: colors.foreground,
-                  fontSize: 14,
-                  paddingVertical: 12,
-                }}
-              />
-            </View>
-            <View className="flex-row gap-2">
-              <Pressable
-                onPress={() => setCreateVisible(false)}
-                className="h-11 flex-1 items-center justify-center rounded-xl bg-muted active:opacity-80"
-              >
-                <Text className="text-sm font-semibold text-foreground">
-                  Cancel
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={handleCreateAlbum}
-                disabled={!name.trim() || createAlbum.isPending}
-                className="h-11 flex-1 items-center justify-center rounded-xl bg-primary active:opacity-80 disabled:opacity-50"
-              >
-                {createAlbum.isPending ? (
-                  <ActivityIndicator
-                    size="small"
-                    color={colors.primaryForeground}
-                  />
-                ) : (
-                  <Text className="text-sm font-bold text-primary-foreground">
-                    Create
+            <Pressable
+              onPress={(event) => event.stopPropagation()}
+              className="rounded-2xl bg-card p-4"
+            >
+              <Text className="mb-3 text-base font-bold text-foreground">
+                Create album
+              </Text>
+              <View className="mb-4 flex-row items-center gap-2 rounded-xl border border-border bg-muted px-3">
+                <Icon name="Disc3" size={16} className="text-muted-foreground" />
+                <TextInput
+                  value={name}
+                  onChangeText={setName}
+                  placeholder="New album name..."
+                  placeholderTextColor={colors.mutedForeground}
+                  autoFocus
+                  returnKeyType="done"
+                  onSubmitEditing={handleCreateAlbum}
+                  style={{
+                    flex: 1,
+                    color: colors.foreground,
+                    fontSize: 14,
+                    paddingVertical: 12,
+                  }}
+                />
+              </View>
+              <View className="flex-row gap-2 rounded-2xl bg-background/60 p-1">
+                <Pressable
+                  onPress={() => setCreateVisible(false)}
+                  className="h-11 flex-1 items-center justify-center rounded-xl bg-muted active:opacity-80"
+                >
+                  <Text className="text-sm font-semibold text-foreground">
+                    Cancel
                   </Text>
-                )}
-              </Pressable>
-            </View>
-          </Pressable>
+                </Pressable>
+                <Pressable
+                  onPress={handleCreateAlbum}
+                  disabled={!name.trim() || createAlbum.isPending}
+                  className="h-11 flex-1 items-center justify-center rounded-xl bg-primary active:opacity-80 disabled:opacity-50"
+                >
+                  {createAlbum.isPending ? (
+                    <ActivityIndicator
+                      size="small"
+                      color={colors.primaryForeground}
+                    />
+                  ) : (
+                    <Text className="text-sm font-bold text-primary-foreground">
+                      Create
+                    </Text>
+                  )}
+                </Pressable>
+              </View>
+            </Pressable>
+          </KeyboardAvoidingView>
         </Pressable>
       </Modal>
     </View>

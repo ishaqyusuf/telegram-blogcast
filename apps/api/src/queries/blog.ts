@@ -34,6 +34,12 @@ export const saveBatchSchema = z.object({
 export type SaveBatchSchema = z.infer<typeof saveBatchSchema>;
 export type IncomingMessage = z.infer<typeof incomingMessageSchema>;
 export type MessageMedia = z.infer<typeof messageMediaSchema>;
+export type SavedIncomingMessageResult = {
+  telegramMessageId: number;
+  status: "created" | "duplicate";
+  blogId: number;
+  mediaId: number | null;
+};
 type TelegramGetFileResponse = {
   ok: boolean;
   result?: {
@@ -130,6 +136,95 @@ function resolveBlogType(
   return "text";
 }
 
+function getTelegramMessageId(blog: {
+  telegramMessageId?: number | null;
+  meta?: unknown;
+}) {
+  return (
+    blog.telegramMessageId ??
+    ((blog.meta as BlogMeta | null)?.telegramMessageId || null)
+  );
+}
+
+async function findExistingTelegramBlogs(
+  db: TRPCContext["db"],
+  channelId: number,
+  messageIds: number[],
+) {
+  if (messageIds.length === 0) {
+    return new Map<number, { blogId: number; mediaId: number | null }>();
+  }
+
+  const existingBlogsByColumn = await db.blog.findMany({
+    where: {
+      channelId,
+      deletedAt: null,
+      telegramMessageId: { in: messageIds },
+    },
+    select: {
+      id: true,
+      telegramMessageId: true,
+      meta: true,
+      medias: {
+        select: { id: true },
+        take: 1,
+      },
+    },
+  });
+
+  const existing = new Map<
+    number,
+    { blogId: number; mediaId: number | null }
+  >();
+  for (const blog of existingBlogsByColumn) {
+    const telegramMessageId = getTelegramMessageId(blog);
+    if (!telegramMessageId) continue;
+    existing.set(telegramMessageId, {
+      blogId: blog.id,
+      mediaId: blog.medias?.[0]?.id ?? null,
+    });
+  }
+
+  const missingIds = messageIds.filter((id) => !existing.has(id));
+  if (missingIds.length === 0) return existing;
+
+  const legacyMetaBlogs = await db.blog.findMany({
+    where: {
+      channelId,
+      deletedAt: null,
+    },
+    select: {
+      id: true,
+      meta: true,
+      medias: {
+        select: { id: true },
+        take: 1,
+      },
+    },
+  });
+  const missingIdSet = new Set(missingIds);
+
+  for (const blog of legacyMetaBlogs) {
+    const telegramMessageId = getTelegramMessageId(blog);
+    if (!telegramMessageId || !missingIdSet.has(telegramMessageId)) continue;
+    existing.set(telegramMessageId, {
+      blogId: blog.id,
+      mediaId: blog.medias?.[0]?.id ?? null,
+    });
+  }
+
+  return existing;
+}
+
+function isUniqueConstraintError(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: string }).code === "P2002"
+  );
+}
+
 // ── Queries ───────────────────────────────────────────────────────────────────
 
 /**
@@ -139,91 +234,132 @@ function resolveBlogType(
  * - For audio: upserts Author by name, sets Media.title + authorId.
  * - Updates channel.lastMessageId to the highest id in this batch.
  */
-export async function saveBatch(ctx: TRPCContext, input: SaveBatchSchema) {
+export async function saveIncomingMessages(
+  ctx: TRPCContext,
+  input: SaveBatchSchema,
+) {
   const { db } = ctx;
   const { channelId, messages } = input;
 
-  if (messages.length === 0) return { created: 0 };
+  if (messages.length === 0) {
+    return { created: 0, skipped: 0, results: [] };
+  }
 
-  // ── Skip already persisted messages ──────────────────────────────────────
-  const existingBlogs = await db.blog.findMany({
-    where: {
-      channelId,
-      meta: {
-        equals: {
-          propName: "telegramMessageId",
-          operator: "in",
-          value: messages.map((m) => m.id),
-        },
-        // path: ["telegramMessageId"],
-
-        // in: messages.map((m) => m.id),
-      },
-    },
-    select: { meta: true },
-  });
-
-  const existingIds = new Set(
-    existingBlogs
-      .map((b) => (b.meta as BlogMeta)?.telegramMessageId as number | undefined)
-      .filter(Boolean),
+  const existing = await findExistingTelegramBlogs(
+    db,
+    channelId,
+    messages.map((m) => m.id),
   );
-
-  const newMessages = messages.filter((m) => !existingIds.has(m.id));
-  const skipped = messages.length - newMessages.length;
-  if (newMessages.length === 0) return { created: 0, skipped };
-
+  const createdMessageIds: number[] = [];
+  const results: SavedIncomingMessageResult[] = [];
   let created = 0;
+  let skipped = 0;
 
-  for (const msg of newMessages) {
+  for (const msg of messages) {
+    const duplicate = existing.get(msg.id);
+    if (duplicate) {
+      skipped++;
+      results.push({
+        telegramMessageId: msg.id,
+        status: "duplicate",
+        blogId: duplicate.blogId,
+        mediaId: duplicate.mediaId,
+      });
+      continue;
+    }
+
     const blogDate = new Date(msg.date);
     const type = resolveBlogType(msg.media);
 
-    // ── Blog ────────────────────────────────────────────────────────────────
-    const blog = await db.blog.create({
-      data: {
-        content: msg.text,
-        type,
-        published: true,
-        publishedAt: blogDate,
-        blogDate,
-        channelId,
-        status: "published",
-        meta: { telegramMessageId: msg.id },
-      },
-    });
+    try {
+      // ── Blog ────────────────────────────────────────────────────────────────
+      const blog = await db.blog.create({
+        data: {
+          content: msg.text,
+          type,
+          published: true,
+          publishedAt: blogDate,
+          blogDate,
+          channelId,
+          status: "published",
+          telegramMessageId: msg.id,
+          meta: { telegramMessageId: msg.id },
+        },
+      });
 
-    // ── File + Media ────────────────────────────────────────────────────────
-    if (msg.media) {
-      await persistResolvedMedia(ctx, msg.media, blog.id).catch((err) => {
-        consoleLog("[saveBatch] persistResolvedMedia failed:", err);
+      let mediaId: number | null = null;
+      // ── File + Media ────────────────────────────────────────────────────────
+      if (msg.media) {
+        mediaId =
+          (await persistResolvedMedia(ctx, msg.media, blog.id).catch((err) => {
+            consoleLog("[saveBatch] persistResolvedMedia failed:", err);
+            return undefined;
+          })) ?? null;
+      }
+
+      created++;
+      createdMessageIds.push(msg.id);
+      existing.set(msg.id, {
+        blogId: blog.id,
+        mediaId,
+      });
+      results.push({
+        telegramMessageId: msg.id,
+        status: "created",
+        blogId: blog.id,
+        mediaId,
+      });
+    } catch (error) {
+      if (!isUniqueConstraintError(error)) {
+        throw error;
+      }
+
+      const refreshed = await findExistingTelegramBlogs(db, channelId, [
+        msg.id,
+      ]);
+      const existingAfterRace = refreshed.get(msg.id);
+      if (!existingAfterRace) {
+        throw error;
+      }
+
+      skipped++;
+      results.push({
+        telegramMessageId: msg.id,
+        status: "duplicate",
+        blogId: existingAfterRace.blogId,
+        mediaId: existingAfterRace.mediaId,
       });
     }
-
-    created++;
   }
+
   consoleLog(
     `[saveBatch] channelId=${channelId} created=${created} skipped=${skipped}`,
   );
 
-  const oldestMessageId = Math.min(...newMessages.map((msg) => msg.id));
-  const channel = await db.channel.findUnique({
-    where: { id: channelId },
-    select: { lastMessageId: true },
-  });
+  if (createdMessageIds.length > 0) {
+    const oldestMessageId = Math.min(...createdMessageIds);
+    const channel = await db.channel.findUnique({
+      where: { id: channelId },
+      select: { lastMessageId: true },
+    });
 
-  await db.channel.update({
-    where: { id: channelId },
-    data: {
-      allFetched: false,
-      lastMessageId:
-        channel?.lastMessageId == null
-          ? oldestMessageId
-          : Math.min(channel.lastMessageId, oldestMessageId),
-    },
-  });
+    await db.channel.update({
+      where: { id: channelId },
+      data: {
+        allFetched: false,
+        lastMessageId:
+          channel?.lastMessageId == null
+            ? oldestMessageId
+            : Math.min(channel.lastMessageId, oldestMessageId),
+      },
+    });
+  }
 
-  return { created, skipped };
+  return { created, skipped, results };
+}
+
+export async function saveBatch(ctx: TRPCContext, input: SaveBatchSchema) {
+  return saveIncomingMessages(ctx, input);
 }
 
 /**
@@ -312,7 +448,7 @@ export async function persistResolvedMedia(
 
   // ── Thumbnails ────────────────────────────────────────────────────────────
   await Promise.all(
-    resolved.thumbnails!?.map(async (thumb) => {
+    (resolved.thumbnails ?? []).map(async (thumb) => {
       const thumbFile = await db.file.upsert({
         where: { fileUniqueId: thumb.fileUniqueId ?? thumb.fileId },
         create: {
@@ -395,7 +531,10 @@ function normalizeChunkStart(input: {
       ? input.chunkStartSec
       : Math.floor((input.positionSec ?? 0) / input.chunkDurationSec) *
         input.chunkDurationSec;
-  return Math.max(0, Math.floor(rawStart / input.chunkDurationSec) * input.chunkDurationSec);
+  return Math.max(
+    0,
+    Math.floor(rawStart / input.chunkDurationSec) * input.chunkDurationSec,
+  );
 }
 
 function distributeWords(segment: {
@@ -451,7 +590,10 @@ function groupWordsIntoSegments(input: {
         id: `${input.idPrefix}-${segments.length}`,
         from,
         to,
-        text: pending.map((word) => word.word).join(" ").trim(),
+        text: pending
+          .map((word) => word.word)
+          .join(" ")
+          .trim(),
         words: pending,
       });
     }
@@ -651,7 +793,14 @@ async function transcribeWithGemini(input: {
   };
   const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!text) {
-    return { segments: [] as Array<{ id: string; from: number; to: number; text: string }> };
+    return {
+      segments: [] as Array<{
+        id: string;
+        from: number;
+        to: number;
+        text: string;
+      }>,
+    };
   }
 
   let parsedJson: unknown = null;
@@ -659,7 +808,12 @@ async function transcribeWithGemini(input: {
     parsedJson = JSON.parse(text);
   } catch {
     return {
-      segments: [] as Array<{ id: string; from: number; to: number; text: string }>,
+      segments: [] as Array<{
+        id: string;
+        from: number;
+        to: number;
+        text: string;
+      }>,
     };
   }
 
@@ -676,17 +830,24 @@ async function transcribeWithGemini(input: {
     .safeParse(parsedJson);
 
   if (!parsed.success) {
-    return { segments: [] as Array<{ id: string; from: number; to: number; text: string }> };
+    return {
+      segments: [] as Array<{
+        id: string;
+        from: number;
+        to: number;
+        text: string;
+      }>,
+    };
   }
 
   const segments = parsed.data.segments
-      .map((segment, idx) => ({
-        id: `gem-${idx}`,
-        from: Math.max(input.fromSec, Math.floor(segment.from)),
-        to: Math.min(input.toSec, Math.ceil(segment.to)),
-        text: segment.text.trim(),
-      }))
-      .filter((segment) => segment.text.length > 0 && segment.to > segment.from);
+    .map((segment, idx) => ({
+      id: `gem-${idx}`,
+      from: Math.max(input.fromSec, Math.floor(segment.from)),
+      to: Math.min(input.toSec, Math.ceil(segment.to)),
+      text: segment.text.trim(),
+    }))
+    .filter((segment) => segment.text.length > 0 && segment.to > segment.from);
 
   return {
     segments: segments.map((segment) => ({
@@ -708,10 +869,9 @@ async function transcribeWithGrokWhisper(input: {
     throw new Error("XAI_API_KEY is not configured");
   }
 
-  const baseUrl = (process.env.XAI_STT_BASE_URL ?? "https://api.x.ai/v1").replace(
-    /\/+$/,
-    "",
-  );
+  const baseUrl = (
+    process.env.XAI_STT_BASE_URL ?? "https://api.x.ai/v1"
+  ).replace(/\/+$/, "");
   const formData = new FormData();
   if (input.language) {
     formData.append("language", input.language);
@@ -790,7 +950,9 @@ async function transcribeWithGrokWhisper(input: {
   };
 }
 
-function resolveTranscriptionModel(input: TranscribeRangeSchema): TranscriptionModel {
+function resolveTranscriptionModel(
+  input: TranscribeRangeSchema,
+): TranscriptionModel {
   if (input.model) return input.model;
   if (input.provider === "gemini") return "gemini-2.0-flash";
   if (input.provider === "grok") return "grok-whisper";
@@ -857,7 +1019,9 @@ async function transcribeWithLocalWhisper(input: {
   try {
     json = await res.json();
   } catch {
-    throw new Error(`Local Whisper returned an unreadable response (${res.status})`);
+    throw new Error(
+      `Local Whisper returned an unreadable response (${res.status})`,
+    );
   }
 
   if (!res.ok) {
@@ -889,33 +1053,47 @@ async function transcribeWithLocalWhisper(input: {
     })
     .safeParse(json);
 
-  if (!parsed.success) return { segments: [] as Array<{ id: string; from: number; to: number; text: string }> };
+  if (!parsed.success)
+    return {
+      segments: [] as Array<{
+        id: string;
+        from: number;
+        to: number;
+        text: string;
+      }>,
+    };
 
   const segments = parsed.data.segments
-      .map((segment, idx) => ({
-        id: `whisper-${idx}`,
-        from: Math.max(input.fromSec, segment.start),
-        to: Math.min(input.toSec, segment.end),
-        text: segment.text.trim(),
-        words: (segment.words ?? [])
-          .map((word) => ({
-            word: word.word.trim(),
-            startSec: Math.max(input.fromSec, word.start),
-            endSec: Math.min(input.toSec, word.end),
-          }))
-          .filter(
-            (word) =>
-              word.word.length > 0 &&
-              word.endSec > word.startSec &&
-              overlapsRange(word.startSec, word.endSec, input.fromSec, input.toSec),
-          ),
-      }))
-      .filter((segment) => segment.text.length > 0 && segment.to > segment.from);
+    .map((segment, idx) => ({
+      id: `whisper-${idx}`,
+      from: Math.max(input.fromSec, segment.start),
+      to: Math.min(input.toSec, segment.end),
+      text: segment.text.trim(),
+      words: (segment.words ?? [])
+        .map((word) => ({
+          word: word.word.trim(),
+          startSec: Math.max(input.fromSec, word.start),
+          endSec: Math.min(input.toSec, word.end),
+        }))
+        .filter(
+          (word) =>
+            word.word.length > 0 &&
+            word.endSec > word.startSec &&
+            overlapsRange(
+              word.startSec,
+              word.endSec,
+              input.fromSec,
+              input.toSec,
+            ),
+        ),
+    }))
+    .filter((segment) => segment.text.length > 0 && segment.to > segment.from);
 
   return {
     segments: segments.map((segment) => ({
       ...segment,
-      words: segment.words.length > 0 ? segment.words : distributeWords(segment),
+      words:
+        segment.words.length > 0 ? segment.words : distributeWords(segment),
     })),
   };
 }
@@ -999,7 +1177,8 @@ export async function transcribeRange(
 
           const fileBuffer = await upstreamRes.arrayBuffer();
           const fileSize = fileBuffer.byteLength;
-          const mimeType = upstreamRes.headers.get("content-type") ?? "audio/mpeg";
+          const mimeType =
+            upstreamRes.headers.get("content-type") ?? "audio/mpeg";
           const fileBlob = new Blob([fileBuffer], {
             type: mimeType,
           });
@@ -1084,17 +1263,18 @@ export async function getOrTranscribeTranscriptChunk(
     update: {},
   });
 
-  const cachedSegments = !transcriptChunkCacheEnabled || input.force
-    ? []
-    : await db.transcriptSegment.findMany({
-        where: {
-          transcriptId: transcript.id,
-          startSec: { gte: chunkStartSec },
-          endSec: { lte: chunkEndSec },
-          status: "done",
-        },
-        orderBy: { startSec: "asc" },
-      });
+  const cachedSegments =
+    !transcriptChunkCacheEnabled || input.force
+      ? []
+      : await db.transcriptSegment.findMany({
+          where: {
+            transcriptId: transcript.id,
+            startSec: { gte: chunkStartSec },
+            endSec: { lte: chunkEndSec },
+            status: "done",
+          },
+          orderBy: { startSec: "asc" },
+        });
 
   if (cachedSegments.length > 0) {
     return {

@@ -2,6 +2,7 @@ import { Pressable } from "@/components/ui/pressable";
 import { Text, View } from "react-native";
 import { useAudioStore } from "@/store/audio-store";
 import { useColors } from "@/hooks/use-color";
+import { useRef } from "react";
 
 export interface TranscriptSegmentData {
   startSec: number;
@@ -43,6 +44,8 @@ export function TranscriptSegments({ segments }: TranscriptSegmentsProps) {
   const colors = useColors();
   const positionSec = useAudioStore((s) => s.position) / 1000;
   const seek = useAudioStore((s) => s.seek);
+  const play = useAudioStore((s) => s.play);
+  const lastTapRef = useRef<{ key: string; at: number } | null>(null);
 
   const activeIdx = segments.findIndex(
     (s) => positionSec >= s.startSec && positionSec < s.endSec,
@@ -65,7 +68,18 @@ export function TranscriptSegments({ segments }: TranscriptSegmentsProps) {
         return (
           <Pressable
             key={getTranscriptSegmentKey(seg, index)}
-            onPress={() => seek(seg.startSec * 1000)}
+            onPress={() => {
+              const key = getTranscriptSegmentKey(seg, index);
+              const now = Date.now();
+              const lastTap = lastTapRef.current;
+              lastTapRef.current = { key, at: now };
+              const shouldPlay = lastTap?.key === key && now - lastTap.at < 320;
+              seek(seg.startSec * 1000)
+                .then(() => {
+                  if (shouldPlay) return play();
+                })
+                .catch(() => undefined);
+            }}
             style={{
               flexDirection: "row",
               gap: 12,

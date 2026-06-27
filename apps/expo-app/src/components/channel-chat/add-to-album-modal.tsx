@@ -13,6 +13,7 @@ import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 
 import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";
+import { Toast } from "@/components/ui/toast";
 import { useColors } from "@/hooks/use-color";
 
 const ALBUM_COLORS = [
@@ -55,6 +56,13 @@ export function AddToAlbumModal({
   const { data: albums = [], isLoading } = useQuery(
     _trpc.album.getAlbums.queryOptions(),
   );
+  const sortedAlbums = [...albums].sort((a, b) => {
+    const aChannel = a.channel?.title ?? a.channel?.username ?? "";
+    const bChannel = b.channel?.title ?? b.channel?.username ?? "";
+    const channelCompare = aChannel.localeCompare(bChannel);
+    if (channelCompare !== 0) return channelCompare;
+    return a.name.localeCompare(b.name);
+  });
 
   const addMedia = useMutation(
     _trpc.album.addMediaToAlbum.mutationOptions({
@@ -62,6 +70,10 @@ export function AddToAlbumModal({
         queryClient.invalidateQueries(_trpc.album.getAlbums.queryOptions());
         if (selectedAlbumRef.current) {
           onAdded?.(selectedAlbumRef.current);
+          Toast.show(`Added to ${selectedAlbumRef.current.name}`, {
+            type: "success",
+            position: "bottom",
+          });
         }
         onClose();
       },
@@ -170,7 +182,7 @@ export function AddToAlbumModal({
           <View className="py-6 items-center">
             <ActivityIndicator color={colors.primary} />
           </View>
-        ) : albums.length === 0 ? (
+        ) : sortedAlbums.length === 0 ? (
           <Text
             className="text-sm text-muted-foreground text-center py-6"
             style={{ color: colors.mutedForeground }}
@@ -179,7 +191,7 @@ export function AddToAlbumModal({
           </Text>
         ) : (
           <FlatList
-            data={albums}
+            data={sortedAlbums}
             keyExtractor={(item) => String(item.id)}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
@@ -217,6 +229,7 @@ export function AddToAlbumModal({
                     style={{ color: colors.mutedForeground }}
                   >
                     {item._count.medias} tracks
+                    {item.channel?.title ? ` · ${item.channel.title}` : ""}
                   </Text>
                 </View>
                 <Icon
@@ -229,19 +242,20 @@ export function AddToAlbumModal({
           />
         )}
 
-        {/* Cancel */}
-        <Pressable
-          onPress={onClose}
-          className="mt-4 h-11 rounded-xl bg-muted items-center justify-center active:opacity-70"
-          style={{ backgroundColor: colors.muted }}
-        >
-          <Text
-            className="text-sm font-semibold text-foreground"
-            style={{ color: colors.foreground }}
+        <View className="mt-4 rounded-2xl bg-background/60 p-1">
+          <Pressable
+            onPress={onClose}
+            className="h-11 rounded-xl bg-muted items-center justify-center active:opacity-70"
+            style={{ backgroundColor: colors.muted }}
           >
-            Cancel
-          </Text>
-        </Pressable>
+            <Text
+              className="text-sm font-semibold text-foreground"
+              style={{ color: colors.foreground }}
+            >
+              Cancel
+            </Text>
+          </Pressable>
+        </View>
       </View>
     </KeyboardAvoidingView>
   );

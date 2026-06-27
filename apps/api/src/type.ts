@@ -3,4 +3,5 @@ export type BlogType = "text" | "image" | "pdf" | "audio" | "video";
 
 export type BlogMeta = {
   telegramMessageId: number;
+  telegramMessageUrl?: string;
 };

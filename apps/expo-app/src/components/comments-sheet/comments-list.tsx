@@ -1,5 +1,6 @@
 import { Pressable } from "@/components/ui/pressable";
 import { formatDate } from "@acme/utils/dayjs";
+import { useRouter } from "expo-router";
 import { useState } from "react";
 import { ActivityIndicator, ScrollView, Text, TextInput, View } from "react-native";
 import { LegendList } from "@legendapp/list";
@@ -7,6 +8,7 @@ import { LegendList } from "@legendapp/list";
 import { Icon } from "@/components/ui/icon";
 import type { CommentsSheetState } from "./index";
 import { useColors } from "@/hooks/use-color";
+import { parseInternalShareLink } from "@/lib/share-links";
 import { withAlpha } from "@/lib/theme";
 import { useAudioStore } from "@/store/audio-store";
 
@@ -26,6 +28,63 @@ function parseTimestamp(content: string): string | null {
 
 function stripTimestamp(content: string): string {
   return content.replace(TIMESTAMP_RE, "").trim();
+}
+
+function InternalLinkPreview({ content }: { content?: string | null }) {
+  const colors = useColors();
+  const router = useRouter();
+  const link = parseInternalShareLink(content);
+  if (!link) return null;
+
+  return (
+    <Pressable
+      onPress={() => router.push(link.href as any)}
+      style={{
+        marginTop: 8,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 9,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: withAlpha(colors.primary, 0.22),
+        backgroundColor: withAlpha(colors.primary, 0.08),
+        paddingHorizontal: 10,
+        paddingVertical: 9,
+      }}
+    >
+      <View
+        style={{
+          width: 34,
+          height: 34,
+          borderRadius: 10,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: withAlpha(colors.primary, 0.14),
+        }}
+      >
+        <Icon
+          name={link.type === "album" ? "Disc3" : "FileText"}
+          size={16}
+          className="text-primary"
+        />
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text
+          style={{ fontSize: 13, fontWeight: "700", color: colors.foreground }}
+          numberOfLines={1}
+        >
+          {link.label}
+        </Text>
+        <Text
+          style={{ marginTop: 1, fontSize: 11, color: colors.mutedForeground }}
+          numberOfLines={1}
+        >
+          Opens in Al-Ghurobaa
+        </Text>
+      </View>
+      <Icon name="ChevronRight" size={15} className="text-muted-foreground" />
+    </Pressable>
+  );
 }
 
 // ── Single comment item ───────────────────────────────────────────────────────
@@ -56,6 +115,7 @@ function CommentItem({
   const comment = item.comment;
   const colors = useColors();
   const seek = useAudioStore((s) => s.seek);
+  const play = useAudioStore((s) => s.play);
 
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(comment?.content ?? "");
@@ -212,7 +272,9 @@ function CommentItem({
               <View style={{ marginBottom: 6 }}>
                 <Pressable
                   onPress={() => {
-                    if (timestampSeconds != null) seek(timestampSeconds * 1000);
+                    if (timestampSeconds != null) {
+                      seek(timestampSeconds * 1000).then(() => play()).catch(() => undefined);
+                    }
                   }}
                   style={{
                     flexDirection: "row",
@@ -236,6 +298,7 @@ function CommentItem({
             )}
 
             <Text
+              selectable
               style={{
                 fontSize: 14,
                 color: colors.foreground,
@@ -246,6 +309,7 @@ function CommentItem({
             >
               {displayContent}
             </Text>
+            <InternalLinkPreview content={comment.content} />
 
             {/* Tags */}
             {tags.length > 0 && (

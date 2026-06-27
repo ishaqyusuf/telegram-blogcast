@@ -12,10 +12,10 @@
 //
 // Each batch is emitted immediately → wired to saveBatch() in startFetch()
 
-import { EventEmitter } from "events";
+import { EventEmitter } from "node:events";
+import { consoleLog } from "@acme/utils";
 import { fetchMessages } from "./message-service";
 import type { FetchedMessage } from "./message-service";
-import { consoleLog } from "@acme/utils";
 
 export type { FetchedMessage };
 
@@ -42,6 +42,7 @@ export type FetcherEvent =
   | { type: "state"; state: FetcherState }
   | { type: "allFetched" } // signal to set allFetched=true in DB
   | { type: "error"; error: string; retryIn: number };
+type FetcherEventListener = (event: FetcherEvent) => unknown | Promise<unknown>;
 
 export interface StartFetcherInput {
   channelId: number;
@@ -85,12 +86,14 @@ class MessageFetcher extends EventEmitter {
   private abortController: AbortController | null = null;
   private channelMessageIds: Set<number> = new Set();
   private newestKnownMessageId: number | null = null;
-  private resolveFiles: boolean = false;
+  private resolveFiles = false;
   private maxTotalFetch: number | null | undefined;
 
   // ── Public API ──────────────────────────────────────────────────────────────
   public addKnownIds(ids: number[]): void {
-    ids.forEach((id) => this.channelMessageIds.add(id));
+    for (const id of ids) {
+      this.channelMessageIds.add(id);
+    }
     const newestId = Math.max(...ids);
     if (!Number.isFinite(newestId)) return;
     this.newestKnownMessageId =
@@ -219,7 +222,9 @@ class MessageFetcher extends EventEmitter {
     if (newMessages.length === 0) return;
 
     await this.emitBatch(newMessages, "recent");
-    newMessages.forEach((m) => this.addKnownIds([m.id]));
+    for (const message of newMessages) {
+      this.addKnownIds([message.id]);
+    }
   }
 
   // ── Phase 2: Historical backfill ─────────────────────────────────────────────
@@ -248,7 +253,7 @@ class MessageFetcher extends EventEmitter {
     const { messages } = await fetchMessages(this.state.channelUsername, {
       limit,
       // offsetId here means "get messages older than this id"
-      startId: this.state.lastMessageId! ?? undefined,
+      startId: this.state.lastMessageId ?? undefined,
       resolveFiles: this.resolveFiles,
     });
 
@@ -257,7 +262,7 @@ class MessageFetcher extends EventEmitter {
     // Empty batch = we've reached the very first message in the channel
     if (messages.length === 0 && this.state.lastMessageId !== null) {
       this.setState({ allFetched: true });
-      this.emit("event", { type: "allFetched" } satisfies FetcherEvent);
+      await this.emitFetcherEvent({ type: "allFetched" });
       return;
     }
 
@@ -267,12 +272,16 @@ class MessageFetcher extends EventEmitter {
 
     if (newMessages.length > 0) {
       await this.emitBatch(newMessages, "backfill");
-      newMessages.forEach((m) => this.channelMessageIds.add(m.id));
+      for (const message of newMessages) {
+        this.channelMessageIds.add(message.id);
+      }
     }
 
     // Advance DB cursor to the oldest message in this batch
-    const oldestId = messages[0]?.id!; // sorted ascending
-    this.setState({ lastMessageId: oldestId });
+    const oldestId = messages[0]?.id; // sorted ascending
+    if (oldestId !== undefined) {
+      this.setState({ lastMessageId: oldestId });
+    }
   }
 
   // ── Emit batch + check maxTotalFetch ─────────────────────────────────────────
@@ -283,11 +292,11 @@ class MessageFetcher extends EventEmitter {
   ): Promise<void> {
     this.setState({ totalFetched: this.state.totalFetched + messages.length });
     consoleLog("State", this.getState());
-    this.emit("event", {
+    await this.emitFetcherEvent({
       type: "messages",
       messages,
       phase,
-    } satisfies FetcherEvent);
+    });
 
     // Auto-stop when maxTotalFetch is reached
     if (
@@ -311,6 +320,25 @@ class MessageFetcher extends EventEmitter {
       type: "state",
       state: this.getState(),
     } satisfies FetcherEvent);
+  }
+
+  private async emitFetcherEvent(event: FetcherEvent): Promise<void> {
+    const listeners = this.listeners("event") as FetcherEventListener[];
+    const results = await Promise.allSettled(
+      listeners.map(async (listener) => {
+        try {
+          await listener(event);
+        } catch (err) {
+          consoleLog("[messageFetcher] event listener failed:", err);
+          throw err;
+        }
+      }),
+    );
+
+    const failed = results.find(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    );
+    if (failed) throw failed.reason;
   }
 
   private sleep(ms: number, signal: AbortSignal): Promise<void> {

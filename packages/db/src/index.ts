@@ -9,7 +9,53 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient, Prisma } from "@prisma/client";
 // import { Pool } from "pg";
 
-export * from "@prisma/client";
+export { Prisma, PrismaClient };
+export type {
+  AiTokenUsage,
+  Album,
+  AlbumAudioIndex,
+  AlbumBookReference,
+  AlbumLocation,
+  Author,
+  Blog,
+  BlogComments,
+  BlogLocation,
+  BlogTags,
+  BlogViews,
+  Book,
+  BookAuthor,
+  BookImportHistory,
+  BookPage,
+  BookPageComment,
+  BookPageFootnote,
+  BookPageHighlight,
+  BookPageImportHistory,
+  BookPageParagraph,
+  BookShelf,
+  BookTocNode,
+  BookVolume,
+  Channel,
+  Device,
+  File,
+  Location,
+  Media,
+  MediaBookPageReference,
+  MediaLocation,
+  Playlist,
+  PlaylistEpisode,
+  Reaction,
+  RecentlyPlayed,
+  RecentlyViewed,
+  Search,
+  ShamelaRawPage,
+  ShamelaStagedPageParse,
+  Tags,
+  Thumbnail,
+  Transcript,
+  TranscriptSegment,
+  TranscriptionJob,
+  User,
+} from "@prisma/client";
 
 // Learn more about instantiating PrismaClient in Next.js here: https://www.prisma.io/docs/data-platform/accelerate/getting-started
 const prismaClientSingleton = () => {
@@ -49,5 +95,6 @@ export const db =
   // globalForPrisma.prisma ??
   prismaClientSingleton();
 export type Database = typeof db;
+export type Db = Database;
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = db;

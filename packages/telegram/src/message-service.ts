@@ -5,22 +5,12 @@
 //   - app/api/telegram/channels/[channelId]/messages/route.ts  (one-shot HTTP)
 //   - lib/messageFetcher.ts                                     (background loop)
 
-import { getClient } from "./telegram-client";
-import { Api } from "telegram";
 import { consoleLog } from "@acme/utils";
+import { Api } from "telegram";
 import { resolveMediaBot } from "./media-bot-resolver";
-import { ResolvedMedia } from "./media-resolver";
+import type { ResolvedMedia } from "./media-resolver";
+import { getClient } from "./telegram-client";
 // ── Types ─────────────────────────────────────────────────────────────────────
-
-export interface FetchedMessage {
-  id: number;
-  text: string | null;
-  fileId: string | null; // Bot API file_id, null if no media or not resolved
-  date: string; // ISO-8601 UTC
-}
-// packages/telegram/src/message-service.ts
-
-// 🧩 Updated: FetchedMessage now carries structured media instead of flat fileId string
 
 export interface FetchedMessage {
   id: number;
@@ -68,6 +58,58 @@ export interface ChannelMessageStats {
   latestKnownMessageId: number | null;
 }
 
+export interface TelegramMessageLink {
+  channelUsername: string;
+  messageId: number;
+  normalizedUrl: string;
+}
+
+export function parseTelegramMessageLink(rawUrl: string): TelegramMessageLink {
+  const trimmed = rawUrl.trim();
+  if (!trimmed) {
+    throw new Error("Telegram link is required");
+  }
+
+  let url: URL;
+  try {
+    url = new URL(
+      /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`,
+    );
+  } catch {
+    throw new Error("Enter a valid Telegram post link");
+  }
+
+  const hostname = url.hostname.toLowerCase().replace(/^www\./, "");
+  if (hostname !== "t.me" && hostname !== "telegram.me") {
+    throw new Error("Only t.me or telegram.me links are supported");
+  }
+
+  const parts = url.pathname.split("/").filter(Boolean);
+  const publicParts = parts[0] === "s" ? parts.slice(1) : parts;
+
+  if (publicParts[0] === "c") {
+    throw new Error("Private t.me/c links are not supported yet");
+  }
+
+  const [rawUsername, rawMessageId] = publicParts;
+  const channelUsername = rawUsername?.replace(/^@/, "");
+  const messageId = Number(rawMessageId);
+
+  if (!channelUsername || !/^[A-Za-z0-9_]{5,32}$/.test(channelUsername)) {
+    throw new Error("Telegram link must include a public channel username");
+  }
+
+  if (!Number.isInteger(messageId) || messageId <= 0) {
+    throw new Error("Telegram link must include a valid message id");
+  }
+
+  return {
+    channelUsername,
+    messageId,
+    normalizedUrl: `https://t.me/${channelUsername}/${messageId}`,
+  };
+}
+
 export async function fetchChannelMessageStats(
   channelUsername: string,
 ): Promise<ChannelMessageStats> {
@@ -105,6 +147,55 @@ export async function fetchChannelMessageStats(
 
 // ── Core function ─────────────────────────────────────────────────────────────
 type BlogType = "audio" | "image" | "video" | "text" | "document";
+
+async function mapTelegramMessage(
+  client: Awaited<ReturnType<typeof getClient>>,
+  channelUsername: string,
+  msg: Api.Message,
+  resolveFiles: boolean,
+): Promise<FetchedMessage> {
+  const mediaMeta = extractMediaMeta(msg);
+  let media: ResolvedMedia | null = mediaMeta as ResolvedMedia | null;
+
+  if (mediaMeta && resolveFiles) {
+    try {
+      const botMedia = await resolveMediaBot(client, channelUsername, msg.id);
+      media = botMedia ? { ...mediaMeta, ...botMedia } : media;
+    } catch (err) {
+      consoleLog(
+        "[message-service]",
+        `fileId resolution failed msg=${msg.id}:`,
+        err,
+      );
+    }
+  }
+
+  return {
+    id: msg.id,
+    text: ("message" in msg ? msg.message : null) ?? null,
+    date: new Date((msg as any).date * 1000).toISOString(),
+    media,
+  };
+}
+
+export async function fetchMessageById(
+  channelUsername: string,
+  messageId: number,
+  options: Pick<FetchMessagesOptions, "resolveFiles"> = {},
+): Promise<FetchedMessage | null> {
+  const client = await getClient();
+  const channel = await client.getEntity(`t.me/${channelUsername}`);
+  const messages = await client.getMessages(channel, { ids: messageId });
+  const message = messages.find((msg) => msg.id === messageId);
+
+  if (!message) return null;
+  return mapTelegramMessage(
+    client,
+    channelUsername,
+    message,
+    options.resolveFiles ?? false,
+  );
+}
 
 export async function fetchMessages(
   channelUsername: string,
@@ -207,41 +298,10 @@ export async function fetchMessages(
   // Sort ascending (oldest first) — consistent with fetcher cursor logic
   filtered.sort((a, b) => a.id - b.id);
 
-  // 🧩 Map + resolve file_ids
   const messages: FetchedMessage[] = await Promise.all(
-    filtered.map(async (msg) => {
-      const mediaMeta = extractMediaMeta(msg);
-      let media: ResolvedMedia | null = null;
-
-      if (mediaMeta && resolveFiles) {
-        try {
-          const botMedia = await resolveMediaBot(
-            client,
-            channelUsername,
-            msg.id,
-          );
-          media = botMedia ? { ...mediaMeta, ...botMedia } : null;
-        } catch (err) {
-          consoleLog(
-            "[message-service]",
-            `fileId resolution failed msg=${msg.id}:`,
-            err,
-          );
-        }
-      }
-      // consoleLog("Fetched message", {
-      //   id: msg.id,
-      //   text: msg.text,
-      //   mediaMeta,
-      //   resolvedFileId: media?.fileId ?? null,
-      // });
-      return {
-        id: msg.id,
-        text: ("message" in msg ? msg.message : null) ?? null,
-        date: new Date((msg as any).date * 1000).toISOString(),
-        media: media!,
-      };
-    }),
+    filtered.map((msg) =>
+      mapTelegramMessage(client, channelUsername, msg, resolveFiles),
+    ),
   );
 
   const nextStartId = messages.length === limit ? messages?.[0]?.id! : null;

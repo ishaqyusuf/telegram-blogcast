@@ -24,6 +24,11 @@ Tracks the current blog-reading experience and blog-related discovery surfaces.
 - Media rendering is source-aware: existing Telegram-imported media remains supported, while new user uploads resolve from Vercel Blob URLs.
 - Channel chat supports selecting exactly two same-channel posts and merging them into one canonical post, preserving media, tags, and comments while soft-deleting the secondary post.
 - Local-only blog import can be controlled from the Expo `/blog-import` screen when the local API is reachable on the device LAN.
+- Blog/search cards are album-aware for audio posts, showing album badges when membership exists and add-to-album actions when eligible.
+- Home feed de-duplicates album-linked audio posts by album and keeps the most recent visible item while leaving non-album posts visible.
+- Search shows live keyword suggestions while typing and hides recent searches until the input is cleared or submitted.
+- Blog post menus can share or copy internal links. Comments render supported internal blog/album links as compact preview cards that open the app route.
+- Comment read mode keeps text selectable and continuous by default, with inline edit controls available on each comment row.
 
 ### Important Surface Areas
 - `apps/expo-app/src/screens/blog-home.tsx`

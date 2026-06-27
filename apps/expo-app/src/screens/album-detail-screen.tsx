@@ -44,8 +44,11 @@ import Animated, {
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
 import { Icon, type IconKeys } from "@/components/ui/icon";
+import { ScrollToTopButton } from "@/components/ui/scroll-to-top-button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Toast } from "@/components/ui/toast";
 import { useColors } from "@/hooks/use-color";
+import { useScrollChrome } from "@/hooks/use-scroll-chrome";
 import { useTranscriptionQueue } from "@/hooks/use-transcription-queue";
 import { getWebUrl } from "@/lib/base-url";
 import { getTelegramFileUrl } from "@/lib/get-telegram-file";
@@ -69,6 +72,7 @@ const ALBUM_COLORS = [
 ];
 const SUGGESTION_DISPLAY_LIMIT = 25;
 const SUGGESTION_POOL_LIMIT = 500;
+type AlbumDetailTab = "tracks" | "add";
 
 function getInitials(name?: string | null) {
 	if (!name) return "AL";
@@ -1279,6 +1283,7 @@ export default function AlbumDetailScreen() {
 	const qc = useQueryClient();
 	const colors = useColors();
 	const setGlobalAudioBarHidden = useGlobalAudioBarStore((s) => s.setHidden);
+	const albumScroll = useScrollChrome<ScrollView>();
 	const localTranscriberBaseUrl = useAppSettingsStore(
 		(s) => s.localTranscriberBaseUrl,
 	);
@@ -1306,6 +1311,8 @@ export default function AlbumDetailScreen() {
 
 	// Local track order state (mirrors server, mutated on reorder actions)
 	const [localTracks, setLocalTracks] = useState<any[] | null>(null);
+	const [activeAlbumTab, setActiveAlbumTab] =
+		useState<AlbumDetailTab>("tracks");
 	const [reorderMode, setReorderMode] = useState(false);
 	const [editModalVisible, setEditModalVisible] = useState(false);
 	const [descExpanded, setDescExpanded] = useState(false);
@@ -1416,8 +1423,11 @@ export default function AlbumDetailScreen() {
 					const addedIds = new Set(variables.mediaIds);
 					setDismissedSuggestionIds((prev) => new Set([...prev, ...addedIds]));
 					setSelectedSuggestionIds(new Set());
-					if (result.added > 1) {
-						Alert.alert("Added to album", `${result.added} audio items added.`);
+					if (result.added > 0) {
+						Toast.show(`${result.added} audio item${result.added === 1 ? "" : "s"} added`, {
+							type: "success",
+							position: "bottom",
+						});
 					}
 				},
 				onError: (e) => Alert.alert("Error", e.message),
@@ -1693,6 +1703,12 @@ export default function AlbumDetailScreen() {
 			}
 
 			setDismissedSuggestionIds((prev) => new Set(prev).add(mediaId));
+			if (result.added > 0) {
+				Toast.show("Added to album", {
+					type: "success",
+					position: "bottom",
+				});
+			}
 			setSelectedSuggestionIds((prev) => {
 				if (!prev.has(mediaId)) return prev;
 				const next = new Set(prev);
@@ -1920,9 +1936,12 @@ export default function AlbumDetailScreen() {
 					</View>
 				) : (
 					<ScrollView
+						ref={albumScroll.ref}
 						showsVerticalScrollIndicator={false}
 						keyboardShouldPersistTaps="handled"
 						removeClippedSubviews={false}
+						onScroll={albumScroll.onScroll}
+						scrollEventThrottle={albumScroll.scrollEventThrottle}
 						refreshControl={
 							<RefreshControl
 								refreshing={isFetchingAlbum && !isLoading}
@@ -2262,99 +2281,151 @@ export default function AlbumDetailScreen() {
 							</View>
 						</View>
 
-						{/* Tracks section */}
-						<View style={{ paddingHorizontal: 16, paddingBottom: 60 }}>
-							{/* Section header */}
+						<View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
 							<View
 								style={{
 									flexDirection: "row",
-									alignItems: "center",
-									justifyContent: "space-between",
-									paddingBottom: 8,
-									borderBottomWidth: 1,
-									borderBottomColor: colors.border,
-									marginBottom: 4,
+									borderRadius: 12,
+									backgroundColor: colors.muted,
+									padding: 4,
 								}}
 							>
-								<Text
-									style={{
-										fontSize: 14,
-										fontWeight: "700",
-										color: colors.foreground,
-									}}
-								>
-									Tracks
-								</Text>
-
-								{tracks.length > 0 && !reorderMode && (
-									<Pressable
-										onPress={enterReorderMode}
-										style={{
-											flexDirection: "row",
-											alignItems: "center",
-											gap: 4,
-											paddingHorizontal: 10,
-											paddingVertical: 5,
-											backgroundColor: colors.muted,
-											borderRadius: 8,
-										}}
-									>
-										<Icon
-											name="ListOrdered"
-											size={14}
-											className="text-muted-foreground"
-										/>
-										<Text
-											style={{ fontSize: 12, color: colors.mutedForeground }}
-										>
-											Reorder
-										</Text>
-									</Pressable>
-								)}
-
-								{reorderMode && (
-									<View style={{ flexDirection: "row", gap: 8 }}>
+								{(["tracks", "add"] as AlbumDetailTab[]).map((tab) => {
+									const active = activeAlbumTab === tab;
+									return (
 										<Pressable
-											onPress={cancelReorder}
-											style={{
-												paddingHorizontal: 10,
-												paddingVertical: 5,
-												backgroundColor: colors.muted,
-												borderRadius: 8,
+											key={tab}
+											onPress={() => {
+												setActiveAlbumTab(tab);
+												if (tab !== "tracks") setReorderMode(false);
 											}}
-										>
-											<Text
-												style={{ fontSize: 12, color: colors.mutedForeground }}
-											>
-												Cancel
-											</Text>
-										</Pressable>
-										<Pressable
-											onPress={commitOrder}
-											disabled={isSavingOrder}
 											style={{
-												paddingHorizontal: 12,
-												paddingVertical: 5,
-												backgroundColor: colors.primary,
-												borderRadius: 8,
-												opacity: isSavingOrder ? 0.6 : 1,
+												flex: 1,
+												minHeight: 40,
+												borderRadius: 9,
+												alignItems: "center",
+												justifyContent: "center",
+												backgroundColor: active ? colors.card : "transparent",
 											}}
 										>
 											<Text
 												style={{
-													fontSize: 12,
-													fontWeight: "700",
-													color: colors.primaryForeground,
+													fontSize: 13,
+													fontWeight: "800",
+													color: active
+														? colors.foreground
+														: colors.mutedForeground,
 												}}
 											>
-												{isSavingOrder ? "..." : "Save order"}
+												{tab === "tracks" ? "Tracks" : "+ Add"}
 											</Text>
 										</Pressable>
-									</View>
-								)}
+									);
+								})}
 							</View>
+						</View>
 
-							{tracks.length === 0 ? (
+						{/* Tracks section */}
+						<View style={{ paddingHorizontal: 16, paddingBottom: 60 }}>
+							{activeAlbumTab === "tracks" && (
+								<>
+									{/* Section header */}
+									<View
+										style={{
+											flexDirection: "row",
+											alignItems: "center",
+											justifyContent: "space-between",
+											paddingBottom: 8,
+											borderBottomWidth: 1,
+											borderBottomColor: colors.border,
+											marginBottom: 4,
+										}}
+									>
+										<Text
+											style={{
+												fontSize: 14,
+												fontWeight: "700",
+												color: colors.foreground,
+											}}
+										>
+											Tracks
+										</Text>
+
+										{tracks.length > 0 && !reorderMode && (
+											<Pressable
+												onPress={enterReorderMode}
+												style={{
+													flexDirection: "row",
+													alignItems: "center",
+													gap: 4,
+													paddingHorizontal: 10,
+													paddingVertical: 5,
+													backgroundColor: colors.muted,
+													borderRadius: 8,
+												}}
+											>
+												<Icon
+													name="ListOrdered"
+													size={14}
+													className="text-muted-foreground"
+												/>
+												<Text
+													style={{
+														fontSize: 12,
+														color: colors.mutedForeground,
+													}}
+												>
+													Reorder
+												</Text>
+											</Pressable>
+										)}
+
+										{reorderMode && (
+											<View style={{ flexDirection: "row", gap: 8 }}>
+												<Pressable
+													onPress={cancelReorder}
+													style={{
+														paddingHorizontal: 10,
+														paddingVertical: 5,
+														backgroundColor: colors.muted,
+														borderRadius: 8,
+													}}
+												>
+													<Text
+														style={{
+															fontSize: 12,
+															color: colors.mutedForeground,
+														}}
+													>
+														Cancel
+													</Text>
+												</Pressable>
+												<Pressable
+													onPress={commitOrder}
+													disabled={isSavingOrder}
+													style={{
+														paddingHorizontal: 12,
+														paddingVertical: 5,
+														backgroundColor: colors.primary,
+														borderRadius: 8,
+														opacity: isSavingOrder ? 0.6 : 1,
+													}}
+												>
+													<Text
+														style={{
+															fontSize: 12,
+															fontWeight: "700",
+															color: colors.primaryForeground,
+														}}
+													>
+														{isSavingOrder ? "..." : "Save order"}
+													</Text>
+												</Pressable>
+											</View>
+										)}
+									</View>
+
+									{tracks.length === 0 ? (
 								<View
 									style={{ alignItems: "center", paddingVertical: 48, gap: 10 }}
 								>
@@ -2395,9 +2466,12 @@ export default function AlbumDetailScreen() {
 									/>
 								))
 							)}
+								</>
+							)}
 
 							{/* Suggested media section */}
-							<View style={{ paddingTop: 28 }}>
+							{activeAlbumTab === "add" && (
+							<View style={{ paddingTop: 6 }}>
 								<View
 									style={{
 										flexDirection: "row",
@@ -2630,10 +2704,15 @@ export default function AlbumDetailScreen() {
 									</>
 								)}
 							</View>
+							)}
 						</View>
 					</ScrollView>
 				)}
 			</SafeArea>
+			<ScrollToTopButton
+				visible={albumScroll.showScrollTop}
+				onPress={albumScroll.scrollToTop}
+			/>
 
 			{selectedSuggestionCount > 0 && (
 				<View

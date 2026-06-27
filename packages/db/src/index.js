@@ -4,9 +4,9 @@
 // Solution for prisma edge: @link https://github.com/prisma/prisma/issues/22050#issuecomment-1821208388
 // import { PrismaClient } from "@prisma/client/edge";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 // import { Pool } from "pg";
-export * from "@prisma/client";
+export { Prisma, PrismaClient };
 // Learn more about instantiating PrismaClient in Next.js here: https://www.prisma.io/docs/data-platform/accelerate/getting-started
 const prismaClientSingleton = () => {
     const connectionString = process.env.POSTGRES_URL;

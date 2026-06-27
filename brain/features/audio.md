@@ -71,7 +71,13 @@ Tracks the current audio playback experience, supporting components, and future 
 - Individual audio media can reference book pages through `MediaBookPageReference`, including timestamp ranges and notes. Album/book and media/page references can be removed from the mobile UI, and book-page reference taps open audio at the referenced timestamp when available.
 - Playlists are user-curated and can mix audio across channels unless future product rules tighten them.
 - Audio menus and channel chat expose add-to-album and add-to-playlist actions for audio media.
+- Album suggestions support keyword-driven, channel-aware discovery. Album detail separates `Tracks` from `+ Add`; track reorder actions are only shown in `Tracks`, while the add tab can mark all/clear/add suggestions and uses toast feedback.
+- Audio and search cards expose album membership as badges. When an audio item is already in an album, audio detail opens the album instead of showing another add-plus affordance.
+- Timestamped comments seek and start playback when tapped. Transcript segments support single tap to seek and double tap/click to seek and play.
+- The global audio bar can show current time plus album track index when the active audio has album order metadata.
+- Long audio/album/search/home/text screens use shared scroll chrome: the mini-player hides while scrolling and a centered scroll-to-top button appears after deep scrolling.
 - Direct Local Whisper transcription is routed through the tRPC API with a LAN transcriber URL, keeping web and mobile on the same typed chunk transcription contract. Queued Local Whisper transcription is worker-owned through internal API endpoints and the local Python service.
+- Blog Import can import a single public Telegram audio post link without fetching the full channel. The API resolves the exact message, saves it through the same Blog/File/Media persistence path as the channel fetcher, and returns an existing blog when the channel/message pair is already stored.
 
 ### Future Improvements
 - Stronger offline download and sync behavior

@@ -101,6 +101,8 @@ export default function BlogImportScreen() {
   const [fetcherState, setFetcherState] = useState<FetcherState | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [attemptLabel, setAttemptLabel] = useState("");
+  const [audioLinkInput, setAudioLinkInput] = useState("");
+  const [directImportMessage, setDirectImportMessage] = useState("");
   const didAutoConnect = useRef(false);
 
   const trpcClient = useMemo(() => {
@@ -242,6 +244,28 @@ export default function BlogImportScreen() {
     );
   }
 
+  function importAudioLink() {
+    const url = audioLinkInput.trim();
+    if (!url) {
+      setDirectImportMessage("Paste a Telegram audio post link first.");
+      return;
+    }
+
+    runAction("import-audio-link", async () => {
+      const result = await trpcClient!.channel.importTelegramAudioLink.mutate({
+        url,
+      });
+      setDirectImportMessage(
+        result.status === "duplicate"
+          ? `Already saved as blog #${result.blogId}.`
+          : `Saved audio as blog #${result.blogId}.`,
+      );
+      if (result.status === "created") {
+        setAudioLinkInput("");
+      }
+    });
+  }
+
   return (
     <View
       className="flex-1 bg-background"
@@ -330,6 +354,69 @@ export default function BlogImportScreen() {
                 : ""}
             </Text>
           ) : null}
+
+          <View className="gap-2 rounded-xl border border-border bg-card p-3">
+            <View className="flex-row items-center gap-2">
+              <Icon name="Link" size={16} className="text-muted-foreground" />
+              <Text className="text-xs font-semibold uppercase text-muted-foreground">
+                Audio link
+              </Text>
+            </View>
+            <View className="flex-row items-center gap-2 rounded-xl border border-border bg-background px-3">
+              <TextInput
+                value={audioLinkInput}
+                onChangeText={(value) => {
+                  setAudioLinkInput(value);
+                  setDirectImportMessage("");
+                }}
+                onSubmitEditing={importAudioLink}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                placeholder="https://t.me/channel/123"
+                placeholderTextColor={colors.mutedForeground}
+                style={{
+                  flex: 1,
+                  color: colors.foreground,
+                  fontSize: 13,
+                  paddingVertical: 11,
+                }}
+              />
+              {audioLinkInput ? (
+                <Pressable
+                  onPress={() => {
+                    setAudioLinkInput("");
+                    setDirectImportMessage("");
+                  }}
+                  className="size-8 items-center justify-center rounded-full bg-muted active:opacity-70"
+                >
+                  <Icon name="X" size={15} className="text-foreground" />
+                </Pressable>
+              ) : null}
+            </View>
+            <Pressable
+              onPress={importAudioLink}
+              disabled={
+                status !== "online" ||
+                busyAction != null ||
+                !audioLinkInput.trim()
+              }
+              className="h-10 items-center justify-center rounded-xl bg-primary active:opacity-80 disabled:opacity-50"
+            >
+              {busyAction === "import-audio-link" ? (
+                <ActivityIndicator size="small" />
+              ) : (
+                <Text className="text-sm font-bold text-primary-foreground">
+                  Import audio
+                </Text>
+              )}
+            </Pressable>
+            {directImportMessage ? (
+              <Text className="text-xs leading-5 text-muted-foreground">
+                {directImportMessage}
+              </Text>
+            ) : null}
+          </View>
 
           <View className="flex-row gap-2">
             <Pressable

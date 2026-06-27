@@ -36,11 +36,14 @@ import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
 import { AnimatedMarquee } from "@/components/ui/animated-marquee";
 import { Icon, type IconKeys } from "@/components/ui/icon";
+import { ScrollToTopButton } from "@/components/ui/scroll-to-top-button";
+import { Toast } from "@/components/ui/toast";
 import { useColors } from "@/hooks/use-color";
 import { usePlayHistorySync } from "@/hooks/use-play-history-sync";
+import { useScrollChrome } from "@/hooks/use-scroll-chrome";
 import { useTranscriptionQueue } from "@/hooks/use-transcription-queue";
 import { getAudioDisplayTitle } from "@/lib/audio-title";
-import { getWebUrl } from "@/lib/base-url";
+import { getBlogShareUrl } from "@/lib/share-links";
 import { getTelegramFileUrl } from "@/lib/get-telegram-file";
 import { getMediaFileUrl } from "@/lib/media-source";
 import {
@@ -1048,14 +1051,16 @@ function PlayerSection({
 						<Icon name="Forward5" size={32} color={fgColor} />
 					</Pressable>
 				</View>
-				<Pressable
-					className="p-2 active:opacity-50"
-					onPress={onPlusPress}
-					disabled={!onPlusPress}
-					style={{ opacity: onPlusPress ? 1 : 0.45 }}
-				>
-					<Icon name="Plus" size={22} color={mutedFgColor} />
-				</Pressable>
+				{onPlusPress ? (
+					<Pressable
+						className="p-2 active:opacity-50"
+						onPress={onPlusPress}
+					>
+						<Icon name="Plus" size={22} color={mutedFgColor} />
+					</Pressable>
+				) : (
+					<View style={{ width: 38 }} />
+				)}
 			</View>
 		</View>
 	);
@@ -1145,14 +1150,16 @@ function FloatingPlayerWidget({
 					>
 						<Icon name="Forward5" size={24} color={colors.mutedForeground} />
 					</Pressable>
-					<Pressable
-						className="p-2 active:opacity-50"
-						onPress={onPlusPress}
-						disabled={!onPlusPress}
-						style={{ opacity: onPlusPress ? 1 : 0.45 }}
-					>
-						<Icon name="Plus" size={22} color={colors.foreground} />
-					</Pressable>
+					{onPlusPress ? (
+						<Pressable
+							className="p-2 active:opacity-50"
+							onPress={onPlusPress}
+						>
+							<Icon name="Plus" size={22} color={colors.foreground} />
+						</Pressable>
+					) : (
+						<View style={{ width: 38 }} />
+					)}
 				</View>
 			</View>
 		</View>
@@ -1466,7 +1473,6 @@ function AddToAlbumPicker({
 	visible,
 	mediaId,
 	onClose,
-	onAdded,
 	onNewAlbum,
 	isAdding,
 	addingAlbumId,
@@ -1475,7 +1481,6 @@ function AddToAlbumPicker({
 	visible: boolean;
 	mediaId?: number | null;
 	onClose: () => void;
-	onAdded: (albumName: string) => void;
 	onNewAlbum: () => void;
 	isAdding: boolean;
 	addingAlbumId: number | null;
@@ -1701,6 +1706,7 @@ export default function AudioBlogScreen() {
 	const qc = useQueryClient();
 	const colors = useColors();
 	const { height: windowHeight } = useWindowDimensions();
+	const mainScroll = useScrollChrome<FlatList<any>>();
 	const {
 		blogId,
 		openComments: openCommentsParam,
@@ -1721,7 +1727,6 @@ export default function AudioBlogScreen() {
 	const [albumPickerVisible, setAlbumPickerVisible] = useState(false);
 	const [playlistPickerVisible, setPlaylistPickerVisible] = useState(false);
 	const [addingAlbumId, setAddingAlbumId] = useState<number | null>(null);
-	const [addedToAlbumName, setAddedToAlbumName] = useState<string | null>(null);
 	const [controlsLayout, setControlsLayout] = useState({ y: 0, height: 0 });
 	const [showFloatingControls, setShowFloatingControls] = useState(false);
 	const [transcriptModalVisible, setTranscriptModalVisible] = useState(false);
@@ -1808,6 +1813,7 @@ export default function AudioBlogScreen() {
 		transcriptionJobs: mediaTranscriptionJobs,
 		duration: duration ?? (media as any)?.duration ?? null,
 	});
+	const isCurrentAudioAlreadyTranscribed = transcriptBadge.isFullyTranscribed;
 	const transcriptBadgeColor =
 		transcriptBadge.tone === "success"
 			? colors.success
@@ -2045,6 +2051,10 @@ export default function AudioBlogScreen() {
 				qc.invalidateQueries({ queryKey: _trpc.blog.getBlog.queryKey({ id }) });
 				setAlbumPickerVisible(false);
 				setAddingAlbumId(null);
+				Toast.show("Added to album", {
+					type: "success",
+					position: "bottom",
+				});
 			},
 			onError: (e) => {
 				setAddingAlbumId(null);
@@ -2108,12 +2118,11 @@ export default function AudioBlogScreen() {
 	function handlePickAlbum(albumId: number, albumName: string) {
 		if (!mediaId) return;
 		setAddingAlbumId(albumId);
-		setAddedToAlbumName(albumName);
 		addToAlbum({ albumId, mediaIds: [mediaId] });
 	}
 
 	async function shareAudioPost() {
-		const webUrl = `${getWebUrl()}/blog/${encodeURIComponent(String(id))}`;
+		const webUrl = getBlogShareUrl(id);
 		await Share.share({
 			message: `Check out this post: ${webUrl}`,
 			url: webUrl,
@@ -2168,6 +2177,27 @@ export default function AudioBlogScreen() {
 					: "This audio could not be added to the transcription queue.",
 			);
 		}
+	}
+
+	function handleQueueCurrentTranscriptionPress() {
+		if (!isCurrentAudioAlreadyTranscribed) {
+			void queueCurrentTranscription();
+			return;
+		}
+
+		Alert.alert(
+			"Already transcribed",
+			"This audio already has a transcript. Do you want to retranscribe it?",
+			[
+				{ text: "No", style: "cancel" },
+				{
+					text: "Retranscribe",
+					onPress: () => {
+						void queueCurrentTranscription();
+					},
+				},
+			],
+		);
 	}
 
 	function resetCurrentTranscription() {
@@ -2285,18 +2315,20 @@ export default function AudioBlogScreen() {
 					</KeyboardAvoidingView>
 				) : (
 					<FlatList
+						ref={mainScroll.ref}
 						data={[]}
 						renderItem={() => null}
 						keyExtractor={(_, index) => String(index)}
 						showsVerticalScrollIndicator={false}
-						scrollEventThrottle={16}
+						scrollEventThrottle={mainScroll.scrollEventThrottle}
 						contentContainerStyle={{
 							paddingBottom: 120,
 							backgroundColor: colors.background,
 						}}
-						onScroll={(event) =>
-							updateFloatingControls(event.nativeEvent.contentOffset.y)
-						}
+						onScroll={(event) => {
+							mainScroll.onScroll(event);
+							updateFloatingControls(event.nativeEvent.contentOffset.y);
+						}}
 						ListHeaderComponent={
 							<>
 								<LinearGradient
@@ -2522,12 +2554,25 @@ export default function AudioBlogScreen() {
 													{channelName}
 												</Text>
 											</View>
-											<Pressable
-												className="p-2 active:opacity-50"
-												onPress={() => setAlbumPickerVisible(true)}
-											>
-												<Icon name="Plus" size={28} color="#fff" />
-											</Pressable>
+											{media?.album ? (
+												<Pressable
+													className="p-2 active:opacity-50"
+													onPress={() =>
+														router.push(`/albums/${media.albumId}` as any)
+													}
+													accessibilityLabel="Open album"
+												>
+													<Icon name="Disc3" size={26} color="#fff" />
+												</Pressable>
+											) : (
+												<Pressable
+													className="p-2 active:opacity-50"
+													onPress={() => setAlbumPickerVisible(true)}
+													accessibilityLabel="Add to album"
+												>
+													<Icon name="Plus" size={28} color="#fff" />
+												</Pressable>
+											)}
 										</View>
 
 										{/* Player controls */}
@@ -2540,7 +2585,11 @@ export default function AudioBlogScreen() {
 										>
 											<PlayerSection
 												theme="dark"
-												onPlusPress={() => setAlbumPickerVisible(true)}
+												onPlusPress={
+													media?.album
+														? undefined
+														: () => setAlbumPickerVisible(true)
+												}
 												onReadPress={openTranscriptModal}
 											/>
 											{audioError ? (
@@ -2603,37 +2652,6 @@ export default function AudioBlogScreen() {
 									</Pressable>
 								)}
 
-								{/* "Added to album" confirmation */}
-								{addedToAlbumName && !isAdding && (
-									<View
-										style={{
-											marginHorizontal: 24,
-											marginTop: 8,
-											paddingHorizontal: 14,
-											paddingVertical: 8,
-											backgroundColor: colors.success + "22",
-											borderRadius: 8,
-											flexDirection: "row",
-											alignItems: "center",
-											gap: 8,
-										}}
-									>
-										<Icon
-											name="CheckCircle2"
-											size={16}
-											className="text-success"
-										/>
-										<Text
-											style={{ fontSize: 13, color: colors.success, flex: 1 }}
-										>
-											Added to {addedToAlbumName}
-										</Text>
-										<Pressable onPress={() => setAddedToAlbumName(null)}>
-											<Icon name="X" size={14} className="text-success" />
-										</Pressable>
-									</View>
-								)}
-
 								{/* Tabs */}
 								<View className="mx-6 mt-4">
 									<View className="flex-row rounded-xl bg-muted p-1">
@@ -2681,9 +2699,19 @@ export default function AudioBlogScreen() {
 			</SafeArea>
 
 			{!showComments && (
+				<ScrollToTopButton
+					visible={mainScroll.showScrollTop}
+					onPress={mainScroll.scrollToTop}
+					bottom={showFloatingControls ? 108 : 24}
+				/>
+			)}
+
+			{!showComments && (
 				<FloatingPlayerWidget
 					visible={showFloatingControls}
-					onPlusPress={() => setAlbumPickerVisible(true)}
+					onPlusPress={
+						media?.album ? undefined : () => setAlbumPickerVisible(true)
+					}
 				/>
 			)}
 
@@ -2697,9 +2725,7 @@ export default function AudioBlogScreen() {
 				onShare={() => {
 					void shareAudioPost();
 				}}
-				onTranscribe={() => {
-					void queueCurrentTranscription();
-				}}
+				onTranscribe={handleQueueCurrentTranscriptionPress}
 				onResetTranscription={resetCurrentTranscription}
 				onAddToAlbum={() => setAlbumPickerVisible(true)}
 				onAddToPlaylist={() => {
@@ -2846,7 +2872,6 @@ export default function AudioBlogScreen() {
 				visible={albumPickerVisible}
 				mediaId={mediaId}
 				onClose={() => setAlbumPickerVisible(false)}
-				onAdded={(name) => setAddedToAlbumName(name)}
 				onNewAlbum={() => router.push("/albums" as any)}
 				isAdding={isAdding}
 				addingAlbumId={addingAlbumId}

@@ -40,6 +40,9 @@ Tracks important request/response expectations and typed boundaries between clie
 ### Audio Organization Contracts
 - `album.addMediaToAlbum` accepts `{ albumId, mediaIds }`, requires audio media, rejects missing media, rejects mixed-channel candidate sets, and rejects cross-channel additions when the album already has a channel. Empty albums infer `channelId` from the first added audio blog.
 - `album.getSuggestedMedia` returns same-channel audio candidates with matching tag metadata and excludes media already in the album.
+- `album.getAlbumSuggestionGroups` accepts a keyword and optional channel context, returns matching albums with channel metadata and channel-compatible audio suggestions.
+- `blog.search` includes media album membership where present so clients can render album badges/actions.
+- `blog.suggestSearchKeywords` returns lightweight live keyword suggestions from recent searches, tags, and matching post text.
 - `playlist` router exposes `getPlaylists`, `getPlaylist`, `createPlaylist`, `addMediaToPlaylist`, `removeMediaFromPlaylist`, and `reorderEpisodes`.
 - `playlist.addMediaToPlaylist` accepts audio media only, skips duplicates, and returns `{ added, skipped }`.
 

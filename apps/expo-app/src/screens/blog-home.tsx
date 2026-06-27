@@ -33,11 +33,13 @@ import { useInfiniteLoader } from "@/components/infinite-loader";
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ScrollToTopButton } from "@/components/ui/scroll-to-top-button";
 import { Toast } from "@/components/ui/toast";
 import { invalidateQueries } from "@/lib/trpc";
 import { updateBlogPostByMediaIdInCache } from "@/lib/blog-post-cache";
 import { useTranslation } from "@/lib/i18n";
 import { useColors } from "@/hooks/use-color";
+import { useScrollChrome } from "@/hooks/use-scroll-chrome";
 import { useGlobalAudioBarStore } from "@/store/global-audio-bar-store";
 
 if (
@@ -118,6 +120,7 @@ export default function BlogHomeScreen() {
 	const params = useLocalSearchParams<{ category?: string }>();
 	const { t } = useTranslation();
 	const colors = useColors();
+	const feedScroll = useScrollChrome<any>();
 	const setGlobalAudioBarScrollHidden = useGlobalAudioBarStore(
 		(s) => s.setScrollHidden,
 	);
@@ -204,10 +207,41 @@ export default function BlogHomeScreen() {
 			},
 		}),
 	);
-	const visiblePosts = useMemo(
+	const rawVisiblePosts = useMemo(
 		() => posts.filter((post) => !hiddenPostIds.has(post.id)),
 		[posts, hiddenPostIds],
 	);
+	const visiblePosts = useMemo(() => {
+		const grouped = new Map<string, BlogItem>();
+		const output: BlogItem[] = [];
+
+		for (const post of rawVisiblePosts) {
+			const albumId = post.audio?.albumId;
+			if (!albumId) {
+				output.push(post);
+				continue;
+			}
+
+			const key = `album:${albumId}`;
+			const existing = grouped.get(key);
+			const postTime = post.date ? new Date(post.date).getTime() : 0;
+			const existingTime = existing?.date ? new Date(existing.date).getTime() : 0;
+
+			if (!existing) {
+				grouped.set(key, post);
+				output.push(post);
+				continue;
+			}
+
+			if (postTime > existingTime) {
+				grouped.set(key, post);
+				const index = output.findIndex((item) => item.id === existing.id);
+				if (index >= 0) output[index] = post;
+			}
+		}
+
+		return output;
+	}, [rawVisiblePosts]);
 	const isFetchingMore = isFetching && !isRefetching && !isPullRefreshing;
 	const handleDeletePost = useCallback(
 		async (post: BlogItem) => {
@@ -325,6 +359,7 @@ export default function BlogHomeScreen() {
 
 	const handleScroll = useCallback(
 		(event: any) => {
+			feedScroll.onScroll(event);
 			const currentY = event.nativeEvent.contentOffset?.y ?? 0;
 			const deltaY = currentY - lastScrollYRef.current;
 			lastScrollYRef.current = currentY;
@@ -365,7 +400,7 @@ export default function BlogHomeScreen() {
 				setGlobalAudioBarScrollHidden(false);
 			}
 		},
-		[setGlobalAudioBarScrollHidden],
+		[feedScroll, setGlobalAudioBarScrollHidden],
 	);
 
 	useEffect(() => {
@@ -404,6 +439,7 @@ export default function BlogHomeScreen() {
 				<BlogHomeHeader />
 				<View className="flex-1 relative">
 					<LegendList
+						ref={feedScroll.ref}
 						style={{ backgroundColor: colors.background }}
 						data={visiblePosts}
 						renderItem={({ item }) => (
@@ -460,6 +496,11 @@ export default function BlogHomeScreen() {
 							}
 						}}
 						onEndReachedThreshold={0.4}
+					/>
+					<ScrollToTopButton
+						visible={feedScroll.showScrollTop}
+						onPress={feedScroll.scrollToTop}
+						bottom={88}
 					/>
 					<BlogHomeFab />
 				</View>

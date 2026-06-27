@@ -9,6 +9,13 @@ const suggestedMediaInput = z.object({
 	keyword: z.string().trim().optional(),
 });
 
+const albumSuggestionGroupsInput = z.object({
+	keyword: z.string().trim().min(1),
+	channelId: z.number().optional(),
+	albumLimit: z.number().int().min(1).max(50).optional().default(12),
+	mediaLimit: z.number().int().min(1).max(100).optional().default(25),
+});
+
 function uniqueNumbers(values: number[]) {
 	return Array.from(new Set(values.filter((value) => Number.isFinite(value))));
 }
@@ -328,6 +335,144 @@ export const albumRoutes = createTRPCRouter({
 					return bTime - aTime;
 				})
 				.slice(0, input.limit);
+		}),
+
+	getAlbumSuggestionGroups: publicProcedure
+		.input(albumSuggestionGroupsInput)
+		.query(async ({ ctx, input }) => {
+			const keyword = input.keyword.trim();
+			const terms = parseKeywordTerms(keyword).slice(0, 40);
+			if (terms.length === 0) return [];
+
+			const albums = await ctx.db.album.findMany({
+				where: {
+					deletedAt: null,
+					...(input.channelId ? { channelId: input.channelId } : {}),
+					OR: terms.flatMap((term) => [
+						{ name: { contains: term, mode: "insensitive" as const } },
+						{
+							suggestionKeywords: {
+								contains: term,
+								mode: "insensitive" as const,
+							},
+						},
+					]),
+				},
+				orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+				take: input.albumLimit,
+				include: {
+					channel: { select: { id: true, title: true, username: true } },
+					_count: { select: { medias: true } },
+					medias: {
+						select: {
+							id: true,
+							blog: { select: { channelId: true } },
+						},
+					},
+				},
+			});
+
+			const groups = await Promise.all(
+				albums.map(async (album) => {
+					const albumMediaIds = album.medias.map((media) => media.id);
+					const channelId =
+						album.channelId ??
+						album.medias.find((media) => media.blog?.channelId)?.blog
+							?.channelId;
+					if (!channelId) {
+						return { album, suggestions: [] };
+					}
+
+					const candidates = await ctx.db.media.findMany({
+						where: {
+							id: { notIn: albumMediaIds },
+							mimeType: { startsWith: "audio/" },
+							blog: {
+								is: {
+									deletedAt: null,
+									type: "audio",
+									channelId,
+								},
+							},
+							OR: terms.flatMap((term) => [
+								{ title: { contains: term, mode: "insensitive" as const } },
+								{
+									file: {
+										is: {
+											fileName: {
+												contains: term,
+												mode: "insensitive" as const,
+											},
+										},
+									},
+								},
+								{
+									blog: {
+										is: {
+											content: {
+												contains: term,
+												mode: "insensitive" as const,
+											},
+										},
+									},
+								},
+							]),
+						},
+						include: {
+							file: true,
+							blog: {
+								select: {
+									id: true,
+									content: true,
+									type: true,
+									blogDate: true,
+									channelId: true,
+									channel: {
+										select: { id: true, title: true, username: true },
+									},
+								},
+							},
+						},
+						take: Math.max(input.mediaLimit * 3, input.mediaLimit),
+						orderBy: { createdAt: "desc" },
+					});
+
+					const suggestions = candidates
+						.map((media) => {
+							const matchScore =
+								scoreTextAgainstTerms(media.title, terms) * 3 +
+								scoreTextAgainstTerms(media.file?.fileName, terms) * 2 +
+								scoreTextAgainstTerms(media.blog?.content, terms);
+							return {
+								id: media.id,
+								title: media.title,
+								mimeType: media.mimeType,
+								file: media.file,
+								blog: media.blog,
+								matchingTerms: terms.filter((term) =>
+									getMediaSearchText(media).toLowerCase().includes(term),
+								),
+								matchScore,
+							};
+						})
+						.filter((media) => media.matchScore > 0)
+						.sort((a, b) => {
+							if (b.matchScore !== a.matchScore) {
+								return b.matchScore - a.matchScore;
+							}
+							const aTime = a.blog?.blogDate?.getTime() ?? 0;
+							const bTime = b.blog?.blogDate?.getTime() ?? 0;
+							return bTime - aTime;
+						})
+						.slice(0, input.mediaLimit);
+
+					return { album, suggestions };
+				}),
+			);
+
+			return groups.filter(
+				(group) => group.suggestions.length > 0 || group.album._count.medias > 0,
+			);
 		}),
 
 	addMediaToAlbum: publicProcedure

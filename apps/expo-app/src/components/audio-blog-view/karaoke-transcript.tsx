@@ -27,7 +27,9 @@ export function KaraokeTranscript({
 	const livePositionSec = useAudioStore((s) => s.position) / 1000;
 	const positionSec = positionSecOverride ?? livePositionSec;
 	const seek = useAudioStore((s) => s.seek);
+	const play = useAudioStore((s) => s.play);
 	const flatListRef = useRef<FlatList>(null);
+	const lastTapRef = useRef<{ key: string; at: number } | null>(null);
 
 	const activeIdx = segments.findIndex(
 		(s) => positionSec >= s.startSec && positionSec < s.endSec,
@@ -87,7 +89,17 @@ export function KaraokeTranscript({
 					<Pressable
 						onPress={() => {
 							Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-							seek(seg.startSec * 1000);
+							const key = getTranscriptSegmentKey(seg, index);
+							const now = Date.now();
+							const lastTap = lastTapRef.current;
+							lastTapRef.current = { key, at: now };
+							const shouldPlay =
+								lastTap?.key === key && now - lastTap.at < 320;
+							seek(seg.startSec * 1000)
+								.then(() => {
+									if (shouldPlay) return play();
+								})
+								.catch(() => undefined);
 						}}
 						onLongPress={() => onSegmentLongPress?.(seg)}
 					>

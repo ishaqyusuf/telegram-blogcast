@@ -12,6 +12,8 @@ import {
   clearChannelRecordsSchema,
   startFetch,
   startFetchSchema,
+  importTelegramAudioLink,
+  importTelegramAudioLinkSchema,
   stopFetch,
   getFetcherState,
 } from "../../queries/channel";
@@ -77,6 +79,12 @@ export const channelRoutes = createTRPCRouter({
     .input(startFetchSchema)
     .mutation(async (props) => {
       return startFetch(props.ctx, props.input);
+    }),
+
+  importTelegramAudioLink: publicProcedure
+    .input(importTelegramAudioLinkSchema)
+    .mutation(async (props) => {
+      return importTelegramAudioLink(props.ctx, props.input);
     }),
 
   stopFetch: publicProcedure.mutation(async () => {

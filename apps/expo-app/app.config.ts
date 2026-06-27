@@ -79,6 +79,7 @@ const config: ExpoConfig = {
 	ios: {
 		supportsTablet: true,
 		bundleIdentifier: variantConfig.iosBundleIdentifier,
+		associatedDomains: ["applinks:alghurobaa.com"],
 		icon: {
 			dark: variantConfig.icons.iosDark,
 			light: variantConfig.icons.iosLight,
@@ -101,6 +102,25 @@ const config: ExpoConfig = {
 			"android.permission.POST_NOTIFICATIONS",
 		],
 		package: variantConfig.androidPackage,
+		intentFilters: [
+			{
+				action: "VIEW",
+				autoVerify: true,
+				data: [
+					{
+						scheme: "https",
+						host: "alghurobaa.com",
+						pathPrefix: "/blog",
+					},
+					{
+						scheme: "https",
+						host: "alghurobaa.com",
+						pathPrefix: "/albums",
+					},
+				],
+				category: ["BROWSABLE", "DEFAULT"],
+			},
+		],
 	},
 
 	web: {

@@ -57,6 +57,10 @@ export function getTranscriptionBadgeState(
 				: "primary";
 
 	return {
+		isFullyTranscribed,
+		isPartlyTranscribed,
+		isQueued,
+		isRunning,
 		show,
 		tone,
 		label: isFullyTranscribed

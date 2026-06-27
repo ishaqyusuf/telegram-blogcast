@@ -10,15 +10,19 @@
 // 🧩 Serialized via mutex — prevents concurrent getUpdates conflict error
 
 import { consoleLog } from "@acme/utils";
-import { Api, TelegramClient } from "telegram";
-import { extractResolvedMedia, ResolvedMedia } from "./media-resolver";
+import { Api, type TelegramClient } from "telegram";
+import { extractResolvedMedia } from "./media-resolver";
+import type { ResolvedMedia } from "./media-resolver";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
 const BOT_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 const RESOLVE_TIMEOUT_MS = 15_000;
+const BOT_API_TIMEOUT_MS = 3_000;
+const BOT_API_COOLDOWN_MS = 60_000;
 const POLL_INTERVAL_MS = 800;
+let botApiUnavailableUntil = 0;
 
 // ── Bot API helper ────────────────────────────────────────────────────────────
 
@@ -26,15 +30,42 @@ async function botApi<T = any>(
   method: string,
   params: Record<string, unknown> = {},
 ): Promise<T> {
-  const res = await fetch(`${BOT_API}/${method}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(params),
-  });
-  const data = await res.json();
-  if (!data.ok)
-    throw new Error(`Bot API ${method} failed: ${data.description}`);
-  return data.result as T;
+  const cooldownMs = botApiUnavailableUntil - Date.now();
+  if (cooldownMs > 0) {
+    throw new Error(
+      `Bot API temporarily unavailable; skipping ${method} for ${Math.ceil(
+        cooldownMs / 1000,
+      )}s`,
+    );
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), BOT_API_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(`${BOT_API}/${method}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(params),
+      signal: controller.signal,
+    });
+    const data = (await res.json()) as {
+      ok: boolean;
+      description?: string;
+      result: T;
+    };
+    if (!data.ok) {
+      throw new Error(`Bot API ${method} failed: ${data.description}`);
+    }
+    return data.result;
+  } catch (err) {
+    if (isBotApiNetworkError(err)) {
+      botApiUnavailableUntil = Date.now() + BOT_API_COOLDOWN_MS;
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 // ── Webhook helpers ───────────────────────────────────────────────────────────
@@ -114,10 +145,10 @@ async function _resolveFileId(
   fromChatId: string | number,
   messageId: number,
 ): Promise<ResolvedMedia | null> {
-  // Step 1 – drop webhook so getUpdates doesn't conflict
-  await dropWebhook();
-
   try {
+    // Step 1 – drop webhook so getUpdates doesn't conflict
+    await dropWebhook();
+
     // Step 2 – get bot's own id (forward target = bot's Saved Messages)
     // const me = await botApi<{ id: number }>("getMe");
     // const me = await botApi<{ id: number; username: string }>("getMe");
@@ -138,7 +169,7 @@ async function _resolveFileId(
       new Api.messages.ForwardMessages({
         fromPeer: fromChatId,
         id: [messageId],
-        toPeer: botChatId,
+        toPeer: botEntity,
         randomId: [
           BigInt(Math.floor(Math.random() * Number.MAX_SAFE_INTEGER)) as any,
         ],
@@ -215,4 +246,19 @@ async function _resolveFileId(
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isBotApiNetworkError(err: unknown): boolean {
+  if (err instanceof DOMException && err.name === "AbortError") return true;
+  if (!(err instanceof Error)) return false;
+
+  const code = (err as Error & { code?: string; cause?: { code?: string } })
+    .code;
+  const causeCode = (err as Error & { cause?: { code?: string } }).cause?.code;
+
+  return (
+    code === "UND_ERR_CONNECT_TIMEOUT" ||
+    causeCode === "UND_ERR_CONNECT_TIMEOUT" ||
+    err.name === "AbortError"
+  );
 }
