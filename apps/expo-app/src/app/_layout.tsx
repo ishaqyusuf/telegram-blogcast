@@ -22,6 +22,7 @@ import { Linking, Platform, View } from "react-native";
 import { StaticRouter } from "@/components/static-router";
 import { GlobalAudioBar } from "@/components/global-audio-bar";
 import { ChannelUpdatePrompt } from "@/components/channel-updates/channel-update-prompt";
+import { AppAutoUpdateModal } from "@/components/app-auto-update-modal";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { useColorScheme, useColors } from "@/hooks/use-color";
 import { initSentry, Sentry } from "@/lib/sentry";
@@ -150,6 +151,7 @@ const InitialLayout = () => {
         <AudioNotificationRouter />
         <ChannelUpdatePrompt />
         <TranscriptionQueueObserver />
+        <AppAutoUpdateModal />
         <AppStatusBar />
         {/* <StatusBar style="auto" /> */}
 

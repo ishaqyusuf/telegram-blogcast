@@ -230,6 +230,7 @@ export const albumRoutes = createTRPCRouter({
 			const candidates = await ctx.db.media.findMany({
 				where: {
 					id: { notIn: albumMediaIds },
+					albumId: null,
 					mimeType: { startsWith: "audio/" },
 					AND: [
 						{
@@ -386,6 +387,7 @@ export const albumRoutes = createTRPCRouter({
 					const candidates = await ctx.db.media.findMany({
 						where: {
 							id: { notIn: albumMediaIds },
+							albumId: null,
 							mimeType: { startsWith: "audio/" },
 							blog: {
 								is: {
@@ -630,6 +632,59 @@ export const albumRoutes = createTRPCRouter({
 			}
 
 			return { removed: true };
+		}),
+
+	removeMediaFromAlbumBulk: publicProcedure
+		.input(
+			z.object({
+				albumId: z.number(),
+				mediaIds: z.array(z.number()).min(1),
+			}),
+		)
+		.mutation(async ({ ctx, input }) => {
+			const db = ctx.db as any;
+			const mediaIds = uniqueNumbers(input.mediaIds);
+			const mediaItems = await db.media.findMany({
+				where: { id: { in: mediaIds }, albumId: input.albumId },
+				select: { id: true, mediaIndexId: true },
+			});
+			const foundIds = new Set(mediaItems.map((media: any) => media.id));
+			const missingIds = mediaIds.filter((mediaId) => !foundIds.has(mediaId));
+			if (missingIds.length > 0) {
+				throw new TRPCError({
+					code: "NOT_FOUND",
+					message: `Media not found in this album: ${missingIds.join(", ")}`,
+				});
+			}
+
+			const mediaIndexIds = uniqueNumbers(
+				mediaItems
+					.map((media: any) => media.mediaIndexId)
+					.filter(
+						(mediaIndexId: unknown): mediaIndexId is number =>
+							typeof mediaIndexId === "number",
+					),
+			);
+
+			await db.$transaction([
+				db.media.updateMany({
+					where: { id: { in: mediaIds }, albumId: input.albumId },
+					data: { albumId: null },
+				}),
+				...(mediaIndexIds.length > 0
+					? [
+							db.albumAudioIndex.updateMany({
+								where: {
+									albumId: input.albumId,
+									blogAudioId: { in: mediaIndexIds },
+								},
+								data: { albumId: null },
+							}),
+						]
+					: []),
+			]);
+
+			return { removed: mediaIds.length };
 		}),
 
 	attachBook: publicProcedure

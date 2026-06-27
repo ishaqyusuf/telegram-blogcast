@@ -1,6 +1,6 @@
 import type { ExpoConfig } from "expo/config";
 
-export const UPDATE_VERSION = "2026.06.25";
+export const UPDATE_VERSION = "2026.06.27.01";
 
 const appVariant =
 	process.env.APP_VARIANT ??
@@ -170,6 +170,7 @@ const config: ExpoConfig = {
 	owner: "ishaqyusuf",
 	updates: {
 		url: "https://u.expo.dev/9d8a8cd8-d310-4724-8a61-db39e6b56c9a", //ishaqyusuf
+		checkAutomatically: "NEVER",
 	},
 	runtimeVersion: {
 		policy: "appVersion",

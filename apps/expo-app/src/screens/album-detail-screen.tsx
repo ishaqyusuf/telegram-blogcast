@@ -469,14 +469,20 @@ function TrackRow({
 	media,
 	displayIndex,
 	onPress,
+	onLongPress,
 	onActions,
 	isRemoving,
+	isSelected,
+	selectionMode,
 }: {
 	media: any;
 	displayIndex: number;
 	onPress: () => void;
+	onLongPress: () => void;
 	onActions: () => void;
 	isRemoving?: boolean;
+	isSelected?: boolean;
+	selectionMode?: boolean;
 }) {
 	const colors = useColors();
 	const duration = media.file?.duration ?? media.duration;
@@ -497,26 +503,52 @@ function TrackRow({
 	return (
 		<Pressable
 			onPress={onPress}
+			onLongPress={onLongPress}
+			delayLongPress={260}
 			style={{
 				flexDirection: "row",
 				alignItems: "center",
 				gap: 12,
 				paddingVertical: 12,
+				paddingHorizontal: selectionMode ? 10 : 0,
+				borderRadius: selectionMode ? 14 : 0,
 				borderBottomWidth: 1,
 				borderBottomColor: colors.border,
+				backgroundColor: isSelected
+					? withAlpha(colors.primary, 0.1)
+					: "transparent",
 			}}
 		>
-			<Text
-				style={{
-					fontSize: 13,
-					fontWeight: "700",
-					color: colors.mutedForeground,
-					width: 24,
-					textAlign: "center",
-				}}
-			>
-				{displayIndex}
-			</Text>
+			{selectionMode ? (
+				<View
+					style={{
+						width: 24,
+						height: 24,
+						borderRadius: 12,
+						borderWidth: 2,
+						borderColor: isSelected ? colors.primary : colors.mutedForeground,
+						backgroundColor: isSelected ? colors.primary : "transparent",
+						alignItems: "center",
+						justifyContent: "center",
+					}}
+				>
+					{isSelected ? (
+						<Icon name="Check" size={13} className="text-primary-foreground" />
+					) : null}
+				</View>
+			) : (
+				<Text
+					style={{
+						fontSize: 13,
+						fontWeight: "700",
+						color: colors.mutedForeground,
+						width: 24,
+						textAlign: "center",
+					}}
+				>
+					{displayIndex}
+				</Text>
+			)}
 			<View style={{ flex: 1, gap: 2 }}>
 				<View
 					style={{
@@ -567,13 +599,13 @@ function TrackRow({
 				)}
 			</View>
 			<Pressable
-				disabled={isRemoving}
+				disabled={isRemoving || selectionMode}
 				onPress={(event) => {
 					event.stopPropagation();
 					onActions();
 				}}
 				hitSlop={8}
-				style={{ padding: 6, opacity: isRemoving ? 0.45 : 1 }}
+				style={{ padding: 6, opacity: isRemoving || selectionMode ? 0.45 : 1 }}
 			>
 				<Icon
 					name="MoreHorizontal"
@@ -1320,6 +1352,9 @@ export default function AlbumDetailScreen() {
 		any | null
 	>(null);
 	const [trackMoveTarget, setTrackMoveTarget] = useState<any | null>(null);
+	const [selectedTrackIds, setSelectedTrackIds] = useState<Set<number>>(
+		new Set(),
+	);
 	const [selectedSuggestionIds, setSelectedSuggestionIds] = useState<
 		Set<number>
 	>(new Set());
@@ -1341,6 +1376,7 @@ export default function AlbumDetailScreen() {
 	);
 	const bgColor = albumColor(id);
 	const selectedSuggestionCount = selectedSuggestionIds.size;
+	const selectedTrackCount = selectedTrackIds.size;
 	const normalizedSuggestionKeyword = suggestionKeyword.trim();
 	const libraryBooks = Array.isArray((booksData as any)?.data)
 		? ((booksData as any).data as any[])
@@ -1459,6 +1495,32 @@ export default function AlbumDetailScreen() {
 			}),
 		);
 
+	const { mutate: removeSelectedMediaFromAlbum, isPending: isRemovingSelectedMedia } =
+		useMutation(
+			_trpc.album.removeMediaFromAlbumBulk.mutationOptions({
+				onSuccess: async (result) => {
+					await Promise.all([
+						qc.invalidateQueries({
+							queryKey: _trpc.album.getAlbum.queryKey({ id }),
+						}),
+						qc.invalidateQueries({
+							queryKey: _trpc.album.getAlbums.queryKey(),
+						}),
+					]);
+					Toast.show(`${result.removed} track${result.removed === 1 ? "" : "s"} removed`, {
+						type: "success",
+						position: "bottom",
+					});
+					setSelectedTrackIds(new Set());
+					setLocalTracks(null);
+				},
+				onError: (e) => {
+					Alert.alert("Error", e.message);
+					setLocalTracks(null);
+				},
+			}),
+		);
+
 	const { mutate: moveMediaToAlbum, isPending: isMovingMedia } = useMutation(
 		_trpc.album.addMediaToAlbum.mutationOptions({
 			onSuccess: async (_result, variables) => {
@@ -1472,6 +1534,7 @@ export default function AlbumDetailScreen() {
 					qc.invalidateQueries({ queryKey: _trpc.album.getAlbums.queryKey() }),
 				]);
 				setSelectedTrackForActions(null);
+				setSelectedTrackIds(new Set());
 				setLocalTracks(null);
 			},
 			onError: (e) => {
@@ -1520,7 +1583,7 @@ export default function AlbumDetailScreen() {
 	);
 
 	useEffect(() => {
-		if (selectedSuggestionCount > 0) {
+		if (selectedSuggestionCount > 0 || selectedTrackCount > 0) {
 			if (previousGlobalAudioHiddenRef.current == null) {
 				previousGlobalAudioHiddenRef.current =
 					useGlobalAudioBarStore.getState().hidden;
@@ -1533,7 +1596,13 @@ export default function AlbumDetailScreen() {
 			setGlobalAudioBarHidden(previousGlobalAudioHiddenRef.current);
 			previousGlobalAudioHiddenRef.current = null;
 		}
-	}, [selectedSuggestionCount, setGlobalAudioBarHidden]);
+	}, [selectedSuggestionCount, selectedTrackCount, setGlobalAudioBarHidden]);
+
+	useEffect(() => {
+		if (activeAlbumTab !== "tracks" && selectedTrackCount > 0) {
+			setSelectedTrackIds(new Set());
+		}
+	}, [activeAlbumTab, selectedTrackCount]);
 
 	useEffect(() => {
 		return () => {
@@ -1579,6 +1648,7 @@ export default function AlbumDetailScreen() {
 
 	// When entering reorder mode, snapshot current server tracks into local state
 	function enterReorderMode() {
+		setSelectedTrackIds(new Set());
 		setLocalTracks([...tracks]);
 		setReorderMode(true);
 	}
@@ -1594,6 +1664,37 @@ export default function AlbumDetailScreen() {
 			index: i + 1,
 		}));
 		saveOrder({ albumId: id, order });
+	}
+
+	function toggleTrackSelection(mediaId: number) {
+		setSelectedTrackIds((prev) => {
+			const next = new Set(prev);
+			if (next.has(mediaId)) next.delete(mediaId);
+			else next.add(mediaId);
+			return next;
+		});
+	}
+
+	function startTrackSelection(mediaId: number) {
+		setSelectedTrackForActions(null);
+		setSelectedTrackIds((prev) => {
+			const next = new Set(prev);
+			next.add(mediaId);
+			return next;
+		});
+	}
+
+	function clearTrackSelection() {
+		setSelectedTrackIds(new Set());
+	}
+
+	function removeSelectedTracksFromAlbum() {
+		const mediaIds = Array.from(selectedTrackIds);
+		if (mediaIds.length === 0) return;
+		setLocalTracks((prev) =>
+			(prev ?? tracks).filter((media) => !selectedTrackIds.has(media.id)),
+		);
+		removeSelectedMediaFromAlbum({ albumId: id, mediaIds });
 	}
 
 	const moveTrack = useCallback(
@@ -1754,18 +1855,33 @@ export default function AlbumDetailScreen() {
 	}
 
 	function moveTrackToAlbum(targetAlbumId: number) {
-		const mediaId = trackMoveTarget?.id ?? selectedTrackForActions?.id;
-		if (!mediaId) return;
+		const selectedMediaIds = Array.from(selectedTrackIds);
+		const mediaIds =
+			selectedMediaIds.length > 0
+				? selectedMediaIds
+				: [trackMoveTarget?.id ?? selectedTrackForActions?.id].filter(
+						(mediaId): mediaId is number => typeof mediaId === "number",
+					);
+		if (mediaIds.length === 0) return;
+		const movingIds = new Set(mediaIds);
 		setLocalTracks((prev) =>
-			(prev ?? tracks).filter((media) => media.id !== mediaId),
+			(prev ?? tracks).filter((media) => !movingIds.has(media.id)),
 		);
 		setTrackMoveTarget(null);
 		setSelectedTrackForActions(null);
-		moveMediaToAlbum({ albumId: targetAlbumId, mediaIds: [mediaId] });
+		moveMediaToAlbum({ albumId: targetAlbumId, mediaIds });
 	}
 
 	function openTrackMovePicker() {
 		setTrackMoveTarget(selectedTrackForActions);
+	}
+
+	function openSelectedTrackMovePicker() {
+		if (selectedTrackCount === 0) return;
+		setTrackMoveTarget({
+			title: `${selectedTrackCount} selected tracks`,
+			bulk: true,
+		});
 	}
 
 	function openSelectedTrackPost(openComments = false) {
@@ -2297,7 +2413,10 @@ export default function AlbumDetailScreen() {
 											key={tab}
 											onPress={() => {
 												setActiveAlbumTab(tab);
-												if (tab !== "tracks") setReorderMode(false);
+												if (tab !== "tracks") {
+													setReorderMode(false);
+													setSelectedTrackIds(new Set());
+												}
 											}}
 											style={{
 												flex: 1,
@@ -2351,7 +2470,36 @@ export default function AlbumDetailScreen() {
 											Tracks
 										</Text>
 
-										{tracks.length > 0 && !reorderMode && (
+										{selectedTrackCount > 0 && !reorderMode && (
+											<Pressable
+												onPress={clearTrackSelection}
+												style={{
+													flexDirection: "row",
+													alignItems: "center",
+													gap: 4,
+													paddingHorizontal: 10,
+													paddingVertical: 5,
+													backgroundColor: colors.muted,
+													borderRadius: 8,
+												}}
+											>
+												<Icon
+													name="X"
+													size={14}
+													className="text-muted-foreground"
+												/>
+												<Text
+													style={{
+														fontSize: 12,
+														color: colors.mutedForeground,
+													}}
+												>
+													Clear
+												</Text>
+											</Pressable>
+										)}
+
+										{tracks.length > 0 && !reorderMode && selectedTrackCount === 0 && (
 											<Pressable
 												onPress={enterReorderMode}
 												style={{
@@ -2456,9 +2604,20 @@ export default function AlbumDetailScreen() {
 										key={media.id}
 										media={media}
 										displayIndex={idx + 1}
-										isRemoving={isRemovingMedia || isMovingMedia}
+										isRemoving={
+											isRemovingMedia ||
+											isMovingMedia ||
+											isRemovingSelectedMedia
+										}
+										isSelected={selectedTrackIds.has(media.id)}
+										selectionMode={selectedTrackCount > 0}
 										onActions={() => setSelectedTrackForActions(media)}
+										onLongPress={() => startTrackSelection(media.id)}
 										onPress={() => {
+											if (selectedTrackCount > 0) {
+												toggleTrackSelection(media.id);
+												return;
+											}
 											if (media.blog?.id) {
 												router.push(`/blog-view-2/${media.blog.id}` as any);
 											}
@@ -2713,6 +2872,119 @@ export default function AlbumDetailScreen() {
 				visible={albumScroll.showScrollTop}
 				onPress={albumScroll.scrollToTop}
 			/>
+
+			{selectedTrackCount > 0 && (
+				<View
+					pointerEvents="box-none"
+					style={{
+						position: "absolute",
+						left: 0,
+						right: 0,
+						bottom: 24,
+						alignItems: "center",
+						zIndex: 85,
+						elevation: 85,
+					}}
+				>
+					<View
+						style={{
+							width: "92%",
+							maxWidth: 420,
+							flexDirection: "row",
+							alignItems: "center",
+							gap: 10,
+							borderRadius: 18,
+							borderWidth: 1,
+							borderColor: colors.border,
+							backgroundColor: colors.card,
+							padding: 8,
+							shadowColor: "#000",
+							shadowOffset: { width: 0, height: 10 },
+							shadowOpacity: 0.28,
+							shadowRadius: 16,
+							elevation: 16,
+						}}
+					>
+						<Text
+							style={{
+								paddingHorizontal: 8,
+								fontSize: 12,
+								fontWeight: "800",
+								color: colors.mutedForeground,
+							}}
+						>
+							{selectedTrackCount}
+						</Text>
+						<Pressable
+							onPress={openSelectedTrackMovePicker}
+							disabled={isMovingMedia || isRemovingSelectedMedia}
+							style={{
+								flex: 1,
+								height: 44,
+								borderRadius: 12,
+								flexDirection: "row",
+								alignItems: "center",
+								justifyContent: "center",
+								gap: 8,
+								backgroundColor: colors.primary,
+								opacity: isMovingMedia || isRemovingSelectedMedia ? 0.6 : 1,
+							}}
+						>
+							{isMovingMedia ? (
+								<ActivityIndicator
+									size="small"
+									color={colors.primaryForeground}
+								/>
+							) : (
+								<Icon
+									name="ListMusic"
+									size={16}
+									className="text-primary-foreground"
+								/>
+							)}
+							<Text
+								style={{
+									fontSize: 14,
+									fontWeight: "800",
+									color: colors.primaryForeground,
+								}}
+							>
+								Move
+							</Text>
+						</Pressable>
+						<Pressable
+							onPress={removeSelectedTracksFromAlbum}
+							disabled={isMovingMedia || isRemovingSelectedMedia}
+							style={{
+								flex: 1,
+								height: 44,
+								borderRadius: 12,
+								flexDirection: "row",
+								alignItems: "center",
+								justifyContent: "center",
+								gap: 8,
+								backgroundColor: withAlpha(colors.destructive, 0.12),
+								opacity: isMovingMedia || isRemovingSelectedMedia ? 0.6 : 1,
+							}}
+						>
+							{isRemovingSelectedMedia ? (
+								<ActivityIndicator size="small" color={colors.destructive} />
+							) : (
+								<Icon name="Trash2" size={16} color={colors.destructive} />
+							)}
+							<Text
+								style={{
+									fontSize: 14,
+									fontWeight: "800",
+									color: colors.destructive,
+								}}
+							>
+								Remove
+							</Text>
+						</Pressable>
+					</View>
+				</View>
+			)}
 
 			{selectedSuggestionCount > 0 && (
 				<View
