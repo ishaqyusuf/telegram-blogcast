@@ -77,6 +77,16 @@ Tracks larger implementation themes that may span multiple concrete tasks.
 - Intake File: brain/intake/2026-06-15-blog-audio-organization-import.md
 - Created Date: 2026-06-15
 
+### Facebook Import Settings Dashboard And Status Flow
+- Priority: High
+- Description: Track plan in `brain/plans/2026-07-02-feature-facebook-import-settings-dashboard.md`.
+- Related Feature: Channel/content ingestion
+- Status: Roadmap
+- Plan Status: Proposed
+- Plan File: brain/plans/2026-07-02-feature-facebook-import-settings-dashboard.md
+- Intake File: brain/intake/2026-07-02-facebook-import-settings.md
+- Created Date: 2026-07-02
+
 ### Theme Foundation And Dark Mode Audit
 - Priority: High
 - Description: Track plan in `brain/plans/2026-06-16-ux-ui-theme-foundation-dark-mode.md`.
@@ -155,3 +165,83 @@ Tracks larger implementation themes that may span multiple concrete tasks.
 - Plan Status: Proposed
 - Plan File: brain/plans/2026-06-23-bug-fix-android-media-notification-controls.md
 - Created Date: 2026-06-23
+
+### Stackable Floating Bottom Footer Registry
+- Priority: High
+- Description: Track plan in `brain/plans/2026-07-01-refactor-stackable-floating-bottom-footer.md`.
+- Related Feature: Expo shared UI
+- Status: Done
+- Plan Status: Implemented
+- Plan File: brain/plans/2026-07-01-refactor-stackable-floating-bottom-footer.md
+- Intake File: brain/intake/2026-07-01-album-search-audio-ai-followups.md
+- Created Date: 2026-07-01
+
+### Album Suggestion Selection Footer Actions
+- Priority: High
+- Description: Track plan in `brain/plans/2026-07-01-ux-ui-album-suggestion-selection-footer.md`.
+- Related Feature: Album suggestions
+- Status: Done
+- Plan Status: Implemented
+- Plan File: brain/plans/2026-07-01-ux-ui-album-suggestion-selection-footer.md
+- Intake File: brain/intake/2026-07-01-album-search-audio-ai-followups.md
+- Created Date: 2026-07-01
+
+### Album Author Management From Track Authors
+- Priority: Medium
+- Description: Track plan in `brain/plans/2026-07-01-feature-album-author-management.md`.
+- Related Feature: Album organization
+- Status: Done
+- Plan Status: Implemented
+- Plan File: brain/plans/2026-07-01-feature-album-author-management.md
+- Intake File: brain/intake/2026-07-01-album-search-audio-ai-followups.md
+- Created Date: 2026-07-01
+
+### Album Book Attachment Management
+- Priority: Medium
+- Description: Track plan in `brain/plans/2026-07-01-feature-album-book-attachments.md`.
+- Related Feature: Album/book references
+- Status: Done
+- Plan Status: Implemented
+- Plan File: brain/plans/2026-07-01-feature-album-book-attachments.md
+- Intake File: brain/intake/2026-07-01-album-search-audio-ai-followups.md
+- Created Date: 2026-07-01
+
+### Search Input Channel Picker And Removable Channel Badge
+- Priority: High
+- Description: Track plan in `brain/plans/2026-07-01-feature-search-channel-picker-badge-query.md`.
+- Related Feature: Search and discovery
+- Status: Done
+- Plan Status: Implemented
+- Plan File: brain/plans/2026-07-01-feature-search-channel-picker-badge-query.md
+- Intake File: brain/intake/2026-07-01-album-search-audio-ai-followups.md
+- Created Date: 2026-07-01
+
+### Search Result Blog Type Badge Pills
+- Priority: Medium
+- Description: Track plan in `brain/plans/2026-07-01-ux-ui-search-result-type-badge-pills.md`.
+- Related Feature: Search and discovery
+- Status: Done
+- Plan Status: Implemented
+- Plan File: brain/plans/2026-07-01-ux-ui-search-result-type-badge-pills.md
+- Intake File: brain/intake/2026-07-01-album-search-audio-ai-followups.md
+- Created Date: 2026-07-01
+
+### AI Automatic Album Index Generation
+- Priority: Medium
+- Description: Track plan in `brain/plans/2026-07-01-feature-ai-album-index-generation.md`.
+- Related Feature: Album automation
+- Status: Done
+- Plan Status: Implemented
+- Plan File: brain/plans/2026-07-01-feature-ai-album-index-generation.md
+- Intake File: brain/intake/2026-07-01-album-search-audio-ai-followups.md
+- Created Date: 2026-07-01
+
+### AI Album Index Review And Approval
+- Priority: Medium
+- Description: Track plan in `brain/plans/2026-07-01-feature-ai-album-index-review.md`.
+- Related Feature: Album automation
+- Status: Done
+- Plan Status: Implemented
+- Plan File: brain/plans/2026-07-01-feature-ai-album-index-review.md
+- Intake File: brain/intake/2026-07-01-album-search-audio-ai-followups.md
+- Created Date: 2026-07-01

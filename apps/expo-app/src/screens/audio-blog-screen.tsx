@@ -1,5 +1,6 @@
 import { Pressable } from "@/components/ui/pressable";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
+import { useFocusEffect } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -25,7 +26,15 @@ import {
 } from "react-native";
 
 import { KaraokeTranscript } from "@/components/audio-blog-view/karaoke-transcript";
-import type { TranscriptSegmentData } from "@/components/audio-blog-view/transcript-segments";
+import { TranscriptReadMode } from "@/components/audio-blog-view/transcript-read-mode";
+import {
+	buildTranscriptDocument,
+	normalizeTranscriptSegment,
+	selectTranscriptSegment,
+	type RawTranscriptSegment,
+	type TranscriptSegmentData,
+	type TranscriptTextSelection,
+} from "@/components/audio-blog-view/transcript-timing";
 import { AddToPlaylistModal } from "@/components/channel-chat/add-to-playlist-modal";
 import { useCommentsState } from "@/components/comments-sheet";
 import { CommentInput } from "@/components/comments-sheet/comment-input";
@@ -52,7 +61,6 @@ import {
 } from "@/lib/transcribe";
 import { getTranscriptionBadgeState } from "@/lib/transcription-status";
 import { withAlpha } from "@/lib/theme";
-import { minuteToString } from "@/lib/utils";
 import { useAppSettingsStore } from "@/store/app-settings-store";
 import { useAudioStore } from "@/store/audio-store";
 import { useRecentlyViewedStore } from "@/store/recently-viewed-store";
@@ -98,14 +106,11 @@ const TRANSCRIPT_CHUNK_SEC = 30;
 const TRANSCRIPT_PREFETCH_AT_SEC = 20;
 const NEXT_CONTENT_PEEK_HEIGHT = 68;
 
-type CenterTranscriptSegment = {
-	id?: number | string;
-	from?: number;
-	to?: number;
-	startSec?: number;
-	endSec?: number;
-	text: string;
-	words?: Array<{ word: string; startSec: number; endSec: number }>;
+type RelatedAlbumSuggestion = {
+	id: number;
+	name: string;
+	_count?: { medias?: number | null } | null;
+	channel?: { title?: string | null; username?: string | null } | null;
 };
 
 function getTranscriptChunkStart(sec: number) {
@@ -114,19 +119,131 @@ function getTranscriptChunkStart(sec: number) {
 	);
 }
 
-function normalizeTranscriptSegment(
-	segment: CenterTranscriptSegment,
-	index: number,
-) {
-	const startSec = segment.startSec ?? segment.from ?? 0;
-	const endSec = segment.endSec ?? segment.to ?? startSec;
-	return {
-		id: segment.id ?? index,
-		startSec,
-		endSec,
-		text: segment.text,
-		words: segment.words,
-	};
+function RelatedAlbumSuggestionSheet({
+	album,
+	isAdding,
+	onAdd,
+	onDismiss,
+}: {
+	album: RelatedAlbumSuggestion;
+	isAdding: boolean;
+	onAdd: () => void;
+	onDismiss: () => void;
+}) {
+	const colors = useColors();
+	const albumAccent = albumColor(album.id);
+	const channelLabel =
+		album.channel?.title || album.channel?.username || "Same channel";
+
+	return (
+		<View
+			style={{
+				position: "absolute",
+				left: 14,
+				right: 14,
+				bottom: 16,
+				borderRadius: 18,
+				backgroundColor: colors.card,
+				borderWidth: 1,
+				borderColor: colors.border,
+				padding: 14,
+				shadowColor: "#000",
+				shadowOpacity: 0.22,
+				shadowRadius: 18,
+				shadowOffset: { width: 0, height: 8 },
+				elevation: 10,
+			}}
+		>
+			<View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+				<View
+					style={{
+						width: 46,
+						height: 46,
+						borderRadius: 12,
+						backgroundColor: albumAccent,
+						alignItems: "center",
+						justifyContent: "center",
+					}}
+				>
+					<Text style={{ color: "#fff", fontSize: 16, fontWeight: "800" }}>
+						{getInitials(album.name)}
+					</Text>
+				</View>
+				<View style={{ flex: 1, minWidth: 0 }}>
+					<Text
+						style={{
+							color: colors.mutedForeground,
+							fontSize: 11,
+							fontWeight: "800",
+							textTransform: "uppercase",
+						}}
+					>
+						Related album
+					</Text>
+					<Text
+						numberOfLines={1}
+						style={{
+							color: colors.foreground,
+							fontSize: 15,
+							fontWeight: "800",
+							textAlign: "right",
+							marginTop: 2,
+						}}
+					>
+						{album.name}
+					</Text>
+					<Text
+						numberOfLines={1}
+						style={{
+							color: colors.mutedForeground,
+							fontSize: 12,
+							textAlign: "right",
+							marginTop: 2,
+						}}
+					>
+						{channelLabel} · {album._count?.medias ?? 0} tracks
+					</Text>
+				</View>
+				<Pressable
+					onPress={onDismiss}
+					className="size-9 items-center justify-center rounded-full active:opacity-70"
+					style={{ backgroundColor: colors.muted }}
+				>
+					<Icon name="X" size={16} className="text-muted-foreground" />
+				</Pressable>
+			</View>
+			<Pressable
+				onPress={onAdd}
+				disabled={isAdding}
+				style={{
+					height: 44,
+					borderRadius: 999,
+					backgroundColor: colors.primary,
+					alignItems: "center",
+					justifyContent: "center",
+					flexDirection: "row",
+					gap: 8,
+					marginTop: 12,
+					opacity: isAdding ? 0.65 : 1,
+				}}
+			>
+				{isAdding ? (
+					<ActivityIndicator size="small" color={colors.primaryForeground} />
+				) : (
+					<Icon name="Plus" size={17} className="text-primary-foreground" />
+				)}
+				<Text
+					style={{
+						color: colors.primaryForeground,
+						fontSize: 14,
+						fontWeight: "800",
+					}}
+				>
+					Add to album
+				</Text>
+			</Pressable>
+		</View>
+	);
 }
 
 function AudioBookReferences({
@@ -799,24 +916,35 @@ function SleepTimerModal({
 
 function PlayerSection({
 	theme = "light",
+	isActiveAudio,
+	isPlaying,
+	position,
+	duration,
+	isLoading,
+	isDownloading,
+	downloadProgress,
+	onPlayPause,
+	onSeek,
 	onPlusPress,
 	onReadPress,
 }: {
 	theme?: "light" | "dark";
+	isActiveAudio: boolean;
+	isPlaying: boolean;
+	position: number;
+	duration: number;
+	isLoading: boolean;
+	isDownloading: boolean;
+	downloadProgress: number;
+	onPlayPause: () => void;
+	onSeek?: (positionMillis: number) => void | Promise<void>;
 	onPlusPress?: () => void;
 	onReadPress?: () => void;
 }) {
 	const colors = useColors();
-	const isPlaying = useAudioStore((s) => s.isPlaying);
-	const position = useAudioStore((s) => s.position);
-	const duration = useAudioStore((s) => s.duration);
-	const isLoading = useAudioStore((s) => s.isLoading);
-	const isDownloading = useAudioStore((s) => s.isDownloading);
-	const downloadProgress = useAudioStore((s) => s.downloadProgress);
-	const togglePlayPause = useAudioStore((s) => s.togglePlayPause);
-	const seek = useAudioStore((s) => s.seek);
 	const playbackRate = useAudioStore((s) => s.playbackRate);
 	const setPlaybackRate = useAudioStore((s) => s.setPlaybackRate);
+	const canSeek = isActiveAudio && Boolean(onSeek) && duration > 0;
 
 	const fgColor = theme === "dark" ? "#ffffff" : colors.foreground;
 	const mutedFgColor =
@@ -842,14 +970,41 @@ function PlayerSection({
 
 	// Refs to avoid stale closures inside PanResponder
 	const trackWidthRef = useRef(0);
+	const trackRef = useRef<View>(null);
+	const trackPageXRef = useRef(0);
+	const hasTrackPageXRef = useRef(false);
 	const durationRef = useRef(duration);
-	const seekRef = useRef(seek);
+	const seekRef = useRef(onSeek);
+	const canSeekRef = useRef(canSeek);
 	useEffect(() => {
 		durationRef.current = duration;
 	}, [duration]);
 	useEffect(() => {
-		seekRef.current = seek;
-	}, [seek]);
+		seekRef.current = onSeek;
+	}, [onSeek]);
+	useEffect(() => {
+		canSeekRef.current = canSeek;
+	}, [canSeek]);
+
+	const syncTrackPageX = useCallback(() => {
+		trackRef.current?.measureInWindow((x) => {
+			trackPageXRef.current = x;
+			hasTrackPageXRef.current = true;
+		});
+	}, []);
+
+	const getGestureProgress = useCallback((evt: any) => {
+		const w = trackWidthRef.current;
+		if (!w) return null;
+
+		const pageX = evt?.nativeEvent?.pageX;
+		const localX =
+			typeof pageX === "number" && hasTrackPageXRef.current
+				? pageX - trackPageXRef.current
+				: (evt?.nativeEvent?.locationX ?? 0);
+
+		return Math.max(0, Math.min(1, localX / w));
+	}, []);
 
 	// Sync store position → animated value when not dragging
 	useEffect(() => {
@@ -858,7 +1013,7 @@ function PlayerSection({
 			progressAnim.setValue(p);
 			setLabelMs(position);
 		}
-	}, [position, duration]);
+	}, [position, duration, progressAnim]);
 
 	// Listen to animated value changes → update time labels (only 2 Text nodes re-render)
 	useEffect(() => {
@@ -866,7 +1021,7 @@ function PlayerSection({
 			setLabelMs(value * durationRef.current);
 		});
 		return () => progressAnim.removeListener(id);
-	}, []);
+	}, [progressAnim]);
 
 	// Interpolated pixel positions — recalculated only when trackWidth changes
 	const KNOB = 22;
@@ -876,7 +1031,7 @@ function PlayerSection({
 				inputRange: [0, 1],
 				outputRange: [0, trackWidth],
 			}),
-		[trackWidth],
+		[progressAnim, trackWidth],
 	);
 	const knobLeft = useMemo(
 		() =>
@@ -884,37 +1039,54 @@ function PlayerSection({
 				inputRange: [0, 1],
 				outputRange: [-(KNOB / 2), trackWidth - KNOB / 2],
 			}),
-		[trackWidth],
+		[progressAnim, trackWidth],
 	);
 
 	const seekPanResponder = useRef(
 		PanResponder.create({
-			onStartShouldSetPanResponder: () => true,
-			onMoveShouldSetPanResponder: () => true,
+			onStartShouldSetPanResponder: () => canSeekRef.current,
+			onMoveShouldSetPanResponder: () => canSeekRef.current,
 			onPanResponderGrant: (evt) => {
-				const x = evt.nativeEvent.locationX;
-				const w = trackWidthRef.current;
-				if (!w) return;
+				if (!canSeekRef.current) return;
+				syncTrackPageX();
+				const p = getGestureProgress(evt);
+				if (p == null) return;
 				Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 				isDragging.current = true;
 				useAudioStore.setState({ isSeeking: true });
-				const p = Math.max(0, Math.min(1, x / w));
 				dragValueRef.current = p;
+				setLabelMs(p * durationRef.current);
 				progressAnim.setValue(p);
 			},
 			onPanResponderMove: (evt) => {
-				const x = evt.nativeEvent.locationX;
-				const w = trackWidthRef.current;
-				if (!w) return;
-				const p = Math.max(0, Math.min(1, x / w));
+				if (!canSeekRef.current) return;
+				const p = getGestureProgress(evt);
+				if (p == null) return;
 				dragValueRef.current = p;
+				setLabelMs(p * durationRef.current);
 				progressAnim.setValue(p);
 			},
 			onPanResponderRelease: () => {
+				if (!canSeekRef.current) {
+					isDragging.current = false;
+					useAudioStore.setState({ isSeeking: false });
+					return;
+				}
 				const d = durationRef.current;
-				seekRef.current(dragValueRef.current * d);
-				isDragging.current = false;
-				// isSeeking cleared by seek() after setPositionAsync resolves
+				const seek = seekRef.current;
+				if (!seek || d <= 0) {
+					isDragging.current = false;
+					useAudioStore.setState({ isSeeking: false });
+					return;
+				}
+
+				const targetPosition = Math.max(0, Math.min(d, dragValueRef.current * d));
+				void Promise.resolve(seek(targetPosition))
+					.catch(() => undefined)
+					.finally(() => {
+						isDragging.current = false;
+					});
+				// Store isSeeking is cleared by seek() after native seek resolves.
 			},
 			onPanResponderTerminate: () => {
 				isDragging.current = false;
@@ -928,9 +1100,11 @@ function PlayerSection({
 			{/* Scrubber */}
 			<View style={{ paddingTop: 4, paddingBottom: 2 }}>
 				<View
+					ref={trackRef}
 					onLayout={(e) => {
 						trackWidthRef.current = e.nativeEvent.layout.width;
 						setTrackWidth(e.nativeEvent.layout.width);
+						requestAnimationFrame(syncTrackPageX);
 					}}
 					style={{
 						height: 42,
@@ -1033,7 +1207,9 @@ function PlayerSection({
 				<View className="flex-row items-center gap-6">
 					<Pressable
 						className="p-2 active:opacity-50"
-						onPress={() => seek(Math.max(0, position - 5000))}
+						disabled={!canSeek}
+						onPress={() => onSeek?.(Math.max(0, position - 5000))}
+						style={{ opacity: canSeek ? 1 : 0.45 }}
 					>
 						<Icon name="Backward5" size={32} color={fgColor} />
 					</Pressable>
@@ -1042,20 +1218,19 @@ function PlayerSection({
 						isLoading={isLoading}
 						isDownloading={isDownloading}
 						downloadProgress={downloadProgress}
-						onPress={() => togglePlayPause()}
+						onPress={onPlayPause}
 					/>
 					<Pressable
 						className="p-2 active:opacity-50"
-						onPress={() => seek(Math.min(duration, position + 5000))}
+						disabled={!canSeek}
+						onPress={() => onSeek?.(Math.min(duration, position + 5000))}
+						style={{ opacity: canSeek ? 1 : 0.45 }}
 					>
 						<Icon name="Forward5" size={32} color={fgColor} />
 					</Pressable>
 				</View>
 				{onPlusPress ? (
-					<Pressable
-						className="p-2 active:opacity-50"
-						onPress={onPlusPress}
-					>
+					<Pressable className="p-2 active:opacity-50" onPress={onPlusPress}>
 						<Icon name="Plus" size={22} color={mutedFgColor} />
 					</Pressable>
 				) : (
@@ -1068,22 +1243,33 @@ function PlayerSection({
 
 function FloatingPlayerWidget({
 	visible,
+	isActiveAudio,
+	isPlaying,
+	position,
+	duration,
+	isLoading,
+	isDownloading,
+	downloadProgress,
+	onPlayPause,
+	onSeek,
 	onPlusPress,
 }: {
 	visible: boolean;
+	isActiveAudio: boolean;
+	isPlaying: boolean;
+	position: number;
+	duration: number;
+	isLoading: boolean;
+	isDownloading: boolean;
+	downloadProgress: number;
+	onPlayPause: () => void;
+	onSeek?: (positionMillis: number) => void;
 	onPlusPress?: () => void;
 }) {
 	const colors = useColors();
-	const isPlaying = useAudioStore((s) => s.isPlaying);
-	const position = useAudioStore((s) => s.position);
-	const duration = useAudioStore((s) => s.duration);
-	const isLoading = useAudioStore((s) => s.isLoading);
-	const isDownloading = useAudioStore((s) => s.isDownloading);
-	const downloadProgress = useAudioStore((s) => s.downloadProgress);
-	const togglePlayPause = useAudioStore((s) => s.togglePlayPause);
-	const seek = useAudioStore((s) => s.seek);
 	const playbackRate = useAudioStore((s) => s.playbackRate);
 	const setPlaybackRate = useAudioStore((s) => s.setPlaybackRate);
+	const canSeek = isActiveAudio && Boolean(onSeek) && duration > 0;
 
 	const cycleSpeed = () => {
 		const idx = SPEED_OPTIONS.findIndex(
@@ -1132,7 +1318,9 @@ function FloatingPlayerWidget({
 					</Pressable>
 					<Pressable
 						className="p-2 active:opacity-50"
-						onPress={() => seek(Math.max(0, position - 5000))}
+						disabled={!canSeek}
+						onPress={() => onSeek?.(Math.max(0, position - 5000))}
+						style={{ opacity: canSeek ? 1 : 0.45 }}
 					>
 						<Icon name="Backward5" size={24} color={colors.mutedForeground} />
 					</Pressable>
@@ -1141,20 +1329,19 @@ function FloatingPlayerWidget({
 						isLoading={isLoading}
 						isDownloading={isDownloading}
 						downloadProgress={downloadProgress}
-						onPress={() => togglePlayPause()}
+						onPress={onPlayPause}
 						size={48}
 					/>
 					<Pressable
 						className="p-2 active:opacity-50"
-						onPress={() => seek(Math.min(duration, position + 5000))}
+						disabled={!canSeek}
+						onPress={() => onSeek?.(Math.min(duration, position + 5000))}
+						style={{ opacity: canSeek ? 1 : 0.45 }}
 					>
 						<Icon name="Forward5" size={24} color={colors.mutedForeground} />
 					</Pressable>
 					{onPlusPress ? (
-						<Pressable
-							className="p-2 active:opacity-50"
-							onPress={onPlusPress}
-						>
+						<Pressable className="p-2 active:opacity-50" onPress={onPlusPress}>
 							<Icon name="Plus" size={22} color={colors.foreground} />
 						</Pressable>
 					) : (
@@ -1727,6 +1914,8 @@ export default function AudioBlogScreen() {
 	const [albumPickerVisible, setAlbumPickerVisible] = useState(false);
 	const [playlistPickerVisible, setPlaylistPickerVisible] = useState(false);
 	const [addingAlbumId, setAddingAlbumId] = useState<number | null>(null);
+	const [dismissedRelatedAlbumMediaId, setDismissedRelatedAlbumMediaId] =
+		useState<number | null>(null);
 	const [controlsLayout, setControlsLayout] = useState({ y: 0, height: 0 });
 	const [showFloatingControls, setShowFloatingControls] = useState(false);
 	const [transcriptModalVisible, setTranscriptModalVisible] = useState(false);
@@ -1734,10 +1923,10 @@ export default function AudioBlogScreen() {
 		useState(false);
 	const [frozenTranscriptPositionSec, setFrozenTranscriptPositionSec] =
 		useState(0);
-	const [markedTranscriptSegment, setMarkedTranscriptSegment] =
-		useState<TranscriptSegmentData | null>(null);
+	const [markedTranscriptSelection, setMarkedTranscriptSelection] =
+		useState<TranscriptTextSelection | null>(null);
 	const [transcriptChunks, setTranscriptChunks] = useState<
-		Record<number, { segments: CenterTranscriptSegment[] }>
+		Record<number, { segments: RawTranscriptSegment[] }>
 	>({});
 	const [pendingTranscriptChunks, setPendingTranscriptChunks] = useState<
 		number[]
@@ -1755,14 +1944,29 @@ export default function AudioBlogScreen() {
 
 	const loadAudio = useAudioStore((s) => s.loadAudio);
 	const seekAudio = useAudioStore((s) => s.seek);
+	const syncPlaybackSnapshot = useAudioStore((s) => s.syncPlaybackSnapshot);
 	const positionMs = useAudioStore((s) => s.position);
+	const activeDurationMs = useAudioStore((s) => s.duration);
+	const activeIsPlaying = useAudioStore((s) => s.isPlaying);
+	const activeIsLoading = useAudioStore((s) => s.isLoading);
+	const activeIsDownloading = useAudioStore((s) => s.isDownloading);
+	const activeDownloadProgress = useAudioStore((s) => s.downloadProgress);
 	const sound = useAudioStore((s) => s.sound);
 	const commentsState = useCommentsState(id);
 	const loadedBlog = useAudioStore((s) => s.blog);
 	const audioError = useAudioStore((s) => s.error);
 	const seekAppliedRef = useRef(false);
+	const [viewedPlaybackError, setViewedPlaybackError] = useState<string | null>(
+		null,
+	);
 
 	const { data: blog } = useQuery(_trpc.blog.getBlog.queryOptions({ id }));
+
+	useFocusEffect(
+		useCallback(() => {
+			syncPlaybackSnapshot().catch(() => undefined);
+		}, [syncPlaybackSnapshot]),
+	);
 
 	const media = blog?.medias?.[0];
 	const mediaId = media?.id;
@@ -1770,9 +1974,72 @@ export default function AudioBlogScreen() {
 		media?.file?.source === "vercel_blob" ? undefined : media?.file?.fileId;
 	const mediaUrl = getMediaFileUrl(media?.file as any);
 	const duration = media?.file?.duration;
+	const viewedDurationMs =
+		typeof duration === "number" ? Math.max(0, duration * 1000) : 0;
+	const isViewedAudioActive = Boolean(blog && loadedBlog?.id === blog.id);
+	const playerPositionMs = isViewedAudioActive ? positionMs : 0;
+	const playerPositionSec = playerPositionMs / 1000;
+	const activeTranscriptChunkStart =
+		getTranscriptChunkStart(playerPositionSec);
+	const shouldPrefetchNextTranscriptChunk =
+		playerPositionSec - activeTranscriptChunkStart >=
+		TRANSCRIPT_PREFETCH_AT_SEC;
+	const playerDurationMs = isViewedAudioActive
+		? activeDurationMs || viewedDurationMs
+		: viewedDurationMs;
+	const playerIsPlaying = isViewedAudioActive && activeIsPlaying;
+	const playerIsLoading = isViewedAudioActive && activeIsLoading;
+	const playerIsDownloading = isViewedAudioActive && activeIsDownloading;
+	const playerDownloadProgress = isViewedAudioActive
+		? activeDownloadProgress
+		: 0;
+	const visibleAudioError = isViewedAudioActive
+		? audioError
+		: viewedPlaybackError;
+	const viewedAudioItem = useMemo(() => {
+		if (!blog || blog.type !== "audio") return null;
+		const media = blog.medias?.[0];
+		const file = media?.file;
+		if (!media?.id || !file?.fileName) return null;
+
+		return {
+			id: blog.id,
+			type: "audio",
+			caption: blog.content ?? file.fileName ?? media.title ?? null,
+			content: null,
+			date: blog.blogDate,
+			audio: {
+				mediaId: media.id,
+				telegramFileId: file.fileId,
+				url: mediaUrl,
+				fileName: file.fileName,
+				title: media.title,
+				duration: file.duration,
+			},
+		} as any;
+	}, [blog, mediaUrl]);
 	const audioTitle = getAudioDisplayTitle(
 		{ content: blog?.content, media: media as any },
 		"Untitled Audio",
+	);
+	const { data: relatedAlbumSuggestion } = useQuery({
+		..._trpc.album.getRelatedAlbumForMedia.queryOptions({
+			mediaId: mediaId ?? 0,
+		}),
+		enabled: Boolean(mediaId && !media?.albumId),
+	});
+	const showRelatedAlbumSuggestion = Boolean(
+		relatedAlbumSuggestion &&
+		mediaId &&
+		!media?.albumId &&
+		dismissedRelatedAlbumMediaId !== mediaId &&
+		!albumPickerVisible &&
+		!playlistPickerVisible &&
+		!moreMenuVisible &&
+		!sleepTimerVisible &&
+		!transcriptModalVisible &&
+		!showFloatingControls &&
+		!showComments,
 	);
 
 	const { data: transcriptData } = useQuery({
@@ -1837,7 +2104,7 @@ export default function AudioBlogScreen() {
 				setTranscriptChunks((prev) => ({
 					...prev,
 					[data.chunkStartSec]: {
-						segments: data.segments as CenterTranscriptSegment[],
+						segments: data.segments as RawTranscriptSegment[],
 					},
 				}));
 				setTranscriptError(null);
@@ -1868,7 +2135,8 @@ export default function AudioBlogScreen() {
 		setTranscriptChunks({});
 		setPendingTranscriptChunks([]);
 		setTranscriptError(null);
-		setMarkedTranscriptSegment(null);
+		setMarkedTranscriptSelection(null);
+		setViewedPlaybackError(null);
 		setTranscriptModalVisible(false);
 		setTranscriptHighlightPaused(false);
 		pendingTranscriptChunksRef.current = [];
@@ -1911,13 +2179,17 @@ export default function AudioBlogScreen() {
 
 	useEffect(() => {
 		if (!mediaId || !telegramFileId) return;
-		const positionSec = positionMs / 1000;
-		const activeChunkStart = getTranscriptChunkStart(positionSec);
-		requestTranscriptChunk(activeChunkStart);
-		if (positionSec - activeChunkStart >= TRANSCRIPT_PREFETCH_AT_SEC) {
-			requestTranscriptChunk(activeChunkStart + TRANSCRIPT_CHUNK_SEC);
+		requestTranscriptChunk(activeTranscriptChunkStart);
+		if (shouldPrefetchNextTranscriptChunk) {
+			requestTranscriptChunk(activeTranscriptChunkStart + TRANSCRIPT_CHUNK_SEC);
 		}
-	}, [mediaId, positionMs, requestTranscriptChunk, telegramFileId]);
+	}, [
+		activeTranscriptChunkStart,
+		mediaId,
+		requestTranscriptChunk,
+		shouldPrefetchNextTranscriptChunk,
+		telegramFileId,
+	]);
 
 	useEffect(() => {
 		if (!mediaId) return;
@@ -1943,7 +2215,7 @@ export default function AudioBlogScreen() {
 
 		(transcriptData?.segments ?? []).forEach((segment, index) => {
 			const normalized = normalizeTranscriptSegment(
-				segment as unknown as CenterTranscriptSegment,
+				segment as unknown as RawTranscriptSegment,
 				index,
 			);
 			segmentsByKey.set(
@@ -1964,6 +2236,10 @@ export default function AudioBlogScreen() {
 
 		return [...segmentsByKey.values()].sort((a, b) => a.startSec - b.startSec);
 	}, [transcriptChunks, transcriptData?.segments]);
+	const transcriptDocument = useMemo(
+		() => buildTranscriptDocument(transcriptSegments),
+		[transcriptSegments],
+	);
 
 	const channelName =
 		blog?.channel?.title || blog?.channel?.username || "Unknown channel";
@@ -2000,29 +2276,10 @@ export default function AudioBlogScreen() {
 	}, [audioTitle, blog, markViewed]);
 
 	useEffect(() => {
-		if (!blog || blog.type !== "audio") return;
-
-		const media = blog.medias?.[0];
-		const file = media?.file;
-		if (!media?.id || !file?.fileName) return;
-		if (loadedBlog?.id === blog.id) return;
-
-		loadAudio({
-			id: blog.id,
-			type: "audio",
-			caption: blog.content ?? file.fileName ?? media.title ?? null,
-			content: null,
-			date: blog.blogDate,
-			audio: {
-				mediaId: media.id,
-				telegramFileId: file.fileId,
-				url: mediaUrl,
-				fileName: file.fileName,
-				title: media.title,
-				duration: file.duration,
-			},
-		} as any).catch(() => undefined);
-	}, [blog, loadedBlog?.id, loadAudio, mediaUrl]);
+		if (isViewedAudioActive) {
+			syncPlaybackSnapshot().catch(() => undefined);
+		}
+	}, [isViewedAudioActive, syncPlaybackSnapshot]);
 
 	useEffect(() => {
 		seekAppliedRef.current = false;
@@ -2032,7 +2289,7 @@ export default function AudioBlogScreen() {
 		if (
 			!hasSeekTarget ||
 			!blog ||
-			loadedBlog?.id !== blog.id ||
+			!isViewedAudioActive ||
 			!sound ||
 			seekAppliedRef.current
 		) {
@@ -2043,12 +2300,45 @@ export default function AudioBlogScreen() {
 				seekAppliedRef.current = true;
 			})
 			.catch(() => undefined);
-	}, [blog, hasSeekTarget, loadedBlog?.id, seekAudio, seekTargetSec, sound]);
+	}, [
+		blog,
+		hasSeekTarget,
+		isViewedAudioActive,
+		seekAudio,
+		seekTargetSec,
+		sound,
+	]);
+
+	const handleViewedPlayPause = useCallback(async () => {
+		if (!viewedAudioItem) return;
+		setViewedPlaybackError(null);
+
+		if (isViewedAudioActive) {
+			await useAudioStore.getState().togglePlayPause();
+			const error = useAudioStore.getState().error;
+			if (error) setViewedPlaybackError(error);
+			return;
+		}
+
+		await loadAudio(viewedAudioItem);
+		const loadError = useAudioStore.getState().error;
+		if (loadError) {
+			setViewedPlaybackError(loadError);
+			return;
+		}
+
+		await useAudioStore.getState().play();
+		const playError = useAudioStore.getState().error;
+		if (playError) setViewedPlaybackError(playError);
+	}, [isViewedAudioActive, loadAudio, viewedAudioItem]);
 
 	const { mutate: addToAlbum, isPending: isAdding } = useMutation(
 		_trpc.album.addMediaToAlbum.mutationOptions({
-			onSuccess: (_, vars) => {
+			onSuccess: () => {
 				qc.invalidateQueries({ queryKey: _trpc.blog.getBlog.queryKey({ id }) });
+				if (mediaId) {
+					setDismissedRelatedAlbumMediaId(mediaId);
+				}
 				setAlbumPickerVisible(false);
 				setAddingAlbumId(null);
 				Toast.show("Added to album", {
@@ -2069,7 +2359,7 @@ export default function AudioBlogScreen() {
 				setTranscriptChunks({});
 				setPendingTranscriptChunks([]);
 				setTranscriptError(null);
-				setMarkedTranscriptSegment(null);
+				setMarkedTranscriptSelection(null);
 				pendingTranscriptChunksRef.current = [];
 				failedTranscriptChunksRef.current = new Set<number>();
 				await Promise.all([
@@ -2109,7 +2399,10 @@ export default function AudioBlogScreen() {
 						}),
 					]);
 					commentsState.refetch();
-					Alert.alert("Comment added", "Marked transcript text was commented.");
+					Alert.alert(
+						"Comment added",
+						"Highlighted transcript text was commented.",
+					);
 				},
 				onError: (e) => Alert.alert("Could not add comment", e.message),
 			}),
@@ -2119,6 +2412,16 @@ export default function AudioBlogScreen() {
 		if (!mediaId) return;
 		setAddingAlbumId(albumId);
 		addToAlbum({ albumId, mediaIds: [mediaId] });
+	}
+
+	function handleAddRelatedAlbumSuggestion() {
+		if (!relatedAlbumSuggestion) return;
+		handlePickAlbum(relatedAlbumSuggestion.id, relatedAlbumSuggestion.name);
+	}
+
+	function dismissRelatedAlbumSuggestion() {
+		if (!mediaId) return;
+		setDismissedRelatedAlbumMediaId(mediaId);
 	}
 
 	async function shareAudioPost() {
@@ -2217,9 +2520,10 @@ export default function AudioBlogScreen() {
 	}
 
 	function openTranscriptModal() {
-		setFrozenTranscriptPositionSec(positionMs / 1000);
+		setFrozenTranscriptPositionSec(playerPositionMs / 1000);
 		setTranscriptHighlightPaused(false);
 		setTranscriptModalVisible(true);
+		syncPlaybackSnapshot().catch(() => undefined);
 		Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 	}
 
@@ -2233,36 +2537,41 @@ export default function AudioBlogScreen() {
 
 	function toggleTranscriptHighlightPause() {
 		if (!transcriptHighlightPaused) {
-			setFrozenTranscriptPositionSec(positionMs / 1000);
+			setFrozenTranscriptPositionSec(playerPositionMs / 1000);
 		}
 		setTranscriptHighlightPaused((value) => !value);
 	}
 
 	function gotoCurrentTranscriptPosition() {
-		setFrozenTranscriptPositionSec(positionMs / 1000);
+		setFrozenTranscriptPositionSec(playerPositionMs / 1000);
 		setTranscriptHighlightPaused(false);
+		setMarkedTranscriptSelection(null);
+		syncPlaybackSnapshot().catch(() => undefined);
 	}
 
 	function markTranscriptSegment(segment: TranscriptSegmentData) {
-		setMarkedTranscriptSegment(segment);
+		setMarkedTranscriptSelection(
+			selectTranscriptSegment(transcriptDocument, segment),
+		);
 		Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 	}
 
 	function copyMarkedTranscriptText() {
-		const text = markedTranscriptSegment?.text?.trim();
+		const text = markedTranscriptSelection?.text;
 		if (!text) return;
 		Clipboard.setString(text);
-		Alert.alert("Copied", "Marked transcript text copied.");
+		Alert.alert("Copied", "Highlighted transcript text copied.");
 	}
 
 	function commentMarkedTranscriptText() {
-		const segment = markedTranscriptSegment;
-		const text = segment?.text?.trim();
-		if (!segment || !text || isAddingTranscriptComment) return;
+		const selection = markedTranscriptSelection;
+		const text = selection?.text;
+		if (!selection || !text?.trim() || isAddingTranscriptComment) return;
+		Clipboard.setString(text);
 		addTranscriptComment({
 			blogId: id,
 			content: text,
-			timestampSeconds: Math.max(0, Math.floor(segment.startSec)),
+			timestampSeconds: Math.max(0, Math.floor(selection.timestampSec)),
 		});
 	}
 
@@ -2441,7 +2750,16 @@ export default function AudioBlogScreen() {
 										{transcriptSegments.length > 0 ? (
 											<KaraokeTranscript
 												segments={transcriptSegments}
+												positionSecOverride={
+													isViewedAudioActive ? undefined : 0
+												}
+												autoScroll={isViewedAudioActive}
+												playbackEnabled={isViewedAudioActive}
 												contentPaddingVertical={34}
+												onSegmentLongPress={(segment) => {
+													markTranscriptSegment(segment);
+													openTranscriptModal();
+												}}
 											/>
 										) : (
 											<View
@@ -2585,6 +2903,15 @@ export default function AudioBlogScreen() {
 										>
 											<PlayerSection
 												theme="dark"
+												isActiveAudio={isViewedAudioActive}
+												isPlaying={playerIsPlaying}
+												position={playerPositionMs}
+												duration={playerDurationMs}
+												isLoading={playerIsLoading}
+												isDownloading={playerIsDownloading}
+												downloadProgress={playerDownloadProgress}
+												onPlayPause={handleViewedPlayPause}
+												onSeek={isViewedAudioActive ? seekAudio : undefined}
 												onPlusPress={
 													media?.album
 														? undefined
@@ -2592,9 +2919,9 @@ export default function AudioBlogScreen() {
 												}
 												onReadPress={openTranscriptModal}
 											/>
-											{audioError ? (
+											{visibleAudioError ? (
 												<Text className="pt-3 text-center text-xs text-destructive">
-													{audioError}
+													{visibleAudioError}
 												</Text>
 											) : null}
 										</View>
@@ -2709,11 +3036,29 @@ export default function AudioBlogScreen() {
 			{!showComments && (
 				<FloatingPlayerWidget
 					visible={showFloatingControls}
+					isActiveAudio={isViewedAudioActive}
+					isPlaying={playerIsPlaying}
+					position={playerPositionMs}
+					duration={playerDurationMs}
+					isLoading={playerIsLoading}
+					isDownloading={playerIsDownloading}
+					downloadProgress={playerDownloadProgress}
+					onPlayPause={handleViewedPlayPause}
+					onSeek={isViewedAudioActive ? seekAudio : undefined}
 					onPlusPress={
 						media?.album ? undefined : () => setAlbumPickerVisible(true)
 					}
 				/>
 			)}
+
+			{showRelatedAlbumSuggestion && relatedAlbumSuggestion ? (
+				<RelatedAlbumSuggestionSheet
+					album={relatedAlbumSuggestion as RelatedAlbumSuggestion}
+					isAdding={isAdding && addingAlbumId === relatedAlbumSuggestion.id}
+					onAdd={handleAddRelatedAlbumSuggestion}
+					onDismiss={dismissRelatedAlbumSuggestion}
+				/>
+			) : null}
 
 			{/* More menu */}
 			<MoreMenu
@@ -2782,16 +3127,20 @@ export default function AudioBlogScreen() {
 							</View>
 						</View>
 						<View style={{ flex: 1 }}>
-							<KaraokeTranscript
-								segments={transcriptSegments}
-								autoScroll={!transcriptHighlightPaused}
-								selectable
+							<TranscriptReadMode
+								document={transcriptDocument}
+								autoScroll={
+									!transcriptHighlightPaused && !markedTranscriptSelection
+								}
+								selection={markedTranscriptSelection}
+								onSelectionChange={setMarkedTranscriptSelection}
 								positionSecOverride={
-									transcriptHighlightPaused
+									!isViewedAudioActive
+										? 0
+										: transcriptHighlightPaused
 										? frozenTranscriptPositionSec
 										: undefined
 								}
-								onSegmentLongPress={markTranscriptSegment}
 							/>
 						</View>
 						<View
@@ -2804,8 +3153,20 @@ export default function AudioBlogScreen() {
 								backgroundColor: "rgba(0,0,0,0.72)",
 							}}
 						>
-							{markedTranscriptSegment ? (
+							{markedTranscriptSelection ? (
 								<>
+									<Text
+										style={{
+											color: "rgba(255,255,255,0.54)",
+											fontSize: 11,
+											fontWeight: "700",
+											marginBottom: 5,
+											textAlign: "right",
+										}}
+									>
+										Starts at{" "}
+										{formatMs(markedTranscriptSelection.timestampSec * 1000)}
+									</Text>
 									<Text
 										selectable
 										numberOfLines={2}
@@ -2817,7 +3178,7 @@ export default function AudioBlogScreen() {
 											writingDirection: "rtl",
 										}}
 									>
-										{markedTranscriptSegment.text}
+										{markedTranscriptSelection.text}
 									</Text>
 									<View className="mt-3 flex-row items-center gap-2">
 										<Pressable
@@ -2854,7 +3215,7 @@ export default function AudioBlogScreen() {
 										textAlign: "center",
 									}}
 								>
-									No marked text
+									No highlighted text
 								</Text>
 							)}
 						</View>

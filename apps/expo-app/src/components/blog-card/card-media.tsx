@@ -6,7 +6,9 @@ import {
   splitTextLinesWithLinks,
 } from "@acme/blog";
 import { useRouter } from "expo-router";
-import { Image, Linking, Text, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import { Image, Linking, Platform, Text, View } from "react-native";
+import { WebView } from "react-native-webview";
 
 import { Icon } from "@/components/ui/icon";
 import { useColors } from "@/hooks/use-color";
@@ -14,7 +16,12 @@ import { getAudioDisplayTitle } from "@/lib/audio-title";
 import { useTranslation } from "@/lib/i18n";
 
 import type { BlogCardVariant, BlogItem } from "./types";
-import { getInlinePreviewText, getPrimaryImageUrl } from "./utils";
+import {
+  getInlinePreviewText,
+  getPrimaryDocumentMedia,
+  getPrimaryDocumentUrl,
+  getPrimaryImageUrl,
+} from "./utils";
 
 function truncateUrlLabel(value: string) {
   const trimmed = value.trim();
@@ -166,6 +173,157 @@ function CardVideo({ post }: { post: BlogItem }) {
   );
 }
 
+function formatFileSize(size?: number | null) {
+  if (!size || !Number.isFinite(size) || size <= 0) return null;
+  const mb = size / (1024 * 1024);
+  return `${mb >= 10 ? Math.round(mb) : mb.toFixed(1)} MB`;
+}
+
+const PRIVATE_HTTPS_HOST_PATTERN =
+  /^https:\/\/(?:localhost|127\.|10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[0-1])\.)/i;
+
+function getPdfPreviewUri(uri?: string | null) {
+  if (!uri) return null;
+
+  if (Platform.OS === "android") {
+    if (!/^https:\/\//i.test(uri) || PRIVATE_HTTPS_HOST_PATTERN.test(uri)) {
+      return null;
+    }
+
+    return `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(uri)}`;
+  }
+
+  const [baseUri] = uri.split("#");
+  return `${baseUri}#page=1&zoom=page-width&toolbar=0&navpanes=0&scrollbar=0`;
+}
+
+function PdfPreviewFallback() {
+  const colors = useColors();
+
+  return (
+    <View
+      className="absolute inset-0 items-center justify-center px-5"
+      style={{ backgroundColor: colors.muted }}
+    >
+      <View
+        className="mb-3 size-14 items-center justify-center rounded-2xl"
+        style={{ backgroundColor: colors.background }}
+      >
+        <Icon name="FileText" size={30} className="text-primary" />
+      </View>
+      <View
+        className="rounded-full px-3 py-1"
+        style={{ backgroundColor: colors.primary }}
+      >
+        <Text
+          className="text-[11px] font-bold"
+          style={{ color: colors.primaryForeground }}
+        >
+          PDF
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function PdfPreview({ uri, title }: { uri?: string | null; title: string }) {
+  const colors = useColors();
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [hasFailed, setHasFailed] = useState(false);
+  const previewUri = useMemo(() => getPdfPreviewUri(uri), [uri]);
+  const showPreview = Boolean(previewUri && !hasFailed);
+
+  useEffect(() => {
+    setHasLoaded(false);
+    setHasFailed(false);
+  }, [previewUri]);
+
+  return (
+    <View
+      className="h-44 overflow-hidden"
+      style={{ backgroundColor: colors.muted }}
+    >
+      {showPreview ? (
+        <View className="absolute inset-0" pointerEvents="none">
+          <WebView
+            source={{ uri: previewUri as string }}
+            originWhitelist={["*"]}
+            scrollEnabled={false}
+            showsHorizontalScrollIndicator={false}
+            showsVerticalScrollIndicator={false}
+            bounces={false}
+            javaScriptEnabled={Platform.OS === "android"}
+            mixedContentMode="always"
+            onLoadEnd={() => setHasLoaded(true)}
+            onError={() => setHasFailed(true)}
+            onHttpError={() => setHasFailed(true)}
+            accessibilityLabel={`${title} preview`}
+            style={{
+              flex: 1,
+              backgroundColor: colors.background,
+              opacity: hasLoaded ? 1 : 0,
+            }}
+          />
+        </View>
+      ) : null}
+      {!showPreview || !hasLoaded ? <PdfPreviewFallback /> : null}
+      {showPreview && hasLoaded ? (
+        <View
+          className="absolute left-3 top-3 rounded-full px-3 py-1"
+          pointerEvents="none"
+          style={{ backgroundColor: colors.primary }}
+        >
+          <Text
+            className="text-[11px] font-bold"
+            style={{ color: colors.primaryForeground }}
+          >
+            PDF
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function CardPdf({ post }: { post: BlogItem }) {
+  const colors = useColors();
+  const doc = getPrimaryDocumentMedia(post) as any;
+  const file = doc?.file;
+  const previewUrl = getPrimaryDocumentUrl(post);
+  const fileName =
+    doc?.fileName ||
+    file?.fileName ||
+    doc?.title ||
+    getInlinePreviewText(post.caption) ||
+    "PDF document";
+  const sizeLabel = formatFileSize(doc?.size ?? file?.fileSize);
+
+  return (
+    <View
+      className="mb-3 overflow-hidden rounded-xl border border-border bg-card"
+      style={{ backgroundColor: colors.card, borderColor: colors.border }}
+    >
+      <PdfPreview uri={previewUrl} title={fileName} />
+      <View className="gap-1 px-3 py-3">
+        <Text
+          className="text-sm font-bold text-foreground"
+          numberOfLines={2}
+          style={{ color: colors.foreground }}
+        >
+          {fileName}
+        </Text>
+        <Text
+          className="text-xs text-muted-foreground"
+          numberOfLines={1}
+          style={{ color: colors.mutedForeground }}
+        >
+          {sizeLabel ? `PDF document · ${sizeLabel}` : "PDF document"}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 export function CardMedia({
   post,
   variant,
@@ -184,6 +342,15 @@ export function CardMedia({
       <>
         <CardText post={post} />
         <CardVideo post={post} />
+      </>
+    );
+  }
+
+  if (variant === "pdf") {
+    return (
+      <>
+        <CardPdf post={post} />
+        <CardText post={post} />
       </>
     );
   }

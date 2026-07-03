@@ -1,6 +1,6 @@
 import type { ExpoConfig } from "expo/config";
 
-export const UPDATE_VERSION = "2026.06.27.01";
+export const UPDATE_VERSION = "2026.07.02.04";
 
 const appVariant =
 	process.env.APP_VARIANT ??
@@ -129,6 +129,7 @@ const config: ExpoConfig = {
 	},
 
 	plugins: [
+		"./plugins/with-image-clipboard",
 		"expo-router",
 		[
 			"@sentry/react-native/expo",

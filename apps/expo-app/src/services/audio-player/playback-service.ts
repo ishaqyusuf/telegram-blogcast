@@ -1,7 +1,7 @@
-import TrackPlayer, { Event } from "react-native-track-player";
 import * as Linking from "expo-linking";
 
 import { AUDIO_JUMP_SECONDS } from "./setup-track-player";
+import TrackPlayer, { Event } from "./track-player-safe";
 
 const SPEED_OPTIONS = [1, 1.25, 1.5, 1.75, 2];
 

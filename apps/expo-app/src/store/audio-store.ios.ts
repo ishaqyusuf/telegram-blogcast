@@ -13,8 +13,24 @@ const Paths = {
 	document: FileSystem.Paths.document,
 };
 const CONTEXT_REWIND_MS = 1500;
+const END_REPLAY_RESET_THRESHOLD_MS = 750;
 const STALE_AUDIO_MS = 12 * 60 * 60 * 1000;
 let positionInterval: ReturnType<typeof setInterval> | null = null;
+
+export type AudioPlayMode =
+	| "off"
+	| "repeat-one"
+	| "album-sequence"
+	| "repeat-album"
+	| "shuffle-album";
+
+const AUDIO_PLAY_MODES: AudioPlayMode[] = [
+	"off",
+	"repeat-one",
+	"album-sequence",
+	"repeat-album",
+	"shuffle-album",
+];
 
 function joinDocumentPath(...parts: string[]) {
 	return parts
@@ -35,6 +51,102 @@ function isOlderThan(timestamp: number | null | undefined, maxAgeMs: number) {
 	return Boolean(timestamp && Date.now() - timestamp > maxAgeMs);
 }
 
+function isAtAudioEnd(positionMs: number, durationMs: number) {
+	return durationMs > 0 && positionMs >= durationMs - END_REPLAY_RESET_THRESHOLD_MS;
+}
+
+function getAudioPayload(blog: ItemProps | null | undefined) {
+	return blog?.audio as Record<string, any> | null | undefined;
+}
+
+function getAlbumQueueFromBlog(blog: ItemProps | null | undefined) {
+	const queue = getAudioPayload(blog)?.albumQueue;
+	return Array.isArray(queue) ? (queue as ItemProps[]) : null;
+}
+
+function getAlbumIdFromBlog(blog: ItemProps | null | undefined) {
+	const albumId = getAudioPayload(blog)?.albumId;
+	return albumId == null ? null : String(albumId);
+}
+
+function getAudioTrackKey(blog: ItemProps | null | undefined) {
+	const audio = getAudioPayload(blog);
+	const mediaId = audio?.mediaId;
+	return String(mediaId ?? blog?.id ?? audio?.fileName ?? "");
+}
+
+function getNextPlayMode(playMode: AudioPlayMode) {
+	const currentIndex = AUDIO_PLAY_MODES.indexOf(playMode);
+	return AUDIO_PLAY_MODES[(currentIndex + 1) % AUDIO_PLAY_MODES.length]!;
+}
+
+function withAlbumQueue(blog: ItemProps, albumQueue: ItemProps[] | null) {
+	if (!albumQueue?.length) return blog;
+
+	return {
+		...blog,
+		audio: {
+			...(blog.audio as any),
+			albumQueue,
+		},
+	} as ItemProps;
+}
+
+function resolveNextAlbumQueueItem(
+	state: Pick<AudioState, "albumQueue" | "blog" | "playMode" | "shuffleHistory">,
+) {
+	const queue = state.albumQueue;
+	if (!queue?.length) return null;
+
+	const currentKey = getAudioTrackKey(state.blog);
+	const currentIndex = Math.max(
+		0,
+		queue.findIndex((item) => getAudioTrackKey(item) === currentKey),
+	);
+
+	if (state.playMode === "album-sequence") {
+		const nextItem = queue[currentIndex + 1];
+		return nextItem
+			? { item: nextItem, shuffleHistory: state.shuffleHistory }
+			: null;
+	}
+
+	if (state.playMode === "repeat-album") {
+		return {
+			item: queue[(currentIndex + 1) % queue.length]!,
+			shuffleHistory: state.shuffleHistory,
+		};
+	}
+
+	if (state.playMode !== "shuffle-album") return null;
+
+	const currentHistory = state.shuffleHistory.includes(currentKey)
+		? state.shuffleHistory
+		: [...state.shuffleHistory, currentKey].filter(Boolean);
+	const visited = new Set(currentHistory);
+	let candidates = queue.filter((item) => !visited.has(getAudioTrackKey(item)));
+
+	if (candidates.length === 0) {
+		candidates = queue.filter((item) => getAudioTrackKey(item) !== currentKey);
+	}
+
+	if (candidates.length === 0) {
+		candidates = queue;
+	}
+
+	const nextItem = candidates[Math.floor(Math.random() * candidates.length)];
+	if (!nextItem) return null;
+
+	const nextKey = getAudioTrackKey(nextItem);
+	return {
+		item: nextItem,
+		shuffleHistory:
+			visited.size >= queue.length
+				? [currentKey, nextKey].filter(Boolean)
+				: [...currentHistory, nextKey].filter(Boolean),
+	};
+}
+
 interface AudioState {
 	sound: Audio.Sound | null;
 	isPlaying: boolean;
@@ -53,9 +165,14 @@ interface AudioState {
 	sleepTimerEnd: number | null;
 	pausedAt: number | null;
 	playedAt: number | null;
+	hasEnded: boolean;
+	playMode: AudioPlayMode;
+	albumQueue: ItemProps[] | null;
+	shuffleHistory: string[];
 
 	loadAudio: (blog: ItemProps) => Promise<void>;
 	play: () => Promise<void>;
+	playNextAlbumTrack: () => Promise<boolean>;
 	pause: () => Promise<void>;
 	stop: () => Promise<void>;
 	seek: (positionMillis: number) => Promise<void>;
@@ -64,11 +181,14 @@ interface AudioState {
 	unloadAudio: () => Promise<void>;
 	updatePosition: (position: number) => void;
 	restoreAudio: () => Promise<void>;
+	syncPlaybackSnapshot: () => Promise<void>;
 	startPositionTracking: () => void;
 	stopPositionTracking: () => void;
 	setPlaybackRate: (rate: number) => Promise<void>;
 	setSleepTimer: (minutes: number) => void;
 	clearSleepTimer: () => void;
+	setPlayMode: (playMode: AudioPlayMode) => void;
+	cyclePlayMode: () => void;
 }
 
 export const useAudioStore = create<AudioState>()(
@@ -90,11 +210,24 @@ export const useAudioStore = create<AudioState>()(
 			pausedAt: null,
 			playedAt: null,
 			isSeeking: false,
+			hasEnded: false,
 			blog: null!,
+			playMode: "off",
+			albumQueue: null,
+			shuffleHistory: [],
 
 			loadAudio: async (blog) => {
 				const directUrl = (blog?.audio as any)?.url as string | undefined;
 				const fileName = blog?.audio?.fileName;
+				const incomingAlbumQueue = getAlbumQueueFromBlog(blog);
+				const incomingAlbumId = getAlbumIdFromBlog(blog);
+				const currentAlbumId = getAlbumIdFromBlog(get().blog);
+				const nextAlbumQueue = incomingAlbumQueue?.length
+					? incomingAlbumQueue
+					: incomingAlbumId && incomingAlbumId === currentAlbumId
+						? get().albumQueue
+						: null;
+				const shouldResetAlbumMode = !incomingAlbumId || !nextAlbumQueue?.length;
 
 				try {
 					const currentSound = get().sound;
@@ -102,17 +235,33 @@ export const useAudioStore = create<AudioState>()(
 
 					if (currentSound && currentBlogId === blog?.id) {
 						const status = await currentSound.getStatusAsync();
+						const duration = status.isLoaded
+							? status.durationMillis || get().duration
+							: get().duration;
+						const position = status.isLoaded
+							? (status.positionMillis ?? get().position)
+							: get().position;
+						const hasEnded =
+							status.isLoaded &&
+							(Boolean(status.didJustFinish) ||
+								(!status.isPlaying && get().hasEnded));
 						set({
+							albumQueue: nextAlbumQueue,
 							blog,
 							error: null,
 							isLoading: false,
-							isPlaying: status.isLoaded ? status.isPlaying : get().isPlaying,
-							duration: status.isLoaded
-								? status.durationMillis || get().duration
-								: get().duration,
-							position: status.isLoaded
-								? status.positionMillis || get().position
-								: get().position,
+							isPlaying: hasEnded
+								? false
+								: status.isLoaded
+									? status.isPlaying
+									: get().isPlaying,
+							playMode: shouldResetAlbumMode ? "off" : get().playMode,
+							shuffleHistory: shouldResetAlbumMode
+								? []
+								: get().shuffleHistory,
+							duration,
+							position: hasEnded && duration > 0 ? duration : position,
+							hasEnded: status.isLoaded ? hasEnded : get().hasEnded,
 						});
 						return;
 					}
@@ -121,7 +270,12 @@ export const useAudioStore = create<AudioState>()(
 						throw new Error("Audio file name is not available");
 					}
 
-					set({ isLoading: true, error: null });
+					set({ isLoading: true, error: null, hasEnded: false });
+					set({
+						albumQueue: nextAlbumQueue,
+						playMode: shouldResetAlbumMode ? "off" : get().playMode,
+						shuffleHistory: shouldResetAlbumMode ? [] : get().shuffleHistory,
+					});
 
 					const { sound: existingSound, stopPositionTracking } = get();
 					if (existingSound) {
@@ -165,10 +319,31 @@ export const useAudioStore = create<AudioState>()(
 
 					const onPlaybackStatusUpdate = (status: any) => {
 						if (status.isLoaded) {
+							const duration = status.durationMillis || 0;
+							const position =
+								status.didJustFinish && duration > 0
+									? duration
+									: status.positionMillis || 0;
+							const hasEnded =
+								Boolean(status.didJustFinish) ||
+								(!status.isPlaying && get().hasEnded);
+							if (hasEnded) {
+								set({
+									hasEnded,
+									isPlaying: false,
+									duration,
+									...(get().isSeeking ? {} : { position }),
+								});
+								void get().playNextAlbumTrack().then((playedNext) => {
+									if (!playedNext) get().stopPositionTracking();
+								});
+								return;
+							}
 							set({
+								hasEnded,
 								isPlaying: status.isPlaying,
-								duration: status.durationMillis || 0,
-								position: status.positionMillis || 0,
+								duration,
+								...(get().isSeeking && !hasEnded ? {} : { position }),
 							});
 						}
 					};
@@ -216,6 +391,7 @@ export const useAudioStore = create<AudioState>()(
 						isLoading: false,
 						isPlaying: false,
 						pausedAt: null,
+						hasEnded: false,
 						duration: status.isLoaded ? status.durationMillis || 0 : 0,
 						position: 0,
 						blog,
@@ -266,16 +442,63 @@ export const useAudioStore = create<AudioState>()(
 				}
 			},
 
+			playNextAlbumTrack: async () => {
+				const { sound } = get();
+				if (!sound) return false;
+
+				if (get().playMode === "repeat-one") {
+					try {
+						await sound.setPositionAsync(0);
+						await sound.playAsync();
+						set({
+							hasEnded: false,
+							isPlaying: true,
+							error: null,
+							pausedAt: null,
+							playedAt: Date.now(),
+							position: 0,
+						});
+						get().startPositionTracking();
+						return true;
+					} catch (err) {
+						set({
+							error:
+								err instanceof Error
+									? err.message
+									: "Failed to repeat audio",
+						});
+						return false;
+					}
+				}
+
+				const next = resolveNextAlbumQueueItem(get());
+				if (!next) return false;
+
+				const albumQueue = get().albumQueue;
+				await get().loadAudio(withAlbumQueue(next.item, albumQueue));
+				if (get().error) return false;
+
+				set({ shuffleHistory: next.shuffleHistory });
+				await get().play();
+				return !get().error;
+			},
+
 			play: async () => {
-				const { sound, position, startPositionTracking } = get();
+				const { duration, hasEnded, position, sound, startPositionTracking } =
+					get();
 				if (!sound) return;
 
 				try {
-					const resumePos = Math.max(0, position - CONTEXT_REWIND_MS);
+					const shouldRestart =
+						hasEnded || isAtAudioEnd(position, duration);
+					const resumePos = shouldRestart
+						? 0
+						: Math.max(0, position - CONTEXT_REWIND_MS);
 					await sound.setPositionAsync(resumePos);
-					set({ position: resumePos });
+					set({ hasEnded: false, position: resumePos });
 					await sound.playAsync();
 					set({
+						hasEnded: false,
 						isPlaying: true,
 						error: null,
 						pausedAt: null,
@@ -314,6 +537,7 @@ export const useAudioStore = create<AudioState>()(
 					set({
 						isPlaying: false,
 						position: 0,
+						hasEnded: false,
 						error: null,
 						pausedAt: Date.now(),
 					});
@@ -330,7 +554,12 @@ export const useAudioStore = create<AudioState>()(
 				if (!sound) return;
 
 				try {
-					set({ position: positionMillis, isSeeking: true, error: null });
+					set({
+						hasEnded: false,
+						position: positionMillis,
+						isSeeking: true,
+						error: null,
+					});
 					await sound.setPositionAsync(positionMillis);
 					set({ isSeeking: false });
 				} catch (err) {
@@ -381,9 +610,13 @@ export const useAudioStore = create<AudioState>()(
 						isDownloading: false,
 						downloadProgress: 0,
 						duration: 0,
+						hasEnded: false,
+						albumQueue: null,
 						pausedAt: null,
 						playedAt: null,
+						playMode: "off",
 						position: 0,
+						shuffleHistory: [],
 						uri: null,
 						localPath: null,
 						error: null,
@@ -429,11 +662,15 @@ export const useAudioStore = create<AudioState>()(
 				if (isStale) {
 					set({
 						duration: 0,
+						hasEnded: false,
 						isPlaying: false,
 						localPath: null,
+						albumQueue: null,
 						pausedAt: null,
 						playedAt: null,
+						playMode: "off",
 						position: 0,
+						shuffleHistory: [],
 						sound: null,
 						uri: null,
 					});
@@ -445,6 +682,7 @@ export const useAudioStore = create<AudioState>()(
 						isLoading: true,
 						error: null,
 						isPlaying: false,
+						hasEnded: false,
 						pausedAt: wasPlaying ? Date.now() : effectivePausedAt,
 						playedAt: effectivePlayedAt,
 					});
@@ -465,12 +703,36 @@ export const useAudioStore = create<AudioState>()(
 						},
 						(status) => {
 							if (status.isLoaded) {
+								const duration = status.durationMillis || 0;
+								const position =
+									status.didJustFinish && duration > 0
+										? duration
+										: status.positionMillis || 0;
+								const hasEnded =
+									Boolean(status.didJustFinish) ||
+									(!status.isPlaying && get().hasEnded);
+								if (hasEnded) {
+									set({
+										hasEnded,
+										isPlaying: false,
+										pausedAt: Date.now(),
+										playedAt: get().playedAt,
+										duration,
+										...(get().isSeeking ? {} : { position }),
+									});
+									void get().playNextAlbumTrack().then((playedNext) => {
+										if (!playedNext) get().stopPositionTracking();
+									});
+									return;
+								}
 								set({
+									hasEnded,
 									isPlaying: status.isPlaying,
 									pausedAt: status.isPlaying ? null : Date.now(),
-									playedAt: status.isPlaying ? Date.now() : get().playedAt,
-									duration: status.durationMillis || 0,
-									position: status.positionMillis || 0,
+									playedAt:
+										status.isPlaying ? Date.now() : get().playedAt,
+									duration,
+									...(get().isSeeking && !hasEnded ? {} : { position }),
 								});
 							}
 						},
@@ -485,6 +747,7 @@ export const useAudioStore = create<AudioState>()(
 						isLoading: false,
 						duration: status.isLoaded ? status.durationMillis || 0 : 0,
 						isPlaying: false,
+						hasEnded: false,
 						pausedAt: wasPlaying ? Date.now() : effectivePausedAt,
 					});
 				} catch (err) {
@@ -492,6 +755,71 @@ export const useAudioStore = create<AudioState>()(
 						error:
 							err instanceof Error ? err.message : "Failed to restore audio",
 						isLoading: false,
+					});
+				}
+			},
+
+			syncPlaybackSnapshot: async () => {
+				const { sound } = get();
+				if (!sound) return;
+
+				try {
+					const status = await sound.getStatusAsync();
+					if (!status.isLoaded) return;
+					const duration = status.durationMillis || get().duration;
+					const position =
+						status.didJustFinish && duration > 0
+							? duration
+							: status.positionMillis || 0;
+					const hasEnded =
+						Boolean(status.didJustFinish) ||
+						(!status.isPlaying && get().hasEnded);
+
+					if (hasEnded) {
+						set({
+							duration,
+							hasEnded,
+							isPlaying: false,
+							pausedAt: get().pausedAt ?? Date.now(),
+							playedAt: get().playedAt,
+							...(get().isSeeking ? {} : { position }),
+						});
+						void get().playNextAlbumTrack().then((playedNext) => {
+							if (!playedNext) get().stopPositionTracking();
+						});
+						return;
+					}
+
+					set({
+						duration,
+						hasEnded: false,
+						isPlaying: status.isPlaying,
+						pausedAt:
+							status.isPlaying
+								? null
+								: (get().pausedAt ?? Date.now()),
+						playedAt:
+							status.isPlaying
+								? Date.now()
+								: get().playedAt,
+						...(get().isSeeking && !hasEnded
+							? {}
+							: {
+									position,
+								}),
+					});
+
+					if (status.isPlaying) {
+						get().startPositionTracking();
+					} else {
+						get().stopPositionTracking();
+					}
+				} catch (err) {
+					set({
+						error:
+							err instanceof Error
+								? err.message
+								: "Failed to sync audio playback",
 					});
 				}
 			},
@@ -507,9 +835,30 @@ export const useAudioStore = create<AudioState>()(
 						try {
 							const status = await sound.getStatusAsync();
 							if (status.isLoaded) {
+								const duration = status.durationMillis || get().duration;
+								const position =
+									status.didJustFinish && duration > 0
+										? duration
+										: status.positionMillis;
+								const hasEnded =
+									Boolean(status.didJustFinish) ||
+									(!status.isPlaying && get().hasEnded);
+								if (hasEnded) {
+									set({
+										duration,
+										hasEnded,
+										position,
+										playedAt: get().playedAt,
+									});
+									void get().playNextAlbumTrack().then((playedNext) => {
+										if (!playedNext) get().stopPositionTracking();
+									});
+									return;
+								}
 								set({
-									position: status.positionMillis,
-									duration: status.durationMillis || get().duration,
+									duration,
+									hasEnded: false,
+									position,
 									playedAt: Date.now(),
 								});
 							}
@@ -546,6 +895,31 @@ export const useAudioStore = create<AudioState>()(
 			clearSleepTimer: () => {
 				set({ sleepTimerEnd: null });
 			},
+
+			setPlayMode: (playMode) => {
+				const canUseAlbumMode = Boolean(get().albumQueue?.length);
+				set({
+					playMode: canUseAlbumMode ? playMode : "off",
+					shuffleHistory:
+						playMode === "shuffle-album"
+							? [getAudioTrackKey(get().blog)].filter(Boolean)
+							: [],
+				});
+			},
+
+			cyclePlayMode: () => {
+				const canUseAlbumMode = Boolean(get().albumQueue?.length);
+				const nextPlayMode = canUseAlbumMode
+					? getNextPlayMode(get().playMode)
+					: "off";
+				set({
+					playMode: nextPlayMode,
+					shuffleHistory:
+						nextPlayMode === "shuffle-album"
+							? [getAudioTrackKey(get().blog)].filter(Boolean)
+							: [],
+				});
+			},
 		}),
 		{
 			name: "audio-storage",
@@ -560,6 +934,7 @@ export const useAudioStore = create<AudioState>()(
 				isPlaying: state.isPlaying,
 				duration: state.duration,
 				playbackRate: state.playbackRate,
+				playMode: state.playMode,
 			}),
 		},
 	),

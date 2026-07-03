@@ -4,6 +4,7 @@ export type BlogItem = RouterOutputs["blog"]["posts"]["data"][number];
 
 export type BlogCardVariant =
   | "audio"
+  | "pdf"
   | "text+image"
   | "image"
   | "text"

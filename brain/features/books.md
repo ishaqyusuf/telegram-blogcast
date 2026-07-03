@@ -93,6 +93,7 @@ Tracks the current scope, architecture, and roadmap for the books experience acr
 - Better offline book-content download and incremental sync
 - Real authenticated user mapping for book annotations/import history instead of the current placeholder user binding in public procedures
 - Richer page selection when attaching audio references can continue improving; current mobile flow supports selecting an album/library book, searching page title/text, manual page ID fallback, and timestamp capture.
+- Album detail now has a searchable manage-books modal for attaching existing books to albums and detaching album references without deleting the underlying book.
 
 ### Planned Implementation Notes
 

@@ -1,4 +1,5 @@
 export {
+  useInfiniteQuery,
   useMutation,
   useQuery,
   useQueryClient,

@@ -52,6 +52,9 @@ Tracks the current audio playback experience, supporting components, and future 
 
 ### UX Notes
 - Persistent mini-player is a core interaction pattern.
+- Opening an audio detail screen is passive: it may show the viewed audio's metadata and duration, but it must not replace, stop, seek, or pause the currently active audio until the user presses play on the viewed audio.
+- Audio-detail scrub dragging is locally controlled until native seek settles; store progress events must not overwrite the thumb/time label while `isSeeking` is active.
+- A naturally ended track is remembered as ended. With no repeat or queue play mode active, pressing play again seeks to 0 and restarts instead of resuming at the end or applying pause rewind.
 - Quick seek controls are part of the intended experience.
 - Android system player controls expose play/pause, seek, and 15-second jump backward/forward actions through media notifications, lock screen, and compatible headset/Bluetooth controls. The operating system owns the final notification/card visual treatment; the app supplies metadata, artwork, progress, and actions.
 - Custom skip icons exist because the desired transport affordance was not available out of the box.
@@ -72,6 +75,15 @@ Tracks the current audio playback experience, supporting components, and future 
 - Playlists are user-curated and can mix audio across channels unless future product rules tighten them.
 - Audio menus and channel chat expose add-to-album and add-to-playlist actions for audio media.
 - Album suggestions support keyword-driven, channel-aware discovery. Album detail separates `Tracks` from `+ Add`; track reorder actions are only shown in `Tracks`, while the add tab can mark all/clear/add suggestions and uses toast feedback.
+- Floating bottom actions use a shared stackable footer registry. The global audio bar is the reserved bottom-most registered layer, and album track/suggestion selection actions stack above it instead of hiding or overlapping the player.
+- Album suggestion selection exposes a floating action row for mark/unmark all, add selected to the current album, delete selected blog items with confirmation, and add selected media to another album. Long-pressing suggestion add actions opens the full add-to-album modal.
+- Add-to-album and album suggestion inputs use keyboard-aware scrolling so focused inputs and bottom actions remain reachable when the mobile keyboard is open.
+- Album track rows expose direct play/resume/pause controls. The active audio row is highlighted when the currently loaded blog/media belongs to the opened album.
+- Album detail manages one album-level author through `Album.albumAuthorId`: unique track authors can be toggled onto/off the album, new authors can be created, existing authors can be edited, and track rows fall back to their own author when the album author is unset.
+- Album detail previews attached books and provides a searchable manage-books modal for attaching existing library books or detaching `AlbumBookReference` rows without deleting the books.
+- Automatic album indexing can generate a channel-level AI proposal using existing same-channel albums and same-channel unalbumed audio candidates. Generation supports DeepSeek, Gemini, and OpenAI provider selection, sends lean author-free `id + textData` media chunks to keep requests small, can include review-only proposed new albums when no existing album fits, merges/dedupes chunk results into one reviewable run, and persists raw AI JSON, parsed JSON, normalized album/media suggestions, model/provider metadata, and failure details without changing album membership.
+- Settings exposes **Album Organizer**, a channel-first review flow for automatic album indexing. It shows unalbumed audio and album counts, supports swipe-down refresh on the channel summary, lets the user choose and cache the AI provider for the next run, reopens saved discovery runs without regenerating, shows the model used for saved discoveries, lists discovered existing/proposed albums with track counts, and lets users review, dismiss/restore, edit proposed album name/type, or approve proposed tracks per album. Proposed albums are created only on approval.
+- Album playback started from album detail carries the ordered playable album queue into the audio store. The global audio bar exposes album-only play modes: off/default, repeat one, play next, repeat album, and shuffle album. Default mode stops at track end; repeat and queue modes are handled by the store on natural completion.
 - Audio and search cards expose album membership as badges. When an audio item is already in an album, audio detail opens the album instead of showing another add-plus affordance.
 - Timestamped comments seek and start playback when tapped. Transcript segments support single tap to seek and double tap/click to seek and play.
 - The global audio bar can show current time plus album track index when the active audio has album order metadata.

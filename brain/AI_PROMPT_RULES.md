@@ -27,3 +27,15 @@ Provides prompt hygiene rules for AI agents working in this repository so output
 - Make changes end-to-end when feasible.
 - Summarize what changed, what was verified, and any residual risk.
 - Reference Brain files when documentation needs follow-up.
+
+<!-- personal-coding-rules:start -->
+## Global Personal Coding Rules
+
+Agents must treat these global coding rule references as non-negotiable:
+
+- `/Users/M1PRO/.me/coding-standards/global.md`
+- `/Users/M1PRO/.me/coding-standards/nextjs.md`
+- `/Users/M1PRO/.me/coding-standards/expo.md`
+
+Project-specific exceptions require an ADR in `brain/decisions/` before agents may diverge.
+<!-- personal-coding-rules:end -->

@@ -4,12 +4,13 @@ import { useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  type ScrollViewProps,
   Text,
   TextInput,
   View,
   useWindowDimensions,
 } from "react-native";
-import { KeyboardAvoidingView } from "react-native-keyboard-controller";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 
 import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";
@@ -24,6 +25,17 @@ const ALBUM_COLORS = [
   "#be123c",
   "#0369a1",
 ];
+const ADD_TO_ALBUM_KEYBOARD_OFFSET = 112;
+
+function renderKeyboardAwareScrollView(props: ScrollViewProps) {
+  return (
+    <KeyboardAwareScrollView
+      {...props}
+      bottomOffset={ADD_TO_ALBUM_KEYBOARD_OFFSET}
+      disableScrollOnKeyboardHide
+    />
+  );
+}
 
 function getInitials(name?: string | null) {
   if (!name) return "AL";
@@ -103,22 +115,31 @@ export function AddToAlbumModal({
   const isBusy = addMedia.isPending || createAlbum.isPending;
 
   return (
-    <KeyboardAvoidingView
-      behavior="translate-with-padding"
-      style={{ width: "100%" }}
+    <View
+      className="bg-card rounded-t-3xl"
+      style={{
+        backgroundColor: colors.card,
+        maxHeight: Math.min(Math.max(360, windowHeight * 0.72), windowHeight - 24),
+        overflow: "hidden",
+        width: "100%",
+      }}
     >
-      <View
-        className="bg-card rounded-t-3xl px-4 pt-4 pb-8"
-        style={{
-          backgroundColor: colors.card,
-          maxHeight: Math.min(
-            Math.max(360, windowHeight * 0.7),
-            windowHeight - 24,
-          ),
-          width: "100%",
+      <FlatList
+        data={isLoading ? [] : sortedAlbums}
+        keyExtractor={(item) => String(item.id)}
+        keyboardDismissMode="interactive"
+        keyboardShouldPersistTaps="handled"
+        renderScrollComponent={renderKeyboardAwareScrollView}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{
+          flexGrow: 1,
+          paddingBottom: 24,
+          paddingHorizontal: 16,
+          paddingTop: 16,
         }}
-      >
-        {/* Handle */}
+        ListHeaderComponent={
+          <>
+            {/* Handle */}
         <View
           className="w-10 h-1 rounded-full bg-muted self-center mb-4"
           style={{ backgroundColor: colors.muted }}
@@ -177,86 +198,82 @@ export function AddToAlbumModal({
         >
           Existing Albums
         </Text>
-
-        {isLoading ? (
-          <View className="py-6 items-center">
-            <ActivityIndicator color={colors.primary} />
-          </View>
-        ) : sortedAlbums.length === 0 ? (
-          <Text
-            className="text-sm text-muted-foreground text-center py-6"
-            style={{ color: colors.mutedForeground }}
-          >
-            No albums yet — create one above
-          </Text>
-        ) : (
-          <FlatList
-            data={sortedAlbums}
-            keyExtractor={(item) => String(item.id)}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-            style={{ flexGrow: 0 }}
-            renderItem={({ item, index }) => (
-              <Pressable
-                onPress={() => handleSelectAlbum(item)}
-                disabled={isBusy}
-                className="flex-row items-center gap-3 py-3 border-b border-border active:opacity-70"
-              >
-                <View
-                  style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 8,
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flexShrink: 0,
-                    backgroundColor: ALBUM_COLORS[index % ALBUM_COLORS.length],
-                  }}
-                >
-                  <Text className="text-sm font-bold text-white">
-                    {getInitials(item.name)}
-                  </Text>
-                </View>
-                <View className="flex-1">
-                  <Text
-                    className="text-sm font-semibold text-foreground"
-                    style={{ color: colors.foreground }}
-                  >
-                    {item.name}
-                  </Text>
-                  <Text
-                    className="text-xs text-muted-foreground"
-                    style={{ color: colors.mutedForeground }}
-                  >
-                    {item._count.medias} tracks
-                    {item.channel?.title ? ` · ${item.channel.title}` : ""}
-                  </Text>
-                </View>
-                <Icon
-                  name="ChevronRight"
-                  size={16}
-                  className="text-muted-foreground"
-                />
-              </Pressable>
-            )}
-          />
-        )}
-
-        <View className="mt-4 rounded-2xl bg-background/60 p-1">
-          <Pressable
-            onPress={onClose}
-            className="h-11 rounded-xl bg-muted items-center justify-center active:opacity-70"
-            style={{ backgroundColor: colors.muted }}
-          >
+          </>
+        }
+        ListEmptyComponent={
+          isLoading ? (
+            <View className="py-6 items-center">
+              <ActivityIndicator color={colors.primary} />
+            </View>
+          ) : (
             <Text
-              className="text-sm font-semibold text-foreground"
-              style={{ color: colors.foreground }}
+              className="text-sm text-muted-foreground text-center py-6"
+              style={{ color: colors.mutedForeground }}
             >
-              Cancel
+              No albums yet — create one above
             </Text>
+          )
+        }
+        renderItem={({ item, index }) => (
+          <Pressable
+            onPress={() => handleSelectAlbum(item)}
+            disabled={isBusy}
+            className="flex-row items-center gap-3 py-3 border-b border-border active:opacity-70"
+          >
+            <View
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 8,
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+                backgroundColor: ALBUM_COLORS[index % ALBUM_COLORS.length],
+              }}
+            >
+              <Text className="text-sm font-bold text-white">
+                {getInitials(item.name)}
+              </Text>
+            </View>
+            <View className="flex-1">
+              <Text
+                className="text-sm font-semibold text-foreground"
+                style={{ color: colors.foreground }}
+              >
+                {item.name}
+              </Text>
+              <Text
+                className="text-xs text-muted-foreground"
+                style={{ color: colors.mutedForeground }}
+              >
+                {item._count.medias} tracks
+                {item.channel?.title ? ` · ${item.channel.title}` : ""}
+              </Text>
+            </View>
+            <Icon
+              name="ChevronRight"
+              size={16}
+              className="text-muted-foreground"
+            />
           </Pressable>
-        </View>
-      </View>
-    </KeyboardAvoidingView>
+        )}
+        ListFooterComponent={
+          <View className="mt-4 rounded-2xl bg-background/60 p-1">
+            <Pressable
+              onPress={onClose}
+              className="h-11 rounded-xl bg-muted items-center justify-center active:opacity-70"
+              style={{ backgroundColor: colors.muted }}
+            >
+              <Text
+                className="text-sm font-semibold text-foreground"
+                style={{ color: colors.foreground }}
+              >
+                Cancel
+              </Text>
+            </Pressable>
+          </View>
+        }
+      />
+    </View>
   );
 }

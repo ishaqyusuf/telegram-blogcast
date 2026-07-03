@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
 	ActivityIndicator,
 	Alert,
@@ -8,11 +8,29 @@ import {
 	ScrollView,
 	Text,
 	View,
+	useWindowDimensions,
 } from "react-native";
+import ReanimatedSwipeable, {
+	SwipeDirection,
+} from "react-native-gesture-handler/ReanimatedSwipeable";
+import Animated, {
+	Easing,
+	Extrapolation,
+	interpolate,
+	runOnJS,
+	useAnimatedStyle,
+	useSharedValue,
+	withTiming,
+	type SharedValue,
+} from "react-native-reanimated";
 
 import { SafeArea } from "@/components/safe-area";
-import { Icon } from "@/components/ui/icon";
+import { Icon, type IconKeys } from "@/components/ui/icon";
 import { Pressable } from "@/components/ui/pressable";
+import {
+	SwipeDeleteAction,
+	getSwipeDeleteThreshold,
+} from "@/components/ui/swipe-delete-action";
 import { useColors } from "@/hooks/use-color";
 import {
 	getTranscriptionJobProgress,
@@ -20,6 +38,36 @@ import {
 } from "@/hooks/use-transcription-queue";
 import { withAlpha } from "@/lib/theme";
 import { vanillaTrpc } from "@/trpc/vanilla-client";
+
+type QueueJob = ReturnType<typeof useTranscriptionQueue>["jobs"][number];
+
+const QUEUE_STATUS_FILTERS = [
+	"queued",
+	"running",
+	"completed",
+	"failed",
+	"duplicate",
+	"already_transcribed",
+];
+
+function canDeleteQueueJob(job: QueueJob) {
+	return job.status === "queued" || job.status === "failed";
+}
+
+function formatQueueStatus(status?: string | null) {
+	if (status === "already_transcribed") return "Already transcribed";
+	if (status === "duplicate") return "Duplicate";
+	return status?.replace(/_/g, " ") ?? "unknown";
+}
+
+function getQueueJobIconName(job: QueueJob): IconKeys {
+	if (job.status === "completed" || job.status === "already_transcribed") {
+		return "CheckCircle2";
+	}
+	if (job.status === "duplicate") return "Copy";
+	if (job.status === "failed") return "AlertCircle";
+	return "Captions";
+}
 
 function formatRange(fromSec?: number | null, toSec?: number | null) {
 	if (fromSec == null && toSec == null) return "Full audio";
@@ -81,15 +129,279 @@ function getQueueJobModel(
 	return null;
 }
 
+function QueueJobRow({
+	job,
+	colors,
+	onDelete,
+	onOpenOptions,
+	onPress,
+}: {
+	job: QueueJob;
+	colors: ReturnType<typeof useColors>;
+	onDelete: (job: QueueJob) => Promise<boolean>;
+	onOpenOptions: (job: QueueJob) => void;
+	onPress: (job: QueueJob) => void;
+}) {
+	const { width } = useWindowDimensions();
+	const swipeRef = useRef<any>(null);
+	const isDeletingRef = useRef(false);
+	const rowHeight = useSharedValue(0);
+	const deleteProgress = useSharedValue(0);
+	const canDelete = canDeleteQueueJob(job);
+	const fullSwipeThreshold = useMemo(
+		() => getSwipeDeleteThreshold(width),
+		[width],
+	);
+	const progress = getTranscriptionJobProgress(job);
+	const title = getQueueJobTitle(job);
+	const stage = formatJobStage(job);
+	const model = getQueueJobModel(job);
+	const blogId = job.media?.blog?.id;
+	const isFailed = job.status === "failed";
+	const isComplete =
+		job.status === "completed" || job.status === "already_transcribed";
+	const statusLabel = formatQueueStatus(job.status);
+
+	const finishDelete = useCallback(async () => {
+		const deleted = await onDelete(job);
+		if (!deleted) {
+			swipeRef.current?.close();
+			deleteProgress.value = withTiming(0, {
+				duration: 180,
+				easing: Easing.out(Easing.cubic),
+			});
+		}
+		isDeletingRef.current = false;
+	}, [deleteProgress, job, onDelete]);
+
+	const handleSwipeWillOpen = useCallback(
+		(direction: SwipeDirection) => {
+			if (
+				!canDelete ||
+				direction !== SwipeDirection.LEFT ||
+				isDeletingRef.current
+			) {
+				swipeRef.current?.close();
+				return;
+			}
+
+			isDeletingRef.current = true;
+			deleteProgress.value = withTiming(
+				1,
+				{ duration: 240, easing: Easing.out(Easing.cubic) },
+				(finished) => {
+					if (finished) {
+						runOnJS(finishDelete)();
+					}
+				},
+			);
+		},
+		[canDelete, deleteProgress, finishDelete],
+	);
+
+	const containerStyle = useAnimatedStyle(() => {
+		const measuredHeight = rowHeight.value;
+		const height =
+			measuredHeight > 0
+				? interpolate(
+						deleteProgress.value,
+						[0, 1],
+						[measuredHeight, 0],
+						Extrapolation.CLAMP,
+					)
+				: undefined;
+
+		return {
+			height,
+			opacity: interpolate(
+				deleteProgress.value,
+				[0, 0.7, 1],
+				[1, 0.35, 0],
+				Extrapolation.CLAMP,
+			),
+			overflow: "hidden",
+			transform: [
+				{
+					translateX: interpolate(
+						deleteProgress.value,
+						[0, 1],
+						[0, -Math.min(width * 0.18, 72)],
+						Extrapolation.CLAMP,
+					),
+				},
+			],
+		};
+	});
+
+	const renderRightActions = useCallback(
+		(progressValue: SharedValue<number>, translation: SharedValue<number>) => (
+			<SwipeDeleteAction
+				progress={progressValue}
+				translation={translation}
+				actionWidth={width}
+				fullSwipeThreshold={fullSwipeThreshold}
+			/>
+		),
+		[fullSwipeThreshold, width],
+	);
+
+	return (
+		<Animated.View
+			onLayout={(event) => {
+				if (!isDeletingRef.current) {
+					rowHeight.value = event.nativeEvent.layout.height;
+				}
+			}}
+			style={containerStyle}
+		>
+			<ReanimatedSwipeable
+				ref={swipeRef}
+				enabled={canDelete}
+				friction={1.15}
+				overshootFriction={8}
+				overshootRight={false}
+				rightThreshold={fullSwipeThreshold}
+				onSwipeableWillOpen={handleSwipeWillOpen}
+				renderRightActions={renderRightActions}
+			>
+				<Pressable
+					className="rounded-xl border border-border bg-card p-4"
+					disabled={!blogId || isDeletingRef.current}
+					onPress={() => onPress(job)}
+					style={{
+						backgroundColor: colors.card,
+						borderColor: colors.border,
+						opacity: blogId ? 1 : 0.85,
+					}}
+				>
+					<View className="flex-row items-center gap-3">
+						<View
+							className="size-10 items-center justify-center rounded-full"
+							style={{
+								backgroundColor: isFailed
+									? withAlpha(colors.destructive, 0.12)
+									: isComplete
+										? withAlpha(colors.success, 0.12)
+										: withAlpha(colors.primary, 0.12),
+							}}
+						>
+							{job.status === "running" ? (
+								<ActivityIndicator color={colors.primary} />
+							) : (
+								<Icon
+									name={getQueueJobIconName(job)}
+									className={
+										isFailed
+											? "text-destructive"
+											: isComplete
+												? "text-success"
+												: "text-primary"
+									}
+								/>
+							)}
+						</View>
+						<View className="min-w-0 flex-1">
+							<Text
+								className="text-sm font-bold text-foreground"
+								numberOfLines={1}
+								style={{ color: colors.foreground }}
+							>
+								{title}
+							</Text>
+							<Text
+								className="mt-0.5 text-xs text-muted-foreground"
+								numberOfLines={1}
+								style={{ color: colors.mutedForeground }}
+							>
+								{formatRange(job.fromSec, job.toSec)} ·{" "}
+								{formatDate(job.createdAt)}
+							</Text>
+							{stage ? (
+								<Text
+									className="mt-0.5 text-xs capitalize text-muted-foreground"
+									numberOfLines={1}
+									style={{ color: colors.mutedForeground }}
+								>
+									{stage}
+								</Text>
+							) : null}
+							{model ? (
+								<Text
+									className="mt-0.5 text-xs text-muted-foreground"
+									numberOfLines={1}
+									style={{ color: colors.mutedForeground }}
+								>
+									Model: {model}
+								</Text>
+							) : null}
+						</View>
+						<View className="items-end gap-0.5">
+							<Pressable
+								className="size-9 items-center justify-center rounded-full active:bg-muted"
+								onPress={(event) => {
+									event.stopPropagation?.();
+									onOpenOptions(job);
+								}}
+							>
+								<Icon
+									name="MoreHorizontal"
+									size={16}
+									className="text-muted-foreground"
+								/>
+							</Pressable>
+							<Text
+								className="text-xs font-bold text-muted-foreground"
+								style={{ color: colors.mutedForeground }}
+							>
+								{statusLabel}
+							</Text>
+							<Text
+								className="text-xs font-bold text-foreground"
+								style={{ color: colors.foreground }}
+							>
+								{progress}%
+							</Text>
+						</View>
+					</View>
+					<View
+						className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted"
+						style={{ backgroundColor: colors.muted }}
+					>
+						<View
+							className="h-full rounded-full bg-primary"
+							style={{
+								backgroundColor: isFailed
+									? colors.destructive
+									: isComplete
+										? colors.success
+										: colors.primary,
+								width: `${progress}%`,
+							}}
+						/>
+					</View>
+					{job.errorMessage ? (
+						<Text
+							className="mt-3 text-xs leading-5 text-muted-foreground"
+							style={{
+								color: isFailed ? colors.destructive : colors.mutedForeground,
+							}}
+						>
+							{job.errorMessage}
+						</Text>
+					) : null}
+				</Pressable>
+			</ReanimatedSwipeable>
+		</Animated.View>
+	);
+}
+
 export default function TranscribeQueueScreen() {
 	const router = useRouter();
 	const colors = useColors();
-	const { jobs, queuedCount, isRunning, runQueued, reload } =
+	const { jobs, queuedCount, isRunning, deleteJob, runQueued, reload } =
 		useTranscriptionQueue();
 	const [isRefreshing, setIsRefreshing] = useState(false);
-	const [selectedJob, setSelectedJob] = useState<
-		ReturnType<typeof useTranscriptionQueue>["jobs"][number] | null
-	>(null);
+	const [selectedJob, setSelectedJob] = useState<QueueJob | null>(null);
 	const counts = useMemo(
 		() =>
 			jobs.reduce(
@@ -117,6 +429,40 @@ export default function TranscribeQueueScreen() {
 			setIsRefreshing(false);
 		}
 	};
+
+	const deleteQueueJob = useCallback(
+		async (job: QueueJob) => {
+			try {
+				await deleteJob(job.id);
+				if (selectedJob?.id === job.id) {
+					setSelectedJob(null);
+				}
+				return true;
+			} catch (error) {
+				await reload().catch((reloadError) =>
+					console.warn("[TranscribeQueue] reload after delete failed", reloadError),
+				);
+				Alert.alert(
+					"Could not delete transcription",
+					error instanceof Error
+						? error.message
+						: "This transcription job could not be deleted.",
+				);
+				return false;
+			}
+		},
+		[deleteJob, reload, selectedJob?.id],
+	);
+
+	const openQueueJob = useCallback(
+		(job: QueueJob) => {
+			const blogId = job.media?.blog?.id;
+			if (blogId) {
+				router.push(`/blog-view-2/${blogId}` as any);
+			}
+		},
+		[router],
+	);
 
 	const resetSelectedJob = () => {
 		if (!selectedJob) return;
@@ -226,8 +572,8 @@ export default function TranscribeQueueScreen() {
 					</Pressable>
 				</View>
 
-				<View className="flex-row gap-2 px-4 py-3">
-					{["queued", "running", "completed", "failed"].map((status) => (
+				<View className="flex-row flex-wrap gap-2 px-4 py-3">
+					{QUEUE_STATUS_FILTERS.map((status) => (
 						<View
 							key={status}
 							className="rounded-full px-2.5 py-1"
@@ -237,7 +583,7 @@ export default function TranscribeQueueScreen() {
 								className="text-[11px] font-semibold text-primary"
 								style={{ color: colors.primary }}
 							>
-								{status} {counts[status] ?? 0}
+								{formatQueueStatus(status)} {counts[status] ?? 0}
 							</Text>
 						</View>
 					))}
@@ -297,148 +643,16 @@ export default function TranscribeQueueScreen() {
 						</View>
 					) : (
 						<View className="gap-2 px-4">
-							{jobs.map((job) =>
-								(() => {
-									const progress = getTranscriptionJobProgress(job);
-									const title = getQueueJobTitle(job);
-									const stage = formatJobStage(job);
-									const model = getQueueJobModel(job);
-									const blogId = job.media?.blog?.id;
-									return (
-										<Pressable
-											key={job.id}
-											className="rounded-xl border border-border bg-card p-4"
-											disabled={!blogId}
-											onPress={() => {
-												if (blogId) {
-													router.push(`/blog-view-2/${blogId}` as any);
-												}
-											}}
-											style={{
-												backgroundColor: colors.card,
-												borderColor: colors.border,
-												opacity: blogId ? 1 : 0.85,
-											}}
-										>
-											<View className="flex-row items-center gap-3">
-												<View
-													className="size-10 items-center justify-center rounded-full"
-													style={{
-														backgroundColor:
-															job.status === "failed"
-																? withAlpha(colors.destructive, 0.12)
-																: withAlpha(colors.primary, 0.12),
-													}}
-												>
-													{job.status === "running" ? (
-														<ActivityIndicator color={colors.primary} />
-													) : (
-														<Icon
-															name={
-																job.status === "completed"
-																	? "CheckCircle2"
-																	: job.status === "failed"
-																		? "AlertCircle"
-																		: "Captions"
-															}
-															className={
-																job.status === "failed"
-																	? "text-destructive"
-																	: "text-primary"
-															}
-														/>
-													)}
-												</View>
-												<View className="min-w-0 flex-1">
-													<Text
-														className="text-sm font-bold text-foreground"
-														numberOfLines={1}
-														style={{ color: colors.foreground }}
-													>
-														{title}
-													</Text>
-													<Text
-														className="mt-0.5 text-xs text-muted-foreground"
-														numberOfLines={1}
-														style={{ color: colors.mutedForeground }}
-													>
-														{formatRange(job.fromSec, job.toSec)} ·{" "}
-														{formatDate(job.createdAt)}
-													</Text>
-													{stage ? (
-														<Text
-															className="mt-0.5 text-xs capitalize text-muted-foreground"
-															numberOfLines={1}
-															style={{ color: colors.mutedForeground }}
-														>
-															{stage}
-														</Text>
-													) : null}
-													{model ? (
-														<Text
-															className="mt-0.5 text-xs text-muted-foreground"
-															numberOfLines={1}
-															style={{ color: colors.mutedForeground }}
-														>
-															Model: {model}
-														</Text>
-													) : null}
-												</View>
-												<View className="items-end gap-0.5">
-													<Pressable
-														className="size-9 items-center justify-center rounded-full active:bg-muted"
-														onPress={(event) => {
-															event.stopPropagation?.();
-															setSelectedJob(job);
-														}}
-													>
-														<Icon
-															name="MoreHorizontal"
-															size={16}
-															className="text-muted-foreground"
-														/>
-													</Pressable>
-													<Text
-														className="text-xs font-bold capitalize text-muted-foreground"
-														style={{ color: colors.mutedForeground }}
-													>
-														{job.status}
-													</Text>
-													<Text
-														className="text-xs font-bold text-foreground"
-														style={{ color: colors.foreground }}
-													>
-														{progress}%
-													</Text>
-												</View>
-											</View>
-											<View
-												className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted"
-												style={{ backgroundColor: colors.muted }}
-											>
-												<View
-													className="h-full rounded-full bg-primary"
-													style={{
-														backgroundColor:
-															job.status === "failed"
-																? colors.destructive
-																: colors.primary,
-														width: `${progress}%`,
-													}}
-												/>
-											</View>
-											{job.errorMessage ? (
-												<Text
-													className="mt-3 text-xs leading-5 text-destructive"
-													style={{ color: colors.destructive }}
-												>
-													{job.errorMessage}
-												</Text>
-											) : null}
-										</Pressable>
-									);
-								})(),
-							)}
+							{jobs.map((job) => (
+								<QueueJobRow
+									key={job.id}
+									job={job}
+									colors={colors}
+									onDelete={deleteQueueJob}
+									onOpenOptions={setSelectedJob}
+									onPress={openQueueJob}
+								/>
+							))}
 						</View>
 					)}
 				</ScrollView>

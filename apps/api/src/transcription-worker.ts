@@ -45,6 +45,147 @@ function workerOwnedWhere(id: number, workerId: string) {
   };
 }
 
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function numbersClose(left: unknown, right: unknown, tolerance = 0.5) {
+  const leftNumber = Number(left);
+  const rightNumber = Number(right);
+  return (
+    Number.isFinite(leftNumber) &&
+    Number.isFinite(rightNumber) &&
+    Math.abs(leftNumber - rightNumber) <= tolerance
+  );
+}
+
+function hasExactTranscriptRange(
+  segments: any[],
+  startSec: number,
+  endSec: number,
+) {
+  return segments.some(
+    (segment) =>
+      numbersClose(segment.chunkStartSec, startSec) &&
+      numbersClose(segment.chunkEndSec, endSec),
+  );
+}
+
+function hasTranscriptCoverage(
+  segments: any[],
+  startSec: number,
+  endSec: number,
+) {
+  const gapToleranceSec = 3;
+  let coveredUntil = startSec;
+
+  for (const segment of segments) {
+    const segmentStart = Number(segment.startSec);
+    const segmentEnd = Number(segment.endSec);
+    if (!Number.isFinite(segmentStart) || !Number.isFinite(segmentEnd)) {
+      continue;
+    }
+    if (segmentEnd <= coveredUntil + 0.5) continue;
+    if (segmentStart > coveredUntil + gapToleranceSec) return false;
+
+    coveredUntil = Math.max(coveredUntil, segmentEnd);
+    if (coveredUntil >= endSec - gapToleranceSec) return true;
+  }
+
+  return false;
+}
+
+async function getExistingTranscriptionStatus(tx: any, job: any) {
+  const fromSec = isFiniteNumber(job.fromSec) ? job.fromSec : null;
+  const toSec = isFiniteNumber(job.toSec) ? job.toSec : null;
+  const completedJob = await tx.transcriptionJob.findFirst({
+    where: {
+      id: { not: job.id },
+      mediaId: job.mediaId,
+      fromSec,
+      toSec,
+      status: { in: ["completed", "already_transcribed"] },
+    },
+    select: { id: true },
+    orderBy: { createdAt: "desc" },
+  });
+
+  if (completedJob) {
+    return {
+      status: "duplicate",
+      stage: "duplicate",
+      errorMessage: `Duplicate of transcription job #${completedJob.id}.`,
+    };
+  }
+
+  const transcript = await tx.transcript.findUnique({
+    where: { mediaId: job.mediaId },
+    select: {
+      status: true,
+      media: {
+        select: {
+          file: { select: { duration: true } },
+        },
+      },
+      segments: {
+        where: { status: "done" },
+        select: {
+          startSec: true,
+          endSec: true,
+          chunkStartSec: true,
+          chunkEndSec: true,
+        },
+        orderBy: { startSec: "asc" },
+      },
+    },
+  });
+
+  if (!transcript?.segments?.length) return null;
+
+  const durationSec = Number(transcript.media?.file?.duration);
+  const requestedStartSec = fromSec ?? 0;
+  const requestedEndSec =
+    toSec ?? (Number.isFinite(durationSec) ? durationSec : null);
+
+  if (fromSec != null || toSec != null) {
+    if (!isFiniteNumber(requestedEndSec)) return null;
+    if (
+      hasExactTranscriptRange(
+        transcript.segments,
+        requestedStartSec,
+        requestedEndSec,
+      ) ||
+      hasTranscriptCoverage(
+        transcript.segments,
+        requestedStartSec,
+        requestedEndSec,
+      )
+    ) {
+      return {
+        status: "already_transcribed",
+        stage: "already_transcribed",
+        errorMessage: "This range already has saved transcript segments.",
+      };
+    }
+    return null;
+  }
+
+  if (
+    transcript.status === "done" &&
+    Number.isFinite(durationSec) &&
+    durationSec > 0 &&
+    hasTranscriptCoverage(transcript.segments, 0, durationSec)
+  ) {
+    return {
+      status: "already_transcribed",
+      stage: "already_transcribed",
+      errorMessage: "This audio already has a saved transcript.",
+    };
+  }
+
+  return null;
+}
+
 function getSegmentStart(segment: any) {
   return Number(segment?.startSec ?? segment?.start ?? segment?.from);
 }
@@ -212,36 +353,64 @@ export async function claimNextTranscriptionJob(
   };
 
   return db.$transaction(async (tx: any) => {
-    const nextJob = await tx.transcriptionJob.findFirst({
-      where: claimWhere,
-      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-    });
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const nextJob = await tx.transcriptionJob.findFirst({
+        where: claimWhere,
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      });
 
-    if (!nextJob) return null;
+      if (!nextJob) return null;
 
-    const claimed = await tx.transcriptionJob.updateMany({
-      where: {
-        id: nextJob.id,
-        ...claimWhere,
-      },
-      data: {
-        status: "running",
-        progressPercent: Math.max(nextJob.progressPercent ?? 0, 1),
-        stage: "claimed",
-        workerId: options.workerId,
-        lockedAt: now,
-        heartbeatAt: now,
-        completedAt: null,
-        errorMessage: null,
-      },
-    });
+      const existingTranscription = await getExistingTranscriptionStatus(
+        tx,
+        nextJob,
+      );
+      if (existingTranscription) {
+        await tx.transcriptionJob.updateMany({
+          where: {
+            id: nextJob.id,
+            ...claimWhere,
+          },
+          data: {
+            status: existingTranscription.status,
+            progressPercent: 100,
+            stage: existingTranscription.stage,
+            workerId: null,
+            lockedAt: null,
+            heartbeatAt: now,
+            completedAt: now,
+            errorMessage: existingTranscription.errorMessage,
+          },
+        });
+        continue;
+      }
 
-    if (claimed.count === 0) return null;
+      const claimed = await tx.transcriptionJob.updateMany({
+        where: {
+          id: nextJob.id,
+          ...claimWhere,
+        },
+        data: {
+          status: "running",
+          progressPercent: Math.max(nextJob.progressPercent ?? 0, 1),
+          stage: "claimed",
+          workerId: options.workerId,
+          lockedAt: now,
+          heartbeatAt: now,
+          completedAt: null,
+          errorMessage: null,
+        },
+      });
 
-    return tx.transcriptionJob.findUnique({
-      where: { id: nextJob.id },
-      include: transcriptionWorkerJobInclude,
-    });
+      if (claimed.count === 0) continue;
+
+      return tx.transcriptionJob.findUnique({
+        where: { id: nextJob.id },
+        include: transcriptionWorkerJobInclude,
+      });
+    }
+
+    return null;
   });
 }
 

@@ -24,7 +24,9 @@ Tracks the current blog-reading experience and blog-related discovery surfaces.
 - Media rendering is source-aware: existing Telegram-imported media remains supported, while new user uploads resolve from Vercel Blob URLs.
 - Channel chat supports selecting exactly two same-channel posts and merging them into one canonical post, preserving media, tags, and comments while soft-deleting the secondary post.
 - Local-only blog import can be controlled from the Expo `/blog-import` screen when the local API is reachable on the device LAN.
+- Settings includes a Facebook Import screen for `Blog.source = "facebook"` rows. It shows media import status and starts a local bridge batch that downloads Facebook media, uploads it to the configured Telegram bot channel, and attaches the returned Telegram file metadata as normal blog media.
 - Blog/search cards are album-aware for audio posts, showing album badges when membership exists and add-to-album actions when eligible.
+- Album suggestion delete actions soft-delete the underlying blog item through `blog.deleteBlog` after a floating bottom confirmation sheet; they do not merely dismiss the suggestion.
 - Home feed de-duplicates album-linked audio posts by album and keeps the most recent visible item while leaving non-album posts visible.
 - Search shows live keyword suggestions while typing and hides recent searches until the input is cleared or submitted.
 - Blog post menus can share or copy internal links. Comments render supported internal blog/album links as compact preview cards that open the app route.
@@ -48,6 +50,7 @@ Tracks the current blog-reading experience and blog-related discovery surfaces.
 - The mobile import screen uses the same local network IP resolution strategy as Expo's local API targeting when available, plus a persisted manual URL fallback for compiled APK/dev-client builds.
 - Local import caches local API IPs, tries the last successful IP first, then the current Expo dev-host IP, then previous IP history, and finally asks for manual IP entry. The port comes from `EXPO_PUBLIC_API_PORT`.
 - Telegram/channel import is local API-owned work. The mobile app starts/stops and observes the import, but it does not run the import library itself.
+- Facebook media import is split between API-owned job/status and `services/facebook-media-bridge`, a local FastAPI helper that uses the local browser Facebook session via `yt-dlp --cookies-from-browser`. The app never stores Facebook's short-lived CDN URL; durable state is Telegram file metadata plus `Blog.meta.facebook.mediaDownload`.
 
 ### Product Role
 - Serves as one of the core content-consumption pillars alongside audio and books.

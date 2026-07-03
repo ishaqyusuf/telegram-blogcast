@@ -14,11 +14,14 @@ import { posts, postsSchema } from "../../queries/posts";
 import { createTRPCRouter, publicProcedure } from "../init";
 
 const blogStatusSchema = z.enum(["draft", "published"]);
+const blogTypeSchema = z.enum(["text", "audio", "image", "video", "pdf"]);
 const transcriptionJobStatusSchema = z.enum([
 	"queued",
 	"running",
 	"completed",
 	"failed",
+	"duplicate",
+	"already_transcribed",
 ]);
 const transcriptionJobRangeSchema = z.object({
 	mediaId: z.number(),
@@ -725,17 +728,33 @@ export const blogRoutes = createTRPCRouter({
 	checkLocalTranscriber: publicProcedure
 		.input(z.object({ baseUrl: z.string().url().optional() }).optional())
 		.query(async ({ input }) => {
-			const health = await checkLocalTranscriber(input?.baseUrl);
-			return {
-				ok: health.ok !== false,
-				service: health.service ?? "local-transcriber",
-				model: health.model ?? "unknown",
-				device: health.device ?? "local",
-				status: health.status ?? (health.ok === false ? "offline" : "ready"),
-				ready: health.ready ?? health.ok !== false,
-				error: health.error ?? null,
-				loadSeconds: health.loadSeconds ?? null,
-			};
+			try {
+				const health = await checkLocalTranscriber(input?.baseUrl);
+				return {
+					ok: health.ok !== false,
+					service: health.service ?? "local-transcriber",
+					model: health.model ?? "unknown",
+					device: health.device ?? "local",
+					status: health.status ?? (health.ok === false ? "offline" : "ready"),
+					ready: health.ready ?? health.ok !== false,
+					error: health.error ?? null,
+					loadSeconds: health.loadSeconds ?? null,
+				};
+			} catch (error) {
+				return {
+					ok: false,
+					service: "local-transcriber",
+					model: "unknown",
+					device: "local",
+					status: "offline",
+					ready: false,
+					error:
+						error instanceof Error
+							? error.message
+							: "Local transcriber is not reachable.",
+					loadSeconds: null,
+				};
+			}
 		}),
 
 	// ── Transcript ──────────────────────────────────────────────────────────────
@@ -841,6 +860,47 @@ export const blogRoutes = createTRPCRouter({
 			});
 		}),
 
+	deleteTranscriptionJob: publicProcedure
+		.input(z.object({ id: z.number() }))
+		.mutation(async ({ ctx, input }) => {
+			const db = ctx.db as any;
+			const job = await db.transcriptionJob.findUnique({
+				where: { id: input.id },
+				select: { id: true, status: true },
+			});
+
+			if (!job) {
+				throw new TRPCError({
+					code: "NOT_FOUND",
+					message: "Transcription job was not found.",
+				});
+			}
+
+			if (job.status !== "queued" && job.status !== "failed") {
+				throw new TRPCError({
+					code: "CONFLICT",
+					message: "Only queued or failed transcription jobs can be deleted.",
+				});
+			}
+
+			const deleted = await db.transcriptionJob.deleteMany({
+				where: {
+					id: input.id,
+					status: { in: ["queued", "failed"] },
+				},
+			});
+
+			if (deleted.count === 0) {
+				throw new TRPCError({
+					code: "CONFLICT",
+					message:
+						"This transcription job changed status before it could be deleted.",
+				});
+			}
+
+			return { id: input.id, deleted: true };
+		}),
+
 	enqueueTranscriptionJob: publicProcedure
 		.input(transcriptionJobRangeSchema)
 		.mutation(async ({ ctx, input }) => {
@@ -858,39 +918,52 @@ export const blogRoutes = createTRPCRouter({
 				});
 			}
 
-			const existing = await db.transcriptionJob.findFirst({
-				where: {
+			return db.$transaction(async (tx: any) => {
+				const rangeWhere = {
 					mediaId: input.mediaId,
 					fromSec,
 					toSec,
-					status: { in: ["queued", "running"] },
-				},
-				include: transcriptionJobInclude,
-				orderBy: { createdAt: "desc" },
-			});
-			if (existing) return existing;
+				};
 
-			return db.transcriptionJob.create({
-				data: {
-					mediaId: input.mediaId,
-					telegramFileId,
-					audioUrl,
-					fromSec,
-					toSec,
-					language: input.language || "ar",
-					transcriberUrl: input.transcriberUrl || null,
-					status: "queued",
-					progressPercent: 0,
-					stage: "queued",
-					workerId: null,
-					lockedAt: null,
-					heartbeatAt: null,
-					currentChunk: null,
-					totalChunks: null,
-					completedAt: null,
-					errorMessage: null,
-				},
-				include: transcriptionJobInclude,
+				await tx.transcriptionJob.deleteMany({
+					where: {
+						...rangeWhere,
+						status: "failed",
+					},
+				});
+
+				const existing = await tx.transcriptionJob.findFirst({
+					where: {
+						...rangeWhere,
+						status: { in: ["queued", "running"] },
+					},
+					include: transcriptionJobInclude,
+					orderBy: { createdAt: "desc" },
+				});
+				if (existing) return existing;
+
+				return tx.transcriptionJob.create({
+					data: {
+						mediaId: input.mediaId,
+						telegramFileId,
+						audioUrl,
+						fromSec,
+						toSec,
+						language: input.language || "ar",
+						transcriberUrl: input.transcriberUrl || null,
+						status: "queued",
+						progressPercent: 0,
+						stage: "queued",
+						workerId: null,
+						lockedAt: null,
+						heartbeatAt: null,
+						currentChunk: null,
+						totalChunks: null,
+						completedAt: null,
+						errorMessage: null,
+					},
+					include: transcriptionJobInclude,
+				});
 			});
 		}),
 
@@ -1114,8 +1187,10 @@ export const blogRoutes = createTRPCRouter({
 		.input(
 			z.object({
 				q: z.string().default(""),
-				limit: z.number().default(20),
+				limit: z.number().min(1).max(50).default(20),
+				cursor: z.number().nullish(),
 				channelIds: z.array(z.number()).optional(),
+				type: blogTypeSchema.optional(),
 				album: z.enum(["in", "not"]).optional(),
 			}),
 		)
@@ -1132,53 +1207,88 @@ export const blogRoutes = createTRPCRouter({
 					: input.album === "not"
 						? { medias: { some: { albumId: null } } }
 						: {};
+			const baseWhere: Prisma.BlogWhereInput = {
+				deletedAt: null,
+				...searchWhere,
+				...channelWhere,
+				...albumWhere,
+			};
+			const itemWhere: Prisma.BlogWhereInput = {
+				...baseWhere,
+				...(input.type ? { type: input.type } : {}),
+			};
+			const limit = input.limit;
 
-			return db.blog.findMany({
-				where: {
-					deletedAt: null,
-					...searchWhere,
-					...channelWhere,
-					...albumWhere,
-				},
-				take: input.limit,
-				orderBy: { blogDate: "desc" },
-				select: {
-					id: true,
-					content: true,
-					type: true,
-					blogDate: true,
-					medias: {
-						include: {
-							file: true,
-							album: { select: { id: true, name: true } },
-							albumAudioIndex: { select: { index: true } },
-							transcript: {
-								select: {
-									status: true,
-									segments: {
-										...(q
-											? {
-													where: {
-														text: { contains: q, mode: "insensitive" },
-													},
-												}
-											: {}),
-										orderBy: { startSec: "asc" },
-										take: 2,
+			const [rows, totalCount, allCount, typeGroups] = await Promise.all([
+				db.blog.findMany({
+					where: itemWhere,
+					take: limit + 1,
+					...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
+					orderBy: [{ blogDate: "desc" }, { id: "desc" }],
+					select: {
+						id: true,
+						content: true,
+						type: true,
+						blogDate: true,
+						medias: {
+							include: {
+								file: true,
+								album: { select: { id: true, name: true } },
+								albumAudioIndex: { select: { index: true } },
+								transcript: {
+									select: {
+										status: true,
+										segments: {
+											...(q
+												? {
+														where: {
+															text: { contains: q, mode: "insensitive" },
+														},
+													}
+												: {}),
+											orderBy: { startSec: "asc" },
+											take: 2,
+										},
 									},
 								},
-							},
-							transcriptionJobs: {
-								select: { status: true },
-								orderBy: { createdAt: "desc" },
-								take: 1,
+								transcriptionJobs: {
+									select: { status: true },
+									orderBy: { createdAt: "desc" },
+									take: 1,
+								},
 							},
 						},
+						blogTags: { include: { tags: true } },
+						channel: { select: { id: true, title: true, username: true } },
 					},
-					blogTags: { include: { tags: true } },
-					channel: { select: { id: true, title: true, username: true } },
+				}),
+				db.blog.count({ where: itemWhere }),
+				db.blog.count({ where: baseWhere }),
+				db.blog.groupBy({
+					by: ["type"],
+					where: baseWhere,
+					_count: { _all: true },
+				}),
+			]);
+
+			const hasNextPage = rows.length > limit;
+			const data = hasNextPage ? rows.slice(0, limit) : rows;
+			const nextCursor = hasNextPage ? data[data.length - 1]?.id : null;
+
+			return {
+				data,
+				meta: {
+					allCount,
+					cursor: nextCursor ?? null,
+					totalCount,
+					typeCounts: typeGroups
+						.map((group) => ({
+							type: group.type,
+							count: group._count._all,
+						}))
+						.sort((a, b) => a.type.localeCompare(b.type)),
 				},
-			});
+			};
 		}),
 
 	searchChannels: publicProcedure
@@ -1279,7 +1389,10 @@ export const blogRoutes = createTRPCRouter({
 				}),
 			]);
 
-			const suggestions = new Map<string, { keyword: string; source: string }>();
+			const suggestions = new Map<
+				string,
+				{ keyword: string; source: string }
+			>();
 			const add = (keyword?: string | null, source = "suggestion") => {
 				const normalized = keyword?.trim().replace(/\s+/g, " ");
 				if (!normalized || normalized.length < 2) return;

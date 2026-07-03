@@ -51,12 +51,54 @@ export function getPrimaryImageUrl(post: BlogItem) {
   return firstImage?.url || getMediaFileUrl(firstImage?.file) || buildTelegramFileProxy(firstImage?.fileId);
 }
 
+export function getPrimaryDocumentMedia(post: BlogItem) {
+  const doc = (post as any).doc;
+  if (doc) return doc;
+
+  const media = ((post as any).media ?? []) as Array<{
+    mimeType?: string | null;
+    file?: {
+      mimeType?: string | null;
+      fileName?: string | null;
+      blobPathname?: string | null;
+      blobContentType?: string | null;
+    } | null;
+  }>;
+
+  return media.find((item) => {
+    const mimeType = (item.mimeType || item.file?.mimeType || "").toLowerCase();
+    const fileName = item.file?.fileName?.toLowerCase() ?? "";
+    const blobPathname = item.file?.blobPathname?.toLowerCase() ?? "";
+    const blobContentType = item.file?.blobContentType?.toLowerCase() ?? "";
+    return (
+      mimeType === "application/pdf" ||
+      mimeType.startsWith("document/") ||
+      blobContentType === "application/pdf" ||
+      fileName.endsWith(".pdf") ||
+      blobPathname.endsWith(".pdf")
+    );
+  });
+}
+
+export function getPrimaryDocumentUrl(post: BlogItem) {
+  const doc = getPrimaryDocumentMedia(post) as any;
+  if (!doc) return null;
+
+  return (
+    doc.url ||
+    getMediaFileUrl(doc.file) ||
+    buildTelegramFileProxy(doc.fileId ?? doc.telegramFileId)
+  );
+}
+
 export function resolveVariant(post: BlogItem): BlogCardVariant {
   const hasAudio = !!(post.audio?.telegramFileId || (post.audio as any)?.url);
   const hasImage = !!getPrimaryImageUrl(post);
+  const hasDocument = !!getPrimaryDocumentMedia(post);
   const hasText = !!(post.content?.trim() || post.caption?.trim());
 
   if (post.type === "video") return "video";
+  if (post.type === "pdf" || hasDocument) return "pdf";
   if (hasAudio) return "audio";
   if (hasImage && hasText) return "text+image";
   if (hasImage) return "image";

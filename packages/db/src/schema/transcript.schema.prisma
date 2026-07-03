@@ -41,7 +41,7 @@ model TranscriptionJob {
   toSec          Int?
   language       String    @default("ar")
   transcriberUrl String?
-  // queued | running | completed | failed
+  // queued | running | completed | failed | duplicate | already_transcribed
   status         String    @default("queued")
   progressPercent Int      @default(0)
   stage          String?

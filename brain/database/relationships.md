@@ -17,6 +17,10 @@ Captures the important cross-domain relationships in the data model at a high le
 - Books connect back to audio through two explicit joins:
   - `AlbumBookReference` links an album/series to one or more source books.
   - `MediaBookPageReference` links a specific audio item or timestamp range to a book page.
+- Automatic album index review data is intentionally separate from live album membership:
+  - `AlbumAutoIndexRun` owns one generated/failed channel indexing attempt.
+  - `AlbumAutoIndexAlbumSuggestion` groups proposed media under an existing album id.
+  - `AlbumAutoIndexMediaSuggestion` stores proposed media ids for review before any actual `Media.albumId` updates happen.
 - Imported books are canonical read-only content; user annotations, comments, and audio references live in separate models so they can change without editing source text.
 
 ### Detailed Mapping TODO

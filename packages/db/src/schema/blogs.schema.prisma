@@ -6,6 +6,10 @@ model Blog {
     publishedAt DateTime?
     status      String?
     meta        Json?
+    source      String?
+    sourceId    String?
+    sourceUrl   String?
+    sourceSyncedAt DateTime?
     telegramMessageId Int?
 
     blogDate DateTime?
@@ -36,6 +40,8 @@ model Blog {
     book           Book?
 
     @@unique([channelId, telegramMessageId])
+    @@unique([source, sourceId])
+    @@index([source, sourceSyncedAt])
 }
 
 model BlogComments {

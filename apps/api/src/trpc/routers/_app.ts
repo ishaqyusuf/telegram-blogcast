@@ -6,6 +6,7 @@ import { channelRoutes } from "./channel.route";
 import { blogRoutes } from "./blog.routes";
 import { albumRoutes } from "./album.routes";
 import { bookRoutes } from "./book.routes";
+import { facebookImportRoutes } from "./facebook-import.routes";
 import { playlistRoutes } from "./playlist.routes";
 
 export const appRouter = createTRPCRouter({
@@ -13,6 +14,7 @@ export const appRouter = createTRPCRouter({
   channel: channelRoutes,
   blog: blogRoutes,
   album: albumRoutes,
+  facebookImport: facebookImportRoutes,
   playlist: playlistRoutes,
   book: bookRoutes,
 });

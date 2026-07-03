@@ -28,3 +28,15 @@ Defines repository-wide implementation norms so code stays consistent across app
 - Update Brain docs after meaningful architecture, feature, API, or database changes.
 - When changing Prisma schema files in this project, use `bun db:push` only to apply DB updates because there is no local database workflow. Do not run `bun db:migrate` unless the project gains a local DB setup or the user explicitly asks. Do not manually create migration files.
 - Add ADRs for major long-term decisions.
+
+<!-- personal-coding-rules:start -->
+## Global Personal Coding Rules
+
+Agents must treat these global coding rule references as non-negotiable:
+
+- `/Users/M1PRO/.me/coding-standards/global.md`
+- `/Users/M1PRO/.me/coding-standards/nextjs.md`
+- `/Users/M1PRO/.me/coding-standards/expo.md`
+
+Project-specific exceptions require an ADR in `brain/decisions/` before agents may diverge.
+<!-- personal-coding-rules:end -->

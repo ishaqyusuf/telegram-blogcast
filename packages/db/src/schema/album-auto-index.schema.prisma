@@ -1,0 +1,75 @@
+model AlbumAutoIndexRun {
+    id        Int       @unique @default(autoincrement())
+    createdAt DateTime? @default(now()) @db.Timestamp(0)
+    updatedAt DateTime? @updatedAt
+    deletedAt DateTime?
+
+    channelId Int
+    provider  String @default("deepseek")
+    model     String
+    status    String @default("running")
+
+    albumCount      Int @default(0)
+    mediaCount      Int @default(0)
+    suggestionCount Int @default(0)
+
+    inputJson          Json?
+    rawResponseJson    Json?
+    parsedResponseJson Json?
+    error              String?
+
+    albumSuggestions AlbumAutoIndexAlbumSuggestion[]
+
+    @@index([channelId])
+    @@index([status])
+}
+
+model AlbumAutoIndexAlbumSuggestion {
+    id        Int       @unique @default(autoincrement())
+    createdAt DateTime? @default(now()) @db.Timestamp(0)
+    updatedAt DateTime? @updatedAt
+    deletedAt DateTime?
+
+    runId Int
+    run   AlbumAutoIndexRun @relation(fields: [runId], references: [id])
+
+    albumId           Int?
+    albumNameSnapshot String?
+    suggestionType    String  @default("existing_album")
+    proposedAlbumName String?
+    proposedAlbumType String?
+    proposedDescription String?
+    proposedSuggestionKeywords String?
+    confidence        Float?
+    reason            String?
+    status            String  @default("pending")
+
+    mediaSuggestions AlbumAutoIndexMediaSuggestion[]
+
+    @@unique([runId, albumId])
+    @@index([suggestionType])
+    @@index([albumId])
+    @@index([runId])
+    @@index([status])
+}
+
+model AlbumAutoIndexMediaSuggestion {
+    id        Int       @unique @default(autoincrement())
+    createdAt DateTime? @default(now()) @db.Timestamp(0)
+    updatedAt DateTime? @updatedAt
+    deletedAt DateTime?
+
+    suggestionId Int
+    suggestion   AlbumAutoIndexAlbumSuggestion @relation(fields: [suggestionId], references: [id])
+
+    mediaId            Int
+    mediaTitleSnapshot String?
+    confidence         Float?
+    reason             String?
+    status             String  @default("pending")
+
+    @@unique([suggestionId, mediaId])
+    @@index([mediaId])
+    @@index([suggestionId])
+    @@index([status])
+}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
 	Alert,
+	Animated,
 	LayoutAnimation,
 	Modal,
 	Platform,
@@ -28,7 +29,6 @@ import { BlogHomeChannels } from "@/components/blog-home/blog-home-channels";
 import { BlogHomeFab } from "@/components/blog-home/blog-home-fab";
 import { BlogHomeHeader } from "@/components/blog-home/blog-home-header";
 import { BlogHomeRecentlyPlayed } from "@/components/blog-home/blog-home-recently-played";
-import { BlogHomeRecentlyViewed } from "@/components/blog-home/blog-home-recently-viewed";
 import { useInfiniteLoader } from "@/components/infinite-loader";
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
@@ -51,6 +51,8 @@ if (
 
 const AUDIO_BAR_SCROLL_HIDE_THRESHOLD = 28;
 const AUDIO_BAR_SCROLL_SHOW_THRESHOLD = -18;
+const HOME_HEADER_ANIMATION_DURATION = 180;
+const CATEGORY_TABS_PIN_HYSTERESIS = 8;
 
 function animatePostListChange() {
 	LayoutAnimation.configureNext({
@@ -128,13 +130,24 @@ export default function BlogHomeScreen() {
 	const lastScrollYRef = useRef(0);
 	const scrollDeltaAccumulatorRef = useRef(0);
 	const audioBarScrollHiddenRef = useRef(false);
+	const homeHeaderHiddenRef = useRef(false);
+	const isFeedDragActiveRef = useRef(false);
+	const pendingHomeHeaderHiddenRef = useRef<boolean | null>(null);
+	const categoryTabsPinnedRef = useRef(false);
+	const headerCollapseProgress = useRef(new Animated.Value(1)).current;
 	const previousGlobalAudioHiddenRef = useRef<boolean | null>(null);
+	const [homeHeaderHeight, setHomeHeaderHeight] = useState(0);
+	const [categoryTabsOffsetY, setCategoryTabsOffsetY] = useState<
+		number | null
+	>(null);
+	const [categoryTabsPinned, setCategoryTabsPinned] = useState(false);
 
 	const selectedCategory = useMemo<BlogCategory>(() => {
 		const map: Record<string, BlogCategory> = {
 			all: "All",
 			audio: "Audio",
 			text: "Text",
+			pdf: "Pdf",
 			picture: "Picture",
 			video: "Video",
 			likes: "Likes",
@@ -146,11 +159,12 @@ export default function BlogHomeScreen() {
 	const category = useMemo(() => {
 		const map: Record<
 			BlogCategory,
-			"all" | "audio" | "text" | "picture" | "video" | "likes" | "saved"
+			"all" | "audio" | "text" | "pdf" | "picture" | "video" | "likes" | "saved"
 		> = {
 			All: "all",
 			Audio: "audio",
 			Text: "text",
+			Pdf: "pdf",
 			Picture: "picture",
 			Video: "video",
 			Likes: "likes",
@@ -162,11 +176,12 @@ export default function BlogHomeScreen() {
 	const onSelectCategory = (value: BlogCategory) => {
 		const map: Record<
 			BlogCategory,
-			"all" | "audio" | "text" | "picture" | "video" | "likes" | "saved"
+			"all" | "audio" | "text" | "pdf" | "picture" | "video" | "likes" | "saved"
 		> = {
 			All: "all",
 			Audio: "audio",
 			Text: "text",
+			Pdf: "pdf",
 			Picture: "picture",
 			Video: "video",
 			Likes: "likes",
@@ -342,6 +357,94 @@ export default function BlogHomeScreen() {
 		[albumMediaIds],
 	);
 
+	const setHomeHeaderHidden = useCallback(
+		(hidden: boolean) => {
+			if (homeHeaderHiddenRef.current === hidden) return;
+
+			homeHeaderHiddenRef.current = hidden;
+			Animated.timing(headerCollapseProgress, {
+				toValue: hidden ? 0 : 1,
+				duration: HOME_HEADER_ANIMATION_DURATION,
+				useNativeDriver: false,
+			}).start();
+		},
+		[headerCollapseProgress],
+	);
+
+	const requestHomeHeaderHidden = useCallback(
+		(hidden: boolean) => {
+			if (isFeedDragActiveRef.current) {
+				pendingHomeHeaderHiddenRef.current = hidden;
+				return;
+			}
+
+			pendingHomeHeaderHiddenRef.current = null;
+			setHomeHeaderHidden(hidden);
+		},
+		[setHomeHeaderHidden],
+	);
+
+	const flushPendingHomeHeaderHidden = useCallback(() => {
+		isFeedDragActiveRef.current = false;
+
+		if (pendingHomeHeaderHiddenRef.current == null) return;
+
+		const nextHidden = pendingHomeHeaderHiddenRef.current;
+		pendingHomeHeaderHiddenRef.current = null;
+		setHomeHeaderHidden(nextHidden);
+	}, [setHomeHeaderHidden]);
+
+	const setCategoryTabsPinnedSafely = useCallback((pinned: boolean) => {
+		if (categoryTabsPinnedRef.current === pinned) return;
+
+		categoryTabsPinnedRef.current = pinned;
+		setCategoryTabsPinned(pinned);
+	}, []);
+
+	const updateCategoryTabsPinnedForScroll = useCallback(
+		(currentY: number) => {
+			if (typeof categoryTabsOffsetY !== "number") return;
+
+			const pinAt = Math.max(0, categoryTabsOffsetY + CATEGORY_TABS_PIN_HYSTERESIS);
+			const unpinAt = Math.max(0, categoryTabsOffsetY - CATEGORY_TABS_PIN_HYSTERESIS);
+			const shouldPinCategoryTabs = categoryTabsPinnedRef.current
+				? currentY >= unpinAt
+				: currentY >= pinAt;
+
+			setCategoryTabsPinnedSafely(shouldPinCategoryTabs);
+		},
+		[categoryTabsOffsetY, setCategoryTabsPinnedSafely],
+	);
+
+	const handleCategoryTabsLayout = useCallback((event: any) => {
+		const nextOffsetY = event.nativeEvent.layout?.y;
+		if (typeof nextOffsetY !== "number") return;
+
+		setCategoryTabsOffsetY((previousOffsetY) => {
+			if (
+				typeof previousOffsetY === "number" &&
+				Math.abs(previousOffsetY - nextOffsetY) < 1
+			) {
+				return previousOffsetY;
+			}
+
+			return nextOffsetY;
+		});
+	}, []);
+
+	const homeHeaderAnimatedStyle = useMemo(() => {
+		if (!homeHeaderHeight) return undefined;
+
+		return {
+			height: headerCollapseProgress.interpolate({
+				inputRange: [0, 1],
+				outputRange: [0, homeHeaderHeight],
+			}),
+			opacity: headerCollapseProgress,
+			overflow: "hidden" as const,
+		};
+	}, [headerCollapseProgress, homeHeaderHeight]);
+
 	useEffect(() => {
 		setHiddenPostIds(new Set());
 		refetch();
@@ -363,9 +466,12 @@ export default function BlogHomeScreen() {
 			const currentY = event.nativeEvent.contentOffset?.y ?? 0;
 			const deltaY = currentY - lastScrollYRef.current;
 			lastScrollYRef.current = currentY;
+			updateCategoryTabsPinnedForScroll(currentY);
 
 			if (currentY <= 0) {
 				scrollDeltaAccumulatorRef.current = 0;
+				requestHomeHeaderHidden(false);
+				setCategoryTabsPinnedSafely(false);
 				if (audioBarScrollHiddenRef.current) {
 					audioBarScrollHiddenRef.current = false;
 					setGlobalAudioBarScrollHidden(false);
@@ -385,27 +491,39 @@ export default function BlogHomeScreen() {
 				: previousAccumulated + deltaY;
 
 			if (
-				scrollDeltaAccumulatorRef.current > AUDIO_BAR_SCROLL_HIDE_THRESHOLD &&
-				!audioBarScrollHiddenRef.current
+				scrollDeltaAccumulatorRef.current > AUDIO_BAR_SCROLL_HIDE_THRESHOLD
 			) {
-				audioBarScrollHiddenRef.current = true;
+				requestHomeHeaderHidden(true);
 				scrollDeltaAccumulatorRef.current = 0;
-				setGlobalAudioBarScrollHidden(true);
+				if (!audioBarScrollHiddenRef.current) {
+					audioBarScrollHiddenRef.current = true;
+					setGlobalAudioBarScrollHidden(true);
+				}
 			} else if (
-				scrollDeltaAccumulatorRef.current < AUDIO_BAR_SCROLL_SHOW_THRESHOLD &&
-				audioBarScrollHiddenRef.current
+				scrollDeltaAccumulatorRef.current < AUDIO_BAR_SCROLL_SHOW_THRESHOLD
 			) {
-				audioBarScrollHiddenRef.current = false;
+				requestHomeHeaderHidden(false);
 				scrollDeltaAccumulatorRef.current = 0;
-				setGlobalAudioBarScrollHidden(false);
+				if (audioBarScrollHiddenRef.current) {
+					audioBarScrollHiddenRef.current = false;
+					setGlobalAudioBarScrollHidden(false);
+				}
 			}
 		},
-		[feedScroll, setGlobalAudioBarScrollHidden],
+		[
+			feedScroll,
+			requestHomeHeaderHidden,
+			setCategoryTabsPinnedSafely,
+			setGlobalAudioBarScrollHidden,
+			updateCategoryTabsPinnedForScroll,
+		],
 	);
 
 	useEffect(() => {
 		return () => {
 			audioBarScrollHiddenRef.current = false;
+			isFeedDragActiveRef.current = false;
+			pendingHomeHeaderHiddenRef.current = null;
 			setGlobalAudioBarScrollHidden(false);
 			if (previousGlobalAudioHiddenRef.current != null) {
 				setGlobalAudioBarHidden(previousGlobalAudioHiddenRef.current);
@@ -436,8 +554,39 @@ export default function BlogHomeScreen() {
 			style={{ backgroundColor: colors.background }}
 		>
 			<SafeArea>
-				<BlogHomeHeader />
+				<Animated.View style={homeHeaderAnimatedStyle}>
+					<View
+						onLayout={(event) => {
+							const nextHeight = event.nativeEvent.layout.height;
+							if (nextHeight > 0) {
+								setHomeHeaderHeight((previousHeight) =>
+									Math.abs(previousHeight - nextHeight) < 1
+										? previousHeight
+										: nextHeight,
+								);
+							}
+						}}
+					>
+						<BlogHomeHeader />
+					</View>
+				</Animated.View>
 				<View className="flex-1 relative">
+					{categoryTabsPinned ? (
+						<View
+							className="absolute left-0 right-0 top-0 border-b border-border bg-background"
+							style={{
+								backgroundColor: colors.background,
+								borderBottomColor: colors.border,
+								elevation: 30,
+								zIndex: 30,
+							}}
+						>
+							<BlogHomeCategoryTabs
+								selected={selectedCategory}
+								onSelect={onSelectCategory}
+							/>
+						</View>
+					) : null}
 					<LegendList
 						ref={feedScroll.ref}
 						style={{ backgroundColor: colors.background }}
@@ -453,18 +602,19 @@ export default function BlogHomeScreen() {
 						)}
 						keyExtractor={(item) => String(item.id)}
 						ListHeaderComponent={
-							<>
+							<View>
 								<BlogHomeAnalytics />
 								<BlogHomeBooksCta />
 								<BlogHomeChannels />
-								<BlogHomeRecentlyViewed />
 								<BlogHomeRecentlyPlayed />
 								<BlogHomeAlbums />
 								<BlogHomeBooks />
-								<BlogHomeCategoryTabs
-									selected={selectedCategory}
-									onSelect={onSelectCategory}
-								/>
+								<View onLayout={handleCategoryTabsLayout}>
+									<BlogHomeCategoryTabs
+										selected={selectedCategory}
+										onSelect={onSelectCategory}
+									/>
+								</View>
 								<Text className="px-4 pt-4 pb-2 text-base font-bold text-foreground">
 									{t("latestPosts")}
 								</Text>
@@ -472,7 +622,7 @@ export default function BlogHomeScreen() {
 									className="border-t border-border"
 									style={{ borderTopColor: colors.border }}
 								/>
-							</>
+							</View>
 						}
 						ListFooterComponent={
 							<View className="h-40 items-center px-4 pt-5">
@@ -489,6 +639,11 @@ export default function BlogHomeScreen() {
 						refreshing={isPullRefreshing || isRefetching}
 						onRefresh={onRefresh}
 						onScroll={handleScroll}
+						onScrollBeginDrag={() => {
+							isFeedDragActiveRef.current = true;
+							pendingHomeHeaderHiddenRef.current = null;
+						}}
+						onScrollEndDrag={flushPendingHomeHeaderHidden}
 						scrollEventThrottle={16}
 						onEndReached={() => {
 							if (hasNextPage && !isFetching) {

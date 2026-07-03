@@ -1,11 +1,11 @@
 import { Modal, useModal } from "@/components/ui/modal";
-import { _trpc } from "@/components/static-trpc";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
 import { useMutation, useQueryClient } from "@/lib/react-query";
 import { storage } from "@/store/mmkv";
+import { useTRPC } from "@/trpc/client";
 import type { RouterOutputs } from "@api/trpc/routers/_app";
 import { BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import { useRouter } from "expo-router";
@@ -28,14 +28,18 @@ const TELEGRAM_LOGIN_PHONE_KEY = "telegram_login_phone";
 
 function formatCount(value: number | null | undefined) {
   if (value === null || value === undefined) return "Unknown";
-  return new Intl.NumberFormat().format(value);
+  return String(value);
 }
 
 function formatDate(value: string | null | undefined) {
   if (!value) return "Never";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Unknown";
-  return date.toLocaleString();
+  try {
+    return date.toLocaleString();
+  } catch {
+    return date.toISOString();
+  }
 }
 
 function getDeltaLabel(channel: SummaryChannel) {
@@ -166,6 +170,7 @@ function OtpInput({
 export function ChannelUpdatePrompt() {
   const modal = useModal();
   const router = useRouter();
+  const trpc = useTRPC();
   const queryClient = useQueryClient();
   const [channels, setChannels] = useState<SummaryChannel[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -178,10 +183,10 @@ export function ChannelUpdatePrompt() {
 
   const selectedCount = selectedIds.size;
   const updateMutation = useMutation(
-    _trpc.channel.startRecentUpdateJob.mutationOptions({
+    trpc.channel.startRecentUpdateJob.mutationOptions({
       onSuccess: () => {
         queryClient.invalidateQueries({
-          queryKey: _trpc.channel.getRecentUpdateJob.queryKey(),
+          queryKey: trpc.channel.getRecentUpdateJob.queryKey(),
         });
         modal.dismiss();
         router.push("/channel-updates" as any);
@@ -189,7 +194,7 @@ export function ChannelUpdatePrompt() {
     }),
   );
   const sendCodeMutation = useMutation(
-    _trpc.channel.telegramSendCode.mutationOptions({
+    trpc.channel.telegramSendCode.mutationOptions({
       onSuccess: (result) => {
         if (result.authorized) {
           void loadPrompt();
@@ -206,7 +211,7 @@ export function ChannelUpdatePrompt() {
     }),
   );
   const verifyCodeMutation = useMutation(
-    _trpc.channel.telegramVerifyCode.mutationOptions({
+    trpc.channel.telegramVerifyCode.mutationOptions({
       onSuccess: (result) => {
         if (!result.ok) {
           setAuthMessage(
@@ -218,7 +223,7 @@ export function ChannelUpdatePrompt() {
         }
 
         queryClient.invalidateQueries({
-          queryKey: _trpc.channel.telegramAuthStatus.queryKey(),
+          queryKey: trpc.channel.telegramAuthStatus.queryKey(),
         });
         void loadPrompt();
       },
@@ -230,16 +235,38 @@ export function ChannelUpdatePrompt() {
 
   useEffect(() => {
     let mounted = true;
-    storage.getString(TELEGRAM_LOGIN_PHONE_KEY).then((value) => {
-      if (!mounted || !value) return;
-      setRememberedPhone(value);
-      setPhoneNumber(value);
-    });
+    storage
+      .getString(TELEGRAM_LOGIN_PHONE_KEY)
+      .then((value) => {
+        if (!mounted || !value) return;
+        setRememberedPhone(value);
+        setPhoneNumber(value);
+      })
+      .catch((error) => {
+        console.warn("[channel-updates] remembered phone read failed", error);
+      });
 
     return () => {
       mounted = false;
     };
   }, []);
+
+  const presentPrompt = useCallback(() => {
+    const present = () => {
+      try {
+        modal.present();
+      } catch (error) {
+        console.warn("[channel-updates] prompt present failed", error);
+      }
+    };
+
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(present);
+      return;
+    }
+
+    setTimeout(present, 0);
+  }, [modal]);
 
   const loadPrompt = useCallback(
     async (mountedRef?: { current: boolean }) => {
@@ -249,7 +276,7 @@ export function ChannelUpdatePrompt() {
       try {
         try {
           await queryClient.fetchQuery(
-            _trpc.channel.pingFetcher.queryOptions(),
+            trpc.channel.pingFetcher.queryOptions(),
           );
         } catch {
           if (mountedRef && !mountedRef.current) return;
@@ -259,12 +286,12 @@ export function ChannelUpdatePrompt() {
           setAuthMessage(
             "The local API is not reachable. Start the local fetcher and try again.",
           );
-          requestAnimationFrame(() => modal.present());
+          presentPrompt();
           return;
         }
 
         const authStatus = await queryClient.fetchQuery(
-          _trpc.channel.telegramAuthStatus.queryOptions(),
+          trpc.channel.telegramAuthStatus.queryOptions(),
         );
         if (mountedRef && !mountedRef.current) return;
 
@@ -273,12 +300,12 @@ export function ChannelUpdatePrompt() {
           setSelectedIds(new Set());
           setAuthStep("phone");
           setAuthMessage(authStatus.error);
-          requestAnimationFrame(() => modal.present());
+          presentPrompt();
           return;
         }
 
         const summary = await queryClient.fetchQuery(
-          _trpc.channel.getUpdatePromptSummary.queryOptions(),
+          trpc.channel.getUpdatePromptSummary.queryOptions(),
         );
         if (mountedRef && !mountedRef.current) return;
         setAuthStep("authorized");
@@ -292,19 +319,19 @@ export function ChannelUpdatePrompt() {
               .map((channel) => channel.channelId),
           ),
         );
-        requestAnimationFrame(() => modal.present());
+        presentPrompt();
       } catch {
         if (mountedRef && !mountedRef.current) return;
         setChannels([]);
         setSelectedIds(new Set());
         setAuthStep("unavailable");
         setAuthMessage("Unable to check Telegram updates right now.");
-        requestAnimationFrame(() => modal.present());
+        presentPrompt();
       } finally {
         if (!mountedRef || mountedRef.current) setLoading(false);
       }
     },
-    [modal, queryClient],
+    [presentPrompt, queryClient, trpc],
   );
 
   useEffect(() => {

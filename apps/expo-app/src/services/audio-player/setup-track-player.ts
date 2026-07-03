@@ -2,7 +2,8 @@ import TrackPlayer, {
   AndroidAudioContentType,
   AppKilledPlaybackBehavior,
   Capability,
-} from "react-native-track-player";
+  isTrackPlayerAvailable,
+} from "./track-player-safe";
 
 let setupPromise: Promise<void> | null = null;
 
@@ -30,6 +31,12 @@ const notificationSpeedIcon = require("../../../assets/notification/notification
 const notificationPlusIcon = require("../../../assets/notification/notification_plus.png");
 
 export async function setupTrackPlayer() {
+  if (!isTrackPlayerAvailable) {
+    throw new Error(
+      "Audio playback needs a fresh Expo development build with react-native-track-player included.",
+    );
+  }
+
   if (!setupPromise) {
     setupPromise = TrackPlayer.setupPlayer({
       androidAudioContentType: AndroidAudioContentType.Speech,
@@ -72,6 +79,6 @@ export async function setupTrackPlayer() {
     previousIcon: notificationSpeedIcon,
     nextIcon: notificationPlusIcon,
     notificationCapabilities,
-    progressUpdateEventInterval: 1,
+    progressUpdateEventInterval: 0.25,
   });
 }

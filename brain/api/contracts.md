@@ -24,6 +24,7 @@ Tracks important request/response expectations and typed boundaries between clie
 - `book.getBooks` returns each book with at most one fetched `pages` entry, ordered by lowest `shamelaPageNo`, so mobile list surfaces can open the first reader page directly while falling back to book detail when no fetched page exists.
 - Blog media is source-aware. `blog.createBlog` accepts optional `mediaUploads` from Vercel Blob and persists them as `File` + `Media` rows with `source = "vercel_blob"`; existing Telegram media keeps using Telegram `fileId` values and the web proxy.
 - Expo uploads user-selected blog media through the Next.js `/api/blob/upload` client-upload token endpoint, then sends the resulting Blob metadata to tRPC with the blog create/update payload.
+- `facebookImport` procedures expose Facebook media import status for DB rows with `Blog.source = "facebook"`. `startMediaImport` launches an API-owned background batch that calls the local Facebook media bridge, then persists Telegram `file_id`/`file_unique_id` as normal `File` + `Media` rows and stores bridge status under `Blog.meta.facebook.mediaDownload`.
 
 ### Blog Contracts
 - `blog.mergeBlogs` accepts `{ primaryBlogId, secondaryBlogId, contentStrategy? }`, requires two different non-deleted blogs, rejects cross-channel merges, moves secondary media/tag/comment links to the primary blog, writes merge metadata, and soft-deletes the secondary blog.
@@ -36,11 +37,18 @@ Tracks important request/response expectations and typed boundaries between clie
 - `blog.enqueueTranscriptionJob` stores DB-backed transcription queue rows. Enqueue clients should provide a reachable HTTP(S) `audioUrl`; Telegram file IDs should be resolved before enqueue when possible.
 - `blog.getTranscriptionJobs` returns queue rows with media title/file/blog fallback metadata plus persisted progress fields from `TranscriptionJob`.
 - Internal transcription worker endpoints under `/api/internal/transcription-jobs/*` are used by the local Python service, not by mobile UI. They claim jobs, persist progress/heartbeats, save completed transcript segments, and record failures/retries. If `TRANSCRIPTION_WORKER_TOKEN` is set, workers must send `Authorization: Bearer <token>`.
+- `facebookImport.checkBridge` checks `FACEBOOK_MEDIA_BRIDGE_BASE_URL` or `http://127.0.0.1:8790`. The bridge itself owns Facebook URL resolution/download and Telegram upload; API clients only start jobs and observe status.
 
 ### Audio Organization Contracts
 - `album.addMediaToAlbum` accepts `{ albumId, mediaIds }`, requires audio media, rejects missing media, rejects mixed-channel candidate sets, and rejects cross-channel additions when the album already has a channel. Empty albums infer `channelId` from the first added audio blog.
 - `album.getSuggestedMedia` returns same-channel audio candidates with matching tag metadata and excludes media already in the album.
 - `album.getAlbumSuggestionGroups` accepts a keyword and optional channel context, returns matching albums with channel metadata and channel-compatible audio suggestions.
+- `album.generateAutomaticIndex` accepts `{ channelId, provider?, albumLimit?, mediaLimit?, chunkSize? }`, snapshots bounded same-channel unalbumed audio candidates plus existing channel albums, and sends non-overlapping media chunks to the selected AI provider with strict JSON output. Candidate media input is lean `id + textData` only; `textData` is title plus filename, or caption content only when title and filename are missing. Authors are not sent. Returned existing-album IDs and media IDs are validated; AI may also return review-only proposed albums with names/types and media. Chunk results are merged/deduped into one saved discovery run, and generation never mutates album membership. Supported provider values are `deepseek`, `gemini`, and `openai`; omitted provider defaults to `deepseek`.
+- `album.getAutomaticIndexChannelSummary` returns a channel's unalbumed audio count, album count, and latest saved automatic index run for Album Organizer.
+- `album.getAutomaticIndexRuns` lists generated/failed automatic album index runs for a channel.
+- `album.getAutomaticIndexRun` returns one persisted run with album suggestions, media suggestions, and hydrated current album/media context for review UI.
+- `album.dismissAutomaticIndexMediaSuggestion` and `album.restoreAutomaticIndexMediaSuggestion` change only persisted discovery suggestion status; they do not delete media or alter album membership.
+- `album.approveAutomaticIndexAlbumSuggestion` applies remaining or selected media suggestions for one album through the same album-add constraints as `album.addMediaToAlbum`. For proposed-album suggestions, approval first creates the album from the reviewed proposed fields, then adds tracks. It persists approved/failed/partial statuses and returns added/skipped/already-added/failed counts plus the target `albumId`.
 - `blog.search` includes media album membership where present so clients can render album badges/actions.
 - `blog.suggestSearchKeywords` returns lightweight live keyword suggestions from recent searches, tags, and matching post text.
 - `playlist` router exposes `getPlaylists`, `getPlaylist`, `createPlaylist`, `addMediaToPlaylist`, `removeMediaFromPlaylist`, and `reorderEpisodes`.
@@ -49,6 +57,7 @@ Tracks important request/response expectations and typed boundaries between clie
 ### Local API Contracts
 - `GET /health` returns a lightweight API reachability payload for local Expo/APK screens.
 - `/blog-import` mobile flow talks to the local API over LAN using the tRPC channel procedures: `channel.getChannels`, `channel.syncChannels`, `channel.toggleFetchable`, `channel.startFetch`, `channel.stopFetch`, and `channel.getFetcherState`.
+- `/facebook-import` mobile flow talks to tRPC `facebookImport.getSummary`, `facebookImport.listMediaImports`, `facebookImport.checkBridge`, and `facebookImport.startMediaImport`.
 
 ### TODO
 - Record contract notes per router as features are implemented or refactored.

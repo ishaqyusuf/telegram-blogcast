@@ -1,14 +1,24 @@
 import { Pressable } from "@/components/ui/pressable";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useMemo, useRef } from "react";
-import { Animated, Image, PanResponder, Text, View } from "react-native";
+import { useMemo, useRef, useState } from "react";
+import {
+  Alert,
+  Animated,
+  Image,
+  PanResponder,
+  Text,
+  View,
+} from "react-native";
 
 import { Icon } from "@/components/ui/icon";
+import { Toast } from "@/components/ui/toast";
+import { copyImageToClipboard } from "@/lib/image-clipboard";
 
 export default function BlogImageViewScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ uri?: string; title?: string }>();
   const translateY = useRef(new Animated.Value(0)).current;
+  const [isCopyingImage, setIsCopyingImage] = useState(false);
 
   const rawUri = typeof params.uri === "string" ? params.uri : "";
   const uri = (() => {
@@ -25,6 +35,36 @@ export default function BlogImageViewScreen() {
     outputRange: [0.6, 1, 0.6],
     extrapolate: "clamp",
   });
+
+  const copyOpenedImage = async () => {
+    if (!uri || isCopyingImage) return;
+    setIsCopyingImage(true);
+    try {
+      await copyImageToClipboard(uri);
+      Toast.show("Image copied", {
+        type: "success",
+        position: "bottom",
+      });
+    } catch (error) {
+      Alert.alert(
+        "Could not copy image",
+        error instanceof Error ? error.message : "The image could not be copied.",
+      );
+    } finally {
+      setIsCopyingImage(false);
+    }
+  };
+
+  const showImageOptions = () => {
+    if (!uri) return;
+    Alert.alert("Image options", undefined, [
+      {
+        text: isCopyingImage ? "Copying..." : "Copy image",
+        onPress: copyOpenedImage,
+      },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  };
 
   const panResponder = useMemo(
     () =>
@@ -77,11 +117,17 @@ export default function BlogImageViewScreen() {
         {...panResponder.panHandlers}
       >
         {uri ? (
-          <Image
-            source={{ uri }}
+          <Pressable
             className="h-full w-full"
-            resizeMode="contain"
-          />
+            onLongPress={showImageOptions}
+            delayLongPress={350}
+          >
+            <Image
+              source={{ uri }}
+              className="h-full w-full"
+              resizeMode="contain"
+            />
+          </Pressable>
         ) : (
           <Text className="text-sm text-zinc-300">Image not available.</Text>
         )}

@@ -21,7 +21,13 @@ export type TranscriptionJob = Awaited<
 >[number];
 
 export function getTranscriptionJobProgress(job: TranscriptionJob) {
-  if (job.status === "completed") return 100;
+  if (
+    job.status === "completed" ||
+    job.status === "duplicate" ||
+    job.status === "already_transcribed"
+  ) {
+    return 100;
+  }
   const progress =
     typeof job.progressPercent === "number" ? job.progressPercent : 0;
   if (job.status === "running") return Math.max(1, Math.min(progress, 99));
@@ -56,6 +62,8 @@ export function useTranscriptionQueue(
   const enqueue = useCallback(
     async (input: QueueInput) => {
       const audioUrl = getReachableAudioUrl(input.audioUrl);
+      const fromSec = input.fromSec ?? null;
+      const toSec = input.toSec ?? null;
       if (!audioUrl && !input.telegramFileId) {
         throw new Error(
           "Queued transcription requires a reachable audio URL or Telegram file ID.",
@@ -66,8 +74,8 @@ export function useTranscriptionQueue(
         mediaId: input.mediaId,
         telegramFileId: input.telegramFileId ?? null,
         audioUrl,
-        fromSec: input.fromSec ?? null,
-        toSec: input.toSec ?? null,
+        fromSec,
+        toSec,
         language: input.language ?? "ar",
         transcriberUrl: input.transcriberUrl ?? null,
       });
@@ -75,19 +83,36 @@ export function useTranscriptionQueue(
       if (reloadOnEnqueue) {
         await reload();
       } else {
-        setJobs((current) =>
-          current.some((currentJob) => currentJob.id === job.id)
-            ? current.map((currentJob) =>
+        setJobs((current) => {
+          const withoutMatchingFailed = current.filter(
+            (currentJob) =>
+              !(
+                currentJob.status === "failed" &&
+                currentJob.mediaId === input.mediaId &&
+                (currentJob.fromSec ?? null) === fromSec &&
+                (currentJob.toSec ?? null) === toSec
+              ),
+          );
+
+          return withoutMatchingFailed.some(
+            (currentJob) => currentJob.id === job.id,
+          )
+            ? withoutMatchingFailed.map((currentJob) =>
                 currentJob.id === job.id ? job : currentJob,
               )
-            : [job, ...current],
-        );
+            : [job, ...withoutMatchingFailed];
+        });
       }
 
       return job;
     },
     [reload, reloadOnEnqueue],
   );
+
+  const deleteJob = useCallback(async (id: number) => {
+    await vanillaTrpc.blog.deleteTranscriptionJob.mutate({ id });
+    setJobs((current) => current.filter((job) => job.id !== id));
+  }, []);
 
   const runQueued = useCallback(async () => {
     setIsRunning(true);
@@ -127,6 +152,7 @@ export function useTranscriptionQueue(
     ).length,
     isRunning,
     enqueue,
+    deleteJob,
     runQueued,
     reload,
   };

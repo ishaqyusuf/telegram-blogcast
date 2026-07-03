@@ -17,7 +17,7 @@ export const postsSchema = z.object({
   size: z.number().optional(),
   sort: z.string().optional(),
   category: z
-    .enum(["all", "audio", "text", "picture", "video", "likes", "saved"])
+    .enum(["all", "audio", "text", "pdf", "picture", "video", "likes", "saved"])
     .optional(),
 });
 export type PostsSchema = z.infer<typeof postsSchema>;
@@ -37,6 +37,33 @@ const hasContentOrMediaWhere = {
       },
     },
   ],
+};
+
+const pdfMediaWhere = {
+  medias: {
+    some: {
+      OR: [
+        { mimeType: { equals: "application/pdf", mode: "insensitive" } },
+        { mimeType: { startsWith: "document/", mode: "insensitive" } },
+        { title: { endsWith: ".pdf", mode: "insensitive" } },
+        {
+          file: {
+            mimeType: { equals: "application/pdf", mode: "insensitive" },
+          },
+        },
+        {
+          file: {
+            blobContentType: {
+              equals: "application/pdf",
+              mode: "insensitive",
+            },
+          },
+        },
+        { file: { fileName: { endsWith: ".pdf", mode: "insensitive" } } },
+        { file: { blobPathname: { endsWith: ".pdf", mode: "insensitive" } } },
+      ],
+    },
+  },
 };
 
 function hasUsableFile(file?: {
@@ -63,6 +90,10 @@ function hasMediaPayload(
         fileId?: string | null;
         blobUrl?: string | null;
         blobDownloadUrl?: string | null;
+        mimeType?: string | null;
+        fileName?: string | null;
+        blobPathname?: string | null;
+        blobContentType?: string | null;
       } | null;
     }[];
   },
@@ -70,10 +101,20 @@ function hasMediaPayload(
 ) {
   return blog.medias?.some((media) => {
     const mimeType = media.mimeType?.toLowerCase() ?? "";
+    const fileMimeType = media.file?.mimeType?.toLowerCase() ?? "";
+    const fileName = media.file?.fileName?.toLowerCase() ?? "";
+    const blobPathname = media.file?.blobPathname?.toLowerCase() ?? "";
+    const blobContentType = media.file?.blobContentType?.toLowerCase() ?? "";
     const matchesType =
       mediaType === "document"
-        ? mimeType === "application/pdf" || mimeType.startsWith("document/")
-        : mimeType.startsWith(`${mediaType}/`);
+        ? mimeType === "application/pdf" ||
+          mimeType.startsWith("document/") ||
+          fileMimeType === "application/pdf" ||
+          blobContentType === "application/pdf" ||
+          fileName.endsWith(".pdf") ||
+          blobPathname.endsWith(".pdf")
+        : mimeType.startsWith(`${mediaType}/`) ||
+          fileMimeType.startsWith(`${mediaType}/`);
 
     return matchesType && hasUsableFile(media.file);
   });
@@ -89,10 +130,16 @@ function hasBlogPayload(blog: {
       fileId?: string | null;
       blobUrl?: string | null;
       blobDownloadUrl?: string | null;
+      mimeType?: string | null;
+      fileName?: string | null;
+      blobPathname?: string | null;
+      blobContentType?: string | null;
     } | null;
   }[];
 }) {
-  if (blog.type === "text") return Boolean(blog.content?.trim());
+  if (blog.type === "text") {
+    return Boolean(blog.content?.trim() || hasMediaPayload(blog, "document"));
+  }
   if (blog.type === "audio") return Boolean(hasMediaPayload(blog, "audio"));
   if (blog.type === "image") return Boolean(hasMediaPayload(blog, "image"));
   if (blog.type === "video") return Boolean(hasMediaPayload(blog, "video"));
@@ -363,6 +410,11 @@ function wherePosts(query: PostsSchema) {
 
   if (category === "picture") {
     where.type = "image";
+    return where;
+  }
+
+  if (category === "pdf") {
+    where.AND.push(pdfMediaWhere);
     return where;
   }
 

@@ -3,20 +3,12 @@ import { Text, View } from "react-native";
 import { useAudioStore } from "@/store/audio-store";
 import { useColors } from "@/hooks/use-color";
 import { useRef } from "react";
+import type {
+  TranscriptSegmentData,
+  TranscriptWordData,
+} from "@/components/audio-blog-view/transcript-timing";
 
-export interface TranscriptSegmentData {
-  startSec: number;
-  endSec: number;
-  text: string;
-  id?: number | string;
-  words?: TranscriptWordData[];
-}
-
-export interface TranscriptWordData {
-  word: string;
-  startSec: number;
-  endSec: number;
-}
+export type { TranscriptSegmentData, TranscriptWordData };
 
 export function getTranscriptSegmentKey(
   segment: TranscriptSegmentData,
