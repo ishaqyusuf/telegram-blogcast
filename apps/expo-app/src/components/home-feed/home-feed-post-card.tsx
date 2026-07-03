@@ -40,6 +40,9 @@ function AudioPost({ post }: { post: ItemProps }) {
 
 function VideoPost({ post }: { post: ItemProps }) {
   const imageUrl = getPrimaryImageUrl(post as any);
+  const video = (post as any).video;
+  const durationLabel = video?.duration ? minuteToString(video.duration) : null;
+  const metaLabel = [durationLabel, video?.fileName].filter(Boolean).join(" · ");
 
   return (
     <>
@@ -62,7 +65,7 @@ function VideoPost({ post }: { post: ItemProps }) {
         </Pressable>
         <View className="absolute bottom-2 right-2 bg-black/60 px-2 py-0.5 rounded">
           <Text className="text-xs font-medium text-white">
-            {/* {post.video.duration} */}
+            {metaLabel || "Video"}
           </Text>
         </View>
       </ImageBackground>

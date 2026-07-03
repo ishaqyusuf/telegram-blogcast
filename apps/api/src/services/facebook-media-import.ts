@@ -19,14 +19,22 @@ export type FacebookMediaImportStatus = z.infer<
 
 export const startFacebookMediaImportSchema = z.object({
 	blogIds: z.array(z.number().int().positive()).max(100).optional(),
+	channelIds: z.array(z.number().int().positive()).max(100).optional(),
 	limit: z.number().int().min(1).max(MAX_IMPORT_LIMIT).default(10),
 	force: z.boolean().default(false),
 	baseUrl: z.string().url().optional(),
 });
 
+export const facebookMediaImportSummarySchema = z
+	.object({
+		channelIds: z.array(z.number().int().positive()).max(100).optional(),
+	})
+	.optional();
+
 export const listFacebookMediaImportsSchema = z
 	.object({
 		status: facebookMediaImportStatusSchema.or(z.literal("all")).default("all"),
+		channelIds: z.array(z.number().int().positive()).max(100).optional(),
 		limit: z.number().int().min(1).max(100).default(50),
 		cursor: z.number().int().positive().optional(),
 	})
@@ -82,6 +90,9 @@ const bridgeHealthResponseSchema = z
 type StartFacebookMediaImportInput = z.infer<
 	typeof startFacebookMediaImportSchema
 >;
+type FacebookMediaImportSummaryInput = z.infer<
+	typeof facebookMediaImportSummarySchema
+>;
 type ListFacebookMediaImportsInput = z.infer<
 	typeof listFacebookMediaImportsSchema
 >;
@@ -93,6 +104,12 @@ type FacebookImportBlog = {
 	type: string;
 	sourceId: string | null;
 	sourceUrl: string | null;
+	channelId: number | null;
+	channel: {
+		id: number;
+		title: string | null;
+		username: string | null;
+	} | null;
 	meta: unknown;
 	createdAt: Date | null;
 	sourceSyncedAt: Date | null;
@@ -115,8 +132,14 @@ type FacebookImportBlog = {
 export type FacebookMediaImportItem = {
 	blogId: number;
 	title: string;
+	previewText: string | null;
 	sourceUrl: string | null;
 	sourceId: string | null;
+	channel: {
+		id: number | null;
+		title: string;
+		username: string | null;
+	};
 	status: FacebookMediaImportStatus;
 	mediaType: string | null;
 	mimeType: string | null;
@@ -137,6 +160,16 @@ type FacebookMediaImportJobItem = {
 	status: FacebookMediaImportStatus;
 	mediaId: number | null;
 	error: string | null;
+};
+
+export type FacebookMediaImportChannel = {
+	id: number;
+	title: string;
+	username: string | null;
+	totalCount: number;
+	importedCount: number;
+	failedCount: number;
+	pendingCount: number;
 };
 
 export type FacebookMediaImportJob = {
@@ -225,6 +258,24 @@ function getBlogCaption(blog: Pick<FacebookImportBlog, "content" | "meta">) {
 	return blog.content ?? "";
 }
 
+function getBlogChannel(
+	blog: Pick<FacebookImportBlog, "channel" | "channelId">,
+) {
+	return {
+		id: blog.channel?.id ?? blog.channelId,
+		title: blog.channel?.title?.trim() || "Unassigned",
+		username: blog.channel?.username ?? null,
+	};
+}
+
+function normalizeChannelIds(channelIds: number[] | undefined) {
+	if (!channelIds?.length) return undefined;
+	const normalized = Array.from(
+		new Set(channelIds.filter((id) => Number.isInteger(id) && id > 0)),
+	);
+	return normalized.length ? normalized : undefined;
+}
+
 function hasImportedTelegramMedia(blog: FacebookImportBlog) {
 	return blog.medias.some((media) => Boolean(media.file?.fileId));
 }
@@ -252,8 +303,10 @@ function buildImportItem(blog: FacebookImportBlog): FacebookMediaImportItem {
 	return {
 		blogId: blog.id,
 		title: getBlogTitle(blog),
+		previewText: truncate(getBlogCaption(blog), 500) || null,
 		sourceUrl: blog.sourceUrl,
 		sourceId: blog.sourceId,
+		channel: getBlogChannel(blog),
 		status: getFacebookMediaImportStatus(blog),
 		mediaType: file?.fileType ?? getMetaString(blog.meta, "mediaType"),
 		mimeType: file?.mimeType ?? getMetaString(blog.meta, "mimeType"),
@@ -318,10 +371,12 @@ async function findFacebookImportBlogs(
 	db: Database,
 	input: {
 		blogIds?: number[];
+		channelIds?: number[];
 		limit?: number;
 		cursor?: number;
 	},
 ) {
+	const channelIds = normalizeChannelIds(input.channelIds);
 	return db.blog.findMany({
 		where: {
 			id: input.cursor
@@ -329,6 +384,7 @@ async function findFacebookImportBlogs(
 				: input.blogIds
 					? { in: input.blogIds }
 					: undefined,
+			channelId: channelIds ? { in: channelIds } : undefined,
 			source: FACEBOOK_SOURCE,
 			deletedAt: null,
 			sourceUrl: { not: null },
@@ -341,6 +397,14 @@ async function findFacebookImportBlogs(
 			type: true,
 			sourceId: true,
 			sourceUrl: true,
+			channelId: true,
+			channel: {
+				select: {
+					id: true,
+					title: true,
+					username: true,
+				},
+			},
 			meta: true,
 			createdAt: true,
 			sourceSyncedAt: true,
@@ -366,7 +430,10 @@ async function findFacebookImportBlogs(
 	});
 }
 
-async function findAllFacebookImportBlogs(db: Database) {
+async function findAllFacebookImportBlogs(
+	db: Database,
+	input?: { channelIds?: number[] },
+) {
 	const blogs: FacebookImportBlog[] = [];
 	let cursor: number | undefined;
 
@@ -374,6 +441,7 @@ async function findAllFacebookImportBlogs(db: Database) {
 		const batch = await findFacebookImportBlogs(db, {
 			limit: 1000,
 			cursor,
+			channelIds: input?.channelIds,
 		});
 		blogs.push(...batch);
 
@@ -393,6 +461,7 @@ async function selectBlogsForImport(
 		input.blogIds?.length ?? Math.max(input.limit * 5, input.limit);
 	const blogs = await findFacebookImportBlogs(db, {
 		blogIds: input.blogIds,
+		channelIds: input.channelIds,
 		limit: Math.min(Math.max(fetchLimit, input.limit), 500),
 	});
 
@@ -656,8 +725,14 @@ export function getFacebookMediaImportJob() {
 	};
 }
 
-export async function getFacebookMediaImportSummary(db: Database) {
-	const blogs = await findAllFacebookImportBlogs(db);
+export async function getFacebookMediaImportSummary(
+	db: Database,
+	input?: FacebookMediaImportSummaryInput,
+) {
+	const parsed = facebookMediaImportSummarySchema.parse(input);
+	const blogs = await findAllFacebookImportBlogs(db, {
+		channelIds: parsed?.channelIds,
+	});
 	const items = blogs.map(buildImportItem);
 	const importedCount = items.filter(
 		(item) => item.status === "imported",
@@ -679,6 +754,41 @@ export async function getFacebookMediaImportSummary(db: Database) {
 	};
 }
 
+export async function getFacebookMediaImportChannels(db: Database) {
+	const blogs = await findAllFacebookImportBlogs(db);
+	const byChannel = new Map<number, FacebookMediaImportChannel>();
+
+	for (const blog of blogs) {
+		if (!blog.channelId) continue;
+		const channel = getBlogChannel(blog);
+		if (!channel.id) continue;
+
+		const status = getFacebookMediaImportStatus(blog);
+		const current =
+			byChannel.get(channel.id) ??
+			({
+				id: channel.id,
+				title: channel.title,
+				username: channel.username,
+				totalCount: 0,
+				importedCount: 0,
+				failedCount: 0,
+				pendingCount: 0,
+			} satisfies FacebookMediaImportChannel);
+
+		current.totalCount += 1;
+		if (status === "imported") current.importedCount += 1;
+		else if (status === "failed") current.failedCount += 1;
+		else current.pendingCount += 1;
+
+		byChannel.set(channel.id, current);
+	}
+
+	return Array.from(byChannel.values()).sort((a, b) =>
+		a.title.localeCompare(b.title, undefined, { sensitivity: "base" }),
+	);
+}
+
 export async function listFacebookMediaImports(
 	db: Database,
 	input: ListFacebookMediaImportsInput,
@@ -686,21 +796,38 @@ export async function listFacebookMediaImports(
 	const parsed = listFacebookMediaImportsSchema.parse(input);
 	const limit = parsed?.limit ?? 50;
 	const status = parsed?.status ?? "all";
-	const fetchLimit =
-		status === "all" ? limit + 1 : Math.max(limit * 5, limit + 1);
-	const blogs = await findFacebookImportBlogs(db, {
-		limit: Math.min(fetchLimit, 500),
-		cursor: parsed?.cursor,
-	});
-	const filtered = blogs
-		.map(buildImportItem)
-		.filter((item) => status === "all" || item.status === status);
-	const items = filtered.slice(0, limit);
-	const lastBlog = blogs.at(-1);
+	const channelIds = parsed?.channelIds;
+	const items: FacebookMediaImportItem[] = [];
+	let cursor = parsed?.cursor;
+	let nextCursor: number | null = null;
+
+	for (;;) {
+		const blogs = await findFacebookImportBlogs(db, {
+			limit: 100,
+			cursor,
+			channelIds,
+		});
+		if (blogs.length === 0) {
+			nextCursor = null;
+			break;
+		}
+
+		for (const blog of blogs) {
+			cursor = blog.id;
+			const item = buildImportItem(blog);
+			if (status !== "all" && item.status !== status) continue;
+			items.push(item);
+			if (items.length >= limit) break;
+		}
+
+		nextCursor = blogs.length === 100 ? (cursor ?? null) : null;
+
+		if (items.length >= limit || !nextCursor) break;
+	}
 
 	return {
 		items,
-		nextCursor: blogs.length >= fetchLimit ? (lastBlog?.id ?? null) : null,
+		nextCursor,
 	};
 }
 

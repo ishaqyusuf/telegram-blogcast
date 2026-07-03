@@ -11,13 +11,25 @@ export const getLocalNetworkHost = () => {
   const debuggerHost = Constants.expoConfig?.hostUri;
   const localhost = debuggerHost?.split(":")[0];
 
-  if (!localhost) {
-    throw new Error(
-      "Failed to resolve the Expo dev host. Set EXPO_PUBLIC_TRPC_URL or point to a reachable production server.",
-    );
+  if (localhost) return localhost;
+
+  const urlCandidates = [
+    process.env.EXPO_PUBLIC_TRPC_URL,
+    process.env.EXPO_PUBLIC_BASE_URL,
+    process.env.EXPO_PUBLIC_WEB_URL,
+  ];
+
+  for (const candidate of urlCandidates) {
+    if (!candidate) continue;
+    try {
+      const parsed = new URL(candidate);
+      if (parsed.hostname) return parsed.hostname;
+    } catch {}
   }
 
-  return localhost;
+  throw new Error(
+    "Failed to resolve the local network host. Set EXPO_PUBLIC_TRPC_URL or EXPO_PUBLIC_FACEBOOK_MEDIA_BRIDGE_URL to a reachable LAN URL.",
+  );
 };
 
 export const getLocalUrl = (port: string) => {
@@ -26,6 +38,10 @@ export const getLocalUrl = (port: string) => {
 
 export const getLocalTranscriberUrl = () => {
   return getLocalUrl(process.env.EXPO_PUBLIC_TRANSCRIBER_PORT ?? "8787");
+};
+
+export const getLocalFacebookMediaBridgeUrl = () => {
+  return getLocalUrl(process.env.EXPO_PUBLIC_FACEBOOK_MEDIA_BRIDGE_PORT ?? "8790");
 };
 
 export const appendPath = (baseUrl: string, path: string) => {

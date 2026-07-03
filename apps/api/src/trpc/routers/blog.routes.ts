@@ -51,6 +51,21 @@ const transcriptionJobInclude = {
 		},
 	},
 };
+const visibleMainBlogWhere = {
+	OR: [
+		{ source: null },
+		{ source: { not: "facebook" } },
+		{
+			medias: {
+				some: {
+					fileId: {
+						not: null,
+					},
+				},
+			},
+		},
+	],
+} satisfies Prisma.BlogWhereInput;
 const blogMediaUploadSchema = z.object({
 	url: z.string().url(),
 	downloadUrl: z.string().url().optional(),
@@ -1212,6 +1227,7 @@ export const blogRoutes = createTRPCRouter({
 				...searchWhere,
 				...channelWhere,
 				...albumWhere,
+				AND: [visibleMainBlogWhere],
 			};
 			const itemWhere: Prisma.BlogWhereInput = {
 				...baseWhere,
@@ -1308,6 +1324,7 @@ export const blogRoutes = createTRPCRouter({
 				deletedAt: null,
 				channelId: { not: null },
 				...searchWhere,
+				AND: [visibleMainBlogWhere],
 			};
 
 			const rows = await db.blog.findMany({
@@ -1339,6 +1356,7 @@ export const blogRoutes = createTRPCRouter({
 							deletedAt: null,
 							channelId: channel.id,
 							...searchWhere,
+							AND: [visibleMainBlogWhere],
 						},
 					}),
 				),

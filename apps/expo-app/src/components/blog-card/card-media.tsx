@@ -14,6 +14,7 @@ import { Icon } from "@/components/ui/icon";
 import { useColors } from "@/hooks/use-color";
 import { getAudioDisplayTitle } from "@/lib/audio-title";
 import { useTranslation } from "@/lib/i18n";
+import { withAlpha } from "@/lib/theme";
 
 import type { BlogCardVariant, BlogItem } from "./types";
 import {
@@ -153,24 +154,57 @@ function CardImage({ post }: { post: BlogItem }) {
 }
 
 function CardVideo({ post }: { post: BlogItem }) {
+  const colors = useColors();
   const imageUrl = getPrimaryImageUrl(post);
+  const video = (post as any).video;
+  const durationLabel = formatDuration(video?.duration);
+  const sizeLabel = formatFileSize(video?.size);
+  const metaLabel = [durationLabel, sizeLabel, video?.fileName]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
-    <View className="mb-1 h-40 overflow-hidden rounded-xl bg-black">
+    <View className="mb-1 overflow-hidden rounded-xl bg-black">
       {imageUrl ? (
         <Image
           source={{ uri: imageUrl }}
-          className="absolute inset-0 h-full w-full opacity-70"
+          className="absolute inset-0 h-full w-full opacity-60"
           resizeMode="cover"
         />
       ) : null}
-      <View className="absolute inset-0 items-center justify-center">
-        <View className="size-12 items-center justify-center rounded-full bg-accent/90">
-          <Icon name="Play" className="ml-1 text-accent-foreground" />
+      <View className="h-44 items-center justify-center px-5">
+        <View
+          className="mb-3 size-14 items-center justify-center rounded-full"
+          style={{ backgroundColor: withAlpha(colors.primary, 0.92) }}
+        >
+          <Icon name="Play" size={28} className="ml-1 text-primary-foreground" />
         </View>
+        <Text className="text-center text-sm font-extrabold text-white">
+          Video
+        </Text>
+        {metaLabel ? (
+          <Text
+            className="mt-1 text-center text-xs font-medium text-white/75"
+            numberOfLines={1}
+          >
+            {metaLabel}
+          </Text>
+        ) : null}
       </View>
     </View>
   );
+}
+
+function formatDuration(seconds?: number | null) {
+  if (!seconds || !Number.isFinite(seconds) || seconds <= 0) return null;
+  const total = Math.floor(seconds);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  }
+  return `${minutes}:${String(secs).padStart(2, "0")}`;
 }
 
 function formatFileSize(size?: number | null) {

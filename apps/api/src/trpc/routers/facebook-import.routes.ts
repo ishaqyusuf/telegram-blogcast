@@ -1,6 +1,8 @@
 import {
 	checkFacebookMediaBridge,
 	checkFacebookMediaBridgeSchema,
+	facebookMediaImportSummarySchema,
+	getFacebookMediaImportChannels,
 	getFacebookMediaImportJob,
 	getFacebookMediaImportSummary,
 	listFacebookMediaImports,
@@ -11,8 +13,14 @@ import {
 import { createTRPCRouter, publicProcedure } from "../init";
 
 export const facebookImportRoutes = createTRPCRouter({
-	getSummary: publicProcedure.query(async ({ ctx }) => {
-		return getFacebookMediaImportSummary(ctx.db);
+	getSummary: publicProcedure
+		.input(facebookMediaImportSummarySchema)
+		.query(async ({ ctx, input }) => {
+			return getFacebookMediaImportSummary(ctx.db, input);
+		}),
+
+	getChannels: publicProcedure.query(async ({ ctx }) => {
+		return getFacebookMediaImportChannels(ctx.db);
 	}),
 
 	listMediaImports: publicProcedure

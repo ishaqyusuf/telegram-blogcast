@@ -1,23 +1,39 @@
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
+import {
+	useFloatingFooterInset,
+	useFloatingFooterLayer,
+} from "@/components/floating-footer";
 import { Icon } from "@/components/ui/icon";
 import { Pressable } from "@/components/ui/pressable";
 import { useColors } from "@/hooks/use-color";
+import {
+	getDefaultFacebookMediaBridgeUrl,
+	isHttpFacebookMediaBridgeUrl,
+} from "@/lib/facebook-media-bridge";
+import { buildTelegramFileProxy } from "@/lib/media-source";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { RouterOutputs } from "@api/trpc/routers/_app";
 import { useRouter } from "expo-router";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
 	ActivityIndicator,
 	FlatList,
+	Modal,
 	RefreshControl,
+	ScrollView,
 	Text,
 	View,
 } from "react-native";
 
 type ImportItem =
 	RouterOutputs["facebookImport"]["listMediaImports"]["items"][number];
+type ImportChannel =
+	RouterOutputs["facebookImport"]["getChannels"][number];
 type StatusFilter = "all" | ImportItem["status"];
+const EMPTY_IMPORT_ITEMS: ImportItem[] = [];
+const FACEBOOK_IMPORT_FILTER_STORAGE_KEY = "facebook-import:filters:v1";
 
 const FILTERS: { id: StatusFilter; label: string }[] = [
 	{ id: "all", label: "All" },
@@ -25,6 +41,47 @@ const FILTERS: { id: StatusFilter; label: string }[] = [
 	{ id: "imported", label: "Imported" },
 	{ id: "failed", label: "Failed" },
 ];
+const FILTER_IDS = new Set<StatusFilter>(FILTERS.map((filter) => filter.id));
+let facebookImportFilterSnapshot: {
+	status: StatusFilter;
+	channelIds: number[];
+} = {
+	status: "all",
+	channelIds: [],
+};
+
+function normalizePersistedChannelIds(value: unknown) {
+	if (!Array.isArray(value)) return [];
+	return Array.from(
+		new Set(
+			value.filter(
+				(item): item is number =>
+					typeof item === "number" && Number.isInteger(item) && item > 0,
+			),
+		),
+	);
+}
+
+function parsePersistedFilters(value: string | null) {
+	if (!value) return facebookImportFilterSnapshot;
+	try {
+		const parsed = JSON.parse(value) as {
+			status?: unknown;
+			channelIds?: unknown;
+		};
+		const status =
+			typeof parsed.status === "string" &&
+			FILTER_IDS.has(parsed.status as StatusFilter)
+				? (parsed.status as StatusFilter)
+				: "all";
+		return {
+			status,
+			channelIds: normalizePersistedChannelIds(parsed.channelIds),
+		};
+	} catch {
+		return facebookImportFilterSnapshot;
+	}
+}
 
 function formatCount(value: number | null | undefined) {
 	return new Intl.NumberFormat().format(value ?? 0);
@@ -65,6 +122,28 @@ function statusClassName(status: ImportItem["status"]) {
 	}
 }
 
+function canImportItem(item: ImportItem) {
+	return item.status !== "imported" && item.status !== "running";
+}
+
+function getImportedItemMediaKind(item: ImportItem) {
+	const mediaType = (item.mediaType ?? "").toLowerCase();
+	const mimeType = (item.mimeType ?? "").toLowerCase();
+	if (mediaType === "audio" || mimeType.startsWith("audio/")) return "audio";
+	if (mediaType === "image" || mimeType.startsWith("image/")) return "image";
+	if (mediaType === "video" || mimeType.startsWith("video/")) return "video";
+	if (mediaType === "text") return "text";
+	return "blog";
+}
+
+function getBridgeOfflineMessage(error: string | null | undefined, baseUrl?: string) {
+	if (!error) return null;
+	if (baseUrl?.includes("127.0.0.1") || baseUrl?.includes("localhost")) {
+		return `${error}. Start the bridge on the API host with bun run facebook-media-bridge:dev.`;
+	}
+	return error;
+}
+
 function StatBox({ label, value }: { label: string; value: string | number }) {
 	return (
 		<View className="flex-1 gap-1 rounded-lg bg-card p-3">
@@ -74,14 +153,43 @@ function StatBox({ label, value }: { label: string; value: string | number }) {
 	);
 }
 
-function ImportRow({ item }: { item: ImportItem }) {
+function ImportRow({
+	item,
+	selected,
+	importing,
+	onOpen,
+	onMark,
+	onImportSingle,
+}: {
+	item: ImportItem;
+	selected: boolean;
+	importing: boolean;
+	onOpen: (item: ImportItem) => void;
+	onMark: (item: ImportItem) => void;
+	onImportSingle: (item: ImportItem) => void;
+}) {
 	const statusClass = statusClassName(item.status);
 	const [statusBg, statusText] = statusClass.split(" ");
+	const channelLabel = item.channel.username
+		? `${item.channel.title} · @${item.channel.username}`
+		: item.channel.title;
+	const importable = canImportItem(item);
 	return (
-		<View className="gap-3 rounded-lg border border-border bg-card p-3">
+		<Pressable
+			onPress={() => onOpen(item)}
+			onLongPress={() => onMark(item)}
+			delayLongPress={350}
+			className={
+				selected
+					? "gap-3 rounded-lg border border-primary bg-primary/10 p-3"
+					: "gap-3 rounded-lg border border-border bg-card p-3"
+			}
+		>
 			<View className="flex-row items-start gap-3">
 				<View className="mt-1 size-9 items-center justify-center rounded-full bg-background">
-					{item.status === "running" ? (
+					{selected ? (
+						<Icon name="CheckCircle2" size={18} className="text-primary" />
+					) : item.status === "running" ? (
 						<ActivityIndicator size="small" />
 					) : item.status === "imported" ? (
 						<Icon name="Check" size={18} className="text-primary" />
@@ -99,10 +207,38 @@ function ImportRow({ item }: { item: ImportItem }) {
 						>
 							{item.title}
 						</Text>
-						<View className={`rounded-full px-2 py-1 ${statusBg}`}>
-							<Text className={`text-[10px] font-bold ${statusText}`}>
-								{statusLabel(item.status)}
-							</Text>
+						<View className="items-end gap-2">
+							<View className={`rounded-full px-2 py-1 ${statusBg}`}>
+								<Text className={`text-[10px] font-bold ${statusText}`}>
+									{statusLabel(item.status)}
+								</Text>
+							</View>
+							<Pressable
+								disabled={!importable || importing}
+								onPress={(event) => {
+									event.stopPropagation();
+									onImportSingle(item);
+								}}
+								className={
+									importable
+										? "size-9 items-center justify-center rounded-full bg-primary"
+										: "size-9 items-center justify-center rounded-full bg-muted"
+								}
+							>
+								{importing ? (
+									<ActivityIndicator size="small" color="#fff" />
+								) : (
+									<Icon
+										name={item.status === "imported" ? "Check" : "Send"}
+										size={16}
+										className={
+											importable
+												? "text-primary-foreground"
+												: "text-muted-foreground"
+										}
+									/>
+								)}
+							</Pressable>
 						</View>
 					</View>
 					<Text className="text-xs text-muted-foreground" numberOfLines={1}>
@@ -114,6 +250,12 @@ function ImportRow({ item }: { item: ImportItem }) {
 							{item.sourceUrl}
 						</Text>
 					) : null}
+					<Text
+						className="text-xs font-semibold text-foreground"
+						numberOfLines={1}
+					>
+						{channelLabel}
+					</Text>
 				</View>
 			</View>
 
@@ -133,7 +275,273 @@ function ImportRow({ item }: { item: ImportItem }) {
 					{item.error}
 				</Text>
 			) : null}
-		</View>
+		</Pressable>
+	);
+}
+
+function ImportPreviewModal({
+	item,
+	importing,
+	canImport,
+	onClose,
+	onImport,
+	onOpenImported,
+}: {
+	item: ImportItem | null;
+	importing: boolean;
+	canImport: boolean;
+	onClose: () => void;
+	onImport: (item: ImportItem) => void;
+	onOpenImported: (item: ImportItem) => void;
+}) {
+	if (!item) return null;
+
+	const importable = canImportItem(item);
+	const isImported = item.status === "imported";
+	const channelLabel = item.channel.username
+		? `${item.channel.title} · @${item.channel.username}`
+		: item.channel.title;
+	const actionDisabled = isImported ? false : !canImport || !importable || importing;
+
+	return (
+		<Modal visible transparent animationType="slide" onRequestClose={onClose}>
+			<View className="flex-1 justify-end bg-black/50">
+				<Pressable className="flex-1" onPress={onClose} />
+				<View className="gap-4 rounded-t-3xl bg-background px-4 pb-6 pt-4">
+					<View className="flex-row items-center gap-3">
+						<View className="h-1.5 w-12 rounded-full bg-muted" />
+						<Text className="flex-1 text-lg font-extrabold text-foreground">
+							Facebook item
+						</Text>
+						<Pressable
+							onPress={onClose}
+							className="size-9 items-center justify-center rounded-full bg-card"
+						>
+							<Icon name="X" size={18} className="text-foreground" />
+						</Pressable>
+					</View>
+
+					<View className="gap-3 rounded-2xl border border-border bg-card p-4">
+						<View className="flex-row items-start gap-3">
+							<View className="size-10 items-center justify-center rounded-full bg-secondary">
+								{item.status === "running" || importing ? (
+									<ActivityIndicator size="small" />
+								) : isImported ? (
+									<Icon name="Check" size={18} className="text-primary" />
+								) : item.status === "failed" ? (
+									<Icon
+										name="AlertCircle"
+										size={18}
+										className="text-destructive"
+									/>
+								) : (
+									<Icon name="Image" size={18} className="text-muted-foreground" />
+								)}
+							</View>
+							<View className="flex-1 gap-1">
+								<Text className="text-base font-extrabold text-foreground">
+									{item.title}
+								</Text>
+								<Text className="text-xs font-semibold text-muted-foreground">
+									{channelLabel}
+								</Text>
+							</View>
+							<View className="rounded-full bg-secondary px-2 py-1">
+								<Text className="text-[10px] font-bold text-muted-foreground">
+									{statusLabel(item.status)}
+								</Text>
+							</View>
+						</View>
+
+						{item.previewText ? (
+							<Text className="text-sm leading-6 text-foreground" numberOfLines={6}>
+								{item.previewText}
+							</Text>
+						) : null}
+
+						{item.sourceUrl ? (
+							<Text className="text-xs text-muted-foreground" numberOfLines={2}>
+								{item.sourceUrl}
+							</Text>
+						) : null}
+
+						<Text className="text-xs text-muted-foreground">
+							{item.mediaType || "No media attached"}
+							{item.mimeType ? ` · ${item.mimeType}` : ""}
+						</Text>
+
+						{item.error ? (
+							<Text className="text-xs font-medium text-destructive" numberOfLines={4}>
+								{item.error}
+							</Text>
+						) : null}
+					</View>
+
+					<Pressable
+						disabled={actionDisabled}
+						onPress={() => {
+							if (isImported) {
+								onOpenImported(item);
+								return;
+							}
+							onImport(item);
+						}}
+						className={
+							actionDisabled
+								? "flex-row items-center justify-center gap-2 rounded-xl bg-muted px-4 py-3 opacity-70"
+								: "flex-row items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3"
+						}
+					>
+						{importing || item.status === "running" ? (
+							<ActivityIndicator size="small" color="#fff" />
+						) : (
+							<Icon
+								name={isImported ? "ExternalLink" : "Send"}
+								size={18}
+								className={
+									actionDisabled
+										? "text-muted-foreground"
+										: "text-primary-foreground"
+								}
+							/>
+						)}
+						<Text
+							className={
+								actionDisabled
+									? "text-sm font-extrabold text-muted-foreground"
+									: "text-sm font-extrabold text-primary-foreground"
+							}
+						>
+							{isImported
+								? "Open blog"
+								: importing || item.status === "running"
+									? "Importing"
+									: "Import"}
+						</Text>
+					</Pressable>
+				</View>
+			</View>
+		</Modal>
+	);
+}
+
+function ChannelFilterSheet({
+	visible,
+	channels,
+	selectedIds,
+	onClose,
+	onSelectAll,
+	onToggle,
+}: {
+	visible: boolean;
+	channels: ImportChannel[];
+	selectedIds: number[];
+	onClose: () => void;
+	onSelectAll: () => void;
+	onToggle: (channelId: number) => void;
+}) {
+	const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+	const totalCount = channels.reduce((sum, channel) => sum + channel.totalCount, 0);
+	const allSelected = selectedIds.length === 0;
+
+	return (
+		<Modal
+			visible={visible}
+			transparent
+			animationType="slide"
+			onRequestClose={onClose}
+		>
+			<View className="flex-1 justify-end bg-black/50">
+				<Pressable className="flex-1" onPress={onClose} />
+				<View className="max-h-[78%] rounded-t-3xl bg-background px-4 pb-6 pt-4">
+					<View className="mb-4 flex-row items-center gap-3">
+						<View className="h-1.5 w-12 rounded-full bg-muted" />
+						<Text className="flex-1 text-lg font-extrabold text-foreground">
+							Facebook channels
+						</Text>
+						<Pressable
+							onPress={onClose}
+							className="size-9 items-center justify-center rounded-full bg-card"
+						>
+							<Icon name="X" size={18} className="text-foreground" />
+						</Pressable>
+					</View>
+
+					<ScrollView
+						showsVerticalScrollIndicator={false}
+						contentContainerClassName="gap-2 pb-4"
+					>
+						<Pressable
+							onPress={onSelectAll}
+							className={
+								allSelected
+									? "flex-row items-center gap-3 rounded-xl border border-primary bg-primary/10 p-3"
+									: "flex-row items-center gap-3 rounded-xl border border-border bg-card p-3"
+							}
+						>
+							<Icon
+								name={allSelected ? "CheckCircle2" : "Circle"}
+								size={20}
+								className={allSelected ? "text-primary" : "text-muted-foreground"}
+							/>
+							<View className="flex-1">
+								<Text className="text-sm font-extrabold text-foreground">
+									All channels
+								</Text>
+								<Text className="text-xs text-muted-foreground">
+									{formatCount(totalCount)} Facebook items
+								</Text>
+							</View>
+						</Pressable>
+
+						{channels.map((channel) => {
+							const selected = selectedSet.has(channel.id);
+							return (
+								<Pressable
+									key={channel.id}
+									onPress={() => onToggle(channel.id)}
+									className={
+										selected
+											? "flex-row items-center gap-3 rounded-xl border border-primary bg-primary/10 p-3"
+											: "flex-row items-center gap-3 rounded-xl border border-border bg-card p-3"
+									}
+								>
+									<Icon
+										name={selected ? "CheckCircle2" : "Circle"}
+										size={20}
+										className={
+											selected ? "text-primary" : "text-muted-foreground"
+										}
+									/>
+									<View className="flex-1 gap-0.5">
+										<Text
+											className="text-sm font-bold text-foreground"
+											numberOfLines={2}
+										>
+											{channel.title}
+										</Text>
+										<Text className="text-xs text-muted-foreground" numberOfLines={1}>
+											{channel.username ? `@${channel.username} · ` : ""}
+											{formatCount(channel.totalCount)} items ·{" "}
+											{formatCount(channel.pendingCount)} pending
+										</Text>
+									</View>
+								</Pressable>
+							);
+						})}
+					</ScrollView>
+
+					<Pressable
+						onPress={onClose}
+						className="flex-row items-center justify-center rounded-xl bg-primary px-4 py-3"
+					>
+						<Text className="text-sm font-extrabold text-primary-foreground">
+							Done
+						</Text>
+					</Pressable>
+				</View>
+			</View>
+		</Modal>
 	);
 }
 
@@ -141,42 +549,81 @@ export default function FacebookImportScreen() {
 	const router = useRouter();
 	const colors = useColors();
 	const qc = useQueryClient();
-	const [status, setStatus] = useState<StatusFilter>("all");
+	const floatingFooterInset = useFloatingFooterInset();
+	const [status, setStatus] = useState<StatusFilter>(
+		facebookImportFilterSnapshot.status,
+	);
+	const [channelFilterOpen, setChannelFilterOpen] = useState(false);
+	const [selectedChannelIds, setSelectedChannelIds] = useState<number[]>(
+		facebookImportFilterSnapshot.channelIds,
+	);
+	const [selectedBlogIds, setSelectedBlogIds] = useState<number[]>([]);
+	const [importingBlogIds, setImportingBlogIds] = useState<number[]>([]);
+	const [previewItem, setPreviewItem] = useState<ImportItem | null>(null);
+	const [filtersHydrated, setFiltersHydrated] = useState(false);
+	const facebookBridgeBaseUrl = getDefaultFacebookMediaBridgeUrl();
+	const canUseFacebookBridgeUrl =
+		isHttpFacebookMediaBridgeUrl(facebookBridgeBaseUrl);
+	const facebookBridgeInput = canUseFacebookBridgeUrl
+		? { baseUrl: facebookBridgeBaseUrl ?? undefined }
+		: undefined;
 	const summaryQuery = useQuery({
-		..._trpc.facebookImport.getSummary.queryOptions(),
+		..._trpc.facebookImport.getSummary.queryOptions({
+			channelIds: selectedChannelIds,
+		}),
 		refetchInterval: 2500,
 	});
 	const hasRunningJob =
 		summaryQuery.data?.job.activeJob?.status === "running" ||
 		(summaryQuery.data?.runningCount ?? 0) > 0;
 	const bridgeQuery = useQuery({
-		..._trpc.facebookImport.checkBridge.queryOptions(),
+		..._trpc.facebookImport.checkBridge.queryOptions(facebookBridgeInput),
 		retry: false,
 	});
+	const channelsQuery = useQuery(
+		_trpc.facebookImport.getChannels.queryOptions(),
+	);
 	const itemsQuery = useQuery({
 		..._trpc.facebookImport.listMediaImports.queryOptions({
 			status,
+			channelIds: selectedChannelIds,
 			limit: 50,
 		}),
-		refetchInterval: hasRunningJob ? 2500 : false,
+		refetchInterval: hasRunningJob || importingBlogIds.length > 0 ? 1500 : false,
 	});
 	const startMutation = useMutation(
 		_trpc.facebookImport.startMediaImport.mutationOptions({
-			onSuccess: async () => {
+			onSuccess: async (_data, variables) => {
+				if (variables.blogIds?.length) {
+					setSelectedBlogIds((current) =>
+						current.filter((id) => !variables.blogIds?.includes(id)),
+					);
+				}
 				await Promise.all([
 					qc.invalidateQueries({
-						queryKey: _trpc.facebookImport.getSummary.queryKey(),
+						queryKey: _trpc.facebookImport.getSummary.queryKey({
+							channelIds: selectedChannelIds,
+						}),
 					}),
 					qc.invalidateQueries({
 						queryKey: _trpc.facebookImport.listMediaImports.queryKey({
 							status,
+							channelIds: selectedChannelIds,
 							limit: 50,
 						}),
 					}),
 					qc.invalidateQueries({
-						queryKey: _trpc.facebookImport.checkBridge.queryKey(),
+						queryKey:
+							_trpc.facebookImport.checkBridge.queryKey(facebookBridgeInput),
 					}),
 				]);
+			},
+			onSettled: (_data, error, variables) => {
+				if (error && variables?.blogIds?.length) {
+					setImportingBlogIds((current) =>
+						current.filter((id) => !variables.blogIds?.includes(id)),
+					);
+				}
 			},
 		}),
 	);
@@ -186,22 +633,327 @@ export default function FacebookImportScreen() {
 		summaryQuery.data?.job.latestCompletedJob ??
 		null;
 	const isRefreshing =
-		summaryQuery.isFetching || itemsQuery.isFetching || bridgeQuery.isFetching;
-	const items = itemsQuery.data?.items ?? [];
+		summaryQuery.isFetching ||
+		itemsQuery.isFetching ||
+		bridgeQuery.isFetching ||
+		channelsQuery.isFetching;
+	const items = itemsQuery.data?.items ?? EMPTY_IMPORT_ITEMS;
+	const importableItems = items.filter(canImportItem);
+	const selectedSet = useMemo(() => new Set(selectedBlogIds), [selectedBlogIds]);
+	const currentPreviewItem = useMemo(() => {
+		if (!previewItem) return null;
+		return (
+			items.find((item) => item.blogId === previewItem.blogId) ?? previewItem
+		);
+	}, [items, previewItem]);
+	const visibleImportableIds = importableItems.map((item) => item.blogId);
+	const allVisibleSelected =
+		visibleImportableIds.length > 0 &&
+		visibleImportableIds.every((id) => selectedSet.has(id));
+	const channels = channelsQuery.data ?? [];
 	const pendingCount = summaryQuery.data?.pendingCount ?? 0;
 	const failedCount = summaryQuery.data?.failedCount ?? 0;
+	const selectedChannelNames = selectedChannelIds
+		.map((channelId) => channels.find((channel) => channel.id === channelId)?.title)
+		.filter(Boolean);
+	const channelFilterLabel =
+		selectedChannelNames.length === 0
+			? "All channels"
+			: selectedChannelNames.length === 1
+				? selectedChannelNames[0]
+				: `${selectedChannelNames.length} channels`;
 	const canStart =
 		!startMutation.isPending &&
 		!hasRunningJob &&
 		(pendingCount > 0 || failedCount > 0);
+	const canImportSelected =
+		selectedBlogIds.length > 0 && !startMutation.isPending && !hasRunningJob;
+
+	useEffect(() => {
+		let cancelled = false;
+
+		AsyncStorage.getItem(FACEBOOK_IMPORT_FILTER_STORAGE_KEY)
+			.then((value) => {
+				if (cancelled) return;
+				const persisted = parsePersistedFilters(value);
+				facebookImportFilterSnapshot = persisted;
+				setStatus(persisted.status);
+				setSelectedChannelIds(persisted.channelIds);
+			})
+			.catch(() => undefined)
+			.finally(() => {
+				if (!cancelled) setFiltersHydrated(true);
+			});
+
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+
+	useEffect(() => {
+		facebookImportFilterSnapshot = {
+			status,
+			channelIds: selectedChannelIds,
+		};
+
+		if (!filtersHydrated) return;
+
+		void AsyncStorage.setItem(
+			FACEBOOK_IMPORT_FILTER_STORAGE_KEY,
+			JSON.stringify({
+				status,
+				channelIds: selectedChannelIds,
+			}),
+		).catch(() => undefined);
+	}, [filtersHydrated, selectedChannelIds, status]);
 
 	const refresh = useCallback(() => {
 		void Promise.all([
 			summaryQuery.refetch(),
 			itemsQuery.refetch(),
 			bridgeQuery.refetch(),
+			channelsQuery.refetch(),
 		]);
-	}, [bridgeQuery, itemsQuery, summaryQuery]);
+	}, [bridgeQuery, channelsQuery, itemsQuery, summaryQuery]);
+
+	useEffect(() => {
+		if (importingBlogIds.length === 0) return;
+
+		const itemStatusById = new Map(
+			items.map((item) => [item.blogId, item.status] as const),
+		);
+		const jobStatusById = new Map(
+			(job?.items ?? []).map((item) => [item.blogId, item.status] as const),
+		);
+
+		setImportingBlogIds((current) => {
+			const next = current.filter((blogId) => {
+				const itemStatus = itemStatusById.get(blogId);
+				const jobStatus = jobStatusById.get(blogId);
+
+				if (
+					itemStatus === "imported" ||
+					itemStatus === "failed" ||
+					itemStatus === "skipped"
+				) {
+					return false;
+				}
+
+				if (
+					jobStatus === "imported" ||
+					jobStatus === "failed" ||
+					jobStatus === "skipped"
+				) {
+					return false;
+				}
+
+				if (!hasRunningJob && itemStatus !== "running") {
+					return false;
+				}
+
+				return true;
+			});
+
+			return next.length === current.length ? current : next;
+		});
+	}, [hasRunningJob, importingBlogIds.length, items, job]);
+
+	const openImportedItem = useCallback(
+		(item: ImportItem) => {
+			void qc.invalidateQueries({
+				queryKey: _trpc.blog.getBlog.queryKey({ id: item.blogId }),
+			});
+
+			const kind = getImportedItemMediaKind(item);
+			if (kind === "audio") {
+				router.push(`/blog-view-2/${item.blogId}` as any);
+				return;
+			}
+			if (kind === "text") {
+				router.push(`/blog-view-text/${item.blogId}` as any);
+				return;
+			}
+			if (kind === "image") {
+				const imageUri = buildTelegramFileProxy(item.fileId);
+				if (imageUri) {
+					router.push(
+						`/blog-image-view?uri=${encodeURIComponent(
+							imageUri,
+						)}&title=${encodeURIComponent(item.title)}` as any,
+					);
+					return;
+				}
+			}
+			router.push(`/blog-view/${item.blogId}` as any);
+		},
+		[qc, router],
+	);
+
+	const openItem = useCallback(
+		(item: ImportItem) => {
+			if (item.status === "imported") {
+				openImportedItem(item);
+				return;
+			}
+			setPreviewItem(item);
+		},
+		[openImportedItem],
+	);
+
+	const toggleChannel = useCallback((channelId: number) => {
+		setSelectedChannelIds((current) =>
+			current.includes(channelId)
+				? current.filter((id) => id !== channelId)
+				: [...current, channelId],
+		);
+	}, []);
+
+	const toggleSelectedItem = useCallback((item: ImportItem) => {
+		if (!canImportItem(item)) return;
+		setSelectedBlogIds((current) =>
+			current.includes(item.blogId)
+				? current.filter((id) => id !== item.blogId)
+				: [...current, item.blogId],
+		);
+	}, []);
+
+	const toggleVisibleSelection = useCallback(() => {
+		setSelectedBlogIds((current) => {
+			if (visibleImportableIds.length === 0) return current;
+			const visibleSet = new Set(visibleImportableIds);
+			const everyVisibleSelected = visibleImportableIds.every((id) =>
+				current.includes(id),
+			);
+			if (everyVisibleSelected) {
+				return current.filter((id) => !visibleSet.has(id));
+			}
+			return Array.from(new Set([...current, ...visibleImportableIds]));
+		});
+	}, [visibleImportableIds]);
+
+	const importSingleItem = useCallback(
+		(item: ImportItem) => {
+			if (!canImportItem(item) || startMutation.isPending || hasRunningJob) return;
+			setImportingBlogIds([item.blogId]);
+			startMutation.mutate({
+				blogIds: [item.blogId],
+				limit: 1,
+				channelIds: selectedChannelIds,
+				baseUrl: canUseFacebookBridgeUrl
+					? (facebookBridgeBaseUrl ?? undefined)
+					: undefined,
+			});
+		},
+		[
+			canUseFacebookBridgeUrl,
+			facebookBridgeBaseUrl,
+			hasRunningJob,
+			selectedChannelIds,
+			startMutation,
+		],
+	);
+
+	const importSelectedItems = useCallback(() => {
+		if (!canImportSelected) return;
+		setImportingBlogIds(selectedBlogIds);
+		startMutation.mutate({
+			blogIds: selectedBlogIds,
+			limit: selectedBlogIds.length,
+			channelIds: selectedChannelIds,
+			baseUrl: canUseFacebookBridgeUrl
+				? (facebookBridgeBaseUrl ?? undefined)
+				: undefined,
+		});
+	}, [
+		canImportSelected,
+		canUseFacebookBridgeUrl,
+		facebookBridgeBaseUrl,
+		selectedBlogIds,
+		selectedChannelIds,
+		startMutation,
+	]);
+
+	const clearSelectedItems = useCallback(() => {
+		setSelectedBlogIds([]);
+	}, []);
+
+	const bridgeStatusUrl =
+		bridgeQuery.data?.baseUrl ??
+		facebookBridgeBaseUrl ??
+		summaryQuery.data?.baseUrl ??
+		null;
+	const bridgeErrorMessage = getBridgeOfflineMessage(
+		bridgeQuery.data?.error,
+		bridgeStatusUrl ?? undefined,
+	);
+
+	useFloatingFooterLayer({
+		id: "facebook-import-selection-actions",
+		priority: 30,
+		visible: selectedBlogIds.length > 0,
+		render: () => (
+			<View className="px-4">
+				<View className="flex-row items-center gap-2 rounded-2xl border border-border bg-card p-2 shadow-lg">
+					<Pressable
+						onPress={toggleVisibleSelection}
+						className="size-11 items-center justify-center rounded-xl bg-secondary"
+					>
+						<Icon
+							name={allVisibleSelected ? "CheckCircle2" : "CheckCheck"}
+							size={20}
+							className="text-foreground"
+						/>
+					</Pressable>
+					<View className="min-w-12 items-center rounded-xl bg-background px-3 py-2">
+						<Text className="text-xs font-medium text-muted-foreground">
+							Marked
+						</Text>
+						<Text className="text-base font-extrabold text-foreground">
+							{selectedBlogIds.length}
+						</Text>
+					</View>
+					<Pressable
+						disabled={!canImportSelected}
+						onPress={importSelectedItems}
+						className={
+							canImportSelected
+								? "flex-1 flex-row items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3"
+								: "flex-1 flex-row items-center justify-center gap-2 rounded-xl bg-muted px-4 py-3"
+						}
+					>
+						{startMutation.isPending ? (
+							<ActivityIndicator size="small" color={colors.background} />
+						) : (
+							<Icon
+								name="Send"
+								size={18}
+								className={
+									canImportSelected
+										? "text-primary-foreground"
+										: "text-muted-foreground"
+								}
+							/>
+						)}
+						<Text
+							className={
+								canImportSelected
+									? "text-sm font-extrabold text-primary-foreground"
+									: "text-sm font-extrabold text-muted-foreground"
+							}
+						>
+							Import {selectedBlogIds.length}
+						</Text>
+					</Pressable>
+					<Pressable
+						onPress={clearSelectedItems}
+						className="size-11 items-center justify-center rounded-xl bg-secondary"
+					>
+						<Icon name="X" size={18} className="text-foreground" />
+					</Pressable>
+				</View>
+			</View>
+		),
+	});
 
 	const header = useMemo(
 		() => (
@@ -227,6 +979,7 @@ export default function FacebookImportScreen() {
 							</Text>
 							<Text className="text-xs text-muted-foreground" numberOfLines={1}>
 								{bridgeQuery.data?.baseUrl ??
+									facebookBridgeBaseUrl ??
 									summaryQuery.data?.baseUrl ??
 									"Checking bridge"}
 							</Text>
@@ -249,9 +1002,9 @@ export default function FacebookImportScreen() {
 							</Text>
 						</View>
 					</View>
-					{bridgeQuery.data?.error ? (
+					{bridgeErrorMessage ? (
 						<Text className="text-xs font-medium text-destructive">
-							{bridgeQuery.data.error}
+							{bridgeErrorMessage}
 						</Text>
 					) : null}
 					<View className="flex-row gap-2">
@@ -270,7 +1023,15 @@ export default function FacebookImportScreen() {
 					</View>
 					<Pressable
 						disabled={!canStart}
-						onPress={() => startMutation.mutate({ limit: 10 })}
+						onPress={() =>
+							startMutation.mutate({
+								limit: 10,
+								channelIds: selectedChannelIds,
+								baseUrl: canUseFacebookBridgeUrl
+									? (facebookBridgeBaseUrl ?? undefined)
+									: undefined,
+							})
+						}
 						className={
 							canStart
 								? "flex-row items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3"
@@ -362,6 +1123,30 @@ export default function FacebookImportScreen() {
 						);
 					})}
 				</View>
+
+				<Pressable
+					onPress={() => setChannelFilterOpen(true)}
+					className="flex-row items-center gap-3 rounded-lg border border-border bg-card p-3"
+				>
+					<View className="size-9 items-center justify-center rounded-full bg-secondary">
+						<Icon name="Layers" size={17} className="text-foreground" />
+					</View>
+					<View className="flex-1">
+						<Text className="text-sm font-extrabold text-foreground">
+							{channelFilterLabel}
+						</Text>
+						<Text className="text-xs text-muted-foreground">
+							Tap to filter Facebook imports by channel
+						</Text>
+					</View>
+					{selectedChannelIds.length > 0 ? (
+						<View className="rounded-full bg-primary px-2 py-1">
+							<Text className="text-[10px] font-bold text-primary-foreground">
+								{selectedChannelIds.length}
+							</Text>
+						</View>
+					) : null}
+				</Pressable>
 			</View>
 		),
 		[
@@ -373,6 +1158,11 @@ export default function FacebookImportScreen() {
 			hasRunningJob,
 			job,
 			pendingCount,
+			selectedChannelIds,
+			channelFilterLabel,
+			canUseFacebookBridgeUrl,
+			facebookBridgeBaseUrl,
+			bridgeErrorMessage,
 			startMutation,
 			status,
 			summaryQuery.data,
@@ -401,6 +1191,19 @@ export default function FacebookImportScreen() {
 						</Text>
 					</View>
 					<Pressable
+						onPress={() => setChannelFilterOpen(true)}
+						className="size-10 items-center justify-center rounded-full bg-card"
+					>
+						<Icon name="Layers" size={18} className="text-foreground" />
+						{selectedChannelIds.length > 0 ? (
+							<View className="absolute right-1 top-1 size-4 items-center justify-center rounded-full bg-primary">
+								<Text className="text-[9px] font-bold text-primary-foreground">
+									{selectedChannelIds.length}
+								</Text>
+							</View>
+						) : null}
+					</Pressable>
+					<Pressable
 						onPress={refresh}
 						className="size-10 items-center justify-center rounded-full bg-card"
 					>
@@ -416,8 +1219,18 @@ export default function FacebookImportScreen() {
 					style={{ backgroundColor: colors.background }}
 					data={items}
 					keyExtractor={(item) => String(item.blogId)}
-					renderItem={({ item }) => <ImportRow item={item} />}
-					contentContainerClassName="gap-3 px-4 pb-8"
+					renderItem={({ item }) => (
+						<ImportRow
+							item={item}
+							selected={selectedSet.has(item.blogId)}
+							importing={importingBlogIds.includes(item.blogId)}
+							onOpen={openItem}
+							onMark={toggleSelectedItem}
+							onImportSingle={importSingleItem}
+						/>
+					)}
+					contentContainerStyle={{ paddingBottom: floatingFooterInset + 32 }}
+					contentContainerClassName="gap-3 px-4"
 					ListHeaderComponent={header}
 					refreshControl={
 						<RefreshControl refreshing={isRefreshing} onRefresh={refresh} />
@@ -438,6 +1251,29 @@ export default function FacebookImportScreen() {
 							</Text>
 						</View>
 					}
+				/>
+				<ChannelFilterSheet
+					visible={channelFilterOpen}
+					channels={channels}
+					selectedIds={selectedChannelIds}
+					onClose={() => setChannelFilterOpen(false)}
+					onSelectAll={() => setSelectedChannelIds([])}
+					onToggle={toggleChannel}
+				/>
+				<ImportPreviewModal
+					item={currentPreviewItem}
+					importing={
+						!!currentPreviewItem &&
+						(importingBlogIds.includes(currentPreviewItem.blogId) ||
+							currentPreviewItem.status === "running")
+					}
+					canImport={!startMutation.isPending && !hasRunningJob}
+					onClose={() => setPreviewItem(null)}
+					onImport={importSingleItem}
+					onOpenImported={(item) => {
+						setPreviewItem(null);
+						openImportedItem(item);
+					}}
 				/>
 			</SafeArea>
 		</View>

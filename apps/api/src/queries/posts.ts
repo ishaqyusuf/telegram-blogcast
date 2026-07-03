@@ -39,6 +39,22 @@ const hasContentOrMediaWhere = {
   ],
 };
 
+const visibleMainBlogWhere = {
+  OR: [
+    { source: null },
+    { source: { not: "facebook" } },
+    {
+      medias: {
+        some: {
+          fileId: {
+            not: null,
+          },
+        },
+      },
+    },
+  ],
+};
+
 const pdfMediaWhere = {
   medias: {
     some: {
@@ -348,7 +364,7 @@ function wherePosts(query: PostsSchema) {
   const q = query?.q?.trim();
   const where = {
     deletedAt: null,
-    AND: [hasContentOrMediaWhere],
+    AND: [hasContentOrMediaWhere, visibleMainBlogWhere],
     ...(query.channelId ? { channelId: query.channelId } : {}),
   } as any;
 
@@ -465,6 +481,32 @@ function blogPdf(type: BlogType, blog) {
 }
 function blogVideo(type: BlogType, blog) {
   if (type == "video") {
+    const media =
+      blog.medias.find((item) => {
+        const mimeType = item.mimeType?.toLowerCase() ?? "";
+        const fileMimeType = item.file?.mimeType?.toLowerCase() ?? "";
+        return mimeType.startsWith("video/") || fileMimeType.startsWith("video/");
+      }) ?? blog.medias[0];
+    if (!media || !media.file) return null;
+
+    const file = media.file;
+    return {
+      title: media.title,
+      mediaId: media.id,
+      source: file.source ?? "telegram",
+      telegramFileId: file.fileId,
+      url:
+        file.source === "vercel_blob"
+          ? file.blobDownloadUrl || file.blobUrl
+          : null,
+      fileName: file.fileName,
+      displayName: media.title || file.fileName,
+      size: file.fileSize,
+      duration: file.duration,
+      width: file.width,
+      height: file.height,
+      mimeType: file.mimeType ?? media.mimeType,
+    };
   }
   return null;
 }

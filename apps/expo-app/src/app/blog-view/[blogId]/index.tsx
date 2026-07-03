@@ -2,6 +2,7 @@ import { DesignSwitch } from "@/components/design-switch";
 import { _trpc } from "@/components/static-trpc";
 import BlogViewAudio from "@/screens.example/blog-view-audio";
 import BlogViewText from "@/screens.example/blog-view-text";
+import VideoBlogScreen from "@/screens/video-blog-screen";
 import { useColors } from "@/hooks/use-color";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams } from "expo-router";
@@ -57,6 +58,10 @@ export default function BlogViewPage() {
 
   if (data?.type === "text") {
     return <DesignSwitch screen screens={[<BlogViewText key={0} />]} />;
+  }
+
+  if (data?.type === "video") {
+    return <VideoBlogScreen />;
   }
 
   return <DesignSwitch screen screens={[<BlogViewAudio key={0} />]} />;

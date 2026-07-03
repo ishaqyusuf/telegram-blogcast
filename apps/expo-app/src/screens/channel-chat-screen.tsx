@@ -466,6 +466,8 @@ function BubbleRow({
       router.push(`/blog-view-text/${post.id}` as any);
     } else if (post.type === "image") {
       router.push(`/blog-image-view?blogId=${post.id}` as any);
+    } else if (post.type === "video") {
+      router.push(`/blog-view/${post.id}` as any);
     } else {
       router.push(`/blog-view-2/${post.id}` as any);
     }
