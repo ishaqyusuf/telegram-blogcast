@@ -15,8 +15,9 @@ import { buildTelegramFileProxy } from "@/lib/media-source";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { RouterOutputs } from "@api/trpc/routers/_app";
+import { Audio, type AVPlaybackStatus } from "expo-av";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
 	ActivityIndicator,
 	FlatList,
@@ -126,6 +127,14 @@ function canImportItem(item: ImportItem) {
 	return item.status !== "imported" && item.status !== "running";
 }
 
+function getImportItemPlaybackUrl(item: ImportItem) {
+	const kind = getImportedItemMediaKind(item);
+	if (item.status !== "imported" || !["audio", "video"].includes(kind)) {
+		return null;
+	}
+	return buildTelegramFileProxy(item.fileId);
+}
+
 function getImportedItemMediaKind(item: ImportItem) {
 	const mediaType = (item.mediaType ?? "").toLowerCase();
 	const mimeType = (item.mimeType ?? "").toLowerCase();
@@ -160,6 +169,10 @@ function ImportRow({
 	onOpen,
 	onMark,
 	onImportSingle,
+	onTogglePlayback,
+	playbackActive,
+	playbackPlaying,
+	playbackLoading,
 }: {
 	item: ImportItem;
 	selected: boolean;
@@ -167,6 +180,10 @@ function ImportRow({
 	onOpen: (item: ImportItem) => void;
 	onMark: (item: ImportItem) => void;
 	onImportSingle: (item: ImportItem) => void;
+	onTogglePlayback: (item: ImportItem) => void;
+	playbackActive: boolean;
+	playbackPlaying: boolean;
+	playbackLoading: boolean;
 }) {
 	const statusClass = statusClassName(item.status);
 	const [statusBg, statusText] = statusClass.split(" ");
@@ -174,6 +191,7 @@ function ImportRow({
 		? `${item.channel.title} · @${item.channel.username}`
 		: item.channel.title;
 	const importable = canImportItem(item);
+	const playbackUrl = getImportItemPlaybackUrl(item);
 	return (
 		<Pressable
 			onPress={() => onOpen(item)}
@@ -239,6 +257,26 @@ function ImportRow({
 									/>
 								)}
 							</Pressable>
+							{playbackUrl ? (
+								<Pressable
+									disabled={playbackLoading}
+									onPress={(event) => {
+										event.stopPropagation();
+										onTogglePlayback(item);
+									}}
+									className="size-9 items-center justify-center rounded-full bg-secondary"
+								>
+									{playbackLoading ? (
+										<ActivityIndicator size="small" />
+									) : (
+										<Icon
+											name={playbackActive && playbackPlaying ? "Pause" : "Play"}
+											size={16}
+											className="text-foreground"
+										/>
+									)}
+								</Pressable>
+							) : null}
 						</View>
 					</View>
 					<Text className="text-xs text-muted-foreground" numberOfLines={1}>
@@ -286,6 +324,10 @@ function ImportPreviewModal({
 	onClose,
 	onImport,
 	onOpenImported,
+	onTogglePlayback,
+	playbackActive,
+	playbackPlaying,
+	playbackLoading,
 }: {
 	item: ImportItem | null;
 	importing: boolean;
@@ -293,6 +335,10 @@ function ImportPreviewModal({
 	onClose: () => void;
 	onImport: (item: ImportItem) => void;
 	onOpenImported: (item: ImportItem) => void;
+	onTogglePlayback: (item: ImportItem) => void;
+	playbackActive: boolean;
+	playbackPlaying: boolean;
+	playbackLoading: boolean;
 }) {
 	if (!item) return null;
 
@@ -302,6 +348,7 @@ function ImportPreviewModal({
 		? `${item.channel.title} · @${item.channel.username}`
 		: item.channel.title;
 	const actionDisabled = isImported ? false : !canImport || !importable || importing;
+	const playbackUrl = getImportItemPlaybackUrl(item);
 
 	return (
 		<Modal visible transparent animationType="slide" onRequestClose={onClose}>
@@ -419,6 +466,26 @@ function ImportPreviewModal({
 									: "Import"}
 						</Text>
 					</Pressable>
+					{playbackUrl ? (
+						<Pressable
+							disabled={playbackLoading}
+							onPress={() => onTogglePlayback(item)}
+							className="flex-row items-center justify-center gap-2 rounded-xl bg-secondary px-4 py-3"
+						>
+							{playbackLoading ? (
+								<ActivityIndicator size="small" />
+							) : (
+								<Icon
+									name={playbackActive && playbackPlaying ? "Pause" : "Play"}
+									size={18}
+									className="text-foreground"
+								/>
+							)}
+							<Text className="text-sm font-extrabold text-foreground">
+								{playbackActive && playbackPlaying ? "Pause" : "Play"}
+							</Text>
+						</Pressable>
+					) : null}
 				</View>
 			</View>
 		</Modal>
@@ -550,6 +617,7 @@ export default function FacebookImportScreen() {
 	const colors = useColors();
 	const qc = useQueryClient();
 	const floatingFooterInset = useFloatingFooterInset();
+	const playbackSoundRef = useRef<Audio.Sound | null>(null);
 	const [status, setStatus] = useState<StatusFilter>(
 		facebookImportFilterSnapshot.status,
 	);
@@ -561,6 +629,13 @@ export default function FacebookImportScreen() {
 	const [importingBlogIds, setImportingBlogIds] = useState<number[]>([]);
 	const [previewItem, setPreviewItem] = useState<ImportItem | null>(null);
 	const [filtersHydrated, setFiltersHydrated] = useState(false);
+	const [activePlaybackBlogId, setActivePlaybackBlogId] = useState<number | null>(
+		null,
+	);
+	const [playbackLoadingBlogId, setPlaybackLoadingBlogId] = useState<
+		number | null
+	>(null);
+	const [playbackPlaying, setPlaybackPlaying] = useState(false);
 	const facebookBridgeBaseUrl = getDefaultFacebookMediaBridgeUrl();
 	const canUseFacebookBridgeUrl =
 		isHttpFacebookMediaBridgeUrl(facebookBridgeBaseUrl);
@@ -687,6 +762,13 @@ export default function FacebookImportScreen() {
 
 		return () => {
 			cancelled = true;
+		};
+	}, []);
+
+	useEffect(() => {
+		return () => {
+			void playbackSoundRef.current?.unloadAsync().catch(() => undefined);
+			playbackSoundRef.current = null;
 		};
 	}, []);
 
@@ -872,6 +954,50 @@ export default function FacebookImportScreen() {
 		selectedChannelIds,
 		startMutation,
 	]);
+
+	const toggleImportPlayback = useCallback(async (item: ImportItem) => {
+		const uri = getImportItemPlaybackUrl(item);
+		if (!uri) return;
+
+		setPlaybackLoadingBlogId(item.blogId);
+		try {
+			const currentSound = playbackSoundRef.current;
+			if (currentSound && activePlaybackBlogId === item.blogId) {
+				const status = await currentSound.getStatusAsync();
+				if (status.isLoaded && status.isPlaying) {
+					await currentSound.pauseAsync();
+					setPlaybackPlaying(false);
+				} else {
+					await currentSound.playAsync();
+					setPlaybackPlaying(true);
+				}
+				return;
+			}
+
+			if (currentSound) {
+				await currentSound.unloadAsync().catch(() => undefined);
+				playbackSoundRef.current = null;
+			}
+
+			const { sound } = await Audio.Sound.createAsync(
+				{ uri },
+				{ shouldPlay: true },
+			);
+			playbackSoundRef.current = sound;
+			setActivePlaybackBlogId(item.blogId);
+			setPlaybackPlaying(true);
+			sound.setOnPlaybackStatusUpdate((nextStatus: AVPlaybackStatus) => {
+				if (!nextStatus.isLoaded) return;
+				setPlaybackPlaying(nextStatus.isPlaying);
+				if (nextStatus.didJustFinish) {
+					setPlaybackPlaying(false);
+					setActivePlaybackBlogId(null);
+				}
+			});
+		} finally {
+			setPlaybackLoadingBlogId(null);
+		}
+	}, [activePlaybackBlogId]);
 
 	const clearSelectedItems = useCallback(() => {
 		setSelectedBlogIds([]);
@@ -1227,6 +1353,10 @@ export default function FacebookImportScreen() {
 							onOpen={openItem}
 							onMark={toggleSelectedItem}
 							onImportSingle={importSingleItem}
+							onTogglePlayback={toggleImportPlayback}
+							playbackActive={activePlaybackBlogId === item.blogId}
+							playbackPlaying={playbackPlaying}
+							playbackLoading={playbackLoadingBlogId === item.blogId}
 						/>
 					)}
 					contentContainerStyle={{ paddingBottom: floatingFooterInset + 32 }}
@@ -1274,6 +1404,16 @@ export default function FacebookImportScreen() {
 						setPreviewItem(null);
 						openImportedItem(item);
 					}}
+					onTogglePlayback={toggleImportPlayback}
+					playbackActive={
+						!!currentPreviewItem &&
+						activePlaybackBlogId === currentPreviewItem.blogId
+					}
+					playbackPlaying={playbackPlaying}
+					playbackLoading={
+						!!currentPreviewItem &&
+						playbackLoadingBlogId === currentPreviewItem.blogId
+					}
 				/>
 			</SafeArea>
 		</View>

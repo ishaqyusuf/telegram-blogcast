@@ -1,4 +1,4 @@
-import { getLocalTranscriberUrl } from "@/lib/base-url";
+import { getLocalTranscriberUrl, isPrivateNetworkHost } from "@/lib/base-url";
 
 const envBaseUrl = process.env.EXPO_PUBLIC_TRANSCRIBER_URL;
 const TRANSCRIBER_PLACEHOLDER_TOKENS = ["YOUR_MAC_LAN_IP", "YOUR_DEVICE_IP"];
@@ -7,6 +7,11 @@ function normalizeTranscriberUrl(value?: string | null) {
 	const normalized = value?.trim().replace(/\/+$/, "");
 	if (!normalized) return null;
 	if (isPlaceholderTranscriberUrl(normalized)) return null;
+	try {
+		if (!isPrivateNetworkHost(new URL(normalized).hostname)) return null;
+	} catch {
+		return null;
+	}
 	return normalized;
 }
 
@@ -17,15 +22,14 @@ export function isPlaceholderTranscriberUrl(value?: string | null) {
 }
 
 export function getDefaultTranscriberUrl(savedUrl?: string | null) {
+	try {
+		return getLocalTranscriberUrl();
+	} catch {}
 	const saved = normalizeTranscriberUrl(savedUrl);
 	if (saved) return saved;
 	const env = normalizeTranscriberUrl(envBaseUrl);
 	if (env) return env;
-	try {
-		return getLocalTranscriberUrl();
-	} catch {
-		return null;
-	}
+	return null;
 }
 
 export function isHttpTranscriberUrl(value?: string | null) {

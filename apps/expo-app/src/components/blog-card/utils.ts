@@ -47,6 +47,9 @@ export function getInlinePreviewText(value?: string | null) {
 
 export function getPrimaryImageUrl(post: BlogItem) {
   if (post.coverImageUrl) return post.coverImageUrl;
+  const coverImageFile = (post as any).coverImageFile;
+  const coverImageFromFile = getMediaFileUrl(coverImageFile);
+  if (coverImageFromFile) return coverImageFromFile;
   const firstImage = post.img?.[0] as any;
   return firstImage?.url || getMediaFileUrl(firstImage?.file) || buildTelegramFileProxy(firstImage?.fileId);
 }
@@ -55,7 +58,7 @@ export function getPrimaryDocumentMedia(post: BlogItem) {
   const doc = (post as any).doc;
   if (doc) return doc;
 
-  const media = ((post as any).media ?? []) as Array<{
+  const media = ((post as any).media ?? []) as {
     mimeType?: string | null;
     file?: {
       mimeType?: string | null;
@@ -63,7 +66,7 @@ export function getPrimaryDocumentMedia(post: BlogItem) {
       blobPathname?: string | null;
       blobContentType?: string | null;
     } | null;
-  }>;
+  }[];
 
   return media.find((item) => {
     const mimeType = (item.mimeType || item.file?.mimeType || "").toLowerCase();

@@ -230,6 +230,11 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
           username: true,
         },
       },
+      thumbnail: {
+        include: {
+          file: true,
+        },
+      },
     },
   });
   return await response(
@@ -254,6 +259,7 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
         file?.source === "vercel_blob"
           ? file.blobDownloadUrl || file.blobUrl
           : null;
+      const coverImageFile = serializeFile(blog.thumbnail?.file);
       const blogAudio = () => {
         const [media] = blog.medias;
         if (!media || !media.file) return null;
@@ -345,7 +351,8 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
         channel: blog.channel,
         isBookmarked: false,
         likes: 0,
-        coverImageUrl: null,
+        coverImageUrl: getMediaUrl(blog.thumbnail?.file),
+        coverImageFile,
         artwork: null,
         title: [
           blogCaption(type, blog.content),
@@ -506,6 +513,7 @@ function blogVideo(type: BlogType, blog) {
       width: file.width,
       height: file.height,
       mimeType: file.mimeType ?? media.mimeType,
+      thumbnailFile: blog.thumbnail?.file ?? null,
     };
   }
   return null;

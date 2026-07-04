@@ -91,3 +91,4 @@ services/transcriber/cache/transcripts/*
 services/transcriber/.venv*/
 __pycache__/
 *.py[cod]
+.gstack/

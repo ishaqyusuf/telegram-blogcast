@@ -1,4 +1,7 @@
-import { getLocalFacebookMediaBridgeUrl } from "@/lib/base-url";
+import {
+	getLocalFacebookMediaBridgeUrl,
+	isPrivateNetworkHost,
+} from "@/lib/base-url";
 
 const envBaseUrl = process.env.EXPO_PUBLIC_FACEBOOK_MEDIA_BRIDGE_URL;
 const PLACEHOLDER_TOKENS = ["YOUR_MAC_LAN_IP", "YOUR_DEVICE_IP"];
@@ -13,19 +16,23 @@ function normalizeBridgeUrl(value?: string | null) {
 	const normalized = value?.trim().replace(/\/+$/, "");
 	if (!normalized) return null;
 	if (isPlaceholderUrl(normalized)) return null;
+	try {
+		if (!isPrivateNetworkHost(new URL(normalized).hostname)) return null;
+	} catch {
+		return null;
+	}
 	return normalized;
 }
 
 export function getDefaultFacebookMediaBridgeUrl(savedUrl?: string | null) {
+	try {
+		return getLocalFacebookMediaBridgeUrl();
+	} catch {}
 	const saved = normalizeBridgeUrl(savedUrl);
 	if (saved) return saved;
 	const env = normalizeBridgeUrl(envBaseUrl);
 	if (env) return env;
-	try {
-		return getLocalFacebookMediaBridgeUrl();
-	} catch {
-		return null;
-	}
+	return null;
 }
 
 export function isHttpFacebookMediaBridgeUrl(value?: string | null) {

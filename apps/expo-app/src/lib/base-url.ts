@@ -13,6 +13,19 @@ export const getLocalNetworkHost = () => {
 
   if (localhost) return localhost;
 
+  const explicitLocalHost =
+    process.env.EXPO_PUBLIC_LOCAL_NETWORK_HOST ??
+    process.env.EXPO_PUBLIC_MAC_LAN_IP ??
+    process.env.EXPO_PUBLIC_DEVICE_IP;
+  if (explicitLocalHost?.trim()) {
+    const trimmed = explicitLocalHost.trim();
+    try {
+      return new URL(trimmed).hostname;
+    } catch {
+      return trimmed;
+    }
+  }
+
   const urlCandidates = [
     process.env.EXPO_PUBLIC_TRPC_URL,
     process.env.EXPO_PUBLIC_BASE_URL,
@@ -23,14 +36,24 @@ export const getLocalNetworkHost = () => {
     if (!candidate) continue;
     try {
       const parsed = new URL(candidate);
-      if (parsed.hostname) return parsed.hostname;
+      if (isPrivateNetworkHost(parsed.hostname)) return parsed.hostname;
     } catch {}
   }
 
   throw new Error(
-    "Failed to resolve the local network host. Set EXPO_PUBLIC_TRPC_URL or EXPO_PUBLIC_FACEBOOK_MEDIA_BRIDGE_URL to a reachable LAN URL.",
+    "Failed to resolve the local network host. Set EXPO_PUBLIC_LOCAL_NETWORK_HOST or EXPO_PUBLIC_TRPC_URL to a reachable LAN URL.",
   );
 };
+
+export function isPrivateNetworkHost(hostname: string) {
+  return (
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname.startsWith("10.") ||
+    hostname.startsWith("192.168.") ||
+    /^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname)
+  );
+}
 
 export const getLocalUrl = (port: string) => {
   return `http://${getLocalNetworkHost()}:${port}`;

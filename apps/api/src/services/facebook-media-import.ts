@@ -70,6 +70,7 @@ const bridgeProcessResponseSchema = z.object({
 		messageId: z.number().int(),
 		chatId: z.string().or(z.number()).optional(),
 		file: telegramFileSchema,
+		thumbnail: telegramFileSchema.nullable().optional(),
 		raw: z.unknown().optional(),
 	}),
 	diagnostics: z.unknown().optional(),
@@ -490,6 +491,10 @@ async function callFacebookMediaBridge(
 			sourceId: blog.sourceId,
 			title: getBlogTitle(blog),
 			caption: getBlogCaption(blog),
+			channelName:
+				blog.channel?.title?.trim() ||
+				blog.channel?.username?.trim() ||
+				undefined,
 		}),
 	});
 
@@ -573,6 +578,55 @@ async function persistBridgeResult(
 	});
 
 	const blogType = inferBlogTypeFromBridge(result);
+	const thumbnailFileData = result.telegram.thumbnail ?? null;
+	let thumbnailId: number | null = null;
+
+	if (thumbnailFileData?.fileId) {
+		const thumbnailUniqueId =
+			thumbnailFileData.fileUniqueId || thumbnailFileData.fileId;
+		const thumbnailFile = await db.file.upsert({
+			where: { fileUniqueId: thumbnailUniqueId },
+			create: {
+				source: "telegram",
+				fileId: thumbnailFileData.fileId,
+				fileUniqueId: thumbnailUniqueId,
+				fileType: thumbnailFileData.fileType || "image",
+				mimeType: thumbnailFileData.mimeType ?? "image/jpeg",
+				fileName: thumbnailFileData.fileName ?? "video-thumbnail.jpg",
+				fileSize: thumbnailFileData.fileSize ?? null,
+				width: thumbnailFileData.width ?? null,
+				height: thumbnailFileData.height ?? null,
+				duration: null,
+			},
+			update: {
+				source: "telegram",
+				fileId: thumbnailFileData.fileId,
+				fileType: thumbnailFileData.fileType || "image",
+				mimeType: thumbnailFileData.mimeType ?? "image/jpeg",
+				fileName: thumbnailFileData.fileName ?? "video-thumbnail.jpg",
+				fileSize: thumbnailFileData.fileSize ?? null,
+				width: thumbnailFileData.width ?? null,
+				height: thumbnailFileData.height ?? null,
+				duration: null,
+			},
+		});
+
+		const existingThumbnail = await db.thumbnail.findFirst({
+			where: { blogId: blog.id, fileId: thumbnailFile.id, deletedAt: null },
+			select: { id: true },
+		});
+		const thumbnail =
+			existingThumbnail ??
+			(await db.thumbnail.create({
+				data: {
+					blogId: blog.id,
+					fileId: thumbnailFile.id,
+				},
+				select: { id: true },
+			}));
+		thumbnailId = thumbnail.id;
+	}
+
 	const media = existingMedia
 		? await db.media.update({
 				where: { id: existingMedia.id },
@@ -594,6 +648,7 @@ async function persistBridgeResult(
 		where: { id: blog.id },
 		data: {
 			type: blogType,
+			...(thumbnailId ? { thumbnailId } : {}),
 			meta: toInputJson(
 				mergeFacebookMediaDownloadMeta(blog.meta, {
 					status: "imported",
@@ -610,6 +665,8 @@ async function persistBridgeResult(
 					chatId: result.telegram.chatId ?? null,
 					fileName,
 					fileSize,
+					thumbnailFileId: thumbnailFileData?.fileId ?? null,
+					thumbnailId,
 					error: null,
 				}),
 			),

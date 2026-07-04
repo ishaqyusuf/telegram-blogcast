@@ -306,6 +306,11 @@ export const blogRoutes = createTRPCRouter({
 							username: true,
 						},
 					},
+					thumbnail: {
+						include: {
+							file: true,
+						},
+					},
 					// comments = BlogComments where blog is parent, include the comment blog
 					blogs: {
 						include: {

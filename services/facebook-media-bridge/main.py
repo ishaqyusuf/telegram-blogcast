@@ -99,6 +99,7 @@ class ProcessRequest(BaseModel):
     sourceId: Optional[str] = None
     title: Optional[str] = None
     caption: Optional[str] = None
+    channelName: Optional[str] = None
 
     @field_validator("sourceUrl")
     @classmethod
@@ -128,9 +129,21 @@ def truncate(value: str, max_length: int) -> str:
     return value[: max_length - 3] + "..."
 
 
-def safe_job_dir(blog_id: int, source_url: str) -> Path:
+def safe_dir_name(value: Optional[str], fallback: str = "unknown-channel") -> str:
+    cleaned = re.sub(r"[\\/:\*\?\"<>\|\x00-\x1f]+", " ", value or "").strip()
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    return truncate(cleaned, 80) or fallback
+
+
+def build_channel_hashtag(value: Optional[str]) -> str:
+    cleaned = re.sub(r"[^\w\u0600-\u06ff]+", "_", value or "", flags=re.UNICODE)
+    cleaned = re.sub(r"_+", "_", cleaned).strip("_")
+    return f"#{cleaned}" if cleaned else ""
+
+
+def safe_job_dir(blog_id: int, source_url: str, channel_name: Optional[str] = None) -> Path:
     digest = hashlib.sha256(source_url.encode("utf-8")).hexdigest()[:16]
-    path = DOWNLOAD_DIR / f"{blog_id}-{digest}"
+    path = DOWNLOAD_DIR / safe_dir_name(channel_name) / f"{blog_id}-{digest}"
     path.mkdir(parents=True, exist_ok=True)
     return path
 
@@ -319,8 +332,50 @@ async def download_facebook_media(source_url: str, target_dir: Path) -> Download
             ) from opengraph_error
 
 
-def build_caption(title: Optional[str], caption: Optional[str]) -> str:
+def generate_video_thumbnail(video_path: Path, target_dir: Path) -> Optional[Path]:
+    if not shutil.which("ffmpeg"):
+        log.warning("ffmpeg is not installed; skipping Telegram video thumbnail.")
+        return None
+
+    thumbnail_path = target_dir / f"{video_path.stem}-thumbnail.jpg"
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-ss",
+        "00:00:01",
+        "-i",
+        str(video_path),
+        "-frames:v",
+        "1",
+        "-vf",
+        "scale='min(640,iw)':-2",
+        "-q:v",
+        "3",
+        str(thumbnail_path),
+    ]
+
+    result = subprocess.run(
+        cmd,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    if result.returncode != 0 or not thumbnail_path.exists():
+        log.warning(
+            "Could not generate video thumbnail for %s: %s",
+            video_path.name,
+            truncate(result.stderr or result.stdout or "ffmpeg failed", 500),
+        )
+        return None
+    return thumbnail_path
+
+
+def build_caption(title: Optional[str], caption: Optional[str], channel_name: Optional[str] = None) -> str:
     parts = [part.strip() for part in [title or "", caption or ""] if part.strip()]
+    channel_hashtag = build_channel_hashtag(channel_name)
+    if channel_hashtag:
+        parts.append(channel_hashtag)
     if not parts:
         return ""
     return truncate("\n\n".join(dict.fromkeys(parts)), 1024)
@@ -383,7 +438,35 @@ def extract_telegram_file(message: dict, media_type: str, mime_type: str, file_n
     }
 
 
-async def upload_to_telegram(download: DownloadedMedia, title: Optional[str], caption: Optional[str]):
+def extract_telegram_thumbnail(message: dict):
+    video = message.get("video")
+    if not isinstance(video, dict):
+        return None
+
+    thumbnail = video.get("thumbnail") or video.get("thumb")
+    if not isinstance(thumbnail, dict) or not thumbnail.get("file_id"):
+        return None
+
+    return {
+        "fileId": thumbnail["file_id"],
+        "fileUniqueId": thumbnail.get("file_unique_id"),
+        "fileType": "image",
+        "fileName": "video-thumbnail.jpg",
+        "mimeType": "image/jpeg",
+        "fileSize": thumbnail.get("file_size"),
+        "width": thumbnail.get("width"),
+        "height": thumbnail.get("height"),
+        "duration": None,
+    }
+
+
+async def upload_to_telegram(
+    download: DownloadedMedia,
+    title: Optional[str],
+    caption: Optional[str],
+    channel_name: Optional[str],
+    thumbnail_path: Optional[Path] = None,
+):
     if not TELEGRAM_BOT_TOKEN:
         raise RuntimeError("TELEGRAM_BOT_TOKEN is not configured.")
     if not TELEGRAM_UPLOAD_CHAT_ID:
@@ -398,7 +481,7 @@ async def upload_to_telegram(download: DownloadedMedia, title: Optional[str], ca
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/{method}"
     data = {
         "chat_id": TELEGRAM_UPLOAD_CHAT_ID,
-        "caption": build_caption(title, caption),
+        "caption": build_caption(title, caption, channel_name),
     }
 
     log.info("Uploading %s to Telegram with %s", path.name, method)
@@ -411,7 +494,19 @@ async def upload_to_telegram(download: DownloadedMedia, title: Optional[str], ca
                     mime_type,
                 )
             }
-            response = await client.post(url, data=data, files=files)
+            thumbnail_file = None
+            try:
+                if method == "sendVideo" and thumbnail_path and thumbnail_path.exists():
+                    thumbnail_file = thumbnail_path.open("rb")
+                    files["thumbnail"] = (
+                        thumbnail_path.name,
+                        thumbnail_file,
+                        "image/jpeg",
+                    )
+                response = await client.post(url, data=data, files=files)
+            finally:
+                if thumbnail_file:
+                    thumbnail_file.close()
 
     try:
         payload = response.json()
@@ -433,6 +528,7 @@ async def upload_to_telegram(download: DownloadedMedia, title: Optional[str], ca
         "messageId": message["message_id"],
         "chatId": message.get("chat", {}).get("id", TELEGRAM_UPLOAD_CHAT_ID),
         "file": file_data,
+        "thumbnail": extract_telegram_thumbnail(message),
         "raw": {
             "mediaType": media_type,
             "method": method,
@@ -456,10 +552,21 @@ async def health():
 
 @app.post("/process")
 async def process(request: ProcessRequest):
-    target_dir = safe_job_dir(request.blogId, request.sourceUrl)
+    target_dir = safe_job_dir(request.blogId, request.sourceUrl, request.channelName)
     try:
         downloaded = await download_facebook_media(request.sourceUrl, target_dir)
-        telegram = await upload_to_telegram(downloaded, request.title, request.caption)
+        thumbnail_path = (
+            generate_video_thumbnail(Path(downloaded.path), target_dir)
+            if downloaded.mediaType == "video"
+            else None
+        )
+        telegram = await upload_to_telegram(
+            downloaded,
+            request.title,
+            request.caption,
+            request.channelName,
+            thumbnail_path,
+        )
         return {
             "ok": True,
             "blogId": request.blogId,
@@ -468,10 +575,12 @@ async def process(request: ProcessRequest):
             "mimeType": downloaded.mimeType,
             "fileName": Path(downloaded.path).name,
             "fileSize": downloaded.fileSize,
+            "downloadDir": str(target_dir),
             "telegram": telegram,
             "diagnostics": {
                 "downloadMethod": downloaded.method,
                 "directUrlResolved": downloaded.directUrl is not None,
+                "thumbnailGenerated": thumbnail_path is not None,
             },
         }
     except Exception as exc:
