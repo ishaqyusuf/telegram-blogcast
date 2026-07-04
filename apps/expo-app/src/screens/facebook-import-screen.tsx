@@ -20,7 +20,9 @@ import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
 	ActivityIndicator,
+	Alert,
 	FlatList,
+	Linking,
 	Modal,
 	RefreshControl,
 	ScrollView,
@@ -125,6 +127,15 @@ function statusClassName(status: ImportItem["status"]) {
 
 function canImportItem(item: ImportItem) {
 	return item.status !== "imported" && item.status !== "running";
+}
+
+function canBulkImportItem(item: ImportItem) {
+	return item.status === "not_started" || item.status === "skipped";
+}
+
+function openExternalUrl(url: string | null) {
+	if (!url) return;
+	void Linking.openURL(url).catch(() => undefined);
 }
 
 function getImportItemPlaybackUrl(item: ImportItem) {
@@ -407,9 +418,11 @@ function ImportPreviewModal({
 						) : null}
 
 						{item.sourceUrl ? (
-							<Text className="text-xs text-muted-foreground" numberOfLines={2}>
-								{item.sourceUrl}
-							</Text>
+							<Pressable onPress={() => openExternalUrl(item.sourceUrl)}>
+								<Text className="text-xs font-semibold text-primary" numberOfLines={2}>
+									{item.sourceUrl}
+								</Text>
+							</Pressable>
 						) : null}
 
 						<Text className="text-xs text-muted-foreground">
@@ -443,7 +456,7 @@ function ImportPreviewModal({
 							<ActivityIndicator size="small" color="#fff" />
 						) : (
 							<Icon
-								name={isImported ? "ExternalLink" : "Send"}
+								name={isImported ? "Eye" : "Send"}
 								size={18}
 								className={
 									actionDisabled
@@ -648,9 +661,9 @@ export default function FacebookImportScreen() {
 		}),
 		refetchInterval: 2500,
 	});
+	const runningCount = summaryQuery.data?.runningCount ?? 0;
 	const hasRunningJob =
-		summaryQuery.data?.job.activeJob?.status === "running" ||
-		(summaryQuery.data?.runningCount ?? 0) > 0;
+		summaryQuery.data?.job.activeJob?.status === "running" || runningCount > 0;
 	const bridgeQuery = useQuery({
 		..._trpc.facebookImport.checkBridge.queryOptions(facebookBridgeInput),
 		retry: false,
@@ -702,6 +715,59 @@ export default function FacebookImportScreen() {
 			},
 		}),
 	);
+	const stopMutation = useMutation(
+		_trpc.facebookImport.stopMediaImport.mutationOptions({
+			onSettled: async () => {
+				setImportingBlogIds([]);
+				await Promise.all([
+					qc.invalidateQueries({
+						queryKey: _trpc.facebookImport.getSummary.queryKey({
+							channelIds: selectedChannelIds,
+						}),
+					}),
+					qc.invalidateQueries({
+						queryKey: _trpc.facebookImport.listMediaImports.queryKey({
+							status,
+							channelIds: selectedChannelIds,
+							limit: 50,
+						}),
+					}),
+				]);
+			},
+		}),
+	);
+	const clearFailedMutation = useMutation(
+		_trpc.facebookImport.clearFailedMediaImports.mutationOptions({
+			onSuccess: async () => {
+				setStatus("not_started");
+				setSelectedBlogIds([]);
+				await Promise.all([
+					qc.invalidateQueries({
+						queryKey: _trpc.facebookImport.getSummary.queryKey({
+							channelIds: selectedChannelIds,
+						}),
+					}),
+					qc.invalidateQueries({
+						queryKey: _trpc.facebookImport.listMediaImports.queryKey({
+							status,
+							channelIds: selectedChannelIds,
+							limit: 50,
+						}),
+					}),
+					qc.invalidateQueries({
+						queryKey: _trpc.facebookImport.listMediaImports.queryKey({
+							status: "not_started",
+							channelIds: selectedChannelIds,
+							limit: 50,
+						}),
+					}),
+					qc.invalidateQueries({
+						queryKey: _trpc.facebookImport.getChannels.queryKey(),
+					}),
+				]);
+			},
+		}),
+	);
 
 	const job =
 		summaryQuery.data?.job.activeJob ??
@@ -713,7 +779,7 @@ export default function FacebookImportScreen() {
 		bridgeQuery.isFetching ||
 		channelsQuery.isFetching;
 	const items = itemsQuery.data?.items ?? EMPTY_IMPORT_ITEMS;
-	const importableItems = items.filter(canImportItem);
+	const importableItems = items.filter(canBulkImportItem);
 	const selectedSet = useMemo(() => new Set(selectedBlogIds), [selectedBlogIds]);
 	const currentPreviewItem = useMemo(() => {
 		if (!previewItem) return null;
@@ -726,8 +792,30 @@ export default function FacebookImportScreen() {
 		visibleImportableIds.length > 0 &&
 		visibleImportableIds.every((id) => selectedSet.has(id));
 	const channels = channelsQuery.data ?? [];
+	const totalCount = summaryQuery.data?.totalCount ?? 0;
+	const importedCount = summaryQuery.data?.importedCount ?? 0;
 	const pendingCount = summaryQuery.data?.pendingCount ?? 0;
 	const failedCount = summaryQuery.data?.failedCount ?? 0;
+	const filterCounts = useMemo<Record<StatusFilter, number>>(
+		() => ({
+			all: totalCount,
+			not_started: pendingCount,
+			imported: importedCount,
+			failed: failedCount,
+			running: runningCount,
+			skipped: 0,
+		}),
+		[failedCount, importedCount, pendingCount, runningCount, totalCount],
+	);
+	const bulkStartCount =
+		status === "all" || status === "not_started" ? pendingCount : 0;
+	const startButtonLabel = hasRunningJob
+		? "Stop import"
+		: bulkStartCount > 0
+			? `Start ${formatCount(bulkStartCount)}`
+			: status === "failed"
+				? "Retry failed individually"
+				: "No pending imports";
 	const selectedChannelNames = selectedChannelIds
 		.map((channelId) => channels.find((channel) => channel.id === channelId)?.title)
 		.filter(Boolean);
@@ -739,10 +827,37 @@ export default function FacebookImportScreen() {
 				: `${selectedChannelNames.length} channels`;
 	const canStart =
 		!startMutation.isPending &&
+		!stopMutation.isPending &&
+		!clearFailedMutation.isPending &&
 		!hasRunningJob &&
-		(pendingCount > 0 || failedCount > 0);
+		bulkStartCount > 0;
+	const canStop = hasRunningJob && !stopMutation.isPending;
 	const canImportSelected =
-		selectedBlogIds.length > 0 && !startMutation.isPending && !hasRunningJob;
+		selectedBlogIds.length > 0 &&
+		!startMutation.isPending &&
+		!stopMutation.isPending &&
+		!clearFailedMutation.isPending &&
+		!hasRunningJob;
+	const canClearFailed =
+		failedCount > 0 && !hasRunningJob && !clearFailedMutation.isPending;
+	const confirmClearFailedImports = useCallback(() => {
+		if (!canClearFailed) return;
+		Alert.alert(
+			"Clear failed imports?",
+			"Failed Facebook imports will move back to Pending so the next Start can retry them.",
+			[
+				{ text: "Cancel", style: "cancel" },
+				{
+					text: "Clear failed",
+					style: "destructive",
+					onPress: () =>
+						clearFailedMutation.mutate({
+							channelIds: selectedChannelIds,
+						}),
+				},
+			],
+		);
+	}, [canClearFailed, clearFailedMutation, selectedChannelIds]);
 
 	useEffect(() => {
 		let cancelled = false;
@@ -891,7 +1006,7 @@ export default function FacebookImportScreen() {
 	}, []);
 
 	const toggleSelectedItem = useCallback((item: ImportItem) => {
-		if (!canImportItem(item)) return;
+		if (!canBulkImportItem(item)) return;
 		setSelectedBlogIds((current) =>
 			current.includes(item.blogId)
 				? current.filter((id) => id !== item.blogId)
@@ -1148,43 +1263,86 @@ export default function FacebookImportScreen() {
 						<StatBox label="Failed" value={formatCount(failedCount)} />
 					</View>
 					<Pressable
-						disabled={!canStart}
-						onPress={() =>
+						disabled={hasRunningJob ? !canStop : !canStart}
+						onPress={() => {
+							if (hasRunningJob) {
+								stopMutation.mutate();
+								return;
+							}
 							startMutation.mutate({
-								limit: 10,
+								status,
+								limit: bulkStartCount,
 								channelIds: selectedChannelIds,
 								baseUrl: canUseFacebookBridgeUrl
 									? (facebookBridgeBaseUrl ?? undefined)
 									: undefined,
-							})
-						}
+							});
+						}}
 						className={
-							canStart
+							hasRunningJob
+								? "flex-row items-center justify-center gap-2 rounded-lg bg-destructive px-4 py-3"
+								: canStart
 								? "flex-row items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3"
 								: "flex-row items-center justify-center gap-2 rounded-lg bg-muted px-4 py-3 opacity-60"
 						}
 					>
-						{startMutation.isPending || hasRunningJob ? (
+						{startMutation.isPending || stopMutation.isPending ? (
 							<ActivityIndicator size="small" color={colors.background} />
 						) : (
 							<Icon
-								name="Send"
+								name={hasRunningJob ? "X" : "Send"}
 								size={18}
 								className={
-									canStart ? "text-primary-foreground" : "text-muted-foreground"
+									hasRunningJob || canStart
+										? "text-primary-foreground"
+										: "text-muted-foreground"
 								}
 							/>
 						)}
 						<Text
 							className={
-								canStart
+								hasRunningJob || canStart
 									? "text-sm font-extrabold text-primary-foreground"
 									: "text-sm font-extrabold text-muted-foreground"
 							}
 						>
-							{hasRunningJob ? "Import running" : "Start next 10"}
+							{startButtonLabel}
 						</Text>
 					</Pressable>
+					{failedCount > 0 ? (
+						<Pressable
+							disabled={!canClearFailed}
+							onPress={confirmClearFailedImports}
+							className={
+								canClearFailed
+									? "flex-row items-center justify-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3"
+									: "flex-row items-center justify-center gap-2 rounded-lg border border-border bg-muted px-4 py-3 opacity-60"
+							}
+						>
+							{clearFailedMutation.isPending ? (
+								<ActivityIndicator size="small" />
+							) : (
+								<Icon
+									name="RotateCcw"
+									size={18}
+									className={
+										canClearFailed
+											? "text-destructive"
+											: "text-muted-foreground"
+									}
+								/>
+							)}
+							<Text
+								className={
+									canClearFailed
+										? "text-sm font-extrabold text-destructive"
+										: "text-sm font-extrabold text-muted-foreground"
+								}
+							>
+								Clear failed
+							</Text>
+						</Pressable>
+					) : null}
 				</View>
 
 				{job ? (
@@ -1198,12 +1356,16 @@ export default function FacebookImportScreen() {
 									size={16}
 									className="text-destructive"
 								/>
+							) : job.status === "cancelled" ? (
+								<Icon name="X" size={16} className="text-muted-foreground" />
 							) : (
 								<Icon name="CheckCircle2" size={16} className="text-primary" />
 							)}
 							<Text className="flex-1 text-sm font-bold text-foreground">
 								{job.status === "running"
 									? "Current media import"
+									: job.status === "cancelled"
+										? "Stopped media import"
 									: "Last media import"}
 							</Text>
 							<Text className="text-xs text-muted-foreground">
@@ -1244,6 +1406,8 @@ export default function FacebookImportScreen() {
 									}
 								>
 									{filter.label}
+									{" "}
+									({formatCount(filterCounts[filter.id])})
 								</Text>
 							</Pressable>
 						);
@@ -1278,9 +1442,15 @@ export default function FacebookImportScreen() {
 		[
 			bridgeQuery.data,
 			bridgeQuery.isFetching,
+			bulkStartCount,
 			canStart,
+			canClearFailed,
+			canStop,
+			clearFailedMutation.isPending,
 			colors.background,
+			confirmClearFailedImports,
 			failedCount,
+			filterCounts,
 			hasRunningJob,
 			job,
 			pendingCount,
@@ -1290,6 +1460,8 @@ export default function FacebookImportScreen() {
 			facebookBridgeBaseUrl,
 			bridgeErrorMessage,
 			startMutation,
+			startButtonLabel,
+			stopMutation,
 			status,
 			summaryQuery.data,
 		],

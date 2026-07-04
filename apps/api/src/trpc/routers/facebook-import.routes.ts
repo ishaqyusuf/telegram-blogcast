@@ -1,6 +1,7 @@
 import {
 	checkFacebookMediaBridge,
 	checkFacebookMediaBridgeSchema,
+	clearFailedFacebookMediaImportStatuses,
 	facebookMediaImportSummarySchema,
 	getFacebookMediaImportChannels,
 	getFacebookMediaImportJob,
@@ -9,6 +10,7 @@ import {
 	listFacebookMediaImportsSchema,
 	startFacebookMediaImportJob,
 	startFacebookMediaImportSchema,
+	stopFacebookMediaImportJob,
 } from "../../services/facebook-media-import";
 import { createTRPCRouter, publicProcedure } from "../init";
 
@@ -37,6 +39,16 @@ export const facebookImportRoutes = createTRPCRouter({
 		.input(startFacebookMediaImportSchema)
 		.mutation(async ({ ctx, input }) => {
 			return startFacebookMediaImportJob(ctx.db, input);
+		}),
+
+	stopMediaImport: publicProcedure.mutation(() => {
+		return stopFacebookMediaImportJob();
+	}),
+
+	clearFailedMediaImports: publicProcedure
+		.input(facebookMediaImportSummarySchema)
+		.mutation(async ({ ctx, input }) => {
+			return clearFailedFacebookMediaImportStatuses(ctx.db, input);
 		}),
 
 	checkBridge: publicProcedure

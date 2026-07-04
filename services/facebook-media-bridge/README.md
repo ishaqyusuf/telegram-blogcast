@@ -14,12 +14,15 @@ The short-lived Facebook CDN URL is not stored.
 
 ## Requirements
 
-- `yt-dlp`
+- `yt-dlp` installed in the bridge virtualenv
 - A logged-in local browser profile for Facebook, usually Chrome
 - `TELEGRAM_BOT_TOKEN`
 - `AL_GHUROBAA_TELEGRAM_CHANNEL_ID` or `TELEGRAM_UPLOAD_CHAT_ID`
 
-Install `yt-dlp` if needed:
+`bun run facebook-media-bridge:install` installs `yt-dlp` into the bridge
+virtualenv. A global/Homebrew `yt-dlp` is only used as a fallback.
+
+Install global `yt-dlp` only if you need that fallback:
 
 ```bash
 brew install yt-dlp

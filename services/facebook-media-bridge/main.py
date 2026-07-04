@@ -9,12 +9,14 @@ returns durable Telegram file metadata to the API.
 import asyncio
 import hashlib
 import html
+import importlib.util
 import logging
 import mimetypes
 import os
 import re
 import shutil
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Optional
@@ -192,13 +194,43 @@ def find_downloaded_file(target_dir: Path, stdout: str) -> Optional[Path]:
     return max(candidates, key=lambda item: item.stat().st_mtime)
 
 
-def run_ytdlp_download(source_url: str, target_dir: Path) -> DownloadedMedia:
-    if not shutil.which("yt-dlp"):
-        raise RuntimeError("yt-dlp is not installed or is not on PATH.")
+def has_python_module(module_name: str) -> bool:
+    return importlib.util.find_spec(module_name) is not None
 
+
+def check_pyexpat_ok() -> bool:
+    try:
+        import pyexpat  # noqa: F401
+    except Exception:
+        return False
+    return True
+
+
+def get_ytdlp_command() -> list[str]:
+    if has_python_module("yt_dlp"):
+        return [sys.executable, "-m", "yt_dlp"]
+
+    executable = shutil.which("yt-dlp")
+    if executable:
+        return [executable]
+
+    raise RuntimeError(
+        "yt-dlp is not installed. Run bun run facebook-media-bridge:install."
+    )
+
+
+def get_ytdlp_command_label() -> str:
+    try:
+        command = get_ytdlp_command()
+    except Exception as error:
+        return f"unavailable: {error}"
+    return " ".join(command)
+
+
+def run_ytdlp_download(source_url: str, target_dir: Path) -> DownloadedMedia:
     output_template = str(target_dir / "%(id)s.%(ext)s")
     cmd = [
-        "yt-dlp",
+        *get_ytdlp_command(),
         "--cookies-from-browser",
         COOKIES_FROM_BROWSER,
         "--no-playlist",
@@ -223,6 +255,12 @@ def run_ytdlp_download(source_url: str, target_dir: Path) -> DownloadedMedia:
     )
     if result.returncode != 0:
         message = (result.stderr or result.stdout or "yt-dlp failed").strip()
+        if "No module named expat" in message or "pyexpat" in message:
+            message = (
+                "yt-dlp Python runtime is missing XML/expat support. "
+                "Run bun run facebook-media-bridge:install and restart the bridge. "
+                f"Original error: {message}"
+            )
         raise RuntimeError(truncate(message, 1000))
 
     downloaded = find_downloaded_file(target_dir, result.stdout)
@@ -542,7 +580,12 @@ async def health():
         "ok": True,
         "service": "al-ghurobaa-facebook-media-bridge",
         "status": "ready",
-        "ytDlpAvailable": shutil.which("yt-dlp") is not None,
+        "ytDlpAvailable": has_python_module("yt_dlp")
+        or shutil.which("yt-dlp") is not None,
+        "ytDlpModuleAvailable": has_python_module("yt_dlp"),
+        "ytDlpCommand": get_ytdlp_command_label(),
+        "pythonExecutable": sys.executable,
+        "pyexpatAvailable": check_pyexpat_ok(),
         "cookiesFromBrowser": COOKIES_FROM_BROWSER,
         "telegramConfigured": bool(TELEGRAM_BOT_TOKEN),
         "channelConfigured": bool(TELEGRAM_UPLOAD_CHAT_ID),

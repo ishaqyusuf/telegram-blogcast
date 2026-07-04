@@ -43,6 +43,7 @@ import { CommentsHeader } from "@/components/comments-sheet/comments-header";
 import { CommentsList } from "@/components/comments-sheet/comments-list";
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
+import { TranscriptionRequestModal } from "@/components/transcription-request-modal";
 import { AnimatedMarquee } from "@/components/ui/animated-marquee";
 import { Icon, type IconKeys } from "@/components/ui/icon";
 import { ScrollToTopButton } from "@/components/ui/scroll-to-top-button";
@@ -1913,6 +1914,9 @@ export default function AudioBlogScreen() {
 	const [sleepTimerVisible, setSleepTimerVisible] = useState(false);
 	const [albumPickerVisible, setAlbumPickerVisible] = useState(false);
 	const [playlistPickerVisible, setPlaylistPickerVisible] = useState(false);
+	const [transcriptionRequestVisible, setTranscriptionRequestVisible] =
+		useState(false);
+	const [isQueueingTranscription, setIsQueueingTranscription] = useState(false);
 	const [addingAlbumId, setAddingAlbumId] = useState<number | null>(null);
 	const [dismissedRelatedAlbumMediaId, setDismissedRelatedAlbumMediaId] =
 		useState<number | null>(null);
@@ -2433,7 +2437,7 @@ export default function AudioBlogScreen() {
 	}
 
 	async function queueCurrentTranscription() {
-		if (!mediaId) return;
+		if (!mediaId) return false;
 		let reachableAudioUrl =
 			mediaUrl?.startsWith("http://") || mediaUrl?.startsWith("https://")
 				? mediaUrl
@@ -2444,10 +2448,11 @@ export default function AudioBlogScreen() {
 				"Cannot transcribe yet",
 				"This audio does not have a reachable file source to queue.",
 			);
-			return;
+			return false;
 		}
 
 		try {
+			setIsQueueingTranscription(true);
 			if (!reachableAudioUrl && telegramFileId) {
 				const resolved = await getTelegramFileUrl(telegramFileId);
 				reachableAudioUrl =
@@ -2472,6 +2477,7 @@ export default function AudioBlogScreen() {
 			});
 			await reloadTranscriptionJobs();
 			Alert.alert("Queued", "Added to transcription queue.");
+			return true;
 		} catch (error) {
 			Alert.alert(
 				"Could not queue transcription",
@@ -2479,28 +2485,19 @@ export default function AudioBlogScreen() {
 					? error.message
 					: "This audio could not be added to the transcription queue.",
 			);
+			return false;
+		} finally {
+			setIsQueueingTranscription(false);
 		}
 	}
 
 	function handleQueueCurrentTranscriptionPress() {
-		if (!isCurrentAudioAlreadyTranscribed) {
-			void queueCurrentTranscription();
-			return;
-		}
+		setTranscriptionRequestVisible(true);
+	}
 
-		Alert.alert(
-			"Already transcribed",
-			"This audio already has a transcript. Do you want to retranscribe it?",
-			[
-				{ text: "No", style: "cancel" },
-				{
-					text: "Retranscribe",
-					onPress: () => {
-						void queueCurrentTranscription();
-					},
-				},
-			],
-		);
+	async function startCurrentTranscriptionFromModal() {
+		const queued = await queueCurrentTranscription();
+		if (queued) setTranscriptionRequestVisible(false);
 	}
 
 	function resetCurrentTranscription() {
@@ -2726,6 +2723,16 @@ export default function AudioBlogScreen() {
 													</Text>
 												</View>
 											) : null}
+											<Pressable
+												onPress={handleQueueCurrentTranscriptionPress}
+												className="size-10 items-center justify-center rounded-full active:bg-black/20"
+											>
+												<Icon
+													name="Captions"
+													size={22}
+													color={transcriptBadgeColor}
+												/>
+											</Pressable>
 											<Pressable
 												onPress={() => setMoreMenuVisible(true)}
 												className="size-10 items-center justify-center rounded-full active:bg-black/20"
@@ -3078,6 +3085,25 @@ export default function AudioBlogScreen() {
 				}}
 				onViewAlbum={() => router.push(`/albums/${media?.albumId}` as any)}
 				onSleepTimer={() => setSleepTimerVisible(true)}
+			/>
+
+			<TranscriptionRequestModal
+				visible={transcriptionRequestVisible}
+				mediaKind="audio"
+				title={audioTitle}
+				statusLabel={
+					isCurrentAudioAlreadyTranscribed
+						? "This audio already has a transcript. Starting again will queue a new transcription job."
+						: transcriptBadge.show
+							? transcriptBadge.label
+							: null
+				}
+				isStarting={isQueueingTranscription}
+				canStart={Boolean(mediaId)}
+				onClose={() => setTranscriptionRequestVisible(false)}
+				onStart={() => {
+					void startCurrentTranscriptionFromModal();
+				}}
 			/>
 
 			<Modal

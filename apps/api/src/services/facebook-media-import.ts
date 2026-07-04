@@ -3,7 +3,7 @@ import { z } from "zod";
 
 const FACEBOOK_SOURCE = "facebook";
 const DEFAULT_FACEBOOK_MEDIA_BRIDGE_BASE_URL = "http://127.0.0.1:8790";
-const MAX_IMPORT_LIMIT = 50;
+const MAX_IMPORT_LIMIT = 10_000;
 
 export const facebookMediaImportStatusSchema = z.enum([
 	"not_started",
@@ -20,7 +20,13 @@ export type FacebookMediaImportStatus = z.infer<
 export const startFacebookMediaImportSchema = z.object({
 	blogIds: z.array(z.number().int().positive()).max(100).optional(),
 	channelIds: z.array(z.number().int().positive()).max(100).optional(),
-	limit: z.number().int().min(1).max(MAX_IMPORT_LIMIT).default(10),
+	status: facebookMediaImportStatusSchema.or(z.literal("all")).default("all"),
+	limit: z
+		.number()
+		.int()
+		.min(1)
+		.max(MAX_IMPORT_LIMIT)
+		.default(MAX_IMPORT_LIMIT),
 	force: z.boolean().default(false),
 	baseUrl: z.string().url().optional(),
 });
@@ -175,10 +181,11 @@ export type FacebookMediaImportChannel = {
 
 export type FacebookMediaImportJob = {
 	id: string;
-	status: "running" | "completed" | "failed";
+	status: "running" | "completed" | "failed" | "cancelled";
 	baseUrl: string;
 	startedAt: string;
 	finishedAt: string | null;
+	cancelRequested: boolean;
 	selectedCount: number;
 	processedCount: number;
 	importedCount: number;
@@ -190,6 +197,7 @@ export type FacebookMediaImportJob = {
 
 let activeMediaImportJob: FacebookMediaImportJob | null = null;
 let latestMediaImportJob: FacebookMediaImportJob | null = null;
+let activeMediaImportAbortController: AbortController | null = null;
 
 function getFacebookMediaBridgeBaseUrl(baseUrl?: string | null) {
 	return (
@@ -458,25 +466,63 @@ async function selectBlogsForImport(
 	db: Database,
 	input: StartFacebookMediaImportInput,
 ) {
-	const fetchLimit =
-		input.blogIds?.length ?? Math.max(input.limit * 5, input.limit);
-	const blogs = await findFacebookImportBlogs(db, {
-		blogIds: input.blogIds,
-		channelIds: input.channelIds,
-		limit: Math.min(Math.max(fetchLimit, input.limit), 500),
-	});
+	if (input.blogIds?.length) {
+		const blogs = await findFacebookImportBlogs(db, {
+			blogIds: input.blogIds,
+			channelIds: input.channelIds,
+			limit: input.blogIds.length,
+		});
 
-	return blogs
-		.filter(
-			(blog) =>
-				input.force || getFacebookMediaImportStatus(blog) !== "imported",
-		)
-		.slice(0, input.limit);
+		return blogs
+			.filter(
+				(blog) =>
+					input.force || getFacebookMediaImportStatus(blog) !== "imported",
+			)
+			.slice(0, input.limit);
+	}
+
+	if (
+		input.status === "failed" ||
+		input.status === "imported" ||
+		input.status === "running"
+	) {
+		return [];
+	}
+
+	const blogs: FacebookImportBlog[] = [];
+	let cursor: number | undefined;
+
+	for (;;) {
+		const batch = await findFacebookImportBlogs(db, {
+			channelIds: input.channelIds,
+			limit: 500,
+			cursor,
+		});
+		if (batch.length === 0) break;
+
+		for (const blog of batch) {
+			const status = getFacebookMediaImportStatus(blog);
+			const matchesStatus =
+				input.status === "skipped"
+					? status === "skipped"
+					: status === "not_started" || status === "skipped";
+			if (!input.force && !matchesStatus) continue;
+			blogs.push(blog);
+			if (blogs.length >= input.limit) break;
+		}
+
+		if (blogs.length >= input.limit || batch.length < 500) break;
+		cursor = batch.at(-1)?.id;
+		if (!cursor) break;
+	}
+
+	return blogs;
 }
 
 async function callFacebookMediaBridge(
 	baseUrl: string,
 	blog: FacebookImportBlog,
+	signal?: AbortSignal,
 ) {
 	if (!blog.sourceUrl) {
 		throw new Error("Facebook source URL is missing.");
@@ -485,6 +531,7 @@ async function callFacebookMediaBridge(
 	const response = await fetch(`${baseUrl}/process`, {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
+		signal,
 		body: JSON.stringify({
 			blogId: blog.id,
 			sourceUrl: blog.sourceUrl,
@@ -680,6 +727,7 @@ async function runFacebookMediaImportJob(
 	db: Database,
 	job: FacebookMediaImportJob,
 	input: StartFacebookMediaImportInput,
+	signal: AbortSignal,
 ) {
 	try {
 		const blogs = await selectBlogsForImport(db, input);
@@ -694,6 +742,8 @@ async function runFacebookMediaImportJob(
 		}));
 
 		for (const blog of blogs) {
+			if (job.cancelRequested || signal.aborted) break;
+
 			const item = job.items.find((entry) => entry.blogId === blog.id);
 			try {
 				await updateBlogImportMeta(db, blog, {
@@ -702,7 +752,7 @@ async function runFacebookMediaImportJob(
 					error: null,
 				});
 
-				const result = await callFacebookMediaBridge(job.baseUrl, blog);
+				const result = await callFacebookMediaBridge(job.baseUrl, blog, signal);
 				const saved = await persistBridgeResult(db, blog, result, job.baseUrl);
 
 				job.importedCount += 1;
@@ -711,6 +761,19 @@ async function runFacebookMediaImportJob(
 					item.mediaId = saved.mediaId;
 				}
 			} catch (error) {
+				if (job.cancelRequested || signal.aborted) {
+					if (item) {
+						item.status = "skipped";
+						item.error = "Import stopped.";
+					}
+					await updateBlogImportMeta(db, blog, {
+						status: "skipped",
+						stage: "cancelled",
+						error: "Import stopped.",
+					}).catch(() => undefined);
+					break;
+				}
+
 				const message =
 					error instanceof Error
 						? error.message
@@ -730,7 +793,22 @@ async function runFacebookMediaImportJob(
 			}
 		}
 
-		job.status = "completed";
+		if (job.cancelRequested || signal.aborted) {
+			for (const item of job.items) {
+				if (item.status !== "running") continue;
+				item.status = "skipped";
+				item.error = "Import stopped.";
+			}
+			job.skippedCount = job.items.filter(
+				(item) => item.status === "skipped",
+			).length;
+			job.processedCount =
+				job.importedCount + job.failedCount + job.skippedCount;
+			job.status = "cancelled";
+			job.error = "Import stopped.";
+		} else {
+			job.status = "completed";
+		}
 		job.finishedAt = new Date().toISOString();
 	} catch (error) {
 		job.status = "failed";
@@ -741,6 +819,9 @@ async function runFacebookMediaImportJob(
 		latestMediaImportJob = job;
 		if (activeMediaImportJob?.id === job.id) {
 			activeMediaImportJob = null;
+		}
+		if (latestMediaImportJob?.id === job.id) {
+			activeMediaImportAbortController = null;
 		}
 	}
 }
@@ -759,6 +840,7 @@ export async function startFacebookMediaImportJob(
 		baseUrl: getFacebookMediaBridgeBaseUrl(input.baseUrl),
 		startedAt: new Date().toISOString(),
 		finishedAt: null,
+		cancelRequested: false,
 		selectedCount: 0,
 		processedCount: 0,
 		importedCount: 0,
@@ -770,9 +852,23 @@ export async function startFacebookMediaImportJob(
 
 	activeMediaImportJob = job;
 	latestMediaImportJob = job;
-	void runFacebookMediaImportJob(db, job, input);
+	const abortController = new AbortController();
+	activeMediaImportAbortController = abortController;
+	void runFacebookMediaImportJob(db, job, input, abortController.signal);
 
 	return { activeJob: job, started: true };
+}
+
+export function stopFacebookMediaImportJob() {
+	if (!activeMediaImportJob || activeMediaImportJob.status !== "running") {
+		return { activeJob: activeMediaImportJob, stopped: false };
+	}
+
+	activeMediaImportJob.cancelRequested = true;
+	activeMediaImportJob.error = "Stopping import...";
+	activeMediaImportAbortController?.abort();
+
+	return { activeJob: activeMediaImportJob, stopped: true };
 }
 
 export function getFacebookMediaImportJob() {
@@ -808,6 +904,42 @@ export async function getFacebookMediaImportSummary(
 		pendingCount,
 		baseUrl: getFacebookMediaBridgeBaseUrl(),
 		job: getFacebookMediaImportJob(),
+	};
+}
+
+export async function clearFailedFacebookMediaImportStatuses(
+	db: Database,
+	input?: FacebookMediaImportSummaryInput,
+) {
+	const parsed = facebookMediaImportSummarySchema.parse(input);
+	const blogs = await findAllFacebookImportBlogs(db, {
+		channelIds: parsed?.channelIds,
+	});
+	const failedBlogs = blogs.filter(
+		(blog) => getFacebookMediaImportStatus(blog) === "failed",
+	);
+
+	if (failedBlogs.length) {
+		const resetFailedAt = new Date().toISOString();
+		for (const blog of failedBlogs) {
+			await db.blog.update({
+				where: { id: blog.id },
+				data: {
+					meta: toInputJson(
+						mergeFacebookMediaDownloadMeta(blog.meta, {
+							status: "skipped",
+							stage: "reset_failed",
+							error: null,
+							resetFailedAt,
+						}),
+					),
+				},
+			});
+		}
+	}
+
+	return {
+		clearedCount: failedBlogs.length,
 	};
 }
 
@@ -872,7 +1004,11 @@ export async function listFacebookMediaImports(
 		for (const blog of blogs) {
 			cursor = blog.id;
 			const item = buildImportItem(blog);
-			if (status !== "all" && item.status !== status) continue;
+			const matchesStatus =
+				status === "all" ||
+				item.status === status ||
+				(status === "not_started" && item.status === "skipped");
+			if (!matchesStatus) continue;
 			items.push(item);
 			if (items.length >= limit) break;
 		}

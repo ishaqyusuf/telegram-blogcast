@@ -1,23 +1,32 @@
 import {
-	useCommentsState,
 	type CommentsSheetState,
+	useCommentsState,
 } from "@/components/comments-sheet";
 import { CommentInput } from "@/components/comments-sheet/comment-input";
 import { CommentsList } from "@/components/comments-sheet/comments-list";
 import { _trpc } from "@/components/static-trpc";
+import { TranscriptionRequestModal } from "@/components/transcription-request-modal";
 import { Icon } from "@/components/ui/icon";
 import { Pressable } from "@/components/ui/pressable";
 import { useColors } from "@/hooks/use-color";
+import { useTranscriptionQueue } from "@/hooks/use-transcription-queue";
+import { getTelegramFileUrl } from "@/lib/get-telegram-file";
 import { getMediaFileUrl } from "@/lib/media-source";
 import { useQuery } from "@/lib/react-query";
 import { withAlpha } from "@/lib/theme";
+import {
+	getDefaultTranscriberUrl,
+	isHttpTranscriberUrl,
+} from "@/lib/transcribe";
+import { useAppSettingsStore } from "@/store/app-settings-store";
 import { formatDate } from "@acme/utils/dayjs";
+import { type AVPlaybackStatus, ResizeMode, Video } from "expo-av";
 import { LinearGradient } from "expo-linear-gradient";
-import { ResizeMode, Video, type AVPlaybackStatus } from "expo-av";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useRef, useState } from "react";
 import {
 	ActivityIndicator,
+	Alert,
 	KeyboardAvoidingView,
 	Linking,
 	Modal,
@@ -117,7 +126,10 @@ function VideoCommentsSheet({
 
 					<View
 						className="overflow-hidden rounded-t-[28px] border-t border-border bg-background shadow-2xl"
-						style={{ height: "82%", paddingBottom: Math.max(insets.bottom, 10) }}
+						style={{
+							height: "82%",
+							paddingBottom: Math.max(insets.bottom, 10),
+						}}
 					>
 						<View className="items-center pb-2 pt-3">
 							<View className="h-1.5 w-12 rounded-full bg-muted" />
@@ -194,7 +206,7 @@ function ActionButton({
 	onPress,
 	disabled,
 }: {
-	icon: "MessageCircle" | "Share" | "Compass";
+	icon: "MessageCircle" | "Share" | "Compass" | "Captions";
 	label: string;
 	onPress: () => void;
 	disabled?: boolean;
@@ -281,6 +293,13 @@ export default function VideoBlogScreen() {
 	const [status, setStatus] = useState<AVPlaybackStatus | null>(null);
 	const [selectedMediaKey, setSelectedMediaKey] = useState<string | null>(null);
 	const [commentsOpen, setCommentsOpen] = useState(false);
+	const [transcriptionModalOpen, setTranscriptionModalOpen] = useState(false);
+	const [isQueueingTranscription, setIsQueueingTranscription] = useState(false);
+	const localTranscriberBaseUrl = useAppSettingsStore(
+		(s) => s.localTranscriberBaseUrl,
+	);
+	const transcriberUrl = getDefaultTranscriberUrl(localTranscriberBaseUrl);
+	const canCheckTranscriber = isHttpTranscriberUrl(transcriberUrl);
 	const id = Number(blogId);
 	const canQuery = Number.isFinite(id) && id > 0;
 
@@ -308,14 +327,22 @@ export default function VideoBlogScreen() {
 		);
 	}, [defaultMedia, selectedMediaKey, videoMediaItems]);
 
-	const videoUrl = getMediaFileUrl((media as any)?.file);
+	const mediaFile = media?.file;
+	const videoUrl = getMediaFileUrl(mediaFile);
+	const mediaId = media?.id;
+	const telegramFileId =
+		mediaFile?.source === "vercel_blob"
+			? null
+			: mediaFile?.fileId
+				? String(mediaFile.fileId)
+				: null;
 	const title = getVideoTitle(blog, media);
 	const caption = getCaptionPreview(blog, title);
 	const loadedStatus = getLoadedStatus(status);
 	const durationLabel =
 		formatDuration(
 			loadedStatus?.durationMillis ? loadedStatus.durationMillis / 1000 : null,
-		) ?? formatDuration((media as any)?.file?.duration);
+		) ?? formatDuration(mediaFile?.duration);
 	const positionLabel = formatDuration(
 		loadedStatus?.positionMillis ? loadedStatus.positionMillis / 1000 : null,
 	);
@@ -338,6 +365,22 @@ export default function VideoBlogScreen() {
 	const sourceUrl = (blog as any)?.sourceUrl;
 	const isPlaying = Boolean(loadedStatus?.isPlaying);
 	const activeMediaKey = getMediaKey(media);
+	const {
+		enqueue: enqueueTranscription,
+		jobs: transcriptionJobs,
+		reload: reloadTranscriptionJobs,
+	} = useTranscriptionQueue(mediaId, {
+		autoLoad: Boolean(mediaId),
+		reloadOnEnqueue: false,
+	});
+	const latestTranscriptionJob = transcriptionJobs.find(
+		(job) => job.mediaId === mediaId,
+	);
+	const transcriptionStatusLabel = latestTranscriptionJob
+		? `Latest job: ${latestTranscriptionJob.status}`
+		: canCheckTranscriber
+			? "Ready to queue with local Whisper"
+			: "Local transcriber URL is not configured";
 
 	async function togglePlayback() {
 		if (!videoRef.current) return;
@@ -357,6 +400,66 @@ export default function VideoBlogScreen() {
 	async function openSource() {
 		if (!sourceUrl) return;
 		await Linking.openURL(sourceUrl);
+	}
+
+	async function queueVideoTranscription() {
+		if (!mediaId) return false;
+		let reachableVideoUrl =
+			videoUrl?.startsWith("http://") || videoUrl?.startsWith("https://")
+				? videoUrl
+				: null;
+
+		if (!telegramFileId && !reachableVideoUrl) {
+			Alert.alert(
+				"Cannot transcribe yet",
+				"This video does not have a reachable file source to queue.",
+			);
+			return false;
+		}
+
+		try {
+			setIsQueueingTranscription(true);
+			if (!reachableVideoUrl && telegramFileId) {
+				const resolved = await getTelegramFileUrl(telegramFileId);
+				reachableVideoUrl =
+					resolved?.url?.startsWith("http://") ||
+					resolved?.url?.startsWith("https://")
+						? resolved.url
+						: null;
+			}
+
+			if (!reachableVideoUrl) {
+				throw new Error(
+					"Could not resolve a reachable video URL for this job.",
+				);
+			}
+
+			await enqueueTranscription({
+				mediaId,
+				telegramFileId: telegramFileId ?? null,
+				audioUrl: reachableVideoUrl,
+				language: "ar",
+				transcriberUrl,
+			});
+			await reloadTranscriptionJobs();
+			Alert.alert("Queued", "Added video to transcription queue.");
+			return true;
+		} catch (error) {
+			Alert.alert(
+				"Could not queue transcription",
+				error instanceof Error
+					? error.message
+					: "This video could not be added to the transcription queue.",
+			);
+			return false;
+		} finally {
+			setIsQueueingTranscription(false);
+		}
+	}
+
+	async function startVideoTranscriptionFromModal() {
+		const queued = await queueVideoTranscription();
+		if (queued) setTranscriptionModalOpen(false);
 	}
 
 	if (!canQuery || isLoading) {
@@ -456,6 +559,12 @@ export default function VideoBlogScreen() {
 				style={{ bottom: insets.bottom + 190 }}
 			>
 				<ActionButton
+					icon="Captions"
+					label="Transcribe"
+					onPress={() => setTranscriptionModalOpen(true)}
+					disabled={!mediaId}
+				/>
+				<ActionButton
 					icon="MessageCircle"
 					label={commentCount > 0 ? String(commentCount) : "Comment"}
 					onPress={() => setCommentsOpen(true)}
@@ -481,7 +590,10 @@ export default function VideoBlogScreen() {
 						<Icon name="Play" size={18} className="text-primary-foreground" />
 					</View>
 					<View className="flex-1">
-						<Text className="text-sm font-extrabold text-white" numberOfLines={1}>
+						<Text
+							className="text-sm font-extrabold text-white"
+							numberOfLines={1}
+						>
 							{channelLabel}
 						</Text>
 						<Text className="text-[11px] font-semibold text-white/65">
@@ -554,6 +666,18 @@ export default function VideoBlogScreen() {
 				visible={commentsOpen}
 				onClose={() => setCommentsOpen(false)}
 				fallbackCount={commentCount}
+			/>
+			<TranscriptionRequestModal
+				visible={transcriptionModalOpen}
+				mediaKind="video"
+				title={title}
+				statusLabel={transcriptionStatusLabel}
+				isStarting={isQueueingTranscription}
+				canStart={Boolean(mediaId)}
+				onClose={() => setTranscriptionModalOpen(false)}
+				onStart={() => {
+					void startVideoTranscriptionFromModal();
+				}}
 			/>
 		</View>
 	);
