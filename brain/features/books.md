@@ -18,6 +18,8 @@ Tracks the current scope, architecture, and roadmap for the books experience acr
 ### Current Surfaces
 - Screens:
   - `/books` via `books-screen.tsx`: library grid and shelf filter; tapping a book opens its first fetched page when available, otherwise falls back to book detail.
+  - `/books/library` via `library-screen.tsx`: physical home-library catalog list with search, linked/unlinked filters, location filters, and create action.
+  - `/books/library/new`, `/books/library/[itemId]`, and `/books/library/[itemId]/edit`: physical catalog create/detail/edit flow with metadata, shelf/location, labels, purchase info, and optional digital book link.
   - `/books/[bookId]` via `book-detail-screen.tsx`: book metadata, imported/read-only source status, and chapter tree.
   - `/books/[bookId]/reader/[pageId]` via `book-reader-screen.tsx`: page reader with offline-first highlights/comments, read-only source enforcement, adjacent Shamela page fetching, and audio reference cards.
   - `/books/[bookId]/search` via `book-search-screen.tsx`: search within book.
@@ -53,6 +55,9 @@ Tracks the current scope, architecture, and roadmap for the books experience acr
 ### Data Model Snapshot
 - Core relationship:
   - `BookShelf -> Book -> BookVolume -> BookPage -> BookPageParagraph`
+  - `LibraryLocation -> LibraryItem -> LibraryVolume`
+  - `LibraryItem -> Book?` links a physical catalog entry to an optional digital/Shamela-backed book.
+  - `LibraryLabel <-> LibraryItem` many-to-many for user-defined physical catalog labels.
   - `BookPage -> BookPageFootnote`
   - `BookPage -> BookPageHighlight`
   - `BookPage -> BookPageComment`
@@ -73,6 +78,21 @@ Tracks the current scope, architecture, and roadmap for the books experience acr
   - `BookPageHighlight` and `BookPageComment` now persist extra anchors (`pageShamelaPageNo`, `paragraphPid`, `quoteText`) so page re-import can remap annotations when paragraph row IDs change.
   - `AlbumBookReference` attaches a book to an audio album/series.
   - `MediaBookPageReference` attaches an audio track/range to a specific book page for bidirectional navigation.
+  - Physical library metadata is intentionally stored on `LibraryItem`/`LibraryVolume` instead of `Book`, so Shamela imports and refreshes cannot overwrite shelf, purchase, condition, or ownership details.
+
+### Physical Library Catalog
+- Status: implemented as a first pass.
+- Purpose: track physical books in the user's home library while optionally syncing each owned item to a digital `Book`.
+- Supported fields:
+  - Arabic/English title, author text, publisher, edition, print year, ISBN
+  - volume count, condition, shelf/location, catalog code
+  - purchase date, purchase price/currency, purchase source
+  - description, notes, cover image URL, labels
+- Linking behavior:
+  - A physical item may remain unlinked.
+  - Detail screens can search existing digital books and link one.
+  - Linked items can open the digital book, reader, or search.
+  - Digital book detail can open a prefilled "Catalog physical copy" flow.
 
 ### AI Integration
 - Metadata extraction prompt (`SHAMELA_BOOK_META_PROMPT`)

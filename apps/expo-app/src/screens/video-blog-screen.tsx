@@ -1,3 +1,8 @@
+import { KaraokeTranscript } from "@/components/audio-blog-view/karaoke-transcript";
+import {
+	type RawTranscriptSegment,
+	normalizeTranscriptSegment,
+} from "@/components/audio-blog-view/transcript-timing";
 import {
 	type CommentsSheetState,
 	useCommentsState,
@@ -12,12 +17,13 @@ import { useColors } from "@/hooks/use-color";
 import { useTranscriptionQueue } from "@/hooks/use-transcription-queue";
 import { getTelegramFileUrl } from "@/lib/get-telegram-file";
 import { getMediaFileUrl } from "@/lib/media-source";
-import { useQuery } from "@/lib/react-query";
+import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { withAlpha } from "@/lib/theme";
 import {
 	getDefaultTranscriberUrl,
 	isHttpTranscriberUrl,
 } from "@/lib/transcribe";
+import { getTranscriptionBadgeState } from "@/lib/transcription-status";
 import { useAppSettingsStore } from "@/store/app-settings-store";
 import { formatDate } from "@acme/utils/dayjs";
 import { type AVPlaybackStatus, ResizeMode, Video } from "expo-av";
@@ -206,11 +212,13 @@ function ActionButton({
 	label,
 	onPress,
 	disabled,
+	color,
 }: {
 	icon: "MessageCircle" | "Share" | "Compass" | "Captions";
 	label: string;
 	onPress: () => void;
 	disabled?: boolean;
+	color?: string;
 }) {
 	return (
 		<Pressable
@@ -219,9 +227,12 @@ function ActionButton({
 			className="items-center gap-1.5 active:opacity-80 disabled:opacity-40"
 		>
 			<View className="size-12 items-center justify-center rounded-full bg-black/45">
-				<Icon name={icon} size={22} className="text-white" />
+				<Icon name={icon} size={22} color={color ?? "#ffffff"} />
 			</View>
-			<Text className="max-w-[56px] text-center text-[11px] font-extrabold text-white">
+			<Text
+				className="max-w-[64px] text-center text-[11px] font-extrabold"
+				style={{ color: color ?? "#ffffff" }}
+			>
 				{label}
 			</Text>
 		</Pressable>
@@ -232,6 +243,7 @@ export default function VideoBlogScreen() {
 	const { blogId } = useLocalSearchParams<{ blogId?: string }>();
 	const router = useRouter();
 	const colors = useColors();
+	const qc = useQueryClient();
 	const insets = useSafeAreaInsets();
 	const videoRef = useRef<Video>(null);
 	const [status, setStatus] = useState<AVPlaybackStatus | null>(null);
@@ -301,22 +313,98 @@ export default function VideoBlogScreen() {
 	const sourceUrl = (blog as any)?.sourceUrl;
 	const isPlaying = Boolean(loadedStatus?.isPlaying);
 	const activeMediaKey = getMediaKey(media);
+	const videoDurationSec =
+		mediaFile?.duration ??
+		(loadedStatus?.durationMillis ? loadedStatus.durationMillis / 1000 : null);
 	const {
 		enqueue: enqueueTranscription,
+		deleteJob: deleteTranscriptionJob,
 		jobs: transcriptionJobs,
 		reload: reloadTranscriptionJobs,
 	} = useTranscriptionQueue(mediaId, {
 		autoLoad: Boolean(mediaId),
 		reloadOnEnqueue: false,
 	});
+	const { data: transcriptData } = useQuery({
+		..._trpc.blog.getTranscript.queryOptions({ mediaId: mediaId ?? 0 }),
+		enabled: Boolean(mediaId),
+	});
 	const latestTranscriptionJob = transcriptionJobs.find(
 		(job) => job.mediaId === mediaId,
 	);
+	const queuedTranscriptionJob = transcriptionJobs.find(
+		(job) => job.mediaId === mediaId && job.status === "queued",
+	);
+	const runningTranscriptionJob = transcriptionJobs.find(
+		(job) => job.mediaId === mediaId && job.status === "running",
+	);
+	const latestTranscriptionStatus =
+		latestTranscriptionJob?.status === "completed"
+			? "done"
+			: latestTranscriptionJob?.status;
+	const transcriptSegments = useMemo(
+		() =>
+			(transcriptData?.segments ?? []).map((segment, index) =>
+				normalizeTranscriptSegment(segment as RawTranscriptSegment, index),
+			),
+		[transcriptData?.segments],
+	);
+	const transcriptBadge = getTranscriptionBadgeState({
+		...(media as any),
+		transcript: transcriptData
+			? {
+					status: transcriptData.status,
+					segments: transcriptData.segments,
+				}
+			: (media as any)?.transcript,
+		transcriptStatus:
+			transcriptData?.status ??
+			(media as any)?.transcriptStatus ??
+			latestTranscriptionStatus,
+		transcriptionJobStatus:
+			latestTranscriptionJob?.status ?? (media as any)?.transcriptionJobStatus,
+		transcriptionJobs,
+		duration: videoDurationSec,
+	});
+	const isVideoAlreadyTranscribed = transcriptBadge.isFullyTranscribed;
+	const transcriptBadgeColor =
+		transcriptBadge.tone === "success"
+			? colors.success
+			: transcriptBadge.tone === "warn"
+				? colors.warn
+				: transcriptBadge.tone === "muted"
+					? colors.warn
+					: colors.primary;
+	const transcribeActionLabel = queuedTranscriptionJob
+		? "Queued"
+		: runningTranscriptionJob
+			? "Running"
+			: isVideoAlreadyTranscribed
+				? "Transcript"
+				: "Transcribe";
 	const transcriptionStatusLabel = latestTranscriptionJob
 		? `Latest job: ${latestTranscriptionJob.status}`
 		: canCheckTranscriber
 			? "Ready to queue with local Whisper"
 			: "Local transcriber URL is not configured";
+	const resetVideoTranscript = useMutation(
+		_trpc.blog.resetTranscript.mutationOptions({
+			onSuccess: async () => {
+				await Promise.all([
+					qc.invalidateQueries({
+						queryKey: _trpc.blog.getTranscript.queryKey({
+							mediaId: mediaId ?? 0,
+						}),
+					}),
+					qc.invalidateQueries({
+						queryKey: _trpc.blog.getBlog.queryKey({ id }),
+					}),
+				]);
+				await reloadTranscriptionJobs();
+			},
+			onError: (e) => Alert.alert("Could not reset transcription", e.message),
+		}),
+	);
 
 	const wakeControls = useCallback(() => {
 		setControlsVisible(true);
@@ -396,6 +484,18 @@ export default function VideoBlogScreen() {
 		void togglePlayback();
 	}, [controlsVisible, togglePlayback, wakeControls]);
 
+	const handlePressTranscriptSegment = useCallback(
+		(segment: { startSec: number }, _index: number, shouldPlay: boolean) => {
+			if (!videoRef.current) return;
+			void videoRef.current
+				.setPositionAsync(segment.startSec * 1000)
+				.then(() => {
+					if (shouldPlay) return videoRef.current?.playAsync();
+				});
+		},
+		[],
+	);
+
 	async function shareVideo() {
 		await Share.share({
 			message: videoUrl || sourceUrl || title,
@@ -465,6 +565,75 @@ export default function VideoBlogScreen() {
 	async function startVideoTranscriptionFromModal() {
 		const queued = await queueVideoTranscription();
 		if (queued) setTranscriptionModalOpen(false);
+	}
+
+	function confirmRemoveQueuedVideoTranscription(jobId: number) {
+		Alert.alert(
+			"Remove from queue?",
+			"This video is already queued for transcription.",
+			[
+				{ text: "Cancel", style: "cancel" },
+				{
+					text: "Remove",
+					style: "destructive",
+					onPress: () => {
+						void deleteTranscriptionJob(jobId)
+							.then(reloadTranscriptionJobs)
+							.catch((error) =>
+								Alert.alert(
+									"Could not remove queue item",
+									error instanceof Error
+										? error.message
+										: "This queued transcription could not be removed.",
+								),
+							);
+					},
+				},
+			],
+		);
+	}
+
+	function confirmCompletedVideoTranscriptionAction() {
+		if (!mediaId) return;
+		Alert.alert(
+			"Transcript available",
+			"Clear the saved transcript or clear it and queue a new transcription.",
+			[
+				{ text: "Cancel", style: "cancel" },
+				{
+					text: "Clear",
+					style: "destructive",
+					onPress: () => resetVideoTranscript.mutate({ mediaId }),
+				},
+				{
+					text: "Re-transcribe",
+					onPress: () => {
+						void resetVideoTranscript
+							.mutateAsync({ mediaId })
+							.then(() => queueVideoTranscription());
+					},
+				},
+			],
+		);
+	}
+
+	function handleVideoTranscriptionPress() {
+		if (queuedTranscriptionJob) {
+			confirmRemoveQueuedVideoTranscription(queuedTranscriptionJob.id);
+			return;
+		}
+		if (runningTranscriptionJob) {
+			Alert.alert(
+				"Transcription running",
+				"This video is already being transcribed.",
+			);
+			return;
+		}
+		if (isVideoAlreadyTranscribed) {
+			confirmCompletedVideoTranscriptionAction();
+			return;
+		}
+		setTranscriptionModalOpen(true);
 	}
 
 	if (!canQuery || isLoading) {
@@ -566,6 +735,26 @@ export default function VideoBlogScreen() {
 				</View>
 			) : null}
 
+			{transcriptSegments.length > 0 ? (
+				<View
+					pointerEvents={controlsVisible ? "none" : "auto"}
+					className="absolute inset-x-0"
+					style={{
+						top: insets.top + (controlsVisible ? 104 : 56),
+						bottom: controlsVisible ? insets.bottom + 250 : insets.bottom + 34,
+					}}
+				>
+					<KaraokeTranscript
+						segments={transcriptSegments}
+						positionSecOverride={(loadedStatus?.positionMillis ?? 0) / 1000}
+						autoScroll={isPlaying}
+						playbackEnabled
+						contentPaddingVertical={controlsVisible ? 48 : 120}
+						onPressSegment={handlePressTranscriptSegment}
+					/>
+				</View>
+			) : null}
+
 			{controlsVisible ? (
 				<View
 					className="absolute right-4 items-center gap-5"
@@ -573,9 +762,10 @@ export default function VideoBlogScreen() {
 				>
 					<ActionButton
 						icon="Captions"
-						label="Transcribe"
-						onPress={() => setTranscriptionModalOpen(true)}
+						label={transcribeActionLabel}
+						onPress={handleVideoTranscriptionPress}
 						disabled={!mediaId}
+						color={transcriptBadge.show ? transcriptBadgeColor : undefined}
 					/>
 					<ActionButton
 						icon="MessageCircle"

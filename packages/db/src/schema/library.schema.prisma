@@ -1,0 +1,96 @@
+model LibraryLocation {
+  id          Int       @id @default(autoincrement())
+  createdAt   DateTime? @default(now()) @db.Timestamp(0)
+  updatedAt   DateTime? @updatedAt
+  deletedAt   DateTime?
+  ownerUserId Int?
+  name        String
+  room        String?
+  bookcase    String?
+  shelf       String?
+  row         String?
+  position    String?
+  description String?
+  sortOrder   Int       @default(0)
+  items       LibraryItem[]
+  volumes     LibraryVolume[]
+
+  @@index([ownerUserId])
+  @@index([deletedAt])
+}
+
+model LibraryLabel {
+  id          Int       @id @default(autoincrement())
+  createdAt   DateTime? @default(now()) @db.Timestamp(0)
+  updatedAt   DateTime? @updatedAt
+  deletedAt   DateTime?
+  ownerUserId Int?
+  name        String
+  color       String?
+  items       LibraryItem[]
+
+  @@unique([ownerUserId, name])
+  @@index([ownerUserId])
+}
+
+model LibraryItem {
+  id                  Int       @id @default(autoincrement())
+  createdAt           DateTime? @default(now()) @db.Timestamp(0)
+  updatedAt           DateTime? @updatedAt
+  deletedAt           DateTime?
+  ownerUserId         Int?
+  bookId              Int?
+  book                Book?     @relation(fields: [bookId], references: [id])
+  titleAr             String
+  titleEn             String?
+  authorText          String?
+  publisher           String?
+  edition             String?
+  printYear           String?
+  isbn                String?
+  description         String?
+  notes               String?
+  volumeCount         Int       @default(1)
+  locationId          Int?
+  location            LibraryLocation? @relation(fields: [locationId], references: [id])
+  shelfNumber         String?
+  catalogCode         String?
+  purchaseDate        DateTime?
+  purchasePriceAmount Decimal?  @db.Decimal(12, 2)
+  purchaseCurrency    String?
+  purchaseSource      String?
+  condition           String?
+  status              String    @default("owned")
+  coverImageUrl       String?
+  labels              LibraryLabel[]
+  volumes             LibraryVolume[]
+
+  @@index([ownerUserId])
+  @@index([bookId])
+  @@index([locationId])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model LibraryVolume {
+  id                  Int       @id @default(autoincrement())
+  createdAt           DateTime? @default(now()) @db.Timestamp(0)
+  updatedAt           DateTime? @updatedAt
+  deletedAt           DateTime?
+  libraryItemId       Int
+  libraryItem         LibraryItem @relation(fields: [libraryItemId], references: [id])
+  volumeNumber        Int
+  title               String?
+  locationId          Int?
+  location            LibraryLocation? @relation(fields: [locationId], references: [id])
+  shelfNumber         String?
+  catalogCode         String?
+  condition           String?
+  status              String    @default("owned")
+  notes               String?
+
+  @@unique([libraryItemId, volumeNumber])
+  @@index([libraryItemId])
+  @@index([locationId])
+  @@index([status])
+}

@@ -53,6 +53,7 @@ model Book {
   stagedParses   ShamelaStagedPageParse[]
   albumReferences AlbumBookReference[]
   mediaReferences MediaBookPageReference[]
+  libraryItems   LibraryItem[]
   authors        BookAuthor[]
   // Offline sync fields — updated whenever a page is fetched
   contentHash    String?

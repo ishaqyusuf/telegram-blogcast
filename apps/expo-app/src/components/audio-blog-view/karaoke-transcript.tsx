@@ -5,13 +5,20 @@ import {
 import { useSyncedTranscript } from "@/components/audio-blog-view/use-synced-transcript";
 import { useAudioStore } from "@/store/audio-store";
 import * as Haptics from "expo-haptics";
-import React, { memo, useCallback, useEffect, useRef, useState } from "react";
+import React, {
+	memo,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import {
 	FlatList,
+	type LayoutChangeEvent,
 	Pressable,
 	Text,
 	View,
-	type LayoutChangeEvent,
 } from "react-native";
 
 interface KaraokeTranscriptProps {
@@ -20,6 +27,11 @@ interface KaraokeTranscriptProps {
 	autoScroll?: boolean;
 	playbackEnabled?: boolean;
 	onSegmentLongPress?: (segment: TranscriptSegmentData) => void;
+	onPressSegment?: (
+		segment: TranscriptSegmentData,
+		index: number,
+		shouldPlay: boolean,
+	) => void;
 	selectable?: boolean;
 	contentPaddingVertical?: number;
 }
@@ -90,6 +102,7 @@ export function KaraokeTranscript({
 	autoScroll = true,
 	playbackEnabled = true,
 	onSegmentLongPress,
+	onPressSegment,
 	selectable = false,
 	contentPaddingVertical = 120,
 }: KaraokeTranscriptProps) {
@@ -97,13 +110,20 @@ export function KaraokeTranscript({
 	const play = useAudioStore((s) => s.play);
 	const flatListRef = useRef<FlatList>(null);
 	const lastTapRef = useRef<{ key: string; at: number } | null>(null);
-	const rowMetricsRef = useRef(new Map<number, { y: number; height: number }>());
+	const rowMetricsRef = useRef(
+		new Map<number, { y: number; height: number }>(),
+	);
 	const viewportHeightRef = useRef(0);
 	const [followPaused, setFollowPaused] = useState(false);
-	const {
-		activeSegmentIndex: activeIdx,
-		activeWordIndex: activeWordIdx,
-	} = useSyncedTranscript({ segments, positionSecOverride });
+	const { activeSegmentIndex: activeIdx, activeWordIndex: activeWordIdx } =
+		useSyncedTranscript({ segments, positionSecOverride });
+	const segmentMetricsResetKey = useMemo(
+		() =>
+			segments
+				.map((segment, index) => getTranscriptSegmentKey(segment, index))
+				.join("|"),
+		[segments],
+	);
 
 	const scrollToActiveSegment = useCallback(
 		(animated: boolean) => {
@@ -156,13 +176,17 @@ export function KaraokeTranscript({
 			const lastTap = lastTapRef.current;
 			lastTapRef.current = { key, at: now };
 			const shouldPlay = lastTap?.key === key && now - lastTap.at < 320;
+			if (onPressSegment) {
+				onPressSegment(segment, index, shouldPlay);
+				return;
+			}
 			seek(segment.startSec * 1000)
 				.then(() => {
 					if (shouldPlay) return play();
 				})
 				.catch(() => undefined);
 		},
-		[play, playbackEnabled, seek],
+		[onPressSegment, play, playbackEnabled, seek],
 	);
 
 	const renderItem = useCallback(
@@ -195,9 +219,10 @@ export function KaraokeTranscript({
 	}, [autoScroll, followPaused, scrollToActiveSegment]);
 
 	useEffect(() => {
+		if (segmentMetricsResetKey.length < 0) return;
 		rowMetricsRef.current.clear();
 		setFollowPaused(false);
-	}, [segments]);
+	}, [segmentMetricsResetKey]);
 
 	if (!segments.length) {
 		return (

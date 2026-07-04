@@ -78,8 +78,14 @@ export default function BooksScreen() {
             <Icon name="ChevronLeft" size={22} className="text-foreground" />
           </Pressable>
           <Text className="flex-1 text-lg font-bold text-foreground">
-            {t("library")}
+            {t("digitalBooks")}
           </Text>
+          <Pressable
+            onPress={() => router.push("/books/library" as any)}
+            className="size-9 items-center justify-center rounded-full bg-card"
+          >
+            <Icon name="Library" size={18} className="text-foreground" />
+          </Pressable>
           <Pressable
             onPress={() => setShowBookmarks((value) => !value)}
             className={
@@ -226,7 +232,11 @@ export default function BooksScreen() {
                       hitSlop={10}
                       style={{ position: "absolute", left: 8, top: 8 }}
                     >
-                      <Icon name="X" size={14} className="text-muted-foreground" />
+                      <Icon
+                        name="X"
+                        size={14}
+                        className="text-muted-foreground"
+                      />
                     </Pressable>
                   </View>
                 ))}

@@ -1474,6 +1474,8 @@ function MoreMenu({
 	onComment,
 	onShare,
 	onTranscribe,
+	transcriptionActionLabel,
+	transcriptionActionDescription,
 	onResetTranscription,
 	onAddToAlbum,
 	onAddToPlaylist,
@@ -1487,6 +1489,8 @@ function MoreMenu({
 	onComment: () => void;
 	onShare: () => void;
 	onTranscribe: () => void;
+	transcriptionActionLabel: string;
+	transcriptionActionDescription: string;
 	onResetTranscription: () => void;
 	onAddToAlbum: () => void;
 	onAddToPlaylist: () => void;
@@ -1595,8 +1599,8 @@ function MoreMenu({
 					})}
 					{menuAction({
 						icon: "Captions",
-						label: "Transcribe",
-						description: "Queue this audio for local Whisper",
+						label: transcriptionActionLabel,
+						description: transcriptionActionDescription,
 						onPress: onTranscribe,
 					})}
 					{menuAction({
@@ -2052,6 +2056,7 @@ export default function AudioBlogScreen() {
 	});
 	const {
 		enqueue: enqueueTranscription,
+		deleteJob: deleteTranscriptionJob,
 		jobs: transcriptionJobs,
 		reload: reloadTranscriptionJobs,
 	} = useTranscriptionQueue(mediaId, {
@@ -2063,6 +2068,12 @@ export default function AudioBlogScreen() {
 		[mediaId, transcriptionJobs],
 	);
 	const latestTranscriptionJob = mediaTranscriptionJobs[0];
+	const queuedTranscriptionJob = mediaTranscriptionJobs.find(
+		(job) => job.status === "queued",
+	);
+	const runningTranscriptionJob = mediaTranscriptionJobs.find(
+		(job) => job.status === "running",
+	);
 	const latestTranscriptionStatus =
 		latestTranscriptionJob?.status === "completed"
 			? "done"
@@ -2091,8 +2102,22 @@ export default function AudioBlogScreen() {
 			: transcriptBadge.tone === "warn"
 				? colors.warn
 				: transcriptBadge.tone === "muted"
-					? "rgba(255,255,255,0.66)"
+					? colors.warn
 					: colors.primary;
+	const transcriptionActionLabel = queuedTranscriptionJob
+		? "Queued"
+		: runningTranscriptionJob
+			? "Running"
+			: isCurrentAudioAlreadyTranscribed
+				? "Transcript"
+				: "Transcribe";
+	const transcriptionActionDescription = queuedTranscriptionJob
+		? "Tap to remove this audio from the queue"
+		: runningTranscriptionJob
+			? "Transcription is currently running"
+			: isCurrentAudioAlreadyTranscribed
+				? "Clear transcript or transcribe again"
+				: "Queue this audio for local Whisper";
 	const { data: localTranscriberHealth } = useQuery({
 		..._trpc.blog.checkLocalTranscriber.queryOptions({
 			baseUrl: canCheckTranscriber ? (transcriberUrl ?? undefined) : undefined,
@@ -2357,7 +2382,10 @@ export default function AudioBlogScreen() {
 		}),
 	);
 
-	const { mutate: resetCurrentTranscript } = useMutation(
+	const {
+		mutate: resetCurrentTranscript,
+		mutateAsync: resetCurrentTranscriptAsync,
+	} = useMutation(
 		_trpc.blog.resetTranscript.mutationOptions({
 			onSuccess: async () => {
 				setTranscriptChunks({});
@@ -2376,15 +2404,7 @@ export default function AudioBlogScreen() {
 						queryKey: _trpc.blog.getBlog.queryKey({ id }),
 					}),
 				]);
-				Alert.alert("Queue for transcribing", undefined, [
-					{ text: "No", style: "cancel" },
-					{
-						text: "Yes",
-						onPress: () => {
-							void queueCurrentTranscription();
-						},
-					},
-				]);
+				await reloadTranscriptionJobs();
 			},
 			onError: (e) => Alert.alert("Could not reset transcription", e.message),
 		}),
@@ -2491,7 +2511,72 @@ export default function AudioBlogScreen() {
 		}
 	}
 
+	function confirmRemoveQueuedTranscription(jobId: number) {
+		Alert.alert(
+			"Remove from queue?",
+			"This audio is already queued for transcription.",
+			[
+				{ text: "Cancel", style: "cancel" },
+				{
+					text: "Remove",
+					style: "destructive",
+					onPress: () => {
+						void deleteTranscriptionJob(jobId)
+							.then(reloadTranscriptionJobs)
+							.catch((error) =>
+								Alert.alert(
+									"Could not remove queue item",
+									error instanceof Error
+										? error.message
+										: "This queued transcription could not be removed.",
+								),
+							);
+					},
+				},
+			],
+		);
+	}
+
+	function confirmCompletedTranscriptionAction() {
+		if (!mediaId) return;
+		Alert.alert(
+			"Transcript available",
+			"Clear the saved transcript or clear it and queue a new transcription.",
+			[
+				{ text: "Cancel", style: "cancel" },
+				{
+					text: "Clear",
+					style: "destructive",
+					onPress: () => resetCurrentTranscript({ mediaId }),
+				},
+				{
+					text: "Re-transcribe",
+					onPress: () => {
+						void resetCurrentTranscriptAsync({ mediaId }).then(() => {
+							void queueCurrentTranscription();
+						});
+					},
+				},
+			],
+		);
+	}
+
 	function handleQueueCurrentTranscriptionPress() {
+		if (queuedTranscriptionJob) {
+			confirmRemoveQueuedTranscription(queuedTranscriptionJob.id);
+			return;
+		}
+		if (runningTranscriptionJob) {
+			Alert.alert(
+				"Transcription running",
+				"This audio is already being transcribed.",
+			);
+			return;
+		}
+		if (isCurrentAudioAlreadyTranscribed) {
+			confirmCompletedTranscriptionAction();
+			return;
+		}
 		setTranscriptionRequestVisible(true);
 	}
 
@@ -3078,6 +3163,8 @@ export default function AudioBlogScreen() {
 					void shareAudioPost();
 				}}
 				onTranscribe={handleQueueCurrentTranscriptionPress}
+				transcriptionActionLabel={transcriptionActionLabel}
+				transcriptionActionDescription={transcriptionActionDescription}
 				onResetTranscription={resetCurrentTranscription}
 				onAddToAlbum={() => setAlbumPickerVisible(true)}
 				onAddToPlaylist={() => {

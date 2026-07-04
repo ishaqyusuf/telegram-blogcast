@@ -31,6 +31,15 @@ const VIEWED_TYPE_ICONS = {
   document: "FileText",
 } as const;
 
+const VIEWED_TYPE_LABELS: Record<string, string> = {
+  audio: "Audio",
+  video: "Video",
+  text: "Blog",
+  image: "Image",
+  pdf: "Pdf",
+  document: "Pdf",
+};
+
 function formatProgress(progressMs: number, durationSec?: number | null) {
   const posMin = Math.floor(progressMs / 60000);
   const posSec = Math.floor((progressMs % 60000) / 1000);
@@ -233,12 +242,23 @@ export function BlogHomeRecentlyPlayed() {
               className="w-[112px] active:opacity-80"
             >
               <View
-                className="h-24 w-full items-center justify-center rounded-xl border border-border bg-card mb-2"
+                className="h-24 w-full items-center justify-center rounded-xl border border-border bg-card mb-2 relative"
                 style={{
                   backgroundColor: colors.card,
                   borderColor: colors.border,
                 }}
               >
+                <View
+                  className="absolute right-2 top-2 rounded-full px-2 py-0.5"
+                  style={{ backgroundColor: colors.primary }}
+                >
+                  <Text
+                    className="text-[9px] font-bold"
+                    style={{ color: colors.primaryForeground }}
+                  >
+                    {VIEWED_TYPE_LABELS[item.type] ?? "Blog"}
+                  </Text>
+                </View>
                 <Icon
                   name={
                     VIEWED_TYPE_ICONS[

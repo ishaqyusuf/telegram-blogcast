@@ -203,6 +203,10 @@ const InitialLayout = () => {
 						/>
 						<Stack.Screen name="book-fetch-preview" />
 						<Stack.Screen name="books" />
+						<Stack.Screen name="books/library/index" />
+						<Stack.Screen name="books/library/new" />
+						<Stack.Screen name="books/library/[itemId]" />
+						<Stack.Screen name="books/library/[itemId]/edit" />
 						<Stack.Screen name="books/[bookId]" />
 						<Stack.Screen name="books/[bookId]/reader/[pageId]" />
 						<Stack.Screen name="books/[bookId]/search" />

@@ -75,7 +75,8 @@ function filterTocNodes(nodes: TocNode[], query: string) {
     let current: TocNode | undefined = node;
     while (current) {
       included.add(current.id);
-      current = current.parentId != null ? byId.get(current.parentId) : undefined;
+      current =
+        current.parentId != null ? byId.get(current.parentId) : undefined;
     }
     includeDescendants(node);
   }
@@ -256,7 +257,8 @@ export default function BookDetailScreen() {
       : null;
   const firstFetchedPage = book.pages.find((page) => page.status === "fetched");
   const firstFetchablePage = book.pages.find((page) => page.shamelaUrl);
-  const primaryReadPage = lastReadPage ?? firstFetchedPage ?? firstFetchablePage;
+  const primaryReadPage =
+    lastReadPage ?? firstFetchedPage ?? firstFetchablePage;
   const bookmarks = getBookmarks(bookIdNum);
 
   const openReader = (targetPageId: number) => {
@@ -279,7 +281,17 @@ export default function BookDetailScreen() {
       openCaptureBrowser(primaryReadPage.shamelaUrl);
     }
   };
-  const tocNodes = (((book as any).tocNodes ?? []) as TocNode[]);
+  const openPhysicalLibraryCreate = () => {
+    const authorText = book.authors.map((a) => a.nameAr ?? a.name).join("، ");
+    const params = new URLSearchParams({
+      bookId: String(book.id),
+      titleAr: book.nameAr ?? book.nameEn ?? "",
+    });
+    if (book.nameEn) params.set("titleEn", book.nameEn);
+    if (authorText) params.set("authorText", authorText);
+    router.push(`/books/library/new?${params.toString()}` as any);
+  };
+  const tocNodes = ((book as any).tocNodes ?? []) as TocNode[];
   const normalizedChapterQuery = normalizeChapterSearch(chapterQuery);
   const visibleTocNodes = filterTocNodes(tocNodes, normalizedChapterQuery);
   const visiblePages = normalizedChapterQuery
@@ -484,6 +496,34 @@ export default function BookDetailScreen() {
               <Icon name="ChevronLeft" size={18} className="text-primary" />
             </Pressable>
           )}
+
+          <Pressable
+            onPress={openPhysicalLibraryCreate}
+            className="mx-4 mb-3 flex-row-reverse items-center gap-2.5 rounded-xl border border-border bg-card px-4 py-3"
+          >
+            <View className="size-9 items-center justify-center rounded-full bg-background">
+              <Icon name="Library" size={18} className="text-foreground" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text
+                className="text-right text-[13px] font-bold text-foreground"
+                style={{ writingDirection: "rtl" }}
+              >
+                {t("catalogPhysicalCopy")}
+              </Text>
+              <Text
+                className="text-right text-[11px] text-muted-foreground"
+                style={{ writingDirection: "rtl" }}
+              >
+                {t("catalogPhysicalCopyDescription")}
+              </Text>
+            </View>
+            <Icon
+              name="ChevronLeft"
+              size={18}
+              className="text-muted-foreground"
+            />
+          </Pressable>
 
           {showBookmarks && bookmarks.length > 0 && (
             <View style={{ paddingHorizontal: 16, marginBottom: 16 }}>
@@ -823,7 +863,11 @@ export default function BookDetailScreen() {
                 className="mb-3 flex-row-reverse items-center gap-2 rounded-xl bg-card px-3 py-2.5"
                 style={{ backgroundColor: colors.card }}
               >
-                <Icon name="Search" size={16} className="text-muted-foreground" />
+                <Icon
+                  name="Search"
+                  size={16}
+                  className="text-muted-foreground"
+                />
                 <TextInput
                   value={chapterQuery}
                   onChangeText={setChapterQuery}
@@ -840,7 +884,11 @@ export default function BookDetailScreen() {
                 />
                 {chapterQuery.length > 0 ? (
                   <Pressable onPress={() => setChapterQuery("")}>
-                    <Icon name="X" size={16} className="text-muted-foreground" />
+                    <Icon
+                      name="X"
+                      size={16}
+                      className="text-muted-foreground"
+                    />
                   </Pressable>
                 ) : null}
               </View>

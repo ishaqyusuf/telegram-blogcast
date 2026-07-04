@@ -1,5 +1,15 @@
 # Progress
 
+## 2026-07-04
+
+### Physical Library Catalog
+- Status: Done.
+- Source mode: Direct user request.
+- Source changed: `packages/db/src/schema/library.schema.prisma`, `packages/db/src/schema/book.schema.prisma`, `packages/db/src/index.ts`, `apps/api/src/trpc/routers/library.routes.ts`, `apps/api/src/trpc/routers/_app.ts`, `apps/expo-app/src/screens/library-screen.tsx`, `apps/expo-app/src/screens/library-item-form-screen.tsx`, `apps/expo-app/src/screens/library-item-detail-screen.tsx`, `apps/expo-app/src/screens/books-screen.tsx`, `apps/expo-app/src/screens/book-detail-screen.tsx`, `apps/expo-app/src/app/_layout.tsx`, `apps/expo-app/src/app/books/library/*`, `apps/expo-app/src/lib/i18n.ts`.
+- Brain changed: `brain/plans/2026-07-04-feature-physical-library-catalog.md`, `brain/features/books.md`, `brain/database/schema.md`, `brain/api/contracts.md`, `brain/tasks/done.md`.
+- Validation passed: `bun --cwd packages/db prisma-generate`; `bunx biome check apps/api/src/trpc/routers/library.routes.ts apps/api/src/trpc/routers/_app.ts packages/db/src/index.ts`; `bunx eslint src/screens/library-screen.tsx src/screens/library-item-form-screen.tsx src/screens/library-item-detail-screen.tsx src/screens/books-screen.tsx src/screens/book-detail-screen.tsx src/app/_layout.tsx`.
+- Validation limitation: full API and Expo typechecks still fail on unrelated existing project errors outside this slice.
+
 ## 2026-07-02
 
 ### Album Organizer Review And Approval
