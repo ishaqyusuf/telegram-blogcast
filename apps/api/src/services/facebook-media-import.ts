@@ -4,6 +4,10 @@ import { z } from "zod";
 const FACEBOOK_SOURCE = "facebook";
 const DEFAULT_FACEBOOK_MEDIA_BRIDGE_BASE_URL = "http://127.0.0.1:8790";
 const MAX_IMPORT_LIMIT = 10_000;
+const LOCAL_ONLY_BRIDGE_MESSAGE =
+	"Facebook media bridge is local-only. Run the API and bridge on your local machine to import Facebook media.";
+const LOCAL_BRIDGE_URL_MESSAGE =
+	"Facebook media bridge URL must point to localhost or a private LAN host.";
 
 export const facebookMediaImportStatusSchema = z.enum([
 	"not_started",
@@ -199,12 +203,54 @@ let activeMediaImportJob: FacebookMediaImportJob | null = null;
 let latestMediaImportJob: FacebookMediaImportJob | null = null;
 let activeMediaImportAbortController: AbortController | null = null;
 
+function isHostedServerRuntime() {
+	return (
+		process.env.VERCEL === "1" ||
+		Boolean(process.env.VERCEL_ENV) ||
+		process.env.FACEBOOK_MEDIA_IMPORT_DISABLED === "true"
+	);
+}
+
+function isFacebookMediaBridgeAllowed() {
+	return !isHostedServerRuntime();
+}
+
 function getFacebookMediaBridgeBaseUrl(baseUrl?: string | null) {
 	return (
 		baseUrl ||
 		process.env.FACEBOOK_MEDIA_BRIDGE_BASE_URL ||
 		DEFAULT_FACEBOOK_MEDIA_BRIDGE_BASE_URL
 	).replace(/\/+$/, "");
+}
+
+function isPrivateNetworkHost(hostname: string) {
+	return (
+		hostname === "localhost" ||
+		hostname === "127.0.0.1" ||
+		hostname === "0.0.0.0" ||
+		hostname === "::1" ||
+		hostname.startsWith("10.") ||
+		hostname.startsWith("192.168.") ||
+		/^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname)
+	);
+}
+
+function getFacebookMediaBridgeBlockReason(baseUrl: string) {
+	if (!isFacebookMediaBridgeAllowed()) return LOCAL_ONLY_BRIDGE_MESSAGE;
+
+	try {
+		const hostname = new URL(baseUrl).hostname;
+		if (!isPrivateNetworkHost(hostname)) return LOCAL_BRIDGE_URL_MESSAGE;
+	} catch {
+		return "Facebook media bridge URL is invalid.";
+	}
+
+	return null;
+}
+
+function assertFacebookMediaBridgeIsAllowed(baseUrl: string) {
+	const blockReason = getFacebookMediaBridgeBlockReason(baseUrl);
+	if (blockReason) throw new Error(blockReason);
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -830,6 +876,9 @@ export async function startFacebookMediaImportJob(
 	db: Database,
 	input: StartFacebookMediaImportInput,
 ) {
+	const baseUrl = getFacebookMediaBridgeBaseUrl(input.baseUrl);
+	assertFacebookMediaBridgeIsAllowed(baseUrl);
+
 	if (activeMediaImportJob?.status === "running") {
 		return { activeJob: activeMediaImportJob, started: false };
 	}
@@ -837,7 +886,7 @@ export async function startFacebookMediaImportJob(
 	const job: FacebookMediaImportJob = {
 		id: `facebook-media-import-${Date.now()}`,
 		status: "running",
-		baseUrl: getFacebookMediaBridgeBaseUrl(input.baseUrl),
+		baseUrl,
 		startedAt: new Date().toISOString(),
 		finishedAt: null,
 		cancelRequested: false,
@@ -1028,6 +1077,20 @@ export async function checkFacebookMediaBridge(input?: {
 	baseUrl?: string;
 }) {
 	const baseUrl = getFacebookMediaBridgeBaseUrl(input?.baseUrl);
+	const blockReason = getFacebookMediaBridgeBlockReason(baseUrl);
+	if (blockReason) {
+		return {
+			ok: false,
+			baseUrl,
+			service: "facebook-media-bridge",
+			status: "local_only",
+			ytDlpAvailable: null,
+			telegramConfigured: null,
+			channelConfigured: null,
+			error: blockReason,
+		};
+	}
+
 	try {
 		const response = await fetch(`${baseUrl}/health`, { cache: "no-store" });
 		const data = await response.json().catch(() => null);
