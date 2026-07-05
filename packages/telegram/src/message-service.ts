@@ -7,7 +7,11 @@
 
 import { consoleLog } from "@acme/utils";
 import { Api } from "telegram";
-import { resolveMediaBot } from "./media-bot-resolver";
+import {
+  getMediaBotResolverPauseMs,
+  isMediaBotResolverPausedError,
+  resolveMediaBot,
+} from "./media-bot-resolver";
 import type { ResolvedMedia } from "./media-resolver";
 import { getClient } from "./telegram-client";
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -147,26 +151,64 @@ export async function fetchChannelMessageStats(
 
 // ── Core function ─────────────────────────────────────────────────────────────
 type BlogType = "audio" | "image" | "video" | "text" | "document";
+type FileResolveState = {
+  stopped: boolean;
+  loggedPause: boolean;
+};
+
+function createFileResolveState(): FileResolveState {
+  return { stopped: false, loggedPause: false };
+}
+
+function stopFileResolution(
+  state: FileResolveState | undefined,
+  retryAfterMs: number,
+): void {
+  if (!state) return;
+
+  state.stopped = true;
+  if (state.loggedPause) return;
+
+  state.loggedPause = true;
+  consoleLog(
+    "[message-service]",
+    `Bot API unavailable; skipping fileId resolution for ${Math.ceil(
+      retryAfterMs / 1000,
+    )}s`,
+  );
+}
 
 async function mapTelegramMessage(
   client: Awaited<ReturnType<typeof getClient>>,
   channelUsername: string,
   msg: Api.Message,
   resolveFiles: boolean,
+  fileResolveState?: FileResolveState,
 ): Promise<FetchedMessage> {
   const mediaMeta = extractMediaMeta(msg);
   let media: ResolvedMedia | null = mediaMeta as ResolvedMedia | null;
 
-  if (mediaMeta && resolveFiles) {
+  if (mediaMeta && resolveFiles && !fileResolveState?.stopped) {
+    const pauseMs = getMediaBotResolverPauseMs();
+    if (pauseMs > 0) {
+      stopFileResolution(fileResolveState, pauseMs);
+    }
+
     try {
-      const botMedia = await resolveMediaBot(client, channelUsername, msg.id);
-      media = botMedia ? { ...mediaMeta, ...botMedia } : media;
+      if (!fileResolveState?.stopped) {
+        const botMedia = await resolveMediaBot(client, channelUsername, msg.id);
+        media = botMedia ? { ...mediaMeta, ...botMedia } : media;
+      }
     } catch (err) {
-      consoleLog(
-        "[message-service]",
-        `fileId resolution failed msg=${msg.id}:`,
-        err,
-      );
+      if (isMediaBotResolverPausedError(err)) {
+        stopFileResolution(fileResolveState, err.retryAfterMs);
+      } else {
+        consoleLog(
+          "[message-service]",
+          `fileId resolution failed msg=${msg.id}:`,
+          err,
+        );
+      }
     }
   }
 
@@ -189,11 +231,13 @@ export async function fetchMessageById(
   const message = messages.find((msg) => msg.id === messageId);
 
   if (!message) return null;
+  const fileResolveState = createFileResolveState();
   return mapTelegramMessage(
     client,
     channelUsername,
     message,
     options.resolveFiles ?? false,
+    fileResolveState,
   );
 }
 
@@ -298,11 +342,30 @@ export async function fetchMessages(
   // Sort ascending (oldest first) — consistent with fetcher cursor logic
   filtered.sort((a, b) => a.id - b.id);
 
-  const messages: FetchedMessage[] = await Promise.all(
-    filtered.map((msg) =>
-      mapTelegramMessage(client, channelUsername, msg, resolveFiles),
-    ),
-  );
+  const messages: FetchedMessage[] = [];
+
+  if (resolveFiles) {
+    const fileResolveState = createFileResolveState();
+    for (const msg of filtered) {
+      messages.push(
+        await mapTelegramMessage(
+          client,
+          channelUsername,
+          msg,
+          true,
+          fileResolveState,
+        ),
+      );
+    }
+  } else {
+    messages.push(
+      ...(await Promise.all(
+        filtered.map((msg) =>
+          mapTelegramMessage(client, channelUsername, msg, false),
+        ),
+      )),
+    );
+  }
 
   const nextStartId = messages.length === limit ? messages?.[0]?.id! : null;
 

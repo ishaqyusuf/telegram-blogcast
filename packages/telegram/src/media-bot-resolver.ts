@@ -24,19 +24,63 @@ const BOT_API_COOLDOWN_MS = 60_000;
 const POLL_INTERVAL_MS = 800;
 let botApiUnavailableUntil = 0;
 
+export class MediaBotResolverPausedError extends Error {
+  readonly method: string;
+  readonly retryAfterMs: number;
+  readonly cause?: unknown;
+
+  constructor(method: string, retryAfterMs: number, cause?: unknown) {
+    super(
+      `Bot API temporarily unavailable; skipping ${method} for ${Math.ceil(
+        retryAfterMs / 1000,
+      )}s`,
+    );
+    this.name = "MediaBotResolverPausedError";
+    this.method = method;
+    this.retryAfterMs = retryAfterMs;
+    this.cause = cause;
+  }
+}
+
+export function isMediaBotResolverPausedError(
+  err: unknown,
+): err is MediaBotResolverPausedError {
+  return err instanceof MediaBotResolverPausedError;
+}
+
+export function getMediaBotResolverPauseMs(): number {
+  return Math.max(0, botApiUnavailableUntil - Date.now());
+}
+
+function createBotApiPausedError(
+  method: string,
+  retryAfterMs: number,
+  cause?: unknown,
+): MediaBotResolverPausedError {
+  return new MediaBotResolverPausedError(method, retryAfterMs, cause);
+}
+
+function pauseBotApi(
+  method: string,
+  retryAfterMs: number,
+  cause?: unknown,
+): MediaBotResolverPausedError {
+  botApiUnavailableUntil = Math.max(
+    botApiUnavailableUntil,
+    Date.now() + retryAfterMs,
+  );
+  return createBotApiPausedError(method, getMediaBotResolverPauseMs(), cause);
+}
+
 // ── Bot API helper ────────────────────────────────────────────────────────────
 
 async function botApi<T = any>(
   method: string,
   params: Record<string, unknown> = {},
 ): Promise<T> {
-  const cooldownMs = botApiUnavailableUntil - Date.now();
+  const cooldownMs = getMediaBotResolverPauseMs();
   if (cooldownMs > 0) {
-    throw new Error(
-      `Bot API temporarily unavailable; skipping ${method} for ${Math.ceil(
-        cooldownMs / 1000,
-      )}s`,
-    );
+    throw createBotApiPausedError(method, cooldownMs);
   }
 
   const controller = new AbortController();
@@ -52,15 +96,29 @@ async function botApi<T = any>(
     const data = (await res.json()) as {
       ok: boolean;
       description?: string;
+      error_code?: number;
+      parameters?: { retry_after?: number };
       result: T;
     };
     if (!data.ok) {
+      const retryAfterMs = data.parameters?.retry_after
+        ? data.parameters.retry_after * 1000
+        : res.status >= 500
+          ? BOT_API_COOLDOWN_MS
+          : 0;
+      if (retryAfterMs > 0) {
+        throw pauseBotApi(
+          method,
+          retryAfterMs,
+          new Error(`Bot API ${method} failed: ${data.description}`),
+        );
+      }
       throw new Error(`Bot API ${method} failed: ${data.description}`);
     }
     return data.result;
   } catch (err) {
     if (isBotApiNetworkError(err)) {
-      botApiUnavailableUntil = Date.now() + BOT_API_COOLDOWN_MS;
+      throw pauseBotApi(method, BOT_API_COOLDOWN_MS, err);
     }
     throw err;
   } finally {
@@ -115,6 +173,13 @@ export function resolveMediaBot(
   fromChatId: string | number,
   messageId: number,
 ): Promise<ResolvedMedia | null> {
+  const cooldownMs = getMediaBotResolverPauseMs();
+  if (cooldownMs > 0) {
+    return Promise.reject(
+      createBotApiPausedError("resolveMediaBot", cooldownMs),
+    );
+  }
+
   const result = resolveLock.then(() =>
     _resolveFileId(mtprotoClient, fromChatId, messageId),
   );
@@ -145,9 +210,12 @@ async function _resolveFileId(
   fromChatId: string | number,
   messageId: number,
 ): Promise<ResolvedMedia | null> {
+  let webhookDropped = false;
+
   try {
     // Step 1 – drop webhook so getUpdates doesn't conflict
     await dropWebhook();
+    webhookDropped = true;
 
     // Step 2 – get bot's own id (forward target = bot's Saved Messages)
     // const me = await botApi<{ id: number }>("getMe");
@@ -238,7 +306,9 @@ async function _resolveFileId(
     );
   } finally {
     // Step 6 – always restore webhook
-    await restoreWebhook();
+    if (webhookDropped) {
+      await restoreWebhook();
+    }
   }
 }
 

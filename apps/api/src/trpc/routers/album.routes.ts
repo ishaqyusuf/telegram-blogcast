@@ -402,16 +402,29 @@ export const albumRoutes = createTRPCRouter({
 										where: { deletedAt: null },
 										include: { tags: { select: { id: true, title: true } } },
 									},
+									blogs: {
+										where: { deletedAt: null },
+										orderBy: { createdAt: "asc" },
+										include: {
+											comment: {
+												select: {
+													id: true,
+													content: true,
+													createdAt: true,
+													deletedAt: true,
+												},
+											},
+										},
+									},
 								},
 							},
 							transcript: {
 								select: {
 									status: true,
 									segments: {
-										select: { endSec: true },
+										select: { startSec: true, endSec: true, text: true },
 										where: { status: "done" },
-										orderBy: { endSec: "desc" },
-										take: 1,
+										orderBy: { startSec: "asc" },
 									},
 								},
 							},

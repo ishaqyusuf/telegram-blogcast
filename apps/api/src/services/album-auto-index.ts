@@ -228,8 +228,88 @@ function extractJsonPayload(text: string) {
 	return trimmed;
 }
 
+function balanceJsonClosers(payload: string) {
+	const stack: string[] = [];
+	let inString = false;
+	let escaped = false;
+
+	for (const char of payload) {
+		if (inString) {
+			if (escaped) {
+				escaped = false;
+				continue;
+			}
+			if (char === "\\") {
+				escaped = true;
+				continue;
+			}
+			if (char === '"') inString = false;
+			continue;
+		}
+
+		if (char === '"') {
+			inString = true;
+			continue;
+		}
+
+		if (char === "{") {
+			stack.push("}");
+			continue;
+		}
+		if (char === "[") {
+			stack.push("]");
+			continue;
+		}
+		if ((char === "}" || char === "]") && stack.at(-1) === char) {
+			stack.pop();
+		}
+	}
+
+	if (inString) return payload;
+	return `${payload}${stack.reverse().join("")}`;
+}
+
+function repairAiJsonPayload(payload: string) {
+	const knownKeys =
+		"albums|proposedAlbums|albumId|confidence|reason|media|mediaId|mediaIds|name|albumType|description|suggestionKeywords";
+	const quotedString = String.raw`"(?:\\.|[^"\\])*"`;
+	const scalarValue = String.raw`(?:${quotedString}|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null)`;
+	const keyLookahead = new RegExp(String.raw`(?="(?:${knownKeys})"\s*:)`, "g");
+
+	return balanceJsonClosers(payload)
+		.replace(/,\s*([}\]])/g, "$1")
+		.replace(/([{,]\s*)([A-Za-z_$][\w$-]*)\s*:/g, '$1"$2":')
+		.replace(
+			new RegExp(String.raw`([}\]])\s+${keyLookahead.source}`, "g"),
+			"$1,",
+		)
+		.replace(
+			new RegExp(String.raw`(${scalarValue})\s+${keyLookahead.source}`, "g"),
+			"$1,",
+		)
+		.replace(/([}\]])\s+(?=[{\[])/g, "$1,");
+}
+
 function parseAiJson(text: string) {
-	return JSON.parse(extractJsonPayload(text)) as unknown;
+	const payload = extractJsonPayload(text);
+	try {
+		return JSON.parse(payload) as unknown;
+	} catch (error) {
+		const repaired = repairAiJsonPayload(payload);
+		try {
+			return JSON.parse(repaired) as unknown;
+		} catch (repairedError) {
+			const originalMessage =
+				error instanceof Error ? error.message : String(error);
+			const repairedMessage =
+				repairedError instanceof Error
+					? repairedError.message
+					: String(repairedError);
+			throw new Error(
+				`Failed to parse AI JSON response: ${originalMessage}; repair failed: ${repairedMessage}`,
+			);
+		}
+	}
 }
 
 function clampConfidence(value: number | undefined) {

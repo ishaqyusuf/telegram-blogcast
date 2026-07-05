@@ -148,6 +148,93 @@ function getBookDisplayName(book?: any | null) {
   return book?.nameAr || book?.nameEn || "Book";
 }
 
+function normalizeAlbumSearchText(value?: string | number | null) {
+  return String(value ?? "")
+    .normalize("NFKD")
+    .replace(/[\u0610-\u061a\u064b-\u065f\u0670]/g, "")
+    .replace(/[\u200c\u200d]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getAlbumSearchTerms(query: string) {
+  return normalizeAlbumSearchText(query)
+    .split(" ")
+    .map((term) => term.trim())
+    .filter(Boolean);
+}
+
+function getTrackSearchFields(media: any, albumAuthor?: any | null) {
+  const blogTags =
+    media?.blog?.blogTags
+      ?.map((blogTag: any) => blogTag?.tags?.title)
+      .filter(Boolean) ?? [];
+  const comments =
+    media?.blog?.blogs
+      ?.map((link: any) =>
+        link?.comment?.deletedAt ? null : link?.comment?.content,
+      )
+      .filter(Boolean) ?? [];
+  const transcriptSegments =
+    media?.transcript?.segments
+      ?.map((segment: any) => segment?.text)
+      .filter(Boolean) ?? [];
+
+  return [
+    { label: "Title", text: getTrackTitle(media) },
+    { label: "File", text: media?.file?.fileName ?? media?.file?.name },
+    { label: "Caption", text: media?.blog?.content },
+    { label: "Author", text: getAuthorDisplayName(media?.author) },
+    { label: "Album author", text: getAuthorDisplayName(albumAuthor) },
+    { label: "Tags", text: blogTags.join(" ") },
+    { label: "Comments", text: comments.join(" ") },
+    { label: "Transcript", text: transcriptSegments.join(" ") },
+  ].filter((field) => field.text);
+}
+
+function clipAlbumSearchSnippet(value: string, query: string) {
+  const text = value.replace(/\s+/g, " ").trim();
+  const normalizedText = normalizeAlbumSearchText(text);
+  const normalizedQuery = normalizeAlbumSearchText(query);
+  const firstTerm = getAlbumSearchTerms(query)[0] ?? normalizedQuery;
+  const matchIndex =
+    normalizedText.indexOf(normalizedQuery) >= 0
+      ? normalizedText.indexOf(normalizedQuery)
+      : normalizedText.indexOf(firstTerm);
+  const start = matchIndex > 28 ? matchIndex - 28 : 0;
+  const snippet = text.slice(start, start + 92).trim();
+  return `${start > 0 ? "..." : ""}${snippet}${text.length > start + 92 ? "..." : ""}`;
+}
+
+function getTrackSearchMatch(media: any, query: string, albumAuthor?: any | null) {
+  const terms = getAlbumSearchTerms(query);
+  if (terms.length === 0) return null;
+
+  const fields = getTrackSearchFields(media, albumAuthor);
+  const combinedText = normalizeAlbumSearchText(
+    fields.map((field) => field.text).join(" "),
+  );
+  if (!terms.every((term) => combinedText.includes(term))) return null;
+
+  const directField =
+    fields.find((field) =>
+      normalizeAlbumSearchText(field.text).includes(
+        normalizeAlbumSearchText(query),
+      ),
+    ) ??
+    fields.find((field) => {
+      const text = normalizeAlbumSearchText(field.text);
+      return terms.some((term) => text.includes(term));
+    });
+
+  if (!directField) return { label: "Match", snippet: "" };
+  return {
+    label: directField.label,
+    snippet: clipAlbumSearchSnippet(String(directField.text), query),
+  };
+}
+
 function buildAlbumTrackAudioItem(
   media: any,
   album: any,
@@ -1114,6 +1201,7 @@ function TrackRow({
   canPlay,
   selectionMode,
   trackAuthorLabel,
+  searchMatch,
 }: {
   media: any;
   displayIndex: number;
@@ -1129,6 +1217,7 @@ function TrackRow({
   canPlay?: boolean;
   selectionMode?: boolean;
   trackAuthorLabel?: string | null;
+  searchMatch?: { label: string; snippet: string } | null;
 }) {
   const colors = useColors();
   const duration = media.file?.duration ?? media.duration;
@@ -1296,6 +1385,38 @@ function TrackRow({
             {metadata.join(" · ")}
           </Text>
         )}
+        {searchMatch?.snippet ? (
+          <View
+            style={{
+              marginTop: 3,
+              flexDirection: "row-reverse",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 11,
+                fontWeight: "800",
+                color: colors.primary,
+              }}
+            >
+              {searchMatch.label}
+            </Text>
+            <Text
+              style={{
+                flex: 1,
+                fontSize: 11,
+                color: colors.mutedForeground,
+                textAlign: "right",
+                writingDirection: "rtl",
+              }}
+              numberOfLines={1}
+            >
+              {searchMatch.snippet}
+            </Text>
+          </View>
+        ) : null}
       </View>
       {isActiveTrack ? (
         <View
@@ -2409,6 +2530,8 @@ export default function AlbumDetailScreen() {
   const [reorderMode, setReorderMode] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [descExpanded, setDescExpanded] = useState(false);
+  const [trackSearchActive, setTrackSearchActive] = useState(false);
+  const [trackSearchQuery, setTrackSearchQuery] = useState("");
   const [selectedTrackForActions, setSelectedTrackForActions] = useState<
     any | null
   >(null);
@@ -2439,6 +2562,7 @@ export default function AlbumDetailScreen() {
   } | null>(null);
   const autoLoadedSuggestionAlbumRef = useRef<number | null>(null);
   const resetQueueTrackRef = useRef<any | null>(null);
+  const trackSearchInputRef = useRef<TextInput>(null);
 
   const rawTracks: any[] = useMemo(
     () => localTracks ?? album?.medias ?? [],
@@ -2448,6 +2572,27 @@ export default function AlbumDetailScreen() {
     () => (reorderMode ? rawTracks : sortMediaByTelegramDate(rawTracks)),
     [rawTracks, reorderMode],
   );
+  const normalizedTrackSearchQuery = normalizeAlbumSearchText(trackSearchQuery);
+  const trackSearchState = useMemo(() => {
+    if (!normalizedTrackSearchQuery) {
+      return {
+        tracks,
+        matchesById: new Map<number, { label: string; snippet: string }>(),
+      };
+    }
+
+    const matchesById = new Map<number, { label: string; snippet: string }>();
+    const filteredTracks = tracks.filter((media) => {
+      const match = getTrackSearchMatch(media, trackSearchQuery, album?.author);
+      if (!match) return false;
+      matchesById.set(media.id, match);
+      return true;
+    });
+
+    return { tracks: filteredTracks, matchesById };
+  }, [album?.author, normalizedTrackSearchQuery, trackSearchQuery, tracks]);
+  const displayedTracks = trackSearchState.tracks;
+  const hasTrackSearch = normalizedTrackSearchQuery.length > 0;
   const bgColor = albumColor(id);
   const selectedSuggestionCount = selectedSuggestionIds.size;
   const selectedTrackCount = selectedTrackIds.size;
@@ -2713,6 +2858,14 @@ export default function AlbumDetailScreen() {
   }, [activeAlbumTab, selectedTrackCount]);
 
   useEffect(() => {
+    if (!trackSearchActive) return;
+    const timeout = setTimeout(() => {
+      trackSearchInputRef.current?.focus();
+    }, 120);
+    return () => clearTimeout(timeout);
+  }, [trackSearchActive]);
+
+  useEffect(() => {
     if (!album?.id || autoLoadedSuggestionAlbumRef.current === album.id) return;
 
     const savedKeywords = ((album as any).suggestionKeywords ?? "").trim();
@@ -2722,6 +2875,18 @@ export default function AlbumDetailScreen() {
     setSelectedSuggestionIds(new Set());
     setDismissedSuggestionIds(new Set());
   }, [album]);
+
+  function openTrackSearch() {
+    setActiveAlbumTab("tracks");
+    setReorderMode(false);
+    setSelectedTrackIds(new Set());
+    setTrackSearchActive(true);
+  }
+
+  function closeTrackSearch() {
+    setTrackSearchActive(false);
+    setTrackSearchQuery("");
+  }
 
   const { mutate: attachBook, isPending: isAttachingBook } = useMutation(
     _trpc.album.attachBook.mutationOptions({
@@ -3319,9 +3484,9 @@ export default function AlbumDetailScreen() {
           <Pressable
             onPress={() => router.back()}
             style={{
-              width: 36,
-              height: 36,
-              borderRadius: 18,
+              width: 44,
+              height: 44,
+              borderRadius: 22,
               backgroundColor: colors.muted,
               alignItems: "center",
               justifyContent: "center",
@@ -3330,33 +3495,112 @@ export default function AlbumDetailScreen() {
             <Icon name="ChevronLeft" size={22} className="text-foreground" />
           </Pressable>
 
-          <Text
-            style={{
-              fontSize: 15,
-              fontWeight: "700",
-              color: colors.foreground,
-              flex: 1,
-              textAlign: "center",
-              marginHorizontal: 8,
-            }}
-            numberOfLines={1}
-          >
-            {album?.name ?? "Album"}
-          </Text>
+          {trackSearchActive ? (
+            <View
+              style={{
+                flex: 1,
+                minHeight: 44,
+                marginHorizontal: 10,
+                borderRadius: 14,
+                borderWidth: 1,
+                borderColor: colors.border,
+                backgroundColor: colors.muted,
+                flexDirection: "row-reverse",
+                alignItems: "center",
+                gap: 8,
+                paddingHorizontal: 12,
+              }}
+            >
+              <Icon name="Search" size={16} color={colors.mutedForeground} />
+              <TextInput
+                ref={trackSearchInputRef}
+                value={trackSearchQuery}
+                onChangeText={setTrackSearchQuery}
+                placeholder="Search tracks..."
+                placeholderTextColor={colors.mutedForeground}
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="search"
+                style={{
+                  flex: 1,
+                  color: colors.foreground,
+                  fontSize: 14,
+                  textAlign: "right",
+                  writingDirection: "rtl",
+                  paddingVertical: 0,
+                }}
+              />
+            </View>
+          ) : (
+            <Text
+              style={{
+                fontSize: 15,
+                fontWeight: "700",
+                color: colors.foreground,
+                flex: 1,
+                textAlign: "center",
+                marginHorizontal: 8,
+              }}
+              numberOfLines={1}
+            >
+              {album?.name ?? "Album"}
+            </Text>
+          )}
 
-          <Pressable
-            onPress={() => setEditModalVisible(true)}
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 18,
-              backgroundColor: colors.muted,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Icon name="Pencil" size={16} className="text-muted-foreground" />
-          </Pressable>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            {trackSearchActive ? (
+              <Pressable
+                onPress={closeTrackSearch}
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: 22,
+                  backgroundColor: colors.muted,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Icon name="X" size={18} className="text-muted-foreground" />
+              </Pressable>
+            ) : (
+              <>
+                <Pressable
+                  onPress={openTrackSearch}
+                  style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: 22,
+                    backgroundColor: colors.muted,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Icon
+                    name="Search"
+                    size={17}
+                    className="text-muted-foreground"
+                  />
+                </Pressable>
+                <Pressable
+                  onPress={() => setEditModalVisible(true)}
+                  style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: 22,
+                    backgroundColor: colors.muted,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Icon
+                    name="Pencil"
+                    size={16}
+                    className="text-muted-foreground"
+                  />
+                </Pressable>
+              </>
+            )}
+          </View>
         </View>
 
         {isLoading ? (
@@ -3959,6 +4203,20 @@ export default function AlbumDetailScreen() {
                     >
                       Tracks
                     </Text>
+                    {hasTrackSearch ? (
+                      <Text
+                        style={{
+                          marginLeft: 8,
+                          flex: 1,
+                          fontSize: 12,
+                          color: colors.mutedForeground,
+                          textAlign: "right",
+                        }}
+                        numberOfLines={1}
+                      >
+                        {displayedTracks.length} of {tracks.length} matches
+                      </Text>
+                    ) : null}
 
                     {selectedTrackCount > 0 && !reorderMode && (
                       <Pressable
@@ -3990,6 +4248,7 @@ export default function AlbumDetailScreen() {
                     )}
 
                     {tracks.length > 0 &&
+                      !hasTrackSearch &&
                       !reorderMode &&
                       selectedTrackCount === 0 && (
                         <Pressable
@@ -4084,6 +4343,29 @@ export default function AlbumDetailScreen() {
                         No tracks yet
                       </Text>
                     </View>
+                  ) : hasTrackSearch && displayedTracks.length === 0 ? (
+                    <View
+                      style={{
+                        alignItems: "center",
+                        paddingVertical: 48,
+                        gap: 10,
+                      }}
+                    >
+                      <Icon
+                        name="SearchX"
+                        size={40}
+                        className="text-muted-foreground"
+                      />
+                      <Text
+                        style={{
+                          fontSize: 14,
+                          color: colors.mutedForeground,
+                          textAlign: "center",
+                        }}
+                      >
+                        {`No tracks match "${trackSearchQuery.trim()}"`}
+                      </Text>
+                    </View>
                   ) : reorderMode ? (
                     tracks.map((media, idx) => (
                       <ReorderRow
@@ -4097,7 +4379,7 @@ export default function AlbumDetailScreen() {
                       />
                     ))
                   ) : (
-                    tracks.map((media, idx) => {
+                    displayedTracks.map((media, idx) => {
                       const isActiveTrack = isActiveAlbumTrack(media);
                       return (
                         <TrackRow
@@ -4118,6 +4400,9 @@ export default function AlbumDetailScreen() {
                           trackAuthorLabel={
                             albumAuthorId ? null : getAuthorDisplayName(media.author)
                           }
+                          searchMatch={trackSearchState.matchesById.get(
+                            media.id,
+                          )}
                           onPlayPress={() =>
                             void handleTrackPlaybackPress(media)
                           }
