@@ -35,6 +35,7 @@ import {
 	type TranscriptSegmentData,
 	type TranscriptTextSelection,
 } from "@/components/audio-blog-view/transcript-timing";
+import { BlogCard, type BlogItem } from "@/components/blog-card";
 import { AddToPlaylistModal } from "@/components/channel-chat/add-to-playlist-modal";
 import { useCommentsState } from "@/components/comments-sheet";
 import { CommentInput } from "@/components/comments-sheet/comment-input";
@@ -45,6 +46,7 @@ import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
 import { TranscriptionRequestModal } from "@/components/transcription-request-modal";
 import { AnimatedMarquee } from "@/components/ui/animated-marquee";
+import { FloatingBottomSheet } from "@/components/ui/floating-bottom-sheet";
 import { Icon, type IconKeys } from "@/components/ui/icon";
 import { ScrollToTopButton } from "@/components/ui/scroll-to-top-button";
 import { Toast } from "@/components/ui/toast";
@@ -53,6 +55,7 @@ import { usePlayHistorySync } from "@/hooks/use-play-history-sync";
 import { useScrollChrome } from "@/hooks/use-scroll-chrome";
 import { useTranscriptionQueue } from "@/hooks/use-transcription-queue";
 import { getAudioDisplayTitle } from "@/lib/audio-title";
+import { uploadBlogMediaAsset, type BlobMediaUpload } from "@/lib/blob-upload";
 import { getBlogShareUrl } from "@/lib/share-links";
 import { getTelegramFileUrl } from "@/lib/get-telegram-file";
 import { getMediaFileUrl } from "@/lib/media-source";
@@ -65,6 +68,8 @@ import { withAlpha } from "@/lib/theme";
 import { useAppSettingsStore } from "@/store/app-settings-store";
 import { useAudioStore } from "@/store/audio-store";
 import { useRecentlyViewedStore } from "@/store/recently-viewed-store";
+import * as DocumentPicker from "expo-document-picker";
+import { Image } from "expo-image";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -1464,6 +1469,297 @@ function InfoTab({
 	);
 }
 
+function AudioArtSourceSheet({
+	visible,
+	hasChannelPictures,
+	isBusy,
+	onClose,
+	onBrowsePictures,
+	onChannelPictures,
+}: {
+	visible: boolean;
+	hasChannelPictures: boolean;
+	isBusy: boolean;
+	onClose: () => void;
+	onBrowsePictures: () => void;
+	onChannelPictures: () => void;
+}) {
+	const colors = useColors();
+	if (!visible) return null;
+
+	const action = ({
+		icon,
+		label,
+		description,
+		onPress,
+		disabled,
+	}: {
+		icon: IconKeys;
+		label: string;
+		description: string;
+		onPress: () => void;
+		disabled?: boolean;
+	}) => (
+		<Pressable
+			disabled={disabled || isBusy}
+			onPress={onPress}
+			style={{
+				minHeight: 58,
+				borderRadius: 16,
+				flexDirection: "row",
+				alignItems: "center",
+				gap: 12,
+				paddingHorizontal: 12,
+				opacity: disabled || isBusy ? 0.5 : 1,
+			}}
+		>
+			<View
+				style={{
+					width: 42,
+					height: 42,
+					borderRadius: 999,
+					alignItems: "center",
+					justifyContent: "center",
+					backgroundColor: colors.muted,
+				}}
+			>
+				{isBusy && label === "Browse pictures" ? (
+					<ActivityIndicator size="small" color={colors.primary} />
+				) : (
+					<Icon name={icon} size={19} color={colors.foreground} />
+				)}
+			</View>
+			<View style={{ flex: 1 }}>
+				<Text
+					style={{
+						color: colors.foreground,
+						fontSize: 14,
+						fontWeight: "800",
+					}}
+				>
+					{label}
+				</Text>
+				<Text
+					numberOfLines={1}
+					style={{
+						color: colors.mutedForeground,
+						fontSize: 12,
+						marginTop: 2,
+					}}
+				>
+					{description}
+				</Text>
+			</View>
+			<Icon name="ChevronRight" size={17} color={colors.mutedForeground} />
+		</Pressable>
+	);
+
+	return (
+		<FloatingBottomSheet
+			visible
+			onClose={onClose}
+			accessibilityLabel="Add or edit audio art"
+		>
+			<View style={{ paddingHorizontal: 16, paddingBottom: 22, gap: 6 }}>
+				<View
+					style={{
+						width: 40,
+						height: 4,
+						borderRadius: 99,
+						alignSelf: "center",
+						marginBottom: 12,
+						backgroundColor: colors.input,
+					}}
+				/>
+				<Text
+					style={{
+						color: colors.foreground,
+						fontSize: 18,
+						fontWeight: "900",
+						marginBottom: 4,
+					}}
+				>
+					Add/Edit Art
+				</Text>
+				{action({
+					icon: "Image",
+					label: "Browse pictures",
+					description: "Choose an image from this device",
+					onPress: onBrowsePictures,
+				})}
+				{action({
+					icon: "Image",
+					label: "Channel pictures",
+					description: hasChannelPictures
+						? "Search image posts from this channel"
+						: "No channel is linked to this audio",
+					onPress: onChannelPictures,
+					disabled: !hasChannelPictures,
+				})}
+			</View>
+		</FloatingBottomSheet>
+	);
+}
+
+function ChannelPicturePickerSheet({
+	visible,
+	posts,
+	query,
+	isLoading,
+	isSelecting,
+	onQueryChange,
+	onClose,
+	onSelect,
+	onDelete,
+}: {
+	visible: boolean;
+	posts: BlogItem[];
+	query: string;
+	isLoading: boolean;
+	isSelecting: boolean;
+	onQueryChange: (value: string) => void;
+	onClose: () => void;
+	onSelect: (post: BlogItem) => void;
+	onDelete?: (post: BlogItem) => Promise<void> | void;
+}) {
+	const colors = useColors();
+	if (!visible) return null;
+
+	return (
+		<Modal
+			visible
+			transparent
+			animationType="slide"
+			statusBarTranslucent
+			onRequestClose={onClose}
+		>
+			<Pressable className="flex-1 justify-end bg-black/60" onPress={onClose}>
+				<Pressable
+					onPress={(event) => event.stopPropagation()}
+					style={{
+						maxHeight: "90%",
+						minHeight: "68%",
+						overflow: "hidden",
+						borderTopLeftRadius: 24,
+						borderTopRightRadius: 24,
+						backgroundColor: colors.background,
+					}}
+				>
+					<View
+						style={{
+							paddingHorizontal: 16,
+							paddingTop: 14,
+							paddingBottom: 10,
+							borderBottomWidth: 1,
+							borderBottomColor: colors.border,
+							gap: 12,
+						}}
+					>
+						<View
+							style={{
+								width: 40,
+								height: 4,
+								borderRadius: 99,
+								alignSelf: "center",
+								backgroundColor: colors.input,
+							}}
+						/>
+						<View
+							style={{
+								flexDirection: "row",
+								alignItems: "center",
+								justifyContent: "space-between",
+								gap: 12,
+							}}
+						>
+							<Text
+								style={{
+									color: colors.foreground,
+									fontSize: 18,
+									fontWeight: "900",
+								}}
+							>
+								Channel pictures
+							</Text>
+							<Pressable
+								onPress={onClose}
+								style={{
+									width: 38,
+									height: 38,
+									borderRadius: 999,
+									alignItems: "center",
+									justifyContent: "center",
+									backgroundColor: colors.muted,
+								}}
+							>
+								<Icon name="X" size={17} color={colors.mutedForeground} />
+							</Pressable>
+						</View>
+						<View
+							style={{
+								minHeight: 44,
+								borderRadius: 16,
+								borderWidth: 1,
+								borderColor: colors.border,
+								backgroundColor: colors.card,
+								flexDirection: "row",
+								alignItems: "center",
+								gap: 8,
+								paddingHorizontal: 12,
+							}}
+						>
+							<Icon name="Search" size={17} color={colors.mutedForeground} />
+							<TextInput
+								value={query}
+								onChangeText={onQueryChange}
+								placeholder="Search pictures and comments"
+								placeholderTextColor={colors.mutedForeground}
+								returnKeyType="search"
+								style={{ flex: 1, color: colors.foreground, fontSize: 14 }}
+							/>
+							{query.length > 0 ? (
+								<Pressable onPress={() => onQueryChange("")} hitSlop={8}>
+									<Icon name="X" size={15} color={colors.mutedForeground} />
+								</Pressable>
+							) : null}
+						</View>
+					</View>
+
+					<FlatList
+						data={posts}
+						keyExtractor={(item) => String(item.id)}
+						keyboardDismissMode="interactive"
+						keyboardShouldPersistTaps="handled"
+						showsVerticalScrollIndicator={false}
+						contentContainerStyle={{ paddingBottom: 28 }}
+						ListEmptyComponent={
+							<View style={{ alignItems: "center", paddingVertical: 48 }}>
+								{isLoading ? (
+									<ActivityIndicator color={colors.primary} />
+								) : (
+									<Text style={{ color: colors.mutedForeground }}>
+										No pictures found
+									</Text>
+								)}
+							</View>
+						}
+						renderItem={({ item }) => (
+							<View style={{ opacity: isSelecting ? 0.65 : 1 }}>
+								<BlogCard
+									post={item}
+									hideChannelName
+									onPress={onSelect}
+									onDelete={onDelete}
+								/>
+							</View>
+						)}
+					/>
+				</Pressable>
+			</Pressable>
+		</Modal>
+	);
+}
+
 // ── More menu sheet ───────────────────────────────────────────────────────────
 
 function MoreMenu({
@@ -1477,6 +1773,7 @@ function MoreMenu({
 	transcriptionActionLabel,
 	transcriptionActionDescription,
 	onResetTranscription,
+	onAddArt,
 	onAddToAlbum,
 	onAddToPlaylist,
 	onViewAlbum,
@@ -1492,6 +1789,7 @@ function MoreMenu({
 	transcriptionActionLabel: string;
 	transcriptionActionDescription: string;
 	onResetTranscription: () => void;
+	onAddArt: () => void;
 	onAddToAlbum: () => void;
 	onAddToPlaylist: () => void;
 	onViewAlbum: () => void;
@@ -1608,6 +1906,12 @@ function MoreMenu({
 						label: "Reset transcribe",
 						description: "Clear transcript and queue jobs",
 						onPress: onResetTranscription,
+					})}
+					{menuAction({
+						icon: "Image",
+						label: "Add/Edit art",
+						description: "Set a picture for this audio",
+						onPress: onAddArt,
 					})}
 					{menuAction({
 						icon: "Bookmark",
@@ -1927,6 +2231,15 @@ export default function AudioBlogScreen() {
 	const [controlsLayout, setControlsLayout] = useState({ y: 0, height: 0 });
 	const [showFloatingControls, setShowFloatingControls] = useState(false);
 	const [transcriptModalVisible, setTranscriptModalVisible] = useState(false);
+	const [audioArtSheetVisible, setAudioArtSheetVisible] = useState(false);
+	const [channelPicturePickerVisible, setChannelPicturePickerVisible] =
+		useState(false);
+	const [channelPictureSearch, setChannelPictureSearch] = useState("");
+	const [hiddenChannelPictureIds, setHiddenChannelPictureIds] = useState<
+		Set<number>
+	>(new Set());
+	const [isUploadingAudioArt, setIsUploadingAudioArt] = useState(false);
+	const [isSelectingAudioArt, setIsSelectingAudioArt] = useState(false);
 	const [transcriptHighlightPaused, setTranscriptHighlightPaused] =
 		useState(false);
 	const [frozenTranscriptPositionSec, setFrozenTranscriptPositionSec] =
@@ -1978,6 +2291,8 @@ export default function AudioBlogScreen() {
 
 	const media = blog?.medias?.[0];
 	const mediaId = media?.id;
+	const audioChannelId = blog?.channelId ?? blog?.channel?.id;
+	const audioArtUrl = getMediaFileUrl((blog as any)?.thumbnail?.file);
 	const telegramFileId =
 		media?.file?.source === "vercel_blob" ? undefined : media?.file?.fileId;
 	const mediaUrl = getMediaFileUrl(media?.file as any);
@@ -2023,9 +2338,11 @@ export default function AudioBlogScreen() {
 				fileName: file.fileName,
 				title: media.title,
 				duration: file.duration,
+				artwork: audioArtUrl ?? undefined,
+				imageUrl: audioArtUrl ?? undefined,
 			},
 		} as any;
-	}, [blog, mediaUrl]);
+	}, [audioArtUrl, blog, mediaUrl]);
 	const audioTitle = getAudioDisplayTitle(
 		{ content: blog?.content, media: media as any },
 		"Untitled Audio",
@@ -2046,8 +2363,32 @@ export default function AudioBlogScreen() {
 		!moreMenuVisible &&
 		!sleepTimerVisible &&
 		!transcriptModalVisible &&
+		!audioArtSheetVisible &&
+		!channelPicturePickerVisible &&
 		!showFloatingControls &&
 		!showComments,
+	);
+
+	const {
+		data: channelPicturesData,
+		isFetching: isFetchingChannelPictures,
+		refetch: refetchChannelPictures,
+	} = useQuery({
+		..._trpc.blog.posts.queryOptions({
+			category: "picture",
+			channelId: audioChannelId,
+			q: channelPictureSearch.trim() || undefined,
+			size: 60,
+		}),
+		enabled:
+			channelPicturePickerVisible && typeof audioChannelId === "number",
+	});
+	const channelPicturePosts = useMemo(
+		() =>
+			(((channelPicturesData as any)?.data ?? []) as BlogItem[]).filter(
+				(post) => !hiddenChannelPictureIds.has(post.id),
+			),
+		[channelPicturesData, hiddenChannelPictureIds],
 	);
 
 	const { data: transcriptData } = useQuery({
@@ -2382,6 +2723,27 @@ export default function AudioBlogScreen() {
 		}),
 	);
 
+	const { mutateAsync: updateAudioArtAsync, isPending: isUpdatingAudioArt } =
+		useMutation(
+			_trpc.blog.updateBlogThumbnail.mutationOptions({
+				onSuccess: async () => {
+					await Promise.all([
+						qc.invalidateQueries({
+							queryKey: _trpc.blog.getBlog.queryKey({ id }),
+						}),
+						qc.invalidateQueries({
+							queryKey: _trpc.blog.posts.queryKey(),
+						}),
+					]);
+				},
+				onError: (e) => Alert.alert("Could not update art", e.message),
+			}),
+		);
+	const {
+		mutateAsync: deleteChannelPicturePost,
+		isPending: isDeletingChannelPicture,
+	} = useMutation(_trpc.blog.deleteBlog.mutationOptions());
+
 	const {
 		mutate: resetCurrentTranscript,
 		mutateAsync: resetCurrentTranscriptAsync,
@@ -2436,6 +2798,84 @@ export default function AudioBlogScreen() {
 		if (!mediaId) return;
 		setAddingAlbumId(albumId);
 		addToAlbum({ albumId, mediaIds: [mediaId] });
+	}
+
+	async function applyAudioArtFromUpload(upload: BlobMediaUpload) {
+		await updateAudioArtAsync({ id, thumbnailUpload: upload });
+		Toast.show("Audio art updated", { type: "success", position: "bottom" });
+		setAudioArtSheetVisible(false);
+		setChannelPicturePickerVisible(false);
+	}
+
+	async function browseAudioArtPictures() {
+		try {
+			const result = await DocumentPicker.getDocumentAsync({
+				type: "image/*",
+				multiple: false,
+				copyToCacheDirectory: true,
+			});
+			if (result.canceled || !result.assets[0]) return;
+
+			setIsUploadingAudioArt(true);
+			const asset = result.assets[0];
+			const upload = await uploadBlogMediaAsset({
+				uri: asset.uri,
+				name: asset.name,
+				mimeType: asset.mimeType,
+				size: asset.size,
+			});
+			await applyAudioArtFromUpload(upload);
+		} catch (error) {
+			Alert.alert(
+				"Could not update art",
+				error instanceof Error ? error.message : "Please try another image.",
+			);
+		} finally {
+			setIsUploadingAudioArt(false);
+		}
+	}
+
+	function openChannelPicturePicker() {
+		if (typeof audioChannelId !== "number") return;
+		setAudioArtSheetVisible(false);
+		setChannelPicturePickerVisible(true);
+		setHiddenChannelPictureIds(new Set());
+	}
+
+	async function selectChannelPicture(post: BlogItem) {
+		if (isSelectingAudioArt) return;
+		try {
+			setIsSelectingAudioArt(true);
+			await updateAudioArtAsync({ id, thumbnailBlogId: post.id });
+			Toast.show("Audio art updated", { type: "success", position: "bottom" });
+			setChannelPicturePickerVisible(false);
+		} catch (error) {
+			Alert.alert(
+				"Could not update art",
+				error instanceof Error ? error.message : "Please try another picture.",
+			);
+		} finally {
+			setIsSelectingAudioArt(false);
+		}
+	}
+
+	async function deleteChannelPicture(post: BlogItem) {
+		setHiddenChannelPictureIds((prev) => new Set(prev).add(post.id));
+		try {
+			await deleteChannelPicturePost({ id: post.id });
+			await refetchChannelPictures();
+			Toast.show("Picture deleted", { type: "success", position: "bottom" });
+		} catch (error) {
+			setHiddenChannelPictureIds((prev) => {
+				const next = new Set(prev);
+				next.delete(post.id);
+				return next;
+			});
+			Alert.alert(
+				"Could not delete picture",
+				error instanceof Error ? error.message : "Please try again.",
+			);
+		}
 	}
 
 	function handleAddRelatedAlbumSuggestion() {
@@ -2916,7 +3356,9 @@ export default function AudioBlogScreen() {
 									>
 										{/* Title & Small Album Art Marquee */}
 										<View className="flex-row items-center px-6 gap-4">
-											<View
+											<Pressable
+												onPress={() => setAudioArtSheetVisible(true)}
+												accessibilityLabel="Add or edit audio art"
 												style={{
 													width: 56,
 													height: 56,
@@ -2926,18 +3368,42 @@ export default function AudioBlogScreen() {
 														: "rgba(255,255,255,0.2)",
 													alignItems: "center",
 													justifyContent: "center",
+													overflow: "hidden",
 												}}
 											>
-												<Text
+												{audioArtUrl ? (
+													<Image
+														source={{ uri: audioArtUrl }}
+														style={{ width: "100%", height: "100%" }}
+														contentFit="cover"
+													/>
+												) : (
+													<Text
+														style={{
+															color: "#fff",
+															fontWeight: "800",
+															fontSize: 20,
+														}}
+													>
+														{getInitials(media?.album?.name ?? audioTitle)}
+													</Text>
+												)}
+												<View
 													style={{
-														color: "#fff",
-														fontWeight: "800",
-														fontSize: 20,
+														position: "absolute",
+														right: 4,
+														bottom: 4,
+														width: 18,
+														height: 18,
+														borderRadius: 999,
+														alignItems: "center",
+														justifyContent: "center",
+														backgroundColor: "rgba(0,0,0,0.48)",
 													}}
 												>
-													{getInitials(media?.album?.name ?? audioTitle)}
-												</Text>
-											</View>
+													<Icon name="Pencil" size={10} color="#fff" />
+												</View>
+											</Pressable>
 											<View
 												style={{
 													flex: 1,
@@ -3166,6 +3632,7 @@ export default function AudioBlogScreen() {
 				transcriptionActionLabel={transcriptionActionLabel}
 				transcriptionActionDescription={transcriptionActionDescription}
 				onResetTranscription={resetCurrentTranscription}
+				onAddArt={() => setAudioArtSheetVisible(true)}
 				onAddToAlbum={() => setAlbumPickerVisible(true)}
 				onAddToPlaylist={() => {
 					if (mediaId) setPlaylistPickerVisible(true);
@@ -3339,6 +3806,31 @@ export default function AudioBlogScreen() {
 			<SleepTimerModal
 				visible={sleepTimerVisible}
 				onClose={() => setSleepTimerVisible(false)}
+			/>
+
+			<AudioArtSourceSheet
+				visible={audioArtSheetVisible}
+				hasChannelPictures={typeof audioChannelId === "number"}
+				isBusy={isUploadingAudioArt || isUpdatingAudioArt}
+				onClose={() => setAudioArtSheetVisible(false)}
+				onBrowsePictures={() => {
+					void browseAudioArtPictures();
+				}}
+				onChannelPictures={openChannelPicturePicker}
+			/>
+
+			<ChannelPicturePickerSheet
+				visible={channelPicturePickerVisible}
+				posts={channelPicturePosts}
+				query={channelPictureSearch}
+				isLoading={isFetchingChannelPictures}
+				isSelecting={isSelectingAudioArt || isDeletingChannelPicture}
+				onQueryChange={setChannelPictureSearch}
+				onClose={() => setChannelPicturePickerVisible(false)}
+				onSelect={(post) => {
+					void selectChannelPicture(post);
+				}}
+				onDelete={deleteChannelPicture}
 			/>
 
 			{/* Album picker */}

@@ -1,8 +1,9 @@
 import { Pressable } from "@/components/ui/pressable";
 import { useRouter } from "expo-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Alert, Clipboard, Share, Text, View } from "react-native";
 
+import { CommentInput } from "@/components/comments-sheet/comment-input";
 import { FloatingBottomSheet } from "@/components/ui/floating-bottom-sheet";
 import { Icon, type IconKeys } from "@/components/ui/icon";
 import { Toast } from "@/components/ui/toast";
@@ -123,6 +124,7 @@ export function BlogCardOptionsSheet({
 	});
 	const numericBlogId = Number(blogId);
 	const numericAudioMediaId = Number(audioMediaId);
+	const [quickCommentVisible, setQuickCommentVisible] = useState(false);
 
 	useEffect(() => {
 		const previousHidden = useGlobalAudioBarStore.getState().hidden;
@@ -394,18 +396,27 @@ export function BlogCardOptionsSheet({
 					/>
 					<ActionRow
 						label="Comment"
-						description="Open the discussion for this post"
+						description="Add a quick comment"
 						icon="MessageSquare"
 						onPress={() => {
-							router.replace({
-								pathname: getBlogHref({
-									id: numericBlogId || Number(blogId),
-									type: rawPostType,
-								} as any) as any,
-								params: { openComments: "1" },
-							});
+							setQuickCommentVisible((visible) => !visible);
 						}}
 					/>
+					{quickCommentVisible && Number.isFinite(numericBlogId) ? (
+						<View
+							className="overflow-hidden rounded-2xl border border-border"
+							style={{ borderColor: colors.border }}
+						>
+							<CommentInput
+								blogId={numericBlogId}
+								compact
+								noKeyboardAvoid
+								autoFocus
+								onClose={() => setQuickCommentVisible(false)}
+								onCommentAdded={() => setQuickCommentVisible(false)}
+							/>
+						</View>
+					) : null}
 					{canQueueTranscription ? (
 						<ActionRow
 							label="Transcribe"

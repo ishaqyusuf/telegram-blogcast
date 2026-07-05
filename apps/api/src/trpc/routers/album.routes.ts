@@ -31,6 +31,18 @@ const relatedAlbumForMediaInput = z.object({
 	mediaId: z.number(),
 });
 
+const albumThumbnailUploadSchema = z.object({
+	url: z.string().url(),
+	downloadUrl: z.string().url().optional(),
+	pathname: z.string().min(1),
+	contentType: z.string().min(1),
+	etag: z.string().optional(),
+	size: z.number().nonnegative().optional(),
+	name: z.string().optional(),
+	width: z.number().nonnegative().optional(),
+	height: z.number().nonnegative().optional(),
+});
+
 const generateAutomaticIndexInput = z.object({
 	channelId: z.number(),
 	provider: albumIndexAiProviderSchema.optional().default("deepseek"),
@@ -172,6 +184,118 @@ function getAlbumSearchText(album: {
 function getUnknownErrorMessage(error: unknown) {
 	if (error instanceof Error) return error.message;
 	return String(error);
+}
+
+async function upsertBlobFileForAlbumThumbnail(
+	db: Database,
+	upload: z.infer<typeof albumThumbnailUploadSchema>,
+) {
+	const fileUniqueId = `vercel:${upload.etag || upload.pathname}`;
+	return db.file.upsert({
+		where: { fileUniqueId },
+		create: {
+			source: "vercel_blob",
+			fileType: upload.contentType.split("/")[0] || "image",
+			fileId: upload.pathname,
+			fileUniqueId,
+			fileSize: upload.size ?? null,
+			fileName: upload.name ?? upload.pathname.split("/").pop() ?? null,
+			mimeType: upload.contentType,
+			width: upload.width ?? null,
+			height: upload.height ?? null,
+			blobUrl: upload.url,
+			blobDownloadUrl: upload.downloadUrl ?? upload.url,
+			blobPathname: upload.pathname,
+			blobContentType: upload.contentType,
+			blobEtag: upload.etag ?? null,
+			storageMetadata: upload as any,
+		},
+		update: {
+			source: "vercel_blob",
+			fileType: upload.contentType.split("/")[0] || "image",
+			fileId: upload.pathname,
+			fileSize: upload.size ?? null,
+			fileName: upload.name ?? upload.pathname.split("/").pop() ?? null,
+			mimeType: upload.contentType,
+			width: upload.width ?? null,
+			height: upload.height ?? null,
+			blobUrl: upload.url,
+			blobDownloadUrl: upload.downloadUrl ?? upload.url,
+			blobPathname: upload.pathname,
+			blobContentType: upload.contentType,
+			blobEtag: upload.etag ?? null,
+			storageMetadata: upload as any,
+		},
+	});
+}
+
+async function resolveAlbumThumbnailId(
+	db: Database,
+	input: {
+		thumbnailBlogId?: number;
+		thumbnailUpload?: z.infer<typeof albumThumbnailUploadSchema>;
+	},
+) {
+	if (input.thumbnailBlogId != null) {
+		const blog = await db.blog.findFirstOrThrow({
+			where: { id: input.thumbnailBlogId, deletedAt: null },
+			select: {
+				id: true,
+				thumbnailId: true,
+				medias: {
+					where: {
+						OR: [
+							{ mimeType: { startsWith: "image/", mode: "insensitive" } },
+							{
+								file: {
+									mimeType: { startsWith: "image/", mode: "insensitive" },
+								},
+							},
+						],
+					},
+					select: { fileId: true },
+					take: 1,
+				},
+			},
+		});
+
+		if (blog.thumbnailId) return blog.thumbnailId;
+
+		const fileId = blog.medias[0]?.fileId;
+		if (!fileId) {
+			throw new TRPCError({
+				code: "BAD_REQUEST",
+				message: "Selected post does not have an image file.",
+			});
+		}
+
+		return (
+			await db.thumbnail.create({
+				data: { blogId: blog.id, fileId },
+				select: { id: true },
+			})
+		).id;
+	}
+
+	if (input.thumbnailUpload) {
+		const upload = input.thumbnailUpload;
+		if (!upload.contentType.toLowerCase().startsWith("image/")) {
+			throw new TRPCError({
+				code: "BAD_REQUEST",
+				message: "Album art must be an image.",
+			});
+		}
+
+		const file = await upsertBlobFileForAlbumThumbnail(db, upload);
+		return (
+			await db.thumbnail.create({
+				data: { fileId: file.id },
+				select: { id: true },
+			})
+		).id;
+	}
+
+	return undefined;
 }
 
 async function addMediaIdsToAlbum(
@@ -1761,10 +1885,12 @@ export const albumRoutes = createTRPCRouter({
 				albumType: z.string().optional(),
 				suggestionKeywords: z.string().optional(),
 				authorId: z.number().nullable().optional(),
+				thumbnailBlogId: z.number().optional(),
+				thumbnailUpload: albumThumbnailUploadSchema.optional(),
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
-			const { id, ...data } = input;
+			const { id, thumbnailBlogId, thumbnailUpload, ...data } = input;
 			const { db } = ctx;
 			if (data.authorId != null) {
 				await db.author.findFirstOrThrow({
@@ -1772,6 +1898,10 @@ export const albumRoutes = createTRPCRouter({
 					select: { id: true },
 				});
 			}
+			const thumbnailId = await resolveAlbumThumbnailId(db, {
+				thumbnailBlogId,
+				thumbnailUpload,
+			});
 			return db.album.update({
 				where: { id },
 				data: {
@@ -1788,6 +1918,7 @@ export const albumRoutes = createTRPCRouter({
 					...(data.authorId !== undefined
 						? { albumAuthorId: data.authorId }
 						: {}),
+					...(thumbnailId !== undefined ? { thumbnailId } : {}),
 				},
 			});
 		}),

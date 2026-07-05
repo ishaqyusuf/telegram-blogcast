@@ -21,6 +21,8 @@ import { ScrollToTopButton } from "@/components/ui/scroll-to-top-button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useColors } from "@/hooks/use-color";
 import { useScrollChrome } from "@/hooks/use-scroll-chrome";
+import { getMediaFileUrl } from "@/lib/media-source";
+import { Image } from "expo-image";
 
 const ALBUM_COLORS = [
   "#1e40af",
@@ -38,6 +40,10 @@ function getInitials(name?: string | null) {
     .slice(0, 2)
     .map((w) => w[0]?.toUpperCase() ?? "")
     .join("");
+}
+
+function getAlbumArtUrl(album: { thumbnail?: { file?: unknown } | null }) {
+  return getMediaFileUrl(album.thumbnail?.file as any);
 }
 
 function AlbumGridSkeleton() {
@@ -211,38 +217,51 @@ export default function AlbumsScreen() {
             }
             onScroll={albumScroll.onScroll}
             scrollEventThrottle={albumScroll.scrollEventThrottle}
-            renderItem={({ item, index }) => (
-              <Pressable
-                onPress={() => router.push(`/albums/${item.id}` as any)}
-                className="flex-1 active:opacity-80"
-              >
-                <View
-                  style={{
-                    width: "100%",
-                    aspectRatio: 1,
-                    borderRadius: 16,
-                    alignItems: "center",
-                    justifyContent: "center",
-                    marginBottom: 8,
-                    backgroundColor: ALBUM_COLORS[index % ALBUM_COLORS.length],
-                  }}
+            renderItem={({ item, index }) => {
+              const albumArtUrl = getAlbumArtUrl(item);
+
+              return (
+                <Pressable
+                  onPress={() => router.push(`/albums/${item.id}` as any)}
+                  className="flex-1 active:opacity-80"
                 >
-                  <Text className="text-4xl font-bold text-white">
-                    {getInitials(item.name)}
+                  <View
+                    style={{
+                      width: "100%",
+                      aspectRatio: 1,
+                      borderRadius: 16,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      marginBottom: 8,
+                      overflow: "hidden",
+                      backgroundColor: ALBUM_COLORS[index % ALBUM_COLORS.length],
+                    }}
+                  >
+                    {albumArtUrl ? (
+                      <Image
+                        source={{ uri: albumArtUrl }}
+                        style={{ width: "100%", height: "100%" }}
+                        contentFit="cover"
+                      />
+                    ) : (
+                      <Text className="text-4xl font-bold text-white">
+                        {getInitials(item.name)}
+                      </Text>
+                    )}
+                  </View>
+                  <Text
+                    className="text-sm font-bold text-foreground"
+                    numberOfLines={2}
+                  >
+                    {item.name}
                   </Text>
-                </View>
-                <Text
-                  className="text-sm font-bold text-foreground"
-                  numberOfLines={2}
-                >
-                  {item.name}
-                </Text>
-                <Text className="text-xs text-muted-foreground mt-0.5">
-                  {item._count.medias} tracks
-                  {item.channel?.title ? ` · ${item.channel.title}` : ""}
-                </Text>
-              </Pressable>
-            )}
+                  <Text className="text-xs text-muted-foreground mt-0.5">
+                    {item._count.medias} tracks
+                    {item.channel?.title ? ` · ${item.channel.title}` : ""}
+                  </Text>
+                </Pressable>
+              );
+            }}
           />
         )}
       </SafeArea>

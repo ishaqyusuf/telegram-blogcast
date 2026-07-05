@@ -14,11 +14,12 @@ import {
   type RecentlyViewedItem,
 } from "@/store/recently-viewed-store";
 
-type ActivityTab = "played" | "blog" | "pdf";
+type ActivityTab = "played" | "blog" | "video" | "pdf";
 
 const ACTIVITY_TABS: { key: ActivityTab; label: string }[] = [
   { key: "played", label: "Recently played" },
   { key: "blog", label: "Blog" },
+  { key: "video", label: "Video" },
   { key: "pdf", label: "Pdf" },
 ];
 
@@ -67,8 +68,15 @@ export function BlogHomeRecentlyPlayed() {
   const blogItems = useMemo(
     () =>
       viewedItems
-        .filter((item) => !["audio", "pdf", "document"].includes(item.type))
+        .filter(
+          (item) =>
+            !["audio", "video", "pdf", "document"].includes(item.type),
+        )
         .slice(0, 10),
+    [viewedItems],
+  );
+  const videoItems = useMemo(
+    () => viewedItems.filter((item) => item.type === "video").slice(0, 10),
     [viewedItems],
   );
   const pdfItems = useMemo(
@@ -81,19 +89,31 @@ export function BlogHomeRecentlyPlayed() {
   const counts = {
     played: history.length,
     blog: blogItems.length,
+    video: videoItems.length,
     pdf: pdfItems.length,
   };
-  const hasActivity = counts.played > 0 || counts.blog > 0 || counts.pdf > 0;
+  const hasActivity =
+    counts.played > 0 ||
+    counts.blog > 0 ||
+    counts.video > 0 ||
+    counts.pdf > 0;
   if (!hasActivity) return null;
 
   const selectedTab = activeTab;
-  const selectedViewedItems = selectedTab === "blog" ? blogItems : pdfItems;
+  const selectedViewedItems =
+    selectedTab === "blog"
+      ? blogItems
+      : selectedTab === "video"
+        ? videoItems
+        : pdfItems;
   const emptyLabel =
     selectedTab === "played"
       ? "No recently played audio"
       : selectedTab === "blog"
         ? "No recent blog activity"
-        : "No recent PDF activity";
+        : selectedTab === "video"
+          ? "No recent video activity"
+          : "No recent PDF activity";
 
   return (
     <View className="pt-4 pb-2">

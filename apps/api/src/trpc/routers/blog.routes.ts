@@ -80,7 +80,20 @@ const blogMediaUploadSchema = z.object({
 	duration: z.number().nonnegative().optional(),
 });
 
+const blogThumbnailUploadSchema = z.object({
+	url: z.string().url(),
+	downloadUrl: z.string().url().optional(),
+	pathname: z.string().min(1),
+	contentType: z.string().min(1),
+	etag: z.string().optional(),
+	size: z.number().nonnegative().optional(),
+	name: z.string().optional(),
+	width: z.number().nonnegative().optional(),
+	height: z.number().nonnegative().optional(),
+});
+
 type BlogMediaUpload = z.infer<typeof blogMediaUploadSchema>;
+type BlogThumbnailUpload = z.infer<typeof blogThumbnailUploadSchema>;
 const mergeBlogsInputSchema = z.object({
 	primaryBlogId: z.number(),
 	secondaryBlogId: z.number(),
@@ -273,6 +286,121 @@ async function attachBlobMediaToBlog(
 			});
 		}
 	}
+}
+
+async function upsertBlobFileForBlogThumbnail(
+	db: any,
+	upload: BlogThumbnailUpload,
+) {
+	const fileUniqueId = `vercel:${upload.etag || upload.pathname}`;
+	return db.file.upsert({
+		where: { fileUniqueId },
+		create: {
+			source: "vercel_blob",
+			fileType: upload.contentType.split("/")[0] || "image",
+			fileId: upload.pathname,
+			fileUniqueId,
+			fileSize: upload.size ?? null,
+			fileName: upload.name ?? upload.pathname.split("/").pop() ?? null,
+			mimeType: upload.contentType,
+			width: upload.width ?? null,
+			height: upload.height ?? null,
+			blobUrl: upload.url,
+			blobDownloadUrl: upload.downloadUrl ?? upload.url,
+			blobPathname: upload.pathname,
+			blobContentType: upload.contentType,
+			blobEtag: upload.etag ?? null,
+			storageMetadata: upload as any,
+		},
+		update: {
+			source: "vercel_blob",
+			fileType: upload.contentType.split("/")[0] || "image",
+			fileId: upload.pathname,
+			fileSize: upload.size ?? null,
+			fileName: upload.name ?? upload.pathname.split("/").pop() ?? null,
+			mimeType: upload.contentType,
+			width: upload.width ?? null,
+			height: upload.height ?? null,
+			blobUrl: upload.url,
+			blobDownloadUrl: upload.downloadUrl ?? upload.url,
+			blobPathname: upload.pathname,
+			blobContentType: upload.contentType,
+			blobEtag: upload.etag ?? null,
+			storageMetadata: upload as any,
+		},
+	});
+}
+
+async function resolveBlogThumbnailId(
+	db: any,
+	input: {
+		thumbnailBlogId?: number;
+		thumbnailUpload?: BlogThumbnailUpload;
+	},
+) {
+	if (input.thumbnailBlogId != null) {
+		const blog = await db.blog.findFirstOrThrow({
+			where: { id: input.thumbnailBlogId, deletedAt: null },
+			select: {
+				id: true,
+				thumbnailId: true,
+				medias: {
+					where: {
+						OR: [
+							{ mimeType: { startsWith: "image/", mode: "insensitive" } },
+							{
+								file: {
+									mimeType: { startsWith: "image/", mode: "insensitive" },
+								},
+							},
+						],
+					},
+					select: { fileId: true },
+					take: 1,
+				},
+			},
+		});
+
+		if (blog.thumbnailId) return blog.thumbnailId;
+
+		const fileId = blog.medias[0]?.fileId;
+		if (!fileId) {
+			throw new TRPCError({
+				code: "BAD_REQUEST",
+				message: "Selected post does not have an image file.",
+			});
+		}
+
+		return (
+			await db.thumbnail.create({
+				data: { blogId: blog.id, fileId },
+				select: { id: true },
+			})
+		).id;
+	}
+
+	if (input.thumbnailUpload) {
+		const upload = input.thumbnailUpload;
+		if (!upload.contentType.toLowerCase().startsWith("image/")) {
+			throw new TRPCError({
+				code: "BAD_REQUEST",
+				message: "Audio art must be an image.",
+			});
+		}
+
+		const file = await upsertBlobFileForBlogThumbnail(db, upload);
+		return (
+			await db.thumbnail.create({
+				data: { fileId: file.id },
+				select: { id: true },
+			})
+		).id;
+	}
+
+	throw new TRPCError({
+		code: "BAD_REQUEST",
+		message: "Choose an image for audio art.",
+	});
 }
 
 export const blogRoutes = createTRPCRouter({
@@ -1537,6 +1665,23 @@ export const blogRoutes = createTRPCRouter({
 				]);
 
 				return blog;
+			});
+		}),
+
+	updateBlogThumbnail: publicProcedure
+		.input(
+			z.object({
+				id: z.number(),
+				thumbnailBlogId: z.number().optional(),
+				thumbnailUpload: blogThumbnailUploadSchema.optional(),
+			}),
+		)
+		.mutation(async ({ ctx, input }) => {
+			const thumbnailId = await resolveBlogThumbnailId(ctx.db, input);
+			return ctx.db.blog.update({
+				where: { id: input.id },
+				data: { thumbnailId },
+				include: { thumbnail: { include: { file: true } } },
 			});
 		}),
 

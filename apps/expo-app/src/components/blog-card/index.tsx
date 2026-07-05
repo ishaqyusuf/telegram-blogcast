@@ -37,10 +37,14 @@ export function BlogCard({
 	post,
 	onDelete,
 	onAddToAlbum,
+	onPress,
+	hideChannelName,
 }: {
 	post: BlogItem;
 	onDelete?: (post: BlogItem) => Promise<void> | void;
 	onAddToAlbum?: (post: BlogItem) => void;
+	onPress?: (post: BlogItem) => void;
+	hideChannelName?: boolean;
 }) {
 	const router = useRouter();
 	const { width } = useWindowDimensions();
@@ -58,6 +62,10 @@ export function BlogCard({
 	);
 
 	const handlePress = () => {
+		if (onPress) {
+			onPress(post);
+			return;
+		}
 		markViewed({
 			id: post.id,
 			title: getAudioDisplayTitle(post, "Untitled"),
@@ -203,6 +211,7 @@ export function BlogCard({
 						post={post}
 						variant={variant}
 						onOpenOptions={handleOpenOptions}
+						hideChannelName={hideChannelName}
 					/>
 					<CardMedia post={post} variant={variant} />
 					<TranscriptPreview post={post} />

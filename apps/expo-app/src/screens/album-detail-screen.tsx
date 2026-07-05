@@ -1,5 +1,6 @@
 import { Pressable } from "@/components/ui/pressable";
 import { AddToAlbumModal } from "@/components/channel-chat/add-to-album-modal";
+import { BlogCard, type BlogItem } from "@/components/blog-card";
 import {
   useFloatingFooterInset,
   useFloatingFooterLayer,
@@ -11,6 +12,10 @@ import {
 import { FloatingBottomSheet } from "@/components/ui/floating-bottom-sheet";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { formatDate } from "@acme/utils/dayjs";
+import * as DocumentPicker from "expo-document-picker";
+import * as FileSystem from "expo-file-system/legacy";
+import { Image } from "expo-image";
+import { manipulateAsync, SaveFormat } from "expo-image-manipulator";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   type ReactNode,
@@ -34,6 +39,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import ReanimatedSwipeable, {
   SwipeDirection,
 } from "react-native-gesture-handler/ReanimatedSwipeable";
@@ -55,8 +61,10 @@ import { ScrollToTopButton } from "@/components/ui/scroll-to-top-button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Toast } from "@/components/ui/toast";
 import { useColors } from "@/hooks/use-color";
+import { uploadBlogMediaAsset, type BlobMediaUpload } from "@/lib/blob-upload";
 import { useScrollChrome } from "@/hooks/use-scroll-chrome";
 import { useTranscriptionQueue } from "@/hooks/use-transcription-queue";
+import { getPrimaryImageUrl } from "@/components/blog-card/utils";
 import { getWebUrl } from "@/lib/base-url";
 import { getTelegramFileUrl } from "@/lib/get-telegram-file";
 import { getMediaFileUrl } from "@/lib/media-source";
@@ -80,7 +88,76 @@ const ALBUM_COLORS = [
 const SUGGESTION_DISPLAY_LIMIT = 25;
 const SUGGESTION_POOL_LIMIT = 500;
 const ALBUM_DETAIL_KEYBOARD_OFFSET = 140;
+const ALBUM_ART_OUTPUT_SIZE = 1024;
+const ALBUM_ART_CROP_QUALITY = 0.92;
 type AlbumDetailTab = "tracks" | "add";
+type AlbumArtCropSource = {
+  uri: string;
+  name: string;
+  mimeType: string;
+  width: number;
+  height: number;
+  source: "local" | "channel";
+  blogId?: number;
+};
+type CroppedAlbumArtAsset = {
+  uri: string;
+  name: string;
+  mimeType: string;
+  width: number;
+  height: number;
+};
+
+function clampCropValue(value: number, min: number, max: number) {
+  "worklet";
+  return Math.min(Math.max(value, min), max);
+}
+
+function getAlbumArtFileName(name?: string | null) {
+  const base = (name || `album-art-${Date.now()}`)
+    .replace(/\.[a-zA-Z0-9]+$/, "")
+    .replace(/[^a-zA-Z0-9._-]/g, "-");
+  return `${base || "album-art"}.jpg`;
+}
+
+function isRemoteUri(uri: string) {
+  return /^https?:\/\//i.test(uri);
+}
+
+async function getLocalAlbumArtUri(uri: string) {
+  if (!isRemoteUri(uri)) return uri;
+  if (!FileSystem.cacheDirectory) {
+    throw new Error("Image cache is not available on this device.");
+  }
+
+  const targetUri = `${FileSystem.cacheDirectory}album-art-${Date.now()}.jpg`;
+  const result = await FileSystem.downloadAsync(uri, targetUri);
+  return result.uri;
+}
+
+async function prepareAlbumArtCropSource(input: {
+  uri: string;
+  name?: string | null;
+  mimeType?: string | null;
+  source: "local" | "channel";
+  blogId?: number;
+}): Promise<AlbumArtCropSource> {
+  const localUri = await getLocalAlbumArtUri(input.uri);
+  const normalized = await manipulateAsync(localUri, [], {
+    compress: 1,
+    format: SaveFormat.JPEG,
+  });
+
+  return {
+    uri: normalized.uri,
+    name: getAlbumArtFileName(input.name),
+    mimeType: "image/jpeg",
+    width: normalized.width,
+    height: normalized.height,
+    source: input.source,
+    blogId: input.blogId,
+  };
+}
 
 function getInitials(name?: string | null) {
   if (!name) return "AL";
@@ -509,6 +586,680 @@ function EditAlbumModal({
               </Text>
             </Pressable>
           </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function AlbumArtSourceSheet({
+  visible,
+  hasChannelPictures,
+  isBusy,
+  onClose,
+  onBrowsePictures,
+  onChannelPictures,
+}: {
+  visible: boolean;
+  hasChannelPictures: boolean;
+  isBusy: boolean;
+  onClose: () => void;
+  onBrowsePictures: () => void;
+  onChannelPictures: () => void;
+}) {
+  const colors = useColors();
+  if (!visible) return null;
+
+  const action = ({
+    icon,
+    label,
+    description,
+    onPress,
+    disabled,
+  }: {
+    icon: IconKeys;
+    label: string;
+    description: string;
+    onPress: () => void;
+    disabled?: boolean;
+  }) => (
+    <Pressable
+      disabled={disabled || isBusy}
+      onPress={onPress}
+      style={{
+        minHeight: 58,
+        borderRadius: 16,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 12,
+        paddingHorizontal: 12,
+        opacity: disabled || isBusy ? 0.5 : 1,
+      }}
+    >
+      <View
+        style={{
+          width: 42,
+          height: 42,
+          borderRadius: 999,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: colors.muted,
+        }}
+      >
+        {isBusy && label === "Browse pictures" ? (
+          <ActivityIndicator size="small" color={colors.primary} />
+        ) : (
+          <Icon name={icon} size={19} color={colors.foreground} />
+        )}
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text
+          style={{ color: colors.foreground, fontSize: 14, fontWeight: "800" }}
+        >
+          {label}
+        </Text>
+        <Text
+          numberOfLines={1}
+          style={{ color: colors.mutedForeground, fontSize: 12, marginTop: 2 }}
+        >
+          {description}
+        </Text>
+      </View>
+      <Icon name="ChevronRight" size={17} color={colors.mutedForeground} />
+    </Pressable>
+  );
+
+  return (
+    <FloatingBottomSheet
+      visible
+      onClose={onClose}
+      accessibilityLabel="Add or edit album art"
+    >
+      <View style={{ paddingHorizontal: 16, paddingBottom: 22, gap: 6 }}>
+        <View
+          style={{
+            width: 40,
+            height: 4,
+            borderRadius: 99,
+            alignSelf: "center",
+            marginBottom: 12,
+            backgroundColor: colors.input,
+          }}
+        />
+        <Text
+          style={{
+            color: colors.foreground,
+            fontSize: 18,
+            fontWeight: "900",
+            marginBottom: 4,
+          }}
+        >
+          Add/Edit Art
+        </Text>
+        {action({
+          icon: "Image",
+          label: "Browse pictures",
+          description: "Choose an image from this device",
+          onPress: onBrowsePictures,
+        })}
+        {action({
+          icon: "Image",
+          label: "Channel pictures",
+          description: hasChannelPictures
+            ? "Search image posts from this channel"
+            : "No channel is linked to this album",
+          onPress: onChannelPictures,
+          disabled: !hasChannelPictures,
+        })}
+      </View>
+    </FloatingBottomSheet>
+  );
+}
+
+function AlbumArtCropSheet({
+  source,
+  isSaving,
+  onCancel,
+  onSave,
+}: {
+  source: AlbumArtCropSource | null;
+  isSaving: boolean;
+  onCancel: () => void;
+  onSave: (asset: CroppedAlbumArtAsset) => Promise<void>;
+}) {
+  const colors = useColors();
+  const { width: windowWidth } = useWindowDimensions();
+  const cropSize = Math.min(windowWidth - 40, 340);
+  const zoom = useSharedValue(1);
+  const startZoom = useSharedValue(1);
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const startX = useSharedValue(0);
+  const startY = useSharedValue(0);
+  const [isCropping, setIsCropping] = useState(false);
+  const hasSource = Boolean(source);
+  const sourceWidth = source?.width ?? 1;
+  const sourceHeight = source?.height ?? 1;
+  const baseScale = Math.max(cropSize / sourceWidth, cropSize / sourceHeight);
+  const busy = isSaving || isCropping;
+
+  useEffect(() => {
+    zoom.value = 1;
+    startZoom.value = 1;
+    translateX.value = 0;
+    translateY.value = 0;
+    startX.value = 0;
+    startY.value = 0;
+  }, [source?.uri, startX, startY, startZoom, translateX, translateY, zoom]);
+
+  const imageStyle = useAnimatedStyle(() => {
+    if (!hasSource) return {};
+    const scaledWidth = sourceWidth * baseScale * zoom.value;
+    const scaledHeight = sourceHeight * baseScale * zoom.value;
+    return {
+      width: scaledWidth,
+      height: scaledHeight,
+      transform: [
+        { translateX: translateX.value },
+        { translateY: translateY.value },
+      ],
+    };
+  }, [baseScale, hasSource, sourceWidth, sourceHeight]);
+
+  const panGesture = Gesture.Pan()
+    .enabled(Boolean(source) && !busy)
+    .onBegin(() => {
+      startX.value = translateX.value;
+      startY.value = translateY.value;
+    })
+    .onUpdate((event) => {
+      if (!hasSource) return;
+      const scaledWidth = sourceWidth * baseScale * zoom.value;
+      const scaledHeight = sourceHeight * baseScale * zoom.value;
+      const maxX = Math.max(0, (scaledWidth - cropSize) / 2);
+      const maxY = Math.max(0, (scaledHeight - cropSize) / 2);
+      translateX.value = clampCropValue(
+        startX.value + event.translationX,
+        -maxX,
+        maxX,
+      );
+      translateY.value = clampCropValue(
+        startY.value + event.translationY,
+        -maxY,
+        maxY,
+      );
+    });
+
+  const pinchGesture = Gesture.Pinch()
+    .enabled(Boolean(source) && !busy)
+    .onBegin(() => {
+      startZoom.value = zoom.value;
+    })
+    .onUpdate((event) => {
+      if (!hasSource) return;
+      zoom.value = clampCropValue(startZoom.value * event.scale, 1, 4);
+      const scaledWidth = sourceWidth * baseScale * zoom.value;
+      const scaledHeight = sourceHeight * baseScale * zoom.value;
+      const maxX = Math.max(0, (scaledWidth - cropSize) / 2);
+      const maxY = Math.max(0, (scaledHeight - cropSize) / 2);
+      translateX.value = clampCropValue(translateX.value, -maxX, maxX);
+      translateY.value = clampCropValue(translateY.value, -maxY, maxY);
+    });
+
+  const gestures = Gesture.Simultaneous(panGesture, pinchGesture);
+
+  function adjustZoom(nextZoom: number) {
+    if (!source || busy) return;
+    const clampedZoom = Math.max(1, Math.min(4, nextZoom));
+    zoom.value = withTiming(clampedZoom, { duration: 140 });
+    const scaledWidth = sourceWidth * baseScale * clampedZoom;
+    const scaledHeight = sourceHeight * baseScale * clampedZoom;
+    const maxX = Math.max(0, (scaledWidth - cropSize) / 2);
+    const maxY = Math.max(0, (scaledHeight - cropSize) / 2);
+    translateX.value = withTiming(
+      Math.min(Math.max(translateX.value, -maxX), maxX),
+      { duration: 140 },
+    );
+    translateY.value = withTiming(
+      Math.min(Math.max(translateY.value, -maxY), maxY),
+      { duration: 140 },
+    );
+  }
+
+  async function handleSave() {
+    if (!source || busy) return;
+
+    const effectiveScale = baseScale * zoom.value;
+    const cropSide = Math.min(
+      sourceWidth,
+      sourceHeight,
+      cropSize / effectiveScale,
+    );
+    const originX = Math.min(
+      Math.max(
+        (sourceWidth - cropSide) / 2 - translateX.value / effectiveScale,
+        0,
+      ),
+      sourceWidth - cropSide,
+    );
+    const originY = Math.min(
+      Math.max(
+        (sourceHeight - cropSide) / 2 - translateY.value / effectiveScale,
+        0,
+      ),
+      sourceHeight - cropSide,
+    );
+
+    try {
+      setIsCropping(true);
+      const result = await manipulateAsync(
+        source.uri,
+        [
+          {
+            crop: {
+              originX: Math.round(originX),
+              originY: Math.round(originY),
+              width: Math.round(cropSide),
+              height: Math.round(cropSide),
+            },
+          },
+          {
+            resize: {
+              width: ALBUM_ART_OUTPUT_SIZE,
+              height: ALBUM_ART_OUTPUT_SIZE,
+            },
+          },
+        ],
+        {
+          compress: ALBUM_ART_CROP_QUALITY,
+          format: SaveFormat.JPEG,
+        },
+      );
+
+      await onSave({
+        uri: result.uri,
+        name: source.name,
+        mimeType: "image/jpeg",
+        width: result.width,
+        height: result.height,
+      });
+    } catch (error) {
+      Alert.alert(
+        "Could not crop image",
+        error instanceof Error ? error.message : "Please try another image.",
+      );
+    } finally {
+      setIsCropping(false);
+    }
+  }
+
+  return (
+    <Modal
+      visible={Boolean(source)}
+      transparent
+      animationType="slide"
+      statusBarTranslucent
+      onRequestClose={() => {
+        if (!busy) onCancel();
+      }}
+    >
+      <View
+        style={{
+          flex: 1,
+          justifyContent: "flex-end",
+          backgroundColor: "rgba(0,0,0,0.72)",
+        }}
+      >
+        <View
+          style={{
+            backgroundColor: colors.background,
+            borderTopLeftRadius: 24,
+            borderTopRightRadius: 24,
+            paddingHorizontal: 20,
+            paddingTop: 14,
+            paddingBottom: 28,
+            gap: 16,
+          }}
+        >
+          <View
+            style={{
+              width: 40,
+              height: 4,
+              borderRadius: 99,
+              alignSelf: "center",
+              backgroundColor: colors.input,
+            }}
+          />
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+            }}
+          >
+            <Text
+              style={{
+                color: colors.foreground,
+                fontSize: 18,
+                fontWeight: "900",
+              }}
+            >
+              Crop album art
+            </Text>
+            <Pressable
+              disabled={busy}
+              onPress={onCancel}
+              style={{
+                width: 38,
+                height: 38,
+                borderRadius: 999,
+                alignItems: "center",
+                justifyContent: "center",
+                opacity: busy ? 0.5 : 1,
+                backgroundColor: colors.muted,
+              }}
+            >
+              <Icon name="X" size={17} color={colors.mutedForeground} />
+            </Pressable>
+          </View>
+
+          <View style={{ alignItems: "center", gap: 12 }}>
+            <GestureDetector gesture={gestures}>
+              <View
+                style={{
+                  width: cropSize,
+                  height: cropSize,
+                  overflow: "hidden",
+                  borderRadius: 20,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: colors.card,
+                }}
+              >
+                {source ? (
+                  <Animated.View style={imageStyle}>
+                    <Image
+                      source={{ uri: source.uri }}
+                      style={{ width: "100%", height: "100%" }}
+                      contentFit="fill"
+                    />
+                  </Animated.View>
+                ) : null}
+                <View
+                  pointerEvents="none"
+                  style={{
+                    position: "absolute",
+                    top: 0,
+                    right: 0,
+                    bottom: 0,
+                    left: 0,
+                    borderRadius: 20,
+                    borderWidth: 2,
+                    borderColor: withAlpha(colors.primary, 0.95),
+                  }}
+                />
+              </View>
+            </GestureDetector>
+
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 10,
+              }}
+            >
+              <Pressable
+                disabled={busy}
+                onPress={() => adjustZoom(zoom.value - 0.2)}
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 999,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  opacity: busy ? 0.5 : 1,
+                  backgroundColor: colors.card,
+                }}
+              >
+                <Icon name="SearchX" size={17} color={colors.mutedForeground} />
+              </Pressable>
+              <Text
+                style={{
+                  color: colors.mutedForeground,
+                  fontSize: 12,
+                  fontWeight: "800",
+                }}
+              >
+                Pinch to zoom. Drag to position.
+              </Text>
+              <Pressable
+                disabled={busy}
+                onPress={() => adjustZoom(zoom.value + 0.2)}
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 999,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  opacity: busy ? 0.5 : 1,
+                  backgroundColor: colors.card,
+                }}
+              >
+                <Icon name="Search" size={17} color={colors.mutedForeground} />
+              </Pressable>
+            </View>
+          </View>
+
+          <View style={{ flexDirection: "row", gap: 10 }}>
+            <Pressable
+              disabled={busy}
+              onPress={onCancel}
+              style={{
+                flex: 1,
+                minHeight: 46,
+                borderRadius: 14,
+                alignItems: "center",
+                justifyContent: "center",
+                opacity: busy ? 0.5 : 1,
+                backgroundColor: colors.muted,
+              }}
+            >
+              <Text
+                style={{ color: colors.mutedForeground, fontWeight: "800" }}
+              >
+                Cancel
+              </Text>
+            </Pressable>
+            <Pressable
+              disabled={!source || busy}
+              onPress={() => {
+                void handleSave();
+              }}
+              style={{
+                flex: 1.5,
+                minHeight: 46,
+                borderRadius: 14,
+                alignItems: "center",
+                justifyContent: "center",
+                opacity: !source || busy ? 0.6 : 1,
+                backgroundColor: colors.primary,
+              }}
+            >
+              {busy ? (
+                <ActivityIndicator color={colors.primaryForeground} />
+              ) : (
+                <Text
+                  style={{
+                    color: colors.primaryForeground,
+                    fontWeight: "900",
+                  }}
+                >
+                  Save
+                </Text>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function ChannelPicturePickerSheet({
+  visible,
+  posts,
+  query,
+  isLoading,
+  isSelecting,
+  onQueryChange,
+  onClose,
+  onSelect,
+  onDelete,
+}: {
+  visible: boolean;
+  posts: BlogItem[];
+  query: string;
+  isLoading: boolean;
+  isSelecting: boolean;
+  onQueryChange: (value: string) => void;
+  onClose: () => void;
+  onSelect: (post: BlogItem) => void;
+  onDelete?: (post: BlogItem) => Promise<void> | void;
+}) {
+  const colors = useColors();
+  if (!visible) return null;
+
+  return (
+    <Modal
+      visible
+      transparent
+      animationType="slide"
+      statusBarTranslucent
+      onRequestClose={onClose}
+    >
+      <Pressable className="flex-1 justify-end bg-black/60" onPress={onClose}>
+        <Pressable
+          onPress={(event) => event.stopPropagation()}
+          style={{
+            maxHeight: "90%",
+            minHeight: "68%",
+            overflow: "hidden",
+            borderTopLeftRadius: 24,
+            borderTopRightRadius: 24,
+            backgroundColor: colors.background,
+          }}
+        >
+          <View
+            style={{
+              paddingHorizontal: 16,
+              paddingTop: 14,
+              paddingBottom: 10,
+              borderBottomWidth: 1,
+              borderBottomColor: colors.border,
+              gap: 12,
+            }}
+          >
+            <View
+              style={{
+                width: 40,
+                height: 4,
+                borderRadius: 99,
+                alignSelf: "center",
+                backgroundColor: colors.input,
+              }}
+            />
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+              }}
+            >
+              <Text
+                style={{
+                  color: colors.foreground,
+                  fontSize: 18,
+                  fontWeight: "900",
+                }}
+              >
+                Channel pictures
+              </Text>
+              <Pressable
+                onPress={onClose}
+                style={{
+                  width: 38,
+                  height: 38,
+                  borderRadius: 999,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: colors.muted,
+                }}
+              >
+                <Icon name="X" size={17} color={colors.mutedForeground} />
+              </Pressable>
+            </View>
+            <View
+              style={{
+                minHeight: 44,
+                borderRadius: 16,
+                borderWidth: 1,
+                borderColor: colors.border,
+                backgroundColor: colors.card,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 8,
+                paddingHorizontal: 12,
+              }}
+            >
+              <Icon name="Search" size={17} color={colors.mutedForeground} />
+              <TextInput
+                value={query}
+                onChangeText={onQueryChange}
+                placeholder="Search pictures and comments"
+                placeholderTextColor={colors.mutedForeground}
+                returnKeyType="search"
+                style={{ flex: 1, color: colors.foreground, fontSize: 14 }}
+              />
+              {query.length > 0 ? (
+                <Pressable onPress={() => onQueryChange("")} hitSlop={8}>
+                  <Icon name="X" size={15} color={colors.mutedForeground} />
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
+
+          <FlatList
+            data={posts}
+            keyExtractor={(item) => String(item.id)}
+            keyboardDismissMode="interactive"
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 28 }}
+            ListEmptyComponent={
+              <View style={{ alignItems: "center", paddingVertical: 48 }}>
+                {isLoading ? (
+                  <ActivityIndicator color={colors.primary} />
+                ) : (
+                  <Text style={{ color: colors.mutedForeground }}>
+                    No pictures found
+                  </Text>
+                )}
+              </View>
+            }
+            renderItem={({ item }) => (
+              <View style={{ opacity: isSelecting ? 0.65 : 1 }}>
+                <BlogCard
+                  post={item}
+                  hideChannelName
+                  onPress={onSelect}
+                  onDelete={onDelete}
+                />
+              </View>
+            )}
+          />
         </Pressable>
       </Pressable>
     </Modal>
@@ -2556,6 +3307,18 @@ export default function AlbumDetailScreen() {
   const [deleteSuggestionConfirmVisible, setDeleteSuggestionConfirmVisible] =
     useState(false);
   const [bookManagerVisible, setBookManagerVisible] = useState(false);
+  const [albumArtSheetVisible, setAlbumArtSheetVisible] = useState(false);
+  const [channelPicturePickerVisible, setChannelPicturePickerVisible] =
+    useState(false);
+  const [channelPictureSearch, setChannelPictureSearch] = useState("");
+  const [hiddenChannelPictureIds, setHiddenChannelPictureIds] = useState<
+    Set<number>
+  >(new Set());
+  const [albumArtCropSource, setAlbumArtCropSource] =
+    useState<AlbumArtCropSource | null>(null);
+  const [isPreparingAlbumArt, setIsPreparingAlbumArt] = useState(false);
+  const [isUploadingAlbumArt, setIsUploadingAlbumArt] = useState(false);
+  const [isSelectingAlbumArt, setIsSelectingAlbumArt] = useState(false);
   const [authorEditorState, setAuthorEditorState] = useState<{
     mode: "create" | "edit";
     author?: any | null;
@@ -2594,6 +3357,11 @@ export default function AlbumDetailScreen() {
   const displayedTracks = trackSearchState.tracks;
   const hasTrackSearch = normalizedTrackSearchQuery.length > 0;
   const bgColor = albumColor(id);
+  const albumArtUrl = getMediaFileUrl((album as any)?.thumbnail?.file);
+  const albumChannelId =
+    album?.channel?.id ??
+    tracks.find((media: any) => typeof media?.blog?.channelId === "number")?.blog
+      ?.channelId;
   const selectedSuggestionCount = selectedSuggestionIds.size;
   const selectedTrackCount = selectedTrackIds.size;
   const normalizedSuggestionKeyword = suggestionKeyword.trim();
@@ -2660,6 +3428,27 @@ export default function AlbumDetailScreen() {
     !isFetchingSuggestions &&
     suggestedMedia.length > 0 &&
     visibleSuggestedMedia.length <= SUGGESTION_DISPLAY_LIMIT;
+
+  const {
+    data: channelPicturesData,
+    isFetching: isFetchingChannelPictures,
+    refetch: refetchChannelPictures,
+  } = useQuery({
+    ..._trpc.blog.posts.queryOptions({
+      category: "picture",
+      channelId: albumChannelId,
+      q: channelPictureSearch.trim() || undefined,
+      size: 60,
+    }),
+    enabled: channelPicturePickerVisible && typeof albumChannelId === "number",
+  });
+  const channelPicturePosts = useMemo(
+    () =>
+      (((channelPicturesData as any)?.data ?? []) as BlogItem[]).filter(
+        (post) => !hiddenChannelPictureIds.has(post.id),
+      ),
+    [channelPicturesData, hiddenChannelPictureIds],
+  );
 
   const { mutate: saveOrder, isPending: isSavingOrder } = useMutation(
     _trpc.album.reorderTracks.mutationOptions({
@@ -3134,18 +3923,133 @@ export default function AlbumDetailScreen() {
     void refetchSuggestedMedia();
   }
 
+  async function applyAlbumArtFromUpload(upload: BlobMediaUpload) {
+    await updateAlbumAsync({ id, thumbnailUpload: upload });
+    Toast.show("Album art updated", { type: "success", position: "bottom" });
+    setAlbumArtSheetVisible(false);
+    setChannelPicturePickerVisible(false);
+    setAlbumArtCropSource(null);
+  }
+
+  async function saveCroppedAlbumArt(asset: CroppedAlbumArtAsset) {
+    try {
+      setIsUploadingAlbumArt(true);
+      const upload = await uploadBlogMediaAsset({
+        uri: asset.uri,
+        name: asset.name,
+        mimeType: asset.mimeType,
+        width: asset.width,
+        height: asset.height,
+      });
+      await applyAlbumArtFromUpload(upload);
+    } catch (error) {
+      Alert.alert(
+        "Could not update art",
+        error instanceof Error ? error.message : "Please try another image.",
+      );
+    } finally {
+      setIsUploadingAlbumArt(false);
+    }
+  }
+
+  async function browseAlbumArtPictures() {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: "image/*",
+        multiple: false,
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets[0]) return;
+
+      setIsPreparingAlbumArt(true);
+      const asset = result.assets[0];
+      const source = await prepareAlbumArtCropSource({
+        uri: asset.uri,
+        name: asset.name,
+        mimeType: asset.mimeType,
+        source: "local",
+      });
+      setAlbumArtCropSource(source);
+      setAlbumArtSheetVisible(false);
+    } catch (error) {
+      Alert.alert(
+        "Could not prepare image",
+        error instanceof Error ? error.message : "Please try another image.",
+      );
+    } finally {
+      setIsPreparingAlbumArt(false);
+    }
+  }
+
+  function openChannelPicturePicker() {
+    if (typeof albumChannelId !== "number") return;
+    setAlbumArtSheetVisible(false);
+    setChannelPicturePickerVisible(true);
+    setHiddenChannelPictureIds(new Set());
+    void refetchChannelPictures();
+  }
+
+  async function selectChannelPicture(post: BlogItem) {
+    if (isSelectingAlbumArt) return;
+    try {
+      setIsSelectingAlbumArt(true);
+      const imageUrl = getPrimaryImageUrl(post);
+      if (!imageUrl) {
+        throw new Error("Selected post does not have a usable image.");
+      }
+      const source = await prepareAlbumArtCropSource({
+        uri: imageUrl,
+        name: `channel-picture-${post.id}.jpg`,
+        mimeType: "image/jpeg",
+        source: "channel",
+        blogId: post.id,
+      });
+      setAlbumArtCropSource(source);
+      setChannelPicturePickerVisible(false);
+    } catch (error) {
+      Alert.alert(
+        "Could not prepare picture",
+        error instanceof Error ? error.message : "Please try another picture.",
+      );
+    } finally {
+      setIsSelectingAlbumArt(false);
+    }
+  }
+
+  async function deleteChannelPicture(post: BlogItem) {
+    setHiddenChannelPictureIds((prev) => new Set(prev).add(post.id));
+    try {
+      await deleteSuggestionBlog({ id: post.id });
+      await refetchChannelPictures();
+      Toast.show("Picture deleted", { type: "success", position: "bottom" });
+    } catch (error) {
+      setHiddenChannelPictureIds((prev) => {
+        const next = new Set(prev);
+        next.delete(post.id);
+        return next;
+      });
+      Alert.alert(
+        "Could not delete picture",
+        error instanceof Error ? error.message : "Please try again.",
+      );
+    }
+  }
+
   const refreshAlbumScreen = useCallback(() => {
     void Promise.all([
       refetchAlbum(),
       refetchAlbums(),
       refetchBooks(),
       suggestionsRequested ? refetchSuggestedMedia() : Promise.resolve(),
+      channelPicturePickerVisible ? refetchChannelPictures() : Promise.resolve(),
     ]);
   }, [
     refetchAlbum,
     refetchAlbums,
     refetchBooks,
     refetchSuggestedMedia,
+    refetchChannelPictures,
+    channelPicturePickerVisible,
     suggestionsRequested,
   ]);
 
@@ -3652,7 +4556,8 @@ export default function AlbumDetailScreen() {
               }}
             >
               {/* Art — white initials on brand color, intentional */}
-              <View
+              <Pressable
+                onPress={() => setAlbumArtSheetVisible(true)}
                 style={{
                   width: 160,
                   height: 160,
@@ -3665,14 +4570,50 @@ export default function AlbumDetailScreen() {
                   shadowOpacity: 0.5,
                   shadowRadius: 20,
                   elevation: 12,
+                  overflow: "hidden",
                 }}
               >
+                {albumArtUrl ? (
+                  <Image
+                    source={{ uri: albumArtUrl }}
+                    style={{ width: "100%", height: "100%" }}
+                    contentFit="cover"
+                  />
+                ) : (
+                  <Text
+                    style={{ fontSize: 52, fontWeight: "800", color: "#fff" }}
+                  >
+                    {getInitials(album.name)}
+                  </Text>
+                )}
+              </Pressable>
+              <Pressable
+                onPress={() => setAlbumArtSheetVisible(true)}
+                style={{
+                  minHeight: 34,
+                  borderRadius: 999,
+                  paddingHorizontal: 12,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 6,
+                  backgroundColor: colors.card,
+                }}
+              >
+                <Icon
+                  name={albumArtUrl ? "Pencil" : "Image"}
+                  size={14}
+                  color={colors.primary}
+                />
                 <Text
-                  style={{ fontSize: 52, fontWeight: "800", color: "#fff" }}
+                  style={{
+                    color: colors.primary,
+                    fontSize: 12,
+                    fontWeight: "900",
+                  }}
                 >
-                  {getInitials(album.name)}
+                  {albumArtUrl ? "Edit Art" : "Add Art"}
                 </Text>
-              </View>
+              </Pressable>
 
               {/* Name */}
               <Text
@@ -4708,6 +5649,38 @@ export default function AlbumDetailScreen() {
         onConfirm={() => {
           void confirmDeleteSelectedSuggestions();
         }}
+      />
+
+      <AlbumArtSourceSheet
+        visible={albumArtSheetVisible}
+        hasChannelPictures={typeof albumChannelId === "number"}
+        isBusy={isPreparingAlbumArt || isUploadingAlbumArt || isUpdating}
+        onClose={() => setAlbumArtSheetVisible(false)}
+        onBrowsePictures={() => {
+          void browseAlbumArtPictures();
+        }}
+        onChannelPictures={openChannelPicturePicker}
+      />
+
+      <ChannelPicturePickerSheet
+        visible={channelPicturePickerVisible}
+        posts={channelPicturePosts}
+        query={channelPictureSearch}
+        isLoading={isFetchingChannelPictures}
+        isSelecting={isSelectingAlbumArt}
+        onQueryChange={setChannelPictureSearch}
+        onClose={() => setChannelPicturePickerVisible(false)}
+        onSelect={(post) => {
+          void selectChannelPicture(post);
+        }}
+        onDelete={deleteChannelPicture}
+      />
+
+      <AlbumArtCropSheet
+        source={albumArtCropSource}
+        isSaving={isUploadingAlbumArt || isUpdating}
+        onCancel={() => setAlbumArtCropSource(null)}
+        onSave={saveCroppedAlbumArt}
       />
 
       {/* Edit album modal */}

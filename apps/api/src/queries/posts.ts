@@ -259,6 +259,7 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
         file?.source === "vercel_blob"
           ? file.blobDownloadUrl || file.blobUrl
           : null;
+      const coverImageUrl = getMediaUrl(blog.thumbnail?.file);
       const coverImageFile = serializeFile(blog.thumbnail?.file);
       const blogAudio = () => {
         const [media] = blog.medias;
@@ -307,6 +308,8 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
           albumName: media.album?.name,
           albumId: media.albumId,
           albumTrackIndex: media.albumAudioIndex?.index ?? undefined,
+          artwork: coverImageUrl,
+          imageUrl: coverImageUrl,
           transcriptStatus: media.transcript?.status ?? null,
           transcriptionJobStatus: media.transcriptionJobs[0]?.status ?? null,
           transcriptSegments,
@@ -351,7 +354,7 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
         channel: blog.channel,
         isBookmarked: false,
         likes: 0,
-        coverImageUrl: getMediaUrl(blog.thumbnail?.file),
+        coverImageUrl,
         coverImageFile,
         artwork: null,
         title: [
@@ -383,6 +386,19 @@ function wherePosts(query: PostsSchema) {
           blogTags: {
             some: {
               tags: { title: { contains: q, mode: "insensitive" } },
+            },
+          },
+        },
+        {
+          blogs: {
+            some: {
+              deletedAt: null,
+              comment: {
+                is: {
+                  deletedAt: null,
+                  content: { contains: q, mode: "insensitive" },
+                },
+              },
             },
           },
         },

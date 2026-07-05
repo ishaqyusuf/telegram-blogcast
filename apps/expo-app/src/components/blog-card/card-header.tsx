@@ -23,10 +23,12 @@ export function CardHeader({
   post,
   variant,
   onOpenOptions,
+  hideChannelName,
 }: {
   post: BlogItem;
   variant: BlogCardVariant;
   onOpenOptions?: () => void;
+  hideChannelName?: boolean;
 }) {
   const colors = useColors();
   const channelName = getChannelName(post);
@@ -53,20 +55,28 @@ export function CardHeader({
           </Text>
         </View>
         <View className="min-w-0 flex-1">
-          <Text
-            className="text-[15px] font-semibold text-foreground"
-            numberOfLines={1}
-            style={{ color: colors.foreground }}
-          >
-            {channelName}
-          </Text>
-          <Text
-            className="mt-0.5 text-xs text-muted-foreground"
-            numberOfLines={1}
-            style={{ color: colors.mutedForeground }}
-          >
-            {subtitle}
-          </Text>
+          {hideChannelName ? null : (
+            <Text
+              className="text-[15px] font-semibold text-foreground"
+              numberOfLines={1}
+              style={{ color: colors.foreground }}
+            >
+              {channelName}
+            </Text>
+          )}
+          {subtitle ? (
+            <Text
+              className={
+                hideChannelName
+                  ? "text-xs text-muted-foreground"
+                  : "mt-0.5 text-xs text-muted-foreground"
+              }
+              numberOfLines={1}
+              style={{ color: colors.mutedForeground }}
+            >
+              {subtitle}
+            </Text>
+          ) : null}
         </View>
       </View>
 

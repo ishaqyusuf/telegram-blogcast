@@ -19,6 +19,8 @@ type UploadAsset = {
   name?: string | null;
   mimeType?: string | null;
   size?: number | null;
+  width?: number | null;
+  height?: number | null;
 };
 
 type BlobTokenResponse = {
@@ -170,5 +172,7 @@ export async function uploadBlogMediaAsset(
     contentType,
     size: asset.size ?? localBlob.size,
     name,
+    width: asset.width ?? undefined,
+    height: asset.height ?? undefined,
   };
 }
