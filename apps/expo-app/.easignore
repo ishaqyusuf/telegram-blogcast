@@ -7,6 +7,11 @@ web-build/
 android/
 ios/
 
+../../services/**/cache/
+../../services/**/cache/**
+../../services/**/.venv*/
+../../services/**/__pycache__/
+
 *.tsbuildinfo
 *.orig.*
 *.jks
