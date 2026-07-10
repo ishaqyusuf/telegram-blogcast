@@ -13,6 +13,16 @@ import {
 } from "@acme/document";
 import type { ShamelaTocNode } from "@acme/document";
 
+const readerWindowInput = z.object({
+  pageId: z.number(),
+  referenceId: z.number().optional(),
+  mediaId: z.number().optional(),
+  centerSec: z.number().int().nonnegative().optional(),
+  radius: z.number().int().min(1).max(10).optional().default(2),
+  direction: z.enum(["initial", "previous", "next"]).optional().default("initial"),
+  cursor: z.number().optional(),
+});
+
 const SHAMELA_EXTRACT_PROMPT = `You are a structured data extractor for Islamic books from Shamela (the largest Islamic digital library).
 
 Given an HTML page from Shamela, extract the book page content and return it as a JSON object with this exact shape:
@@ -3137,6 +3147,173 @@ export const bookRoutes = createTRPCRouter({
             shamelaUrl: nextUrl,
             page: nextPageNo ? (adjacentByPageNo.get(nextPageNo) ?? null) : null,
           },
+        },
+      };
+    }),
+
+  getReaderWindow: publicProcedure
+    .input(readerWindowInput)
+    .query(async ({ ctx, input }) => {
+      const openedPage = await ctx.db.bookPage.findFirstOrThrow({
+        where: { id: input.pageId, deletedAt: null },
+        select: {
+          id: true,
+          bookId: true,
+          shamelaPageNo: true,
+          shamelaUrl: true,
+          previousShamelaPageNo: true,
+          previousShamelaUrl: true,
+          nextShamelaPageNo: true,
+          nextShamelaUrl: true,
+        },
+      });
+
+      let centerPageNo = openedPage.shamelaPageNo;
+      let centerPageId = openedPage.id;
+      let centerReferenceId: number | null = null;
+
+      if (input.referenceId) {
+        const reference = await ctx.db.mediaBookPageReference.findFirst({
+          where: {
+            id: input.referenceId,
+            bookId: openedPage.bookId,
+            deletedAt: null,
+          },
+          include: {
+            page: { select: { id: true, shamelaPageNo: true } },
+          },
+        });
+        if (reference?.page) {
+          centerPageNo = reference.page.shamelaPageNo;
+          centerPageId = reference.page.id;
+          centerReferenceId = reference.id;
+        }
+      }
+      if (!centerReferenceId && input.mediaId && input.centerSec != null) {
+        const references = await ctx.db.mediaBookPageReference.findMany({
+          where: {
+            mediaId: input.mediaId,
+            bookId: openedPage.bookId,
+            deletedAt: null,
+            startSec: { not: null },
+          },
+          include: {
+            page: { select: { id: true, shamelaPageNo: true } },
+          },
+          take: 200,
+        });
+        const nearest = references
+          .filter((reference) => reference.page && reference.startSec != null)
+          .sort(
+            (a, b) =>
+              Math.abs((a.startSec ?? 0) - input.centerSec!) -
+              Math.abs((b.startSec ?? 0) - input.centerSec!),
+          )[0];
+        if (nearest?.page) {
+          centerPageNo = nearest.page.shamelaPageNo;
+          centerPageId = nearest.page.id;
+          centerReferenceId = nearest.id;
+        }
+      }
+
+      const cursor = input.cursor ?? centerPageNo;
+      const pageWhere =
+        input.direction === "previous"
+          ? { lt: cursor }
+          : input.direction === "next"
+            ? { gt: cursor }
+            : {
+                gte: Math.max(0, centerPageNo - input.radius),
+                lte: centerPageNo + input.radius,
+              };
+      const take =
+        input.direction === "initial" ? input.radius * 2 + 1 : input.radius;
+      const orderBy =
+        input.direction === "previous"
+          ? ({ shamelaPageNo: "desc" } as const)
+          : ({ shamelaPageNo: "asc" } as const);
+
+      const rows = await ctx.db.bookPage.findMany({
+        where: {
+          bookId: openedPage.bookId,
+          deletedAt: null,
+          shamelaPageNo: pageWhere,
+        },
+        orderBy,
+        take,
+        include: {
+          paragraphs: { orderBy: { pid: "asc" } },
+          footnotes: { orderBy: { marker: "asc" } },
+          highlights: { orderBy: { startOffset: "asc" } },
+          audioReferences: {
+            where: { deletedAt: null },
+            include: {
+              media: {
+                select: {
+                  id: true,
+                  title: true,
+                  file: {
+                    select: { id: true, fileName: true, duration: true },
+                  },
+                  album: { select: { id: true, name: true } },
+                  blog: { select: { id: true, content: true } },
+                },
+              },
+            },
+          },
+          comments: {
+            where: { deletedAt: null },
+            orderBy: { createdAt: "asc" },
+          },
+          volume: { select: { id: true, number: true, title: true } },
+          book: {
+            select: {
+              id: true,
+              sourceType: true,
+              editable: true,
+              ownerUserId: true,
+              shamelaId: true,
+              shamelaUrl: true,
+            },
+          },
+        },
+      });
+      const data =
+        input.direction === "previous"
+          ? [...rows].reverse()
+          : rows;
+      const first = data[0];
+      const last = data[data.length - 1];
+
+      const [previousCount, nextCount] = await Promise.all([
+        first
+          ? ctx.db.bookPage.count({
+              where: {
+                bookId: openedPage.bookId,
+                deletedAt: null,
+                shamelaPageNo: { lt: first.shamelaPageNo },
+              },
+            })
+          : Promise.resolve(0),
+        last
+          ? ctx.db.bookPage.count({
+              where: {
+                bookId: openedPage.bookId,
+                deletedAt: null,
+                shamelaPageNo: { gt: last.shamelaPageNo },
+              },
+            })
+          : Promise.resolve(0),
+      ]);
+
+      return {
+        data,
+        meta: {
+          activePageId: centerPageId,
+          centerPageNo,
+          centerReferenceId,
+          previousCursor: previousCount > 0 ? first?.shamelaPageNo : null,
+          nextCursor: nextCount > 0 ? last?.shamelaPageNo : null,
         },
       };
     }),

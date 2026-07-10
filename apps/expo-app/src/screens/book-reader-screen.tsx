@@ -50,6 +50,7 @@ import { useAppSettingsStore } from "@/store/app-settings-store";
 import { useTranslation } from "@/lib/i18n";
 import { useColors } from "@/hooks/use-color";
 import { toAbsoluteShamelaUrl } from "@/lib/shamela-url";
+import { vanillaTrpc } from "@/trpc/vanilla-client";
 import {
   createDocumentFromHtml,
   createDocumentFromPlainText,
@@ -89,16 +90,23 @@ function getLineSpacingMultiplier(spacing: "compact" | "normal" | "relaxed") {
 }
 
 export default function BookReaderScreen() {
-  const { bookId, pageId } = useLocalSearchParams<{
-    bookId: string;
-    pageId: string;
-  }>();
+  const { bookId, pageId, referenceId, mediaId, seekSec } =
+    useLocalSearchParams<{
+      bookId: string;
+      pageId: string;
+      referenceId?: string;
+      mediaId?: string;
+      seekSec?: string;
+    }>();
   const router = useRouter();
   const qc = useQueryClient();
   const { t } = useTranslation();
   const colors = useColors();
   const bookIdNum = Number(bookId);
   const pageIdNum = Number(pageId);
+  const referenceIdNum = referenceId ? Number(referenceId) : undefined;
+  const mediaIdNum = mediaId ? Number(mediaId) : undefined;
+  const seekSecNum = seekSec ? Number(seekSec) : undefined;
 
   // ── Reading progress + bookmarks ────────────────────────────────────────────
   const setLastPage = useBookOfflineStore((s) => s.setLastPage);
@@ -135,17 +143,38 @@ export default function BookReaderScreen() {
   const [editorText, setEditorText] = useState("");
   const [editorHtml, setEditorHtml] = useState("");
   const [baseVersion, setBaseVersion] = useState<number>(0);
-  const [adjacentLoadingDirection, setAdjacentLoadingDirection] = useState<
+  const [readerPages, setReaderPages] = useState<any[]>([]);
+  const [readerWindowMeta, setReaderWindowMeta] = useState<{
+    previousCursor?: number | null;
+    nextCursor?: number | null;
+  }>({});
+  const [chunkLoadingDirection, setChunkLoadingDirection] = useState<
     "previous" | "next" | null
   >(null);
   const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const editorRef = useRef<BookRichEditorHandle>(null);
-  const refetchRedirectedRef = useRef(false);
 
   // ── Server data ────────────────────────────────────────────────────────────
   const { data: page, isLoading } = useQuery(
     _trpc.book.getPage.queryOptions({ pageId: pageIdNum }),
   );
+  const { data: initialReaderWindow, isLoading: isLoadingReaderWindow } =
+    useQuery(
+      _trpc.book.getReaderWindow.queryOptions({
+        pageId: pageIdNum,
+        referenceId:
+          Number.isFinite(referenceIdNum) && referenceIdNum! > 0
+            ? referenceIdNum
+            : undefined,
+        mediaId:
+          Number.isFinite(mediaIdNum) && mediaIdNum! > 0 ? mediaIdNum : undefined,
+        centerSec:
+          Number.isFinite(seekSecNum) && seekSecNum! >= 0
+            ? Math.floor(seekSecNum!)
+            : undefined,
+        radius: 2,
+      }),
+    );
   const { data: pageDocument } = useQuery(
     _trpc.book.getPageDocument.queryOptions(
       { pageId: pageIdNum },
@@ -209,6 +238,16 @@ export default function BookReaderScreen() {
   useEffect(() => {
     setLastPage(bookIdNum, pageIdNum);
   }, [bookIdNum, pageIdNum]);
+
+  useEffect(() => {
+    const data = (initialReaderWindow as any)?.data;
+    if (!Array.isArray(data) || data.length === 0) return;
+    setReaderPages(data);
+    setReaderWindowMeta({
+      previousCursor: (initialReaderWindow as any)?.meta?.previousCursor ?? null,
+      nextCursor: (initialReaderWindow as any)?.meta?.nextCursor ?? null,
+    });
+  }, [initialReaderWindow]);
 
   useEffect(() => {
     const showEvent =
@@ -516,7 +555,7 @@ export default function BookReaderScreen() {
 
   const navigateAdjacentPage = useCallback(
     (direction: "previous" | "next") => {
-      if (!page || adjacentLoadingDirection || mode !== "read") return;
+      if (!page || mode !== "read") return;
       const target = (page as any).adjacentPages?.[direction] as
         | {
             shamelaPageNo?: number | null;
@@ -540,17 +579,96 @@ export default function BookReaderScreen() {
         return;
       }
 
-      setAdjacentLoadingDirection(direction);
       router.push(
         `/book-fetch-browser?url=${encodeURIComponent(
           toAbsoluteShamelaUrl(targetUrl),
         )}&bookId=${bookIdNum}&autoPromote=1` as any,
       );
-      setTimeout(() => {
-        setAdjacentLoadingDirection(null);
-      }, 600);
     },
-    [adjacentLoadingDirection, bookId, bookIdNum, mode, page, router, t],
+    [bookId, bookIdNum, mode, page, router, t],
+  );
+
+  const mergeReaderPages = useCallback(
+    (incomingPages: any[], direction: "previous" | "next") => {
+      setReaderPages((current) => {
+        const byId = new Map<number, any>();
+        const merged =
+          direction === "previous"
+            ? [...incomingPages, ...current]
+            : [...current, ...incomingPages];
+        for (const readerPage of merged) {
+          if (typeof readerPage?.id === "number") {
+            byId.set(readerPage.id, readerPage);
+          }
+        }
+        return Array.from(byId.values()).sort(
+          (a, b) => (a.shamelaPageNo ?? 0) - (b.shamelaPageNo ?? 0),
+        );
+      });
+    },
+    [],
+  );
+
+  const loadReaderChunk = useCallback(
+    async (direction: "previous" | "next") => {
+      const cursor =
+        direction === "previous"
+          ? readerWindowMeta.previousCursor
+          : readerWindowMeta.nextCursor;
+      if (!cursor || chunkLoadingDirection || mode !== "read") return;
+      setChunkLoadingDirection(direction);
+      try {
+        const result = await vanillaTrpc.book.getReaderWindow.query({
+          pageId: pageIdNum,
+          radius: 2,
+          direction,
+          cursor,
+        });
+        mergeReaderPages((result as any).data ?? [], direction);
+        setReaderWindowMeta((current) => ({
+          previousCursor:
+            direction === "previous"
+              ? ((result as any).meta?.previousCursor ?? null)
+              : current.previousCursor,
+          nextCursor:
+            direction === "next"
+              ? ((result as any).meta?.nextCursor ?? null)
+              : current.nextCursor,
+        }));
+      } catch (error) {
+        Alert.alert(
+          t("error"),
+          error instanceof Error ? error.message : "Could not load more pages.",
+        );
+      } finally {
+        setChunkLoadingDirection(null);
+      }
+    },
+    [
+      chunkLoadingDirection,
+      mergeReaderPages,
+      mode,
+      pageIdNum,
+      readerWindowMeta.nextCursor,
+      readerWindowMeta.previousCursor,
+      t,
+    ],
+  );
+
+  const handleReaderScroll = useCallback(
+    (event: any) => {
+      const { contentOffset, contentSize, layoutMeasurement } =
+        event.nativeEvent;
+      if (contentOffset.y < 180) {
+        void loadReaderChunk("previous");
+      }
+      const distanceFromBottom =
+        contentSize.height - (contentOffset.y + layoutMeasurement.height);
+      if (distanceFromBottom < 360) {
+        void loadReaderChunk("next");
+      }
+    },
+    [loadReaderChunk],
   );
 
   const pageSwipeResponder = useMemo(
@@ -560,7 +678,7 @@ export default function BookReaderScreen() {
           Math.abs(gesture.dx) > 42 &&
           Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.4,
         onPanResponderRelease: (_, gesture) => {
-          if (!page || adjacentLoadingDirection || mode !== "read") return;
+          if (!page || mode !== "read") return;
           if (gesture.dx < -60) {
             navigateAdjacentPage("next");
           } else if (gesture.dx > 60) {
@@ -568,48 +686,18 @@ export default function BookReaderScreen() {
           }
         },
       }),
-    [adjacentLoadingDirection, mode, navigateAdjacentPage, page],
+    [mode, navigateAdjacentPage, page],
   );
 
   useEffect(() => {
-    setAdjacentLoadingDirection(null);
-    refetchRedirectedRef.current = false;
     setSelectedTextRange(null);
     setShowHighlightColors(false);
     setShowCommentInput(false);
   }, [pageIdNum]);
 
   const pageBook = (page as any)?.book;
-  const pageSourceUrl = (page as any)?.shamelaUrl as
-    | string
-    | null
-    | undefined;
-  const isImportedShamelaPage =
-    pageBook?.editable === false ||
-    pageBook?.sourceType === "shamela" ||
-    Boolean(pageBook?.shamelaId || pageBook?.shamelaUrl);
-  const shouldRefetchPage =
-    Boolean(page) &&
-    mode === "read" &&
-    isImportedShamelaPage &&
-    Boolean(pageSourceUrl) &&
-    ((page as any)?.status !== "fetched" ||
-      ((page as any)?.paragraphs?.length ?? 0) === 0);
 
-  useEffect(() => {
-    if (!shouldRefetchPage || !pageSourceUrl || refetchRedirectedRef.current) {
-      return;
-    }
-
-    refetchRedirectedRef.current = true;
-    router.replace(
-      `/book-fetch-browser?url=${encodeURIComponent(
-        toAbsoluteShamelaUrl(pageSourceUrl),
-      )}&bookId=${bookIdNum}&autoPromote=1` as any,
-    );
-  }, [bookIdNum, pageSourceUrl, router, shouldRefetchPage]);
-
-  if (isLoading) {
+  if (isLoading && !initialReaderWindow) {
     return (
       <View
         className="flex-1 items-center justify-center bg-background"
@@ -627,20 +715,20 @@ export default function BookReaderScreen() {
     (pageBook?.sourceType ?? "user") === "user" &&
     !pageBook?.shamelaId &&
     !pageBook?.shamelaUrl;
-  const audioReferences = Array.isArray((page as any).audioReferences)
-    ? (page as any).audioReferences
-    : [];
-
-  if (shouldRefetchPage) {
-    return (
-      <View
-        className="flex-1 items-center justify-center bg-background"
-        style={{ backgroundColor: colors.background }}
-      >
-        <ActivityIndicator color={colors.primary} />
-      </View>
+  const visibleReaderPages =
+    readerPages.length > 0 ? readerPages : page ? [page] : [];
+  const openFetchReaderPage = (readerPage: any) => {
+    const sourceUrl = readerPage?.shamelaUrl;
+    if (!sourceUrl) {
+      Alert.alert(t("error"), "No Shamela link is available for this page.");
+      return;
+    }
+    router.push(
+      `/book-fetch-browser?url=${encodeURIComponent(
+        toAbsoluteShamelaUrl(sourceUrl),
+      )}&bookId=${bookIdNum}&autoPromote=1` as any,
     );
-  }
+  };
 
   return (
     <View
@@ -762,142 +850,285 @@ export default function BookReaderScreen() {
                 paddingBottom: 120,
               }}
               keyboardShouldPersistTaps="handled"
+              onScroll={handleReaderScroll}
+              scrollEventThrottle={16}
             >
-              {page.topicTitle && (
-                <Text
-                  className="mb-4 text-center text-[15px] font-semibold text-primary"
-                  style={{ writingDirection: "rtl" }}
-                >
-                  {page.topicTitle}
-                </Text>
-              )}
+              {chunkLoadingDirection === "previous" ? (
+                <View style={{ alignItems: "center", paddingBottom: 16 }}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                </View>
+              ) : null}
 
-              <BookPageView
-                paragraphs={page.paragraphs}
-                highlights={highlights.map((h) => ({
-                  localId: h.localId,
-                  paragraphId: h.paragraphId,
-                  color: h.color,
-                  startOffset: h.startOffset,
-                  endOffset: h.endOffset,
-                  quoteText: h.quoteText,
-                }))}
-                onFootnotePress={openFootnotes}
-                onCopyParagraph={handleCopyParagraph}
-                selectedTextRange={selectedTextRange}
-                onTextSelection={(selection) => {
-                  setSelectedTextRange(selection);
-                }}
-                onHighlightColor={handleHighlightColor}
-                onHighlightDelete={handleHighlightDelete}
-                fontSize={readerFontSize}
-                lineHeight={readerLineHeight}
-                textColor={readerPalette.text}
-              />
+              {isLoadingReaderWindow && visibleReaderPages.length === 0 ? (
+                <View style={{ alignItems: "center", paddingVertical: 40 }}>
+                  <ActivityIndicator color={colors.primary} />
+                </View>
+              ) : null}
 
-              {/* Comments list */}
-              {mode === "read" && comments.length > 0 && (
-                <View style={{ marginTop: 24, gap: 8 }}>
-                  <Text
-                    className="text-right text-sm font-bold text-foreground"
-                    style={{ writingDirection: "rtl" }}
-                  >
-                    {t("comments", { count: comments.length })}
-                  </Text>
-                  {comments.map((comment) => (
-                    <View
-                      key={comment.localId}
-                      className="flex-row-reverse items-start gap-2 rounded-lg bg-card p-2.5"
-                    >
+              {visibleReaderPages.map((readerPage: any) => {
+                const isCurrentPage = readerPage.id === pageIdNum;
+                const pageHighlights = isCurrentPage
+                  ? highlights.map((h) => ({
+                      localId: h.localId,
+                      paragraphId: h.paragraphId,
+                      color: h.color,
+                      startOffset: h.startOffset,
+                      endOffset: h.endOffset,
+                      quoteText: h.quoteText,
+                    }))
+                  : ((readerPage.highlights ?? []) as any[]).map((h) => ({
+                      localId: `server-${h.id}`,
+                      paragraphId: h.paragraphId,
+                      color: h.color,
+                      startOffset: h.startOffset,
+                      endOffset: h.endOffset,
+                      quoteText: h.quoteText,
+                    }));
+                const pageComments = isCurrentPage
+                  ? comments
+                  : ((readerPage.comments ?? []) as any[]);
+                const pageAudioReferences = Array.isArray(
+                  readerPage.audioReferences,
+                )
+                  ? readerPage.audioReferences
+                  : [];
+                const hasFetchedContent =
+                  readerPage.status === "fetched" &&
+                  (readerPage.paragraphs?.length ?? 0) > 0;
+
+                return (
+                  <View key={readerPage.id} style={{ marginBottom: 32 }}>
+                    {readerPage.topicTitle ? (
                       <Text
-                        className="flex-1 text-right text-sm text-foreground"
+                        className="mb-4 text-center text-[15px] font-semibold text-primary"
                         style={{ writingDirection: "rtl" }}
                       >
-                        {comment.content}
+                        {readerPage.topicTitle}
                       </Text>
-                      {comment.syncStatus === "pending_create" && (
-                        <Icon
-                          name="Clock"
-                          size={12}
-                          className="text-muted-foreground"
-                        />
-                      )}
-                      <Pressable onPress={() => deleteComment(comment.localId)}>
-                        <Icon
-                          name="Trash2"
-                          size={14}
-                          className="text-muted-foreground"
-                        />
-                      </Pressable>
-                    </View>
-                  ))}
-                </View>
-              )}
-
-              {mode === "read" && audioReferences.length > 0 && (
-                <View style={{ marginTop: 24, gap: 8 }}>
-                  <Text
-                    className="text-right text-sm font-bold text-foreground"
-                    style={{ writingDirection: "rtl" }}
-                  >
-                    Audio references
-                  </Text>
-                  {audioReferences.map((reference: any) => {
-                    const media = reference.media;
-                    const label =
-                      media?.title ||
-                      media?.file?.fileName ||
-                      media?.album?.name ||
-                      "Referenced audio";
-                    return (
+                    ) : null}
+                    {!isCurrentPage ? (
                       <Pressable
-                        key={reference.id}
-                        onPress={() => {
-                          const blogId = media?.blog?.id;
-                          if (blogId) {
-                            const suffix =
-                              reference.startSec != null
-                                ? `?seekSec=${reference.startSec}`
-                                : "";
-                            router.push(
-                              `/blog-view-2/${blogId}${suffix}` as any,
-                            );
-                            return;
-                          }
-                          Alert.alert(
-                            "Audio unavailable",
-                            "This reference is linked to media that does not have an audio screen yet.",
-                          );
+                        onPress={() =>
+                          router.replace(
+                            `/books/${bookId}/reader/${readerPage.id}` as any,
+                          )
+                        }
+                        style={{
+                          alignSelf: "center",
+                          borderRadius: 999,
+                          backgroundColor: readerPalette.card,
+                          marginBottom: 12,
+                          paddingHorizontal: 12,
+                          paddingVertical: 6,
                         }}
-                        className="flex-row-reverse items-center gap-2 rounded-lg bg-card p-2.5"
+                      >
+                        <Text
+                          style={{
+                            color: readerPalette.muted,
+                            fontSize: 12,
+                            fontWeight: "700",
+                          }}
+                        >
+                          {readerPage.printedPageNo != null
+                            ? t("pageShort", {
+                                number: readerPage.printedPageNo,
+                              })
+                            : `#${readerPage.shamelaPageNo}`}
+                        </Text>
+                      </Pressable>
+                    ) : null}
+
+                    {hasFetchedContent ? (
+                      <BookPageView
+                        paragraphs={readerPage.paragraphs}
+                        highlights={pageHighlights}
+                        onFootnotePress={openFootnotes}
+                        onCopyParagraph={
+                          isCurrentPage ? handleCopyParagraph : undefined
+                        }
+                        selectedTextRange={
+                          isCurrentPage ? selectedTextRange : null
+                        }
+                        onTextSelection={(selection) => {
+                          if (isCurrentPage) setSelectedTextRange(selection);
+                        }}
+                        onHighlightColor={
+                          isCurrentPage ? handleHighlightColor : undefined
+                        }
+                        onHighlightDelete={
+                          isCurrentPage ? handleHighlightDelete : undefined
+                        }
+                        fontSize={readerFontSize}
+                        lineHeight={readerLineHeight}
+                        textColor={readerPalette.text}
+                      />
+                    ) : (
+                      <View
+                        style={{
+                          alignItems: "center",
+                          gap: 10,
+                          borderRadius: 14,
+                          backgroundColor: readerPalette.card,
+                          padding: 18,
+                        }}
                       >
                         <Icon
-                          name="Headphones"
-                          size={16}
+                          name="CloudDownload"
+                          size={24}
                           className="text-primary"
                         />
-                        <View style={{ flex: 1 }}>
+                        <Text
+                          style={{
+                            color: readerPalette.muted,
+                            fontSize: 13,
+                            textAlign: "center",
+                          }}
+                        >
+                          This page has not been fetched yet.
+                        </Text>
+                        <Pressable
+                          onPress={() => openFetchReaderPage(readerPage)}
+                          style={{
+                            borderRadius: 10,
+                            backgroundColor: colors.primary,
+                            paddingHorizontal: 14,
+                            paddingVertical: 9,
+                          }}
+                        >
                           <Text
-                            className="text-right text-sm font-semibold text-foreground"
-                            style={{ writingDirection: "rtl" }}
-                            numberOfLines={1}
+                            style={{
+                              color: colors.primaryForeground,
+                              fontSize: 12,
+                              fontWeight: "800",
+                            }}
                           >
-                            {label}
+                            Fetch page
                           </Text>
-                          <Text className="text-right text-[11px] text-muted-foreground">
-                            {reference.startSec != null
-                              ? formatAudioReferenceTime(reference.startSec)
-                              : ""}
-                            {reference.endSec != null
-                              ? ` - ${formatAudioReferenceTime(reference.endSec)}`
-                              : ""}
-                          </Text>
-                        </View>
-                      </Pressable>
-                    );
-                  })}
+                        </Pressable>
+                      </View>
+                    )}
+
+                    {pageComments.length > 0 && (
+                      <View style={{ marginTop: 24, gap: 8 }}>
+                        <Text
+                          className="text-right text-sm font-bold text-foreground"
+                          style={{ writingDirection: "rtl" }}
+                        >
+                          {t("comments", { count: pageComments.length })}
+                        </Text>
+                        {pageComments.map((comment: any) => (
+                          <View
+                            key={comment.localId ?? comment.id}
+                            className="flex-row-reverse items-start gap-2 rounded-lg bg-card p-2.5"
+                          >
+                            <Text
+                              className="flex-1 text-right text-sm text-foreground"
+                              style={{ writingDirection: "rtl" }}
+                            >
+                              {comment.content}
+                            </Text>
+                            {comment.syncStatus === "pending_create" && (
+                              <Icon
+                                name="Clock"
+                                size={12}
+                                className="text-muted-foreground"
+                              />
+                            )}
+                            {isCurrentPage ? (
+                              <Pressable
+                                onPress={() =>
+                                  deleteComment(comment.localId)
+                                }
+                              >
+                                <Icon
+                                  name="Trash2"
+                                  size={14}
+                                  className="text-muted-foreground"
+                                />
+                              </Pressable>
+                            ) : null}
+                          </View>
+                        ))}
+                      </View>
+                    )}
+
+                    {pageAudioReferences.length > 0 && (
+                      <View style={{ marginTop: 24, gap: 8 }}>
+                        <Text
+                          className="text-right text-sm font-bold text-foreground"
+                          style={{ writingDirection: "rtl" }}
+                        >
+                          Audio references
+                        </Text>
+                        {pageAudioReferences.map((reference: any) => {
+                          const media = reference.media;
+                          const label =
+                            media?.title ||
+                            media?.file?.fileName ||
+                            media?.album?.name ||
+                            "Referenced audio";
+                          return (
+                            <Pressable
+                              key={reference.id}
+                              onPress={() => {
+                                const blogId = media?.blog?.id;
+                                if (blogId) {
+                                  const suffix =
+                                    reference.startSec != null
+                                      ? `?seekSec=${reference.startSec}`
+                                      : "";
+                                  router.push(
+                                    `/blog-view-2/${blogId}${suffix}` as any,
+                                  );
+                                  return;
+                                }
+                                Alert.alert(
+                                  "Audio unavailable",
+                                  "This reference is linked to media that does not have an audio screen yet.",
+                                );
+                              }}
+                              className="flex-row-reverse items-center gap-2 rounded-lg bg-card p-2.5"
+                            >
+                              <Icon
+                                name="Headphones"
+                                size={16}
+                                className="text-primary"
+                              />
+                              <View style={{ flex: 1 }}>
+                                <Text
+                                  className="text-right text-sm font-semibold text-foreground"
+                                  style={{ writingDirection: "rtl" }}
+                                  numberOfLines={1}
+                                >
+                                  {label}
+                                </Text>
+                                <Text className="text-right text-[11px] text-muted-foreground">
+                                  {reference.startSec != null
+                                    ? formatAudioReferenceTime(
+                                        reference.startSec,
+                                      )
+                                    : ""}
+                                  {reference.endSec != null
+                                    ? ` - ${formatAudioReferenceTime(
+                                        reference.endSec,
+                                      )}`
+                                    : ""}
+                                </Text>
+                              </View>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    )}
+                  </View>
+                );
+              })}
+
+              {chunkLoadingDirection === "next" ? (
+                <View style={{ alignItems: "center", paddingTop: 4 }}>
+                  <ActivityIndicator size="small" color={colors.primary} />
                 </View>
-              )}
+              ) : null}
             </ScrollView>
           )}
 
@@ -1035,43 +1266,28 @@ export default function BookReaderScreen() {
                 onPress={() => navigateAdjacentPage("previous")}
                 className="flex-row items-center justify-center gap-1.5 rounded-xl bg-card px-4 py-2.5"
               >
-                {adjacentLoadingDirection === "previous" ? (
-                  <ActivityIndicator size="small" color={colors.primary} />
-                ) : (
-                  <>
-                    <Icon
-                      name="ChevronRight"
-                      size={18}
-                      className="text-foreground"
-                    />
-                    <Text className="text-[13px] text-foreground">
-                      {t("previous")}
-                    </Text>
-                  </>
-                )}
+                <Icon
+                  name="ChevronRight"
+                  size={18}
+                  className="text-foreground"
+                />
+                <Text className="text-[13px] text-foreground">
+                  {t("previous")}
+                </Text>
               </Pressable>
 
               <Pressable
                 onPress={() => navigateAdjacentPage("next")}
                 className="flex-row items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2.5"
               >
-                {adjacentLoadingDirection === "next" ? (
-                  <ActivityIndicator
-                    size="small"
-                    color={colors.primaryForeground}
-                  />
-                ) : (
-                  <>
-                    <Text className="text-[13px] font-bold text-primary-foreground">
-                      {t("next")}
-                    </Text>
-                    <Icon
-                      name="ChevronLeft"
-                      size={18}
-                      className="text-background"
-                    />
-                  </>
-                )}
+                <Text className="text-[13px] font-bold text-primary-foreground">
+                  {t("next")}
+                </Text>
+                <Icon
+                  name="ChevronLeft"
+                  size={18}
+                  className="text-background"
+                />
               </Pressable>
             </View>
           )}
@@ -1102,21 +1318,6 @@ export default function BookReaderScreen() {
           )}
         </KeyboardAvoidingView>
       </SafeArea>
-
-      {adjacentLoadingDirection ? (
-        <View
-          pointerEvents="auto"
-          style={{
-            position: "absolute",
-            inset: 0,
-            alignItems: "center",
-            justifyContent: "center",
-            backgroundColor: colors.background,
-          }}
-        >
-          <ActivityIndicator size="large" color={colors.primary} />
-        </View>
-      ) : null}
 
       <Modal
         ref={readerSettingsModal.ref}

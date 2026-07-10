@@ -1,5 +1,6 @@
 import { Pressable } from "@/components/ui/pressable";
 import { AddToAlbumModal } from "@/components/channel-chat/add-to-album-modal";
+import { useInfiniteLoader } from "@/components/infinite-loader";
 import { BlogCard, type BlogItem } from "@/components/blog-card";
 import {
   useFloatingFooterInset,
@@ -176,18 +177,6 @@ function formatMediaSizeMb(size?: number | null) {
   if (!size || !Number.isFinite(size) || size <= 0) return null;
   const mb = size / (1024 * 1024);
   return `${mb >= 10 ? Math.round(mb) : mb.toFixed(1)} MB`;
-}
-
-function getMediaTelegramTime(media: any) {
-  const value = media?.blog?.blogDate ?? media?.blogDate ?? media?.date;
-  const time = value ? new Date(value).getTime() : Number.NEGATIVE_INFINITY;
-  return Number.isFinite(time) ? time : Number.NEGATIVE_INFINITY;
-}
-
-function sortMediaByTelegramDate(items: any[]) {
-  return [...items].sort(
-    (a, b) => getMediaTelegramTime(b) - getMediaTelegramTime(a),
-  );
 }
 
 function getTrackBlogHref(media: any) {
@@ -2730,7 +2719,7 @@ function ReorderRow({
           }}
           numberOfLines={1}
         >
-          {media.title || media.file?.name || "Untitled"}
+          {media.title || media.file?.fileName || "Untitled"}
         </Text>
         {metadata.length > 0 && (
           <Text
@@ -3262,6 +3251,8 @@ export default function AlbumDetailScreen() {
   });
   const { albumId } = useLocalSearchParams<{ albumId: string }>();
   const id = Number(albumId);
+  const [trackSearchActive, setTrackSearchActive] = useState(false);
+  const [trackSearchQuery, setTrackSearchQuery] = useState("");
 
   const {
     data: album,
@@ -3269,6 +3260,28 @@ export default function AlbumDetailScreen() {
     isLoading,
     refetch: refetchAlbum,
   } = useQuery(_trpc.album.getAlbum.queryOptions({ id }));
+  const trimmedTrackSearchQuery = trackSearchQuery.trim();
+  const {
+    data: paginatedTracks = [],
+    hasNextPage: hasNextTrackPage,
+    isFetching: isFetchingTracks,
+    isRefetching: isRefetchingTracks,
+    fetchNextPage: fetchNextTrackPage,
+    refetch: refetchAlbumTracks,
+    queryData: albumTracksQueryData,
+  } = useInfiniteLoader({
+    route: _trpc.album.getAlbumTracks,
+    input: { albumId: id, limit: 30 },
+    filter: { q: trimmedTrackSearchQuery || undefined },
+    queryOptions: { staleTime: 60 * 1000, gcTime: 5 * 60 * 1000 },
+  });
+  const { refetch: refetchAlbumPlaybackQueue } = useQuery({
+    ..._trpc.album.getAlbumPlaybackQueue.queryOptions({
+      albumId: id,
+      limit: 1000,
+    }),
+    enabled: false,
+  });
   const { data: albums = [], refetch: refetchAlbums } = useQuery(
     _trpc.album.getAlbums.queryOptions(),
   );
@@ -3286,8 +3299,6 @@ export default function AlbumDetailScreen() {
   const [reorderMode, setReorderMode] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [descExpanded, setDescExpanded] = useState(false);
-  const [trackSearchActive, setTrackSearchActive] = useState(false);
-  const [trackSearchQuery, setTrackSearchQuery] = useState("");
   const [selectedTrackForActions, setSelectedTrackForActions] = useState<
     any | null
   >(null);
@@ -3333,13 +3344,17 @@ export default function AlbumDetailScreen() {
   const trackSearchInputRef = useRef<TextInput>(null);
 
   const rawTracks: any[] = useMemo(
-    () => localTracks ?? album?.medias ?? [],
-    [album?.medias, localTracks],
+    () => localTracks ?? paginatedTracks ?? [],
+    [localTracks, paginatedTracks],
   );
-  const tracks = useMemo(
-    () => (reorderMode ? rawTracks : sortMediaByTelegramDate(rawTracks)),
-    [rawTracks, reorderMode],
-  );
+  const totalTrackCount =
+    ((albumTracksQueryData?.pages?.[0] as any)?.meta?.totalCount as
+      | number
+      | undefined) ??
+    (album as any)?._count?.medias ??
+    (album as any)?.medias?.length ??
+    rawTracks.length;
+  const tracks = rawTracks;
   const normalizedTrackSearchQuery = normalizeAlbumSearchText(trackSearchQuery);
   const trackSearchState = useMemo(() => {
     if (!normalizedTrackSearchQuery) {
@@ -3399,6 +3414,19 @@ export default function AlbumDetailScreen() {
     }
     return Array.from(byId.values());
   }, [album?.author, authors, trackAuthors]);
+  const invalidateAlbumTrackData = useCallback(async () => {
+    await Promise.all([
+      qc.invalidateQueries({
+        queryKey: _trpc.album.getAlbumTracks.queryKey(),
+      }),
+      qc.invalidateQueries({
+        queryKey: _trpc.album.getAlbumPlaybackQueue.queryKey({
+          albumId: id,
+          limit: 1000,
+        }),
+      }),
+    ]);
+  }, [id, qc]);
 
   const {
     data: suggestedMedia = [],
@@ -3461,6 +3489,7 @@ export default function AlbumDetailScreen() {
         qc.invalidateQueries({
           queryKey: _trpc.album.getAlbum.queryKey({ id }),
         });
+        void invalidateAlbumTrackData();
         setLocalTracks(null);
         setReorderMode(false);
       },
@@ -3498,6 +3527,7 @@ export default function AlbumDetailScreen() {
           qc.invalidateQueries({
             queryKey: _trpc.album.getAlbum.queryKey({ id }),
           });
+          void invalidateAlbumTrackData();
           qc.invalidateQueries({ queryKey: _trpc.album.getAlbums.queryKey() });
           qc.invalidateQueries({
             queryKey: _trpc.album.getSuggestedMedia.queryKey({
@@ -3540,6 +3570,7 @@ export default function AlbumDetailScreen() {
             qc.invalidateQueries({
               queryKey: _trpc.album.getAlbum.queryKey({ id }),
             }),
+            invalidateAlbumTrackData(),
             qc.invalidateQueries({
               queryKey: _trpc.album.getAlbums.queryKey(),
             }),
@@ -3563,6 +3594,7 @@ export default function AlbumDetailScreen() {
           qc.invalidateQueries({
             queryKey: _trpc.album.getAlbum.queryKey({ id }),
           }),
+          invalidateAlbumTrackData(),
           qc.invalidateQueries({
             queryKey: _trpc.album.getAlbums.queryKey(),
           }),
@@ -3594,6 +3626,7 @@ export default function AlbumDetailScreen() {
           qc.invalidateQueries({
             queryKey: _trpc.album.getAlbum.queryKey({ id: variables.albumId }),
           }),
+          invalidateAlbumTrackData(),
           qc.invalidateQueries({ queryKey: _trpc.album.getAlbums.queryKey() }),
         ]);
         setSelectedTrackForActions(null);
@@ -3614,6 +3647,7 @@ export default function AlbumDetailScreen() {
           await qc.invalidateQueries({
             queryKey: _trpc.album.getAlbum.queryKey({ id }),
           });
+          await invalidateAlbumTrackData();
           setSelectedTrackForActions(null);
           const media = resetQueueTrackRef.current;
           resetQueueTrackRef.current = null;
@@ -3763,11 +3797,20 @@ export default function AlbumDetailScreen() {
     }
   }
 
-  // When entering reorder mode, snapshot current server tracks into local state
-  function enterReorderMode() {
+  // Reorder needs the full album order, not only the currently loaded page.
+  async function enterReorderMode() {
     setSelectedTrackIds(new Set());
-    setLocalTracks([...tracks]);
-    setReorderMode(true);
+    try {
+      const result = await refetchAlbumPlaybackQueue();
+      const fullTracks = Array.isArray(result.data) ? result.data : tracks;
+      setLocalTracks([...fullTracks]);
+      setReorderMode(true);
+    } catch (error) {
+      Alert.alert(
+        "Could not load all tracks",
+        error instanceof Error ? error.message : "Please try again.",
+      );
+    }
   }
 
   function cancelReorder() {
@@ -4043,6 +4086,7 @@ export default function AlbumDetailScreen() {
   const refreshAlbumScreen = useCallback(() => {
     void Promise.all([
       refetchAlbum(),
+      refetchAlbumTracks(),
       refetchAlbums(),
       refetchBooks(),
       suggestionsRequested ? refetchSuggestedMedia() : Promise.resolve(),
@@ -4050,6 +4094,7 @@ export default function AlbumDetailScreen() {
     ]);
   }, [
     refetchAlbum,
+    refetchAlbumTracks,
     refetchAlbums,
     refetchBooks,
     refetchSuggestedMedia,
@@ -4057,6 +4102,34 @@ export default function AlbumDetailScreen() {
     channelPicturePickerVisible,
     suggestionsRequested,
   ]);
+  const handleAlbumScroll = useCallback(
+    (event: any) => {
+      albumScroll.onScroll(event);
+      if (
+        activeAlbumTab !== "tracks" ||
+        reorderMode ||
+        !hasNextTrackPage ||
+        isFetchingTracks
+      ) {
+        return;
+      }
+      const { contentOffset, contentSize, layoutMeasurement } =
+        event.nativeEvent;
+      const distanceFromBottom =
+        contentSize.height - (contentOffset.y + layoutMeasurement.height);
+      if (distanceFromBottom < 480) {
+        void fetchNextTrackPage();
+      }
+    },
+    [
+      activeAlbumTab,
+      albumScroll,
+      fetchNextTrackPage,
+      hasNextTrackPage,
+      isFetchingTracks,
+      reorderMode,
+    ],
+  );
 
   async function addOneSuggestion(media: any) {
     const mediaId = media.id;
@@ -4071,11 +4144,7 @@ export default function AlbumDetailScreen() {
       });
 
       if (result.added > 0) {
-        setLocalTracks((prev) => {
-          const base = prev ?? tracks;
-          if (base.some((track) => track.id === mediaId)) return base;
-          return sortMediaByTelegramDate([...base, media]);
-        });
+        await invalidateAlbumTrackData();
         qc.setQueryData(_trpc.album.getAlbums.queryKey(), (old: any) =>
           Array.isArray(old)
             ? old.map((albumItem) =>
@@ -4153,6 +4222,7 @@ export default function AlbumDetailScreen() {
       qc.invalidateQueries({
         queryKey: _trpc.album.getAlbum.queryKey({ id: targetAlbum.id }),
       }),
+      invalidateAlbumTrackData(),
       qc.invalidateQueries({
         queryKey: _trpc.album.getSuggestedMedia.queryKey({
           albumId: id,
@@ -4194,7 +4264,16 @@ export default function AlbumDetailScreen() {
       return;
     }
 
-    const albumQueue = buildAlbumTrackQueue(tracks, album);
+    let queueTracks = tracks;
+    try {
+      const result = await refetchAlbumPlaybackQueue();
+      if (Array.isArray(result.data) && result.data.length > 0) {
+        queueTracks = result.data;
+      }
+    } catch {
+      queueTracks = tracks;
+    }
+    const albumQueue = buildAlbumTrackQueue(queueTracks, album);
     const audioItem = buildAlbumTrackAudioItem(media, album, albumQueue);
     if (!audioItem) {
       Toast.show("Audio file is not available", {
@@ -4539,11 +4618,13 @@ export default function AlbumDetailScreen() {
             keyboardDismissMode="interactive"
             keyboardShouldPersistTaps="handled"
             removeClippedSubviews={false}
-            onScroll={albumScroll.onScroll}
+            onScroll={handleAlbumScroll}
             scrollEventThrottle={albumScroll.scrollEventThrottle}
             refreshControl={
               <RefreshControl
-                refreshing={isFetchingAlbum && !isLoading}
+                refreshing={
+                  (isFetchingAlbum || isRefetchingTracks) && !isLoading
+                }
                 onRefresh={refreshAlbumScreen}
                 tintColor={colors.primary}
                 colors={[colors.primary]}
@@ -4834,7 +4915,7 @@ export default function AlbumDetailScreen() {
                   }}
                 >
                   <Text style={{ fontSize: 12, color: colors.mutedForeground }}>
-                    {album.medias?.length ?? 0} tracks
+                    {totalTrackCount} tracks
                   </Text>
                 </View>
                 {album.albumType && (
@@ -5160,7 +5241,7 @@ export default function AlbumDetailScreen() {
                         }}
                         numberOfLines={1}
                       >
-                        {displayedTracks.length} of {tracks.length} matches
+                        {displayedTracks.length} of {totalTrackCount} matches
                       </Text>
                     ) : null}
 
@@ -5198,7 +5279,9 @@ export default function AlbumDetailScreen() {
                       !reorderMode &&
                       selectedTrackCount === 0 && (
                         <Pressable
-                          onPress={enterReorderMode}
+                          onPress={() => {
+                            void enterReorderMode();
+                          }}
                           style={{
                             flexDirection: "row",
                             alignItems: "center",
@@ -5270,7 +5353,11 @@ export default function AlbumDetailScreen() {
                     )}
                   </View>
 
-                  {tracks.length === 0 ? (
+                  {tracks.length === 0 && isFetchingTracks ? (
+                    <View style={{ alignItems: "center", paddingVertical: 40 }}>
+                      <ActivityIndicator color={colors.primary} />
+                    </View>
+                  ) : tracks.length === 0 ? (
                     <View
                       style={{
                         alignItems: "center",
@@ -5325,49 +5412,67 @@ export default function AlbumDetailScreen() {
                       />
                     ))
                   ) : (
-                    displayedTracks.map((media, idx) => {
-                      const isActiveTrack = isActiveAlbumTrack(media);
-                      return (
-                        <TrackRow
-                          key={media.id}
-                          media={media}
-                          displayIndex={idx + 1}
-                          isRemoving={
-                            isRemovingMedia ||
-                            isMovingMedia ||
-                            isRemovingSelectedMedia
-                          }
-                          isSelected={selectedTrackIds.has(media.id)}
-                          isActiveTrack={isActiveTrack}
-                          isTrackPlaying={isActiveTrack && activeAudioIsPlaying}
-                          isTrackLoading={isActiveTrack && activeAudioIsLoading}
-                          canPlay={canPlayAlbumTrack(media)}
-                          selectionMode={selectedTrackCount > 0}
-                          trackAuthorLabel={
-                            albumAuthorId ? null : getAuthorDisplayName(media.author)
-                          }
-                          searchMatch={trackSearchState.matchesById.get(
-                            media.id,
-                          )}
-                          onPlayPress={() =>
-                            void handleTrackPlaybackPress(media)
-                          }
-                          onActions={() => setSelectedTrackForActions(media)}
-                          onLongPress={() => startTrackSelection(media.id)}
-                          onPress={() => {
-                            if (selectedTrackCount > 0) {
-                              toggleTrackSelection(media.id);
-                              return;
+                    <>
+                      {displayedTracks.map((media, idx) => {
+                        const isActiveTrack = isActiveAlbumTrack(media);
+                        return (
+                          <TrackRow
+                            key={media.id}
+                            media={media}
+                            displayIndex={idx + 1}
+                            isRemoving={
+                              isRemovingMedia ||
+                              isMovingMedia ||
+                              isRemovingSelectedMedia
                             }
-                            if (media.blog?.id) {
-                              router.push(
-                                `/blog-view-2/${media.blog.id}` as any,
-                              );
+                            isSelected={selectedTrackIds.has(media.id)}
+                            isActiveTrack={isActiveTrack}
+                            isTrackPlaying={
+                              isActiveTrack && activeAudioIsPlaying
                             }
-                          }}
-                        />
-                      );
-                    })
+                            isTrackLoading={
+                              isActiveTrack && activeAudioIsLoading
+                            }
+                            canPlay={canPlayAlbumTrack(media)}
+                            selectionMode={selectedTrackCount > 0}
+                            trackAuthorLabel={
+                              albumAuthorId
+                                ? null
+                                : getAuthorDisplayName(media.author)
+                            }
+                            searchMatch={trackSearchState.matchesById.get(
+                              media.id,
+                            )}
+                            onPlayPress={() =>
+                              void handleTrackPlaybackPress(media)
+                            }
+                            onActions={() => setSelectedTrackForActions(media)}
+                            onLongPress={() => startTrackSelection(media.id)}
+                            onPress={() => {
+                              if (selectedTrackCount > 0) {
+                                toggleTrackSelection(media.id);
+                                return;
+                              }
+                              if (media.blog?.id) {
+                                router.push(
+                                  `/blog-view-2/${media.blog.id}` as any,
+                                );
+                              }
+                            }}
+                          />
+                        );
+                      })}
+                      {isFetchingTracks && tracks.length > 0 ? (
+                        <View
+                          style={{ alignItems: "center", paddingVertical: 18 }}
+                        >
+                          <ActivityIndicator
+                            size="small"
+                            color={colors.primary}
+                          />
+                        </View>
+                      ) : null}
+                    </>
                   )}
                 </>
               )}

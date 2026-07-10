@@ -419,7 +419,11 @@ function AudioBookReferences({
 					<Pressable
 						onPress={() =>
 							router.push(
-								`/books/${reference.bookId}/reader/${reference.pageId}` as any,
+								`/books/${reference.bookId}/reader/${reference.pageId}?referenceId=${reference.id}&mediaId=${mediaId}${
+									reference.startSec != null
+										? `&seekSec=${reference.startSec}`
+										: ""
+								}` as any,
 							)
 						}
 						style={{

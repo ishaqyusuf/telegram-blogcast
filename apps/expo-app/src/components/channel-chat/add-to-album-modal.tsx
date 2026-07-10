@@ -1,6 +1,6 @@
 import { Pressable } from "@/components/ui/pressable";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -46,6 +46,16 @@ function getInitials(name?: string | null) {
     .join("");
 }
 
+function normalizeAlbumFilterText(value?: string | number | null) {
+  return String(value ?? "")
+    .normalize("NFKD")
+    .replace(/[\u0610-\u061a\u064b-\u065f\u0670]/g, "")
+    .replace(/[\u200c\u200d]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 interface Props {
   mediaIds: number[];
   authorId?: number;
@@ -68,13 +78,39 @@ export function AddToAlbumModal({
   const { data: albums = [], isLoading } = useQuery(
     _trpc.album.getAlbums.queryOptions(),
   );
-  const sortedAlbums = [...albums].sort((a, b) => {
-    const aChannel = a.channel?.title ?? a.channel?.username ?? "";
-    const bChannel = b.channel?.title ?? b.channel?.username ?? "";
-    const channelCompare = aChannel.localeCompare(bChannel);
-    if (channelCompare !== 0) return channelCompare;
-    return a.name.localeCompare(b.name);
-  });
+  const sortedAlbums = useMemo(
+    () =>
+      [...albums].sort((a, b) => {
+        const aChannel = a.channel?.title ?? a.channel?.username ?? "";
+        const bChannel = b.channel?.title ?? b.channel?.username ?? "";
+        const channelCompare = aChannel.localeCompare(bChannel);
+        if (channelCompare !== 0) return channelCompare;
+        return a.name.localeCompare(b.name);
+      }),
+    [albums],
+  );
+  const albumFilterTerms = useMemo(
+    () =>
+      normalizeAlbumFilterText(newAlbumName)
+        .split(" ")
+        .filter(Boolean),
+    [newAlbumName],
+  );
+  const filteredAlbums = useMemo(() => {
+    if (albumFilterTerms.length === 0) return sortedAlbums;
+    return sortedAlbums.filter((album) => {
+      const searchText = normalizeAlbumFilterText(
+        [
+          album.name,
+          album.author?.name,
+          album.author?.nameAr,
+          album.channel?.title,
+          album.channel?.username,
+        ].join(" "),
+      );
+      return albumFilterTerms.every((term) => searchText.includes(term));
+    });
+  }, [albumFilterTerms, sortedAlbums]);
 
   const addMedia = useMutation(
     _trpc.album.addMediaToAlbum.mutationOptions({
@@ -125,7 +161,7 @@ export function AddToAlbumModal({
       }}
     >
       <FlatList
-        data={isLoading ? [] : sortedAlbums}
+        data={isLoading ? [] : filteredAlbums}
         keyExtractor={(item) => String(item.id)}
         keyboardDismissMode="interactive"
         keyboardShouldPersistTaps="handled"
@@ -210,7 +246,9 @@ export function AddToAlbumModal({
               className="text-sm text-muted-foreground text-center py-6"
               style={{ color: colors.mutedForeground }}
             >
-              No albums yet — create one above
+              {albumFilterTerms.length > 0
+                ? "No existing albums match"
+                : "No albums yet — create one above"}
             </Text>
           )
         }

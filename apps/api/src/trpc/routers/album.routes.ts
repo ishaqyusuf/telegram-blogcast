@@ -31,6 +31,18 @@ const relatedAlbumForMediaInput = z.object({
 	mediaId: z.number(),
 });
 
+const albumTracksInput = z.object({
+	albumId: z.number(),
+	cursor: z.number().optional(),
+	limit: z.number().int().min(1).max(100).optional().default(30),
+	q: z.string().trim().optional(),
+});
+
+const albumPlaybackQueueInput = z.object({
+	albumId: z.number(),
+	limit: z.number().int().min(1).max(1000).optional().default(1000),
+});
+
 const albumThumbnailUploadSchema = z.object({
 	url: z.string().url(),
 	downloadUrl: z.string().url().optional(),
@@ -180,6 +192,94 @@ function getAlbumSearchText(album: {
 		.filter(Boolean)
 		.join(" ");
 }
+
+function getAlbumTrackSearchWhere(q?: string | null): Prisma.MediaWhereInput {
+	const terms = tokenizeSearchText(q);
+	if (terms.length === 0) return {};
+
+	return {
+		AND: terms.map((term) => ({
+			OR: [
+				{ title: { contains: term, mode: "insensitive" } },
+				{ file: { fileName: { contains: term, mode: "insensitive" } } },
+				{ blog: { content: { contains: term, mode: "insensitive" } } },
+				{ author: { name: { contains: term, mode: "insensitive" } } },
+				{ author: { nameAr: { contains: term, mode: "insensitive" } } },
+			],
+		})),
+	};
+}
+
+const albumTrackInclude = {
+	author: { select: { id: true, name: true, nameAr: true } },
+	file: true,
+	bookPageReferences: {
+		where: { deletedAt: null },
+		include: {
+			book: {
+				select: {
+					id: true,
+					nameAr: true,
+					nameEn: true,
+					coverColor: true,
+				},
+			},
+			page: {
+				select: {
+					id: true,
+					shamelaPageNo: true,
+					printedPageNo: true,
+					chapterTitle: true,
+					topicTitle: true,
+				},
+			},
+		},
+	},
+	blog: {
+		select: {
+			id: true,
+			content: true,
+			type: true,
+			blogDate: true,
+			channelId: true,
+			blogTags: {
+				where: { deletedAt: null },
+				include: { tags: { select: { id: true, title: true } } },
+			},
+			blogs: {
+				where: { deletedAt: null },
+				orderBy: { createdAt: "asc" as const },
+				include: {
+					comment: {
+						select: {
+							id: true,
+							content: true,
+							createdAt: true,
+							deletedAt: true,
+						},
+					},
+				},
+			},
+		},
+	},
+	transcript: {
+		select: {
+			status: true,
+			segments: {
+				select: { startSec: true, endSec: true, text: true },
+				where: { status: "done" },
+				orderBy: { startSec: "asc" as const },
+			},
+		},
+	},
+	transcriptionJobs: {
+		where: { status: { in: ["queued", "running"] } },
+		orderBy: { createdAt: "desc" as const },
+		take: 1,
+		select: { status: true },
+	},
+	albumAudioIndex: true,
+};
 
 function getUnknownErrorMessage(error: unknown) {
 	if (error instanceof Error) return error.message;
@@ -562,6 +662,70 @@ export const albumRoutes = createTRPCRouter({
 						},
 						orderBy: { albumAudioIndex: { index: "asc" } },
 					},
+				},
+			});
+		}),
+
+	getAlbumTracks: publicProcedure
+		.input(albumTracksInput)
+		.query(async ({ ctx, input }) => {
+			await ctx.db.album.findFirstOrThrow({
+				where: { id: input.albumId, deletedAt: null },
+				select: { id: true },
+			});
+
+			const where: Prisma.MediaWhereInput = {
+				albumId: input.albumId,
+				...getAlbumTrackSearchWhere(input.q),
+			};
+
+			const [rows, totalCount] = await Promise.all([
+				ctx.db.media.findMany({
+					where,
+					take: input.limit + 1,
+					...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
+					orderBy: [{ albumAudioIndex: { index: "asc" } }, { id: "asc" }],
+					include: albumTrackInclude,
+				}),
+				ctx.db.media.count({ where }),
+			]);
+
+			const hasNextPage = rows.length > input.limit;
+			const data = hasNextPage ? rows.slice(0, input.limit) : rows;
+
+			return {
+				data,
+				meta: {
+					cursor: hasNextPage ? data[data.length - 1]?.id : null,
+					totalCount,
+				},
+			};
+		}),
+
+	getAlbumPlaybackQueue: publicProcedure
+		.input(albumPlaybackQueueInput)
+		.query(async ({ ctx, input }) => {
+			await ctx.db.album.findFirstOrThrow({
+				where: { id: input.albumId, deletedAt: null },
+				select: { id: true },
+			});
+
+			return ctx.db.media.findMany({
+				where: { albumId: input.albumId },
+				take: input.limit,
+				orderBy: [{ albumAudioIndex: { index: "asc" } }, { id: "asc" }],
+				include: {
+					file: true,
+					blog: {
+						select: {
+							id: true,
+							content: true,
+							type: true,
+							blogDate: true,
+							channelId: true,
+						},
+					},
+					albumAudioIndex: true,
 				},
 			});
 		}),
