@@ -1,5 +1,15 @@
 # Progress
 
+## 2026-07-10
+
+### Audio Transcript Streaming And Local Services IP
+- Status: Done.
+- Source mode: Direct user request.
+- Source changed: `apps/api/src/queries/blog.ts`, `apps/api/src/trpc/routers/blog.routes.ts`, `apps/api/src/queries/blog.test.ts`, `apps/expo-app/src/screens/audio-blog-screen.tsx`, `apps/expo-app/src/components/audio-blog-view/transcript-read-mode.tsx`, `apps/expo-app/src/lib/local-service-urls.ts`, `apps/expo-app/src/lib/transcribe.ts`, `apps/expo-app/src/lib/facebook-media-bridge.ts`, `apps/expo-app/src/store/app-settings-store.ts`, `apps/expo-app/src/screens/settings-screen.tsx`, `apps/expo-app/src/screens/blog-import-screen.tsx`, `apps/expo-app/src/screens/facebook-import-screen.tsx`, and local transcription call sites.
+- Brain changed: `brain/plans/2026-07-10-feature-audio-transcript-streaming-karaoke-local-service-settings.md`, `brain/tasks/backlog.md`, `brain/tasks/done.md`, `brain/features/audio.md`, `brain/api/contracts.md`, `brain/progress.md`.
+- Validation passed: `bun --cwd apps/api test src/queries/blog.test.ts`; `bun test apps/expo-app/src/lib/local-service-urls.test.ts`; `bun test apps/expo-app/src/components/audio-blog-view/transcript-timing.test.ts`; focused Expo ESLint for touched mobile files; `bun --cwd apps/api test`; repo-level `bun test`; `git diff --check`.
+- Validation limitation: API Biome and API/Expo typechecks were terminated by SIGKILL in this environment before producing diagnostics.
+
 ## 2026-07-04
 
 ### Physical Library Catalog

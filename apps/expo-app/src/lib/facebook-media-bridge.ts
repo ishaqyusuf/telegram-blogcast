@@ -2,6 +2,10 @@ import {
 	getLocalFacebookMediaBridgeUrl,
 	isPrivateNetworkHost,
 } from "@/lib/base-url";
+import {
+	buildLocalServiceUrls,
+	normalizeLocalServiceIpInput,
+} from "@/lib/local-service-urls";
 
 const envBaseUrl = process.env.EXPO_PUBLIC_FACEBOOK_MEDIA_BRIDGE_URL;
 const PLACEHOLDER_TOKENS = ["YOUR_MAC_LAN_IP", "YOUR_DEVICE_IP"];
@@ -24,12 +28,19 @@ function normalizeBridgeUrl(value?: string | null) {
 	return normalized;
 }
 
-export function getDefaultFacebookMediaBridgeUrl(savedUrl?: string | null) {
+export function getDefaultFacebookMediaBridgeUrl(
+	savedUrl?: string | null,
+	savedIp?: string | null,
+) {
+	const saved = normalizeBridgeUrl(savedUrl);
+	if (saved) return saved;
+	const savedIpUrls = buildLocalServiceUrls(
+		normalizeLocalServiceIpInput(savedIp),
+	);
+	if (savedIpUrls) return savedIpUrls.facebookMediaBridgeBaseUrl;
 	try {
 		return getLocalFacebookMediaBridgeUrl();
 	} catch {}
-	const saved = normalizeBridgeUrl(savedUrl);
-	if (saved) return saved;
 	const env = normalizeBridgeUrl(envBaseUrl);
 	if (env) return env;
 	return null;

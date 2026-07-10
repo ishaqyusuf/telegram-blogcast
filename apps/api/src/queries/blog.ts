@@ -125,6 +125,14 @@ export const transcriptChunkSchema = z.object({
 });
 export type TranscriptChunkSchema = z.infer<typeof transcriptChunkSchema>;
 
+export const transcriptWindowSchema = z.object({
+  mediaId: z.number(),
+  anchorSec: z.number().min(0).optional(),
+  windowStartSec: z.number().min(0).optional(),
+  windowDurationSec: z.number().min(15).max(300).default(60),
+});
+export type TranscriptWindowSchema = z.infer<typeof transcriptWindowSchema>;
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function resolveBlogType(
@@ -535,6 +543,29 @@ function normalizeChunkStart(input: {
     0,
     Math.floor(rawStart / input.chunkDurationSec) * input.chunkDurationSec,
   );
+}
+
+export function resolveTranscriptWindowRange(input: {
+  anchorSec?: number;
+  windowStartSec?: number;
+  windowDurationSec: number;
+}) {
+  const windowDurationSec = Math.max(15, Math.min(300, input.windowDurationSec));
+  const rawStart =
+    typeof input.windowStartSec === "number"
+      ? input.windowStartSec
+      : Math.floor((input.anchorSec ?? 0) / windowDurationSec) *
+        windowDurationSec;
+  const windowStartSec = Math.max(
+    0,
+    Math.floor(rawStart / windowDurationSec) * windowDurationSec,
+  );
+
+  return {
+    windowDurationSec,
+    windowStartSec,
+    windowEndSec: windowStartSec + windowDurationSec,
+  };
 }
 
 function distributeWords(segment: {
@@ -1357,4 +1388,92 @@ export async function getOrTranscribeTranscriptChunk(
     });
     throw err;
   }
+}
+
+export async function getTranscriptWindow(
+  ctx: TRPCContext,
+  input: TranscriptWindowSchema,
+) {
+  const db = ctx.db as any;
+  const { windowDurationSec, windowStartSec, windowEndSec } =
+    resolveTranscriptWindowRange(input);
+
+  const transcript = await db.transcript.findUnique({
+    where: { mediaId: input.mediaId },
+    select: {
+      id: true,
+      status: true,
+      media: {
+        select: {
+          file: { select: { duration: true } },
+        },
+      },
+      segments: {
+        where: {
+          startSec: { lt: windowEndSec },
+          endSec: { gt: windowStartSec },
+          status: "done",
+        },
+        orderBy: { startSec: "asc" },
+      },
+    },
+  });
+
+  if (!transcript) {
+    return {
+      mediaId: input.mediaId,
+      transcriptId: null,
+      status: null,
+      windowDurationSec,
+      windowStartSec,
+      windowEndSec,
+      previousWindowStartSec: null,
+      nextWindowStartSec: null,
+      hasPrevious: false,
+      hasNext: false,
+      durationSec: null,
+      segmentCount: 0,
+      maxEndSec: 0,
+      segments: [] as ReturnType<typeof normalizeDbSegment>[],
+    };
+  }
+
+  const [segmentCount, lastSegment] = await Promise.all([
+    db.transcriptSegment.count({
+      where: { transcriptId: transcript.id, status: "done" },
+    }),
+    db.transcriptSegment.findFirst({
+      where: { transcriptId: transcript.id, status: "done" },
+      orderBy: { endSec: "desc" },
+      select: { endSec: true },
+    }),
+  ]);
+  const durationSec =
+    typeof transcript.media?.file?.duration === "number"
+      ? transcript.media.file.duration
+      : null;
+  const maxEndSec =
+    typeof lastSegment?.endSec === "number" ? lastSegment.endSec : 0;
+  const hasNext =
+    typeof durationSec === "number"
+      ? windowEndSec < durationSec
+      : maxEndSec > windowEndSec;
+
+  return {
+    mediaId: input.mediaId,
+    transcriptId: transcript.id,
+    status: transcript.status,
+    windowDurationSec,
+    windowStartSec,
+    windowEndSec,
+    previousWindowStartSec:
+      windowStartSec > 0 ? Math.max(0, windowStartSec - windowDurationSec) : null,
+    nextWindowStartSec: hasNext ? windowEndSec : null,
+    hasPrevious: windowStartSec > 0,
+    hasNext,
+    durationSec,
+    segmentCount,
+    maxEndSec,
+    segments: transcript.segments.map(normalizeDbSegment),
+  };
 }

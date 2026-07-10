@@ -110,7 +110,26 @@ function formatPercent(value: number) {
 type Tab = "info" | "books";
 const TRANSCRIPT_CHUNK_SEC = 30;
 const TRANSCRIPT_PREFETCH_AT_SEC = 20;
+const SAVED_TRANSCRIPT_WINDOW_SEC = 60;
+const SAVED_TRANSCRIPT_PREFETCH_AT_SEC = 45;
 const NEXT_CONTENT_PEEK_HEIGHT = 68;
+
+type SavedTranscriptWindow = {
+	mediaId: number;
+	transcriptId: number | null;
+	status: string | null;
+	windowDurationSec: number;
+	windowStartSec: number;
+	windowEndSec: number;
+	previousWindowStartSec: number | null;
+	nextWindowStartSec: number | null;
+	hasPrevious: boolean;
+	hasNext: boolean;
+	durationSec: number | null;
+	segmentCount: number;
+	maxEndSec: number;
+	segments: RawTranscriptSegment[];
+};
 
 type RelatedAlbumSuggestion = {
 	id: number;
@@ -122,6 +141,13 @@ type RelatedAlbumSuggestion = {
 function getTranscriptChunkStart(sec: number) {
 	return (
 		Math.floor(Math.max(0, sec) / TRANSCRIPT_CHUNK_SEC) * TRANSCRIPT_CHUNK_SEC
+	);
+}
+
+function getSavedTranscriptWindowStart(sec: number) {
+	return (
+		Math.floor(Math.max(0, sec) / SAVED_TRANSCRIPT_WINDOW_SEC) *
+		SAVED_TRANSCRIPT_WINDOW_SEC
 	);
 }
 
@@ -2249,17 +2275,33 @@ export default function AudioBlogScreen() {
 	const [transcriptChunks, setTranscriptChunks] = useState<
 		Record<number, { segments: RawTranscriptSegment[] }>
 	>({});
+	const [transcriptWindows, setTranscriptWindows] = useState<
+		Record<number, SavedTranscriptWindow>
+	>({});
 	const [pendingTranscriptChunks, setPendingTranscriptChunks] = useState<
 		number[]
 	>([]);
+	const [pendingTranscriptWindows, setPendingTranscriptWindows] = useState<
+		number[]
+	>([]);
+	const [transcriptWindowChecked, setTranscriptWindowChecked] =
+		useState(false);
 	const [transcriptError, setTranscriptError] = useState<string | null>(null);
 	const pendingTranscriptChunksRef = useRef<number[]>([]);
+	const pendingTranscriptWindowsRef = useRef<number[]>([]);
+	const transcriptWindowsRef = useRef<Record<number, SavedTranscriptWindow>>({});
 	const failedTranscriptChunksRef = useRef<Set<number>>(new Set());
+	const failedTranscriptWindowsRef = useRef<Set<number>>(new Set());
 	const lastTranscriptTapRef = useRef(0);
 	const localTranscriberBaseUrl = useAppSettingsStore(
 		(s) => s.localTranscriberBaseUrl,
 	);
-	const transcriberUrl = getDefaultTranscriberUrl(localTranscriberBaseUrl);
+	const localServicesIp = useAppSettingsStore((s) => s.localServicesIp);
+	const localApiLastIp = useAppSettingsStore((s) => s.localApiLastIp);
+	const transcriberUrl = getDefaultTranscriberUrl(
+		localTranscriberBaseUrl,
+		localServicesIp ?? localApiLastIp,
+	);
 	const canCheckTranscriber = isHttpTranscriberUrl(transcriberUrl);
 	const lastCompletedTranscriptJobRef = useRef<number | null>(null);
 
@@ -2302,11 +2344,18 @@ export default function AudioBlogScreen() {
 	const isViewedAudioActive = Boolean(blog && loadedBlog?.id === blog.id);
 	const playerPositionMs = isViewedAudioActive ? positionMs : 0;
 	const playerPositionSec = playerPositionMs / 1000;
+	const transcriptAnchorSec =
+		isViewedAudioActive ? playerPositionSec : hasSeekTarget ? seekTargetSec : 0;
 	const activeTranscriptChunkStart =
-		getTranscriptChunkStart(playerPositionSec);
+		getTranscriptChunkStart(transcriptAnchorSec);
+	const activeTranscriptWindowStart =
+		getSavedTranscriptWindowStart(transcriptAnchorSec);
 	const shouldPrefetchNextTranscriptChunk =
-		playerPositionSec - activeTranscriptChunkStart >=
+		transcriptAnchorSec - activeTranscriptChunkStart >=
 		TRANSCRIPT_PREFETCH_AT_SEC;
+	const shouldPrefetchNextTranscriptWindow =
+		transcriptAnchorSec - activeTranscriptWindowStart >=
+		SAVED_TRANSCRIPT_PREFETCH_AT_SEC;
 	const playerDurationMs = isViewedAudioActive
 		? activeDurationMs || viewedDurationMs
 		: viewedDurationMs;
@@ -2391,10 +2440,27 @@ export default function AudioBlogScreen() {
 		[channelPicturesData, hiddenChannelPictureIds],
 	);
 
-	const { data: transcriptData } = useQuery({
-		..._trpc.blog.getTranscript.queryOptions({ mediaId: mediaId ?? 0 }),
-		enabled: !!mediaId,
-	});
+	const transcriptWindowValues = useMemo(
+		() =>
+			Object.values(transcriptWindows).sort(
+				(a, b) => a.windowStartSec - b.windowStartSec,
+			),
+		[transcriptWindows],
+	);
+	const transcriptSummary = useMemo(() => {
+		if (transcriptWindowValues.length === 0) return null;
+		return transcriptWindowValues.reduce(
+			(summary, window) => ({
+				status: summary.status ?? window.status,
+				segmentCount: Math.max(summary.segmentCount, window.segmentCount ?? 0),
+				maxEndSec: Math.max(summary.maxEndSec, window.maxEndSec ?? 0),
+			}),
+			{ status: null as string | null, segmentCount: 0, maxEndSec: 0 },
+		);
+	}, [transcriptWindowValues]);
+	const hasSavedTranscript =
+		(transcriptSummary?.segmentCount ?? 0) > 0 ||
+		(transcriptSummary?.maxEndSec ?? 0) > 0;
 	const {
 		enqueue: enqueueTranscription,
 		deleteJob: deleteTranscriptionJob,
@@ -2421,14 +2487,14 @@ export default function AudioBlogScreen() {
 			: latestTranscriptionJob?.status;
 	const transcriptBadge = getTranscriptionBadgeState({
 		...(media as any),
-		transcript: transcriptData
+		transcript: transcriptSummary
 			? {
-					status: transcriptData.status,
-					segments: transcriptData.segments,
+					status: transcriptSummary.status,
+					segments: [{ endSec: transcriptSummary.maxEndSec }],
 				}
 			: (media as any)?.transcript,
 		transcriptStatus:
-			transcriptData?.status ??
+			transcriptSummary?.status ??
 			(media as any)?.transcriptStatus ??
 			latestTranscriptionStatus,
 		transcriptionJobStatus:
@@ -2502,15 +2568,92 @@ export default function AudioBlogScreen() {
 	}, [getTranscriptChunk]);
 
 	useEffect(() => {
+		transcriptWindowsRef.current = transcriptWindows;
+	}, [transcriptWindows]);
+
+	useEffect(() => {
+		pendingTranscriptWindowsRef.current = pendingTranscriptWindows;
+	}, [pendingTranscriptWindows]);
+
+	const requestTranscriptWindow = useCallback(
+		async (windowStartSec: number, options?: { force?: boolean }) => {
+			if (!mediaId) return;
+			const normalizedStart = getSavedTranscriptWindowStart(windowStartSec);
+			if (
+				!options?.force &&
+				transcriptWindowsRef.current[normalizedStart]
+			) {
+				setTranscriptWindowChecked(true);
+				return;
+			}
+			if (pendingTranscriptWindowsRef.current.includes(normalizedStart)) return;
+			if (
+				!options?.force &&
+				failedTranscriptWindowsRef.current.has(normalizedStart)
+			) {
+				setTranscriptWindowChecked(true);
+				return;
+			}
+
+			pendingTranscriptWindowsRef.current = [
+				...pendingTranscriptWindowsRef.current,
+				normalizedStart,
+			];
+			setPendingTranscriptWindows(pendingTranscriptWindowsRef.current);
+			try {
+				const windowData = await qc.fetchQuery(
+					_trpc.blog.getTranscriptWindow.queryOptions({
+						mediaId,
+						windowStartSec: normalizedStart,
+						windowDurationSec: SAVED_TRANSCRIPT_WINDOW_SEC,
+					}),
+				);
+				const typedWindow = windowData as SavedTranscriptWindow;
+				failedTranscriptWindowsRef.current.delete(normalizedStart);
+				setTranscriptWindows((current) => {
+					const next = {
+						...current,
+						[typedWindow.windowStartSec]: typedWindow,
+					};
+					transcriptWindowsRef.current = next;
+					return next;
+				});
+				setTranscriptError(null);
+			} catch (error) {
+				failedTranscriptWindowsRef.current.add(normalizedStart);
+				setTranscriptError(
+					error instanceof Error
+						? error.message
+						: "Could not load transcript window.",
+				);
+			} finally {
+				setTranscriptWindowChecked(true);
+				pendingTranscriptWindowsRef.current =
+					pendingTranscriptWindowsRef.current.filter(
+						(value) => value !== normalizedStart,
+					);
+				setPendingTranscriptWindows(pendingTranscriptWindowsRef.current);
+			}
+		},
+		[mediaId, qc],
+	);
+
+	useEffect(() => {
 		setTranscriptChunks({});
+		setTranscriptWindows({});
 		setPendingTranscriptChunks([]);
+		setPendingTranscriptWindows([]);
+		setTranscriptWindowChecked(false);
 		setTranscriptError(null);
 		setMarkedTranscriptSelection(null);
 		setViewedPlaybackError(null);
 		setTranscriptModalVisible(false);
 		setTranscriptHighlightPaused(false);
 		pendingTranscriptChunksRef.current = [];
+		pendingTranscriptWindowsRef.current = [];
+		transcriptWindowsRef.current = {};
 		failedTranscriptChunksRef.current = new Set<number>();
+		failedTranscriptWindowsRef.current = new Set<number>();
 	}, [mediaId]);
 
 	const requestTranscriptChunk = useCallback(
@@ -2548,17 +2691,35 @@ export default function AudioBlogScreen() {
 	);
 
 	useEffect(() => {
-		if (!mediaId || !telegramFileId) return;
+		if (!mediaId) return;
+		void requestTranscriptWindow(activeTranscriptWindowStart);
+		if (shouldPrefetchNextTranscriptWindow) {
+			void requestTranscriptWindow(
+				activeTranscriptWindowStart + SAVED_TRANSCRIPT_WINDOW_SEC,
+			);
+		}
+	}, [
+		activeTranscriptWindowStart,
+		mediaId,
+		requestTranscriptWindow,
+		shouldPrefetchNextTranscriptWindow,
+	]);
+
+	useEffect(() => {
+		if (!mediaId || !telegramFileId || !transcriptWindowChecked) return;
+		if (hasSavedTranscript) return;
 		requestTranscriptChunk(activeTranscriptChunkStart);
 		if (shouldPrefetchNextTranscriptChunk) {
 			requestTranscriptChunk(activeTranscriptChunkStart + TRANSCRIPT_CHUNK_SEC);
 		}
 	}, [
 		activeTranscriptChunkStart,
+		hasSavedTranscript,
 		mediaId,
 		requestTranscriptChunk,
 		shouldPrefetchNextTranscriptChunk,
 		telegramFileId,
+		transcriptWindowChecked,
 	]);
 
 	useEffect(() => {
@@ -2569,10 +2730,10 @@ export default function AudioBlogScreen() {
 		if (!completedJob) return;
 		if (lastCompletedTranscriptJobRef.current === completedJob.id) return;
 		lastCompletedTranscriptJobRef.current = completedJob.id;
+		setTranscriptWindows({});
+		transcriptWindowsRef.current = {};
+		setTranscriptWindowChecked(false);
 		void Promise.all([
-			qc.invalidateQueries({
-				queryKey: _trpc.blog.getTranscript.queryKey({ mediaId }),
-			}),
 			qc.invalidateQueries({ queryKey: _trpc.blog.getBlog.queryKey({ id }) }),
 		]);
 	}, [id, mediaId, mediaTranscriptionJobs, qc]);
@@ -2583,16 +2744,15 @@ export default function AudioBlogScreen() {
 			ReturnType<typeof normalizeTranscriptSegment>
 		>();
 
-		(transcriptData?.segments ?? []).forEach((segment, index) => {
-			const normalized = normalizeTranscriptSegment(
-				segment as unknown as RawTranscriptSegment,
-				index,
-			);
-			segmentsByKey.set(
-				`${normalized.startSec}:${normalized.endSec}:${normalized.text}`,
-				normalized,
-			);
-		});
+		transcriptWindowValues
+			.flatMap((window) => window.segments)
+			.forEach((segment, index) => {
+				const normalized = normalizeTranscriptSegment(segment, index);
+				segmentsByKey.set(
+					`${normalized.startSec}:${normalized.endSec}:${normalized.text}`,
+					normalized,
+				);
+			});
 
 		Object.values(transcriptChunks)
 			.flatMap((chunk) => chunk.segments)
@@ -2605,11 +2765,29 @@ export default function AudioBlogScreen() {
 			});
 
 		return [...segmentsByKey.values()].sort((a, b) => a.startSec - b.startSec);
-	}, [transcriptChunks, transcriptData?.segments]);
+	}, [transcriptChunks, transcriptWindowValues]);
 	const transcriptDocument = useMemo(
 		() => buildTranscriptDocument(transcriptSegments),
 		[transcriptSegments],
 	);
+	const requestPreviousTranscriptWindow = useCallback(() => {
+		const firstWindow = transcriptWindowValues[0];
+		const target =
+			firstWindow?.previousWindowStartSec ??
+			Math.max(0, activeTranscriptWindowStart - SAVED_TRANSCRIPT_WINDOW_SEC);
+		void requestTranscriptWindow(target);
+	}, [activeTranscriptWindowStart, requestTranscriptWindow, transcriptWindowValues]);
+	const requestNextTranscriptWindow = useCallback(() => {
+		const lastWindow = transcriptWindowValues.at(-1);
+		if (lastWindow && lastWindow.nextWindowStartSec == null) return;
+		const target =
+			lastWindow?.nextWindowStartSec ??
+			(lastWindow
+				? lastWindow.windowEndSec
+				: activeTranscriptWindowStart + SAVED_TRANSCRIPT_WINDOW_SEC);
+		if (target == null) return;
+		void requestTranscriptWindow(target);
+	}, [activeTranscriptWindowStart, requestTranscriptWindow, transcriptWindowValues]);
 
 	const channelName =
 		blog?.channel?.title || blog?.channel?.username || "Unknown channel";
@@ -2751,16 +2929,20 @@ export default function AudioBlogScreen() {
 		_trpc.blog.resetTranscript.mutationOptions({
 			onSuccess: async () => {
 				setTranscriptChunks({});
+				setTranscriptWindows({});
 				setPendingTranscriptChunks([]);
+				setPendingTranscriptWindows([]);
+				setTranscriptWindowChecked(false);
 				setTranscriptError(null);
 				setMarkedTranscriptSelection(null);
 				pendingTranscriptChunksRef.current = [];
+				pendingTranscriptWindowsRef.current = [];
+				transcriptWindowsRef.current = {};
 				failedTranscriptChunksRef.current = new Set<number>();
+				failedTranscriptWindowsRef.current = new Set<number>();
 				await Promise.all([
 					qc.invalidateQueries({
-						queryKey: _trpc.blog.getTranscript.queryKey({
-							mediaId: mediaId ?? 0,
-						}),
+						queryKey: _trpc.blog.getTranscriptWindow.queryKey(),
 					}),
 					qc.invalidateQueries({
 						queryKey: _trpc.blog.getBlog.queryKey({ id }),
@@ -3042,7 +3224,7 @@ export default function AudioBlogScreen() {
 	}
 
 	function openTranscriptModal() {
-		setFrozenTranscriptPositionSec(playerPositionMs / 1000);
+		setFrozenTranscriptPositionSec(transcriptAnchorSec);
 		setTranscriptHighlightPaused(false);
 		setTranscriptModalVisible(true);
 		syncPlaybackSnapshot().catch(() => undefined);
@@ -3059,16 +3241,29 @@ export default function AudioBlogScreen() {
 
 	function toggleTranscriptHighlightPause() {
 		if (!transcriptHighlightPaused) {
-			setFrozenTranscriptPositionSec(playerPositionMs / 1000);
+			setFrozenTranscriptPositionSec(transcriptAnchorSec);
 		}
 		setTranscriptHighlightPaused((value) => !value);
 	}
 
 	function gotoCurrentTranscriptPosition() {
-		setFrozenTranscriptPositionSec(playerPositionMs / 1000);
+		setFrozenTranscriptPositionSec(transcriptAnchorSec);
 		setTranscriptHighlightPaused(false);
 		setMarkedTranscriptSelection(null);
 		syncPlaybackSnapshot().catch(() => undefined);
+	}
+
+	function handleReadModeSegmentPress(
+		segment: TranscriptSegmentData,
+		_index: number,
+		shouldPlay: boolean,
+	) {
+		if (!isViewedAudioActive) return;
+		seekAudio(segment.startSec * 1000)
+			.then(() => {
+				if (shouldPlay) return useAudioStore.getState().play();
+			})
+			.catch(() => undefined);
 	}
 
 	function markTranscriptSegment(segment: TranscriptSegmentData) {
@@ -3283,7 +3478,7 @@ export default function AudioBlogScreen() {
 											<KaraokeTranscript
 												segments={transcriptSegments}
 												positionSecOverride={
-													isViewedAudioActive ? undefined : 0
+													isViewedAudioActive ? undefined : transcriptAnchorSec
 												}
 												autoScroll={isViewedAudioActive}
 												playbackEnabled={isViewedAudioActive}
@@ -3303,7 +3498,8 @@ export default function AudioBlogScreen() {
 													gap: 12,
 												}}
 											>
-												{pendingTranscriptChunks.length > 0 ? (
+												{pendingTranscriptChunks.length > 0 ||
+												pendingTranscriptWindows.length > 0 ? (
 													<ActivityIndicator color="#ffffff" />
 												) : (
 													<Icon
@@ -3323,11 +3519,14 @@ export default function AudioBlogScreen() {
 												>
 													{transcriptError
 														? "Transcript could not load"
-														: !telegramFileId
+														: pendingTranscriptChunks.length > 0 ||
+															  pendingTranscriptWindows.length > 0
+															? "Loading transcript..."
+															: !telegramFileId &&
+																  transcriptWindowChecked &&
+																  !hasSavedTranscript
 															? "Transcript unavailable for this audio"
-															: pendingTranscriptChunks.length > 0
-																? "Loading transcript..."
-																: "Transcript will appear here"}
+															: "Transcript will appear here"}
 												</Text>
 												{transcriptError ? (
 													<Text
@@ -3714,9 +3913,12 @@ export default function AudioBlogScreen() {
 								}
 								selection={markedTranscriptSelection}
 								onSelectionChange={setMarkedTranscriptSelection}
+								onStartReached={requestPreviousTranscriptWindow}
+								onEndReached={requestNextTranscriptWindow}
+								onPressSegment={handleReadModeSegmentPress}
 								positionSecOverride={
 									!isViewedAudioActive
-										? 0
+										? transcriptAnchorSec
 										: transcriptHighlightPaused
 										? frozenTranscriptPositionSec
 										: undefined

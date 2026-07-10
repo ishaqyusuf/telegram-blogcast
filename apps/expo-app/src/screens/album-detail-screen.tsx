@@ -3250,7 +3250,12 @@ export default function AlbumDetailScreen() {
   const localTranscriberBaseUrl = useAppSettingsStore(
     (s) => s.localTranscriberBaseUrl,
   );
-  const transcriberUrl = getDefaultTranscriberUrl(localTranscriberBaseUrl);
+  const localServicesIp = useAppSettingsStore((s) => s.localServicesIp);
+  const localApiLastIp = useAppSettingsStore((s) => s.localApiLastIp);
+  const transcriberUrl = getDefaultTranscriberUrl(
+    localTranscriberBaseUrl,
+    localServicesIp ?? localApiLastIp,
+  );
   const { enqueue: enqueueTranscription } = useTranscriptionQueue(undefined, {
     autoLoad: false,
     reloadOnEnqueue: false,

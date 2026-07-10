@@ -4,11 +4,16 @@ import { Icon } from "@/components/ui/icon";
 import { Pressable } from "@/components/ui/pressable";
 import { useColors } from "@/hooks/use-color";
 import { useTranslation } from "@/lib/i18n";
+import { checkLocalApiBaseUrl } from "@/lib/local-api-ip-cache";
 import { useQuery } from "@/lib/react-query";
 import {
 	getDefaultTranscriberUrl,
 	isHttpTranscriberUrl,
 } from "@/lib/transcribe";
+import {
+	buildLocalServiceUrls,
+	getPreferredLocalServiceIp,
+} from "@/lib/local-service-urls";
 import {
 	TRANSCRIPTION_MODELS,
 	formatTranscriptionCost,
@@ -33,12 +38,32 @@ export default function SettingsScreen() {
 	const localTranscriberBaseUrl = useAppSettingsStore(
 		(s) => s.localTranscriberBaseUrl,
 	);
+	const localApiBaseUrl = useAppSettingsStore((s) => s.localApiBaseUrl);
+	const localServicesIp = useAppSettingsStore((s) => s.localServicesIp);
+	const localApiLastIp = useAppSettingsStore((s) => s.localApiLastIp);
+	const localApiIpHistory = useAppSettingsStore((s) => s.localApiIpHistory);
+	const setLocalServicesIp = useAppSettingsStore((s) => s.setLocalServicesIp);
 	const setLocalTranscriberBaseUrl = useAppSettingsStore(
 		(s) => s.setLocalTranscriberBaseUrl,
 	);
+	const preferredLocalServicesIp = getPreferredLocalServiceIp({
+		manualIp: localServicesIp,
+		lastUsedIp: localApiLastIp,
+		savedApiBaseUrl: localApiBaseUrl,
+	});
+	const localServiceUrls = preferredLocalServicesIp
+		? buildLocalServiceUrls(preferredLocalServicesIp)
+		: null;
 	const resolvedTranscriberUrl = getDefaultTranscriberUrl(
 		localTranscriberBaseUrl,
+		preferredLocalServicesIp,
 	);
+	const [localServicesIpInput, setLocalServicesIpInput] = useState(
+		preferredLocalServicesIp ?? "",
+	);
+	const [localServicesIpMessage, setLocalServicesIpMessage] = useState("");
+	const [isCheckingLocalServicesIp, setIsCheckingLocalServicesIp] =
+		useState(false);
 	const [transcriberUrlInput, setTranscriberUrlInput] = useState(
 		localTranscriberBaseUrl ?? resolvedTranscriberUrl ?? "",
 	);
@@ -61,6 +86,37 @@ export default function SettingsScreen() {
 			localTranscriberBaseUrl ?? resolvedTranscriberUrl ?? "",
 		);
 	}, [localTranscriberBaseUrl, resolvedTranscriberUrl]);
+
+	useEffect(() => {
+		setLocalServicesIpInput(preferredLocalServicesIp ?? "");
+	}, [preferredLocalServicesIp]);
+
+	async function saveAndCheckLocalServicesIp() {
+		const urls = buildLocalServiceUrls(localServicesIpInput);
+		if (!urls) {
+			setLocalServicesIp(null);
+			setLocalServicesIpMessage("Enter a local services IP.");
+			return;
+		}
+
+		setLocalServicesIp(urls.ip);
+		setIsCheckingLocalServicesIp(true);
+		setLocalServicesIpMessage(`Checking ${urls.apiBaseUrl}...`);
+		try {
+			const ok = await checkLocalApiBaseUrl(urls.apiBaseUrl);
+			setLocalServicesIpMessage(
+				ok
+					? `Saved. Local API is reachable at ${urls.apiBaseUrl}.`
+					: `Saved. Local API did not respond at ${urls.apiBaseUrl}.`,
+			);
+		} catch {
+			setLocalServicesIpMessage(
+				`Saved. Local API did not respond at ${urls.apiBaseUrl}.`,
+			);
+		} finally {
+			setIsCheckingLocalServicesIp(false);
+		}
+	}
 
 	useEffect(() => {
 		if (transcriptionModel !== "whisper-local") {
@@ -213,6 +269,111 @@ export default function SettingsScreen() {
 							className="text-muted-foreground"
 						/>
 					</Pressable>
+
+					<View className="gap-3 rounded-xl bg-card p-4">
+						<View
+							className="flex-row items-center gap-3"
+							style={{ flexDirection: isRtl ? "row-reverse" : "row" }}
+						>
+							<View className="size-10 items-center justify-center rounded-full bg-secondary">
+								<Icon name="Wifi" size={18} className="text-foreground" />
+							</View>
+							<View className="flex-1">
+								<Text
+									className="text-foreground"
+									style={{
+										textAlign,
+										fontSize: 15,
+										fontWeight: "700",
+										writingDirection,
+									}}
+								>
+									Local services IP
+								</Text>
+								<Text
+									className="text-muted-foreground"
+									style={{
+										textAlign,
+										fontSize: 13,
+										lineHeight: 19,
+										writingDirection,
+									}}
+								>
+									Use one LAN IP for Telegram updates, transcription, and Facebook import.
+								</Text>
+							</View>
+						</View>
+
+						<View className="flex-row items-center gap-2 rounded-xl border border-border bg-background px-3">
+							<Icon name="Server" size={16} className="text-muted-foreground" />
+							<TextInput
+								value={localServicesIpInput}
+								onChangeText={setLocalServicesIpInput}
+								onSubmitEditing={() =>
+									void saveAndCheckLocalServicesIp()
+								}
+								autoCapitalize="none"
+								autoCorrect={false}
+								placeholder="192.168.1.20"
+								placeholderTextColor={colors.mutedForeground}
+								style={{
+									flex: 1,
+									color: colors.foreground,
+									fontSize: 13,
+									paddingVertical: 10,
+									textAlign: "left",
+								}}
+							/>
+							<Pressable
+								onPress={() => {
+									void saveAndCheckLocalServicesIp();
+								}}
+								disabled={isCheckingLocalServicesIp}
+								className="size-8 items-center justify-center rounded-full bg-muted active:opacity-70"
+							>
+								<Icon name="Check" size={15} className="text-foreground" />
+							</Pressable>
+						</View>
+
+						{localServicesIpMessage ? (
+							<Text className="text-xs text-muted-foreground">
+								{localServicesIpMessage}
+							</Text>
+						) : null}
+
+						{localApiIpHistory.length > 0 ? (
+							<ScrollView
+								horizontal
+								showsHorizontalScrollIndicator={false}
+								contentContainerStyle={{ gap: 8 }}
+							>
+								{localApiIpHistory.map((ip) => (
+									<Pressable
+										key={ip}
+										onPress={() => setLocalServicesIp(ip)}
+										className="rounded-full bg-secondary px-3 py-2 active:opacity-70"
+									>
+										<Text className="text-xs font-semibold text-foreground">
+											{ip}
+										</Text>
+									</Pressable>
+								))}
+							</ScrollView>
+						) : null}
+
+						<View className="gap-1">
+							<Text className="text-xs text-muted-foreground">
+								API: {localServiceUrls?.apiBaseUrl ?? "Not set"}
+							</Text>
+							<Text className="text-xs text-muted-foreground">
+								Transcriber: {localServiceUrls?.transcriberBaseUrl ?? "Not set"}
+							</Text>
+							<Text className="text-xs text-muted-foreground">
+								Facebook:{" "}
+								{localServiceUrls?.facebookMediaBridgeBaseUrl ?? "Not set"}
+							</Text>
+						</View>
+					</View>
 
 					<View className="gap-2 rounded-xl bg-card p-4">
 						<Text

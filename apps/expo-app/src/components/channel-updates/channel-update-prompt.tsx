@@ -286,6 +286,7 @@ export function ChannelUpdatePrompt() {
           setAuthMessage(
             "The local API is not reachable. Start the local fetcher and try again.",
           );
+          if (mountedRef) return;
           presentPrompt();
           return;
         }
@@ -326,6 +327,7 @@ export function ChannelUpdatePrompt() {
         setSelectedIds(new Set());
         setAuthStep("unavailable");
         setAuthMessage("Unable to check Telegram updates right now.");
+        if (mountedRef) return;
         presentPrompt();
       } finally {
         if (!mountedRef || mountedRef.current) setLoading(false);

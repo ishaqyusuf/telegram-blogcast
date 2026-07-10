@@ -49,9 +49,16 @@ function stripTrpcPath(value: string) {
     .replace(/\/+$/, "");
 }
 
-function getInitialLocalApiIp(savedIp: string | null, savedUrl: string | null) {
+function getInitialLocalApiIp(input: {
+  sharedIp: string | null;
+  savedIp: string | null;
+  savedUrl: string | null;
+}) {
   return (
-    savedIp || normalizeLocalApiIpInput(savedUrl) || getCurrentLocalApiIp()
+    input.sharedIp ||
+    input.savedIp ||
+    normalizeLocalApiIpInput(input.savedUrl) ||
+    getCurrentLocalApiIp()
   );
 }
 
@@ -80,17 +87,24 @@ export default function BlogImportScreen() {
   const colors = useColors();
   const savedLocalApiBaseUrl = useAppSettingsStore((s) => s.localApiBaseUrl);
   const setLocalApiBaseUrl = useAppSettingsStore((s) => s.setLocalApiBaseUrl);
+  const localServicesIp = useAppSettingsStore((s) => s.localServicesIp);
+  const setLocalServicesIp = useAppSettingsStore((s) => s.setLocalServicesIp);
   const localApiLastIp = useAppSettingsStore((s) => s.localApiLastIp);
   const localApiIpHistory = useAppSettingsStore((s) => s.localApiIpHistory);
   const rememberLocalApiIp = useAppSettingsStore((s) => s.rememberLocalApiIp);
   const [apiIpInput, setApiIpInput] = useState(() =>
-    getInitialLocalApiIp(localApiLastIp, savedLocalApiBaseUrl),
+    getInitialLocalApiIp({
+      sharedIp: localServicesIp,
+      savedIp: localApiLastIp,
+      savedUrl: savedLocalApiBaseUrl,
+    }),
   );
   const [baseUrl, setBaseUrl] = useState(() => {
-    const initialIp = getInitialLocalApiIp(
-      localApiLastIp,
-      savedLocalApiBaseUrl,
-    );
+    const initialIp = getInitialLocalApiIp({
+      sharedIp: localServicesIp,
+      savedIp: localApiLastIp,
+      savedUrl: savedLocalApiBaseUrl,
+    });
     return initialIp ? buildLocalApiBaseUrl(initialIp) : "";
   });
   const [status, setStatus] = useState<
@@ -142,6 +156,7 @@ export default function BlogImportScreen() {
           `Local API connected using ${formatIpSource(source)}. Import continues in the API process after you start it.`,
         );
         setLocalApiBaseUrl(cleanUrl);
+        if (source === "manual" && nextIp) setLocalServicesIp(nextIp);
         if (nextIp) rememberLocalApiIp(nextIp);
       } catch (error) {
         setStatus("offline");
@@ -154,7 +169,7 @@ export default function BlogImportScreen() {
         setAttemptLabel("");
       }
     },
-    [rememberLocalApiIp, setLocalApiBaseUrl],
+    [rememberLocalApiIp, setLocalApiBaseUrl, setLocalServicesIp],
   );
 
   const autoConnect = useCallback(async () => {
@@ -163,7 +178,7 @@ export default function BlogImportScreen() {
     setFetcherState(null);
     setMessage(`Looking for the local API on port ${LOCAL_API_PORT}.`);
     const resolved = await resolveReachableLocalApi({
-      lastUsedIp: localApiLastIp,
+      lastUsedIp: localServicesIp ?? localApiLastIp,
       history: localApiIpHistory,
       onAttempt: (candidate) => {
         setApiIpInput(candidate.ip);
@@ -181,7 +196,7 @@ export default function BlogImportScreen() {
     setStatus("offline");
     setAttemptLabel("");
     setMessage("No saved local API IP responded. Enter your Mac LAN IP below.");
-  }, [loadApiState, localApiIpHistory, localApiLastIp]);
+  }, [loadApiState, localApiIpHistory, localApiLastIp, localServicesIp]);
 
   const connectManualIp = useCallback(async () => {
     const ip = normalizeLocalApiIpInput(apiIpInput);

@@ -1,19 +1,20 @@
 import { withAlpha } from "@/lib/theme";
 import { useSyncedTranscript } from "@/components/audio-blog-view/use-synced-transcript";
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { memo, useCallback, useMemo, useRef, useState } from "react";
 import {
-	ScrollView,
+	FlatList,
 	Pressable,
 	Text,
-	TextInput,
 	View,
+	type NativeScrollEvent,
 	type NativeSyntheticEvent,
-	type TextInputSelectionChangeEventData,
 } from "react-native";
 
 import {
-	buildTranscriptTextSelection,
+	selectTranscriptSegment,
 	type TranscriptDocument,
+	type TranscriptSegmentData,
+	type TranscriptSegmentRange,
 	type TranscriptTextSelection,
 } from "@/components/audio-blog-view/transcript-timing";
 
@@ -23,6 +24,13 @@ type TranscriptReadModeProps = {
 	positionSecOverride?: number;
 	selection: TranscriptTextSelection | null;
 	onSelectionChange: (selection: TranscriptTextSelection | null) => void;
+	onStartReached?: () => void;
+	onEndReached?: () => void;
+	onPressSegment?: (
+		segment: TranscriptSegmentData,
+		index: number,
+		shouldPlay: boolean,
+	) => void;
 };
 
 type VisibleSpan = {
@@ -43,72 +51,130 @@ function intersects(
 	);
 }
 
-function getVisibleDocumentSpans({
+function getVisibleSegmentSpans({
 	document,
+	segmentRange,
 	activeSegmentIndex,
 	activeWordIndex,
 	selection,
 }: {
 	document: TranscriptDocument;
+	segmentRange: TranscriptSegmentRange;
 	activeSegmentIndex: number;
 	activeWordIndex: number;
 	selection: TranscriptTextSelection | null;
 }) {
 	const spans: VisibleSpan[] = [];
-	const activeSegmentRange =
-		activeSegmentIndex >= 0
-			? document.segmentRanges[activeSegmentIndex]
-			: undefined;
-	const activeSegmentWordRanges =
-		activeSegmentIndex >= 0
-			? (document.wordRangesBySegment[activeSegmentIndex] ?? [])
-			: [];
+	const isActiveSegment = segmentRange.index === activeSegmentIndex;
+	const activeSegmentWordRanges = isActiveSegment
+		? (document.wordRangesBySegment[segmentRange.index] ?? [])
+		: [];
 	const activeWordRange = activeSegmentWordRanges.find(
 		(range) => range.wordIndex === activeWordIndex,
 	);
+	const boundaries = new Set([segmentRange.startOffset, segmentRange.endOffset]);
 
-	const pushSpan = (start: number, end: number) => {
-		if (end <= start) return;
-		const text = document.fullText.slice(start, end);
-		if (!text) return;
-		spans.push({
-			key: `${start}:${end}`,
-			text,
-			isActiveSegment: intersects(start, end, activeSegmentRange),
-			isActiveWord: intersects(start, end, activeWordRange),
-			isSelected: intersects(start, end, selection),
-		});
-	};
-
-	const boundaries = new Set([0, document.fullText.length]);
-
-	for (const range of document.segmentRanges) {
-		boundaries.add(range.startOffset);
-		boundaries.add(range.endOffset);
+	if (activeWordRange) {
+		boundaries.add(activeWordRange.startOffset);
+		boundaries.add(activeWordRange.endOffset);
 	}
 
-	if (activeSegmentRange) {
-		for (const wordRange of activeSegmentWordRanges) {
-			boundaries.add(wordRange.startOffset);
-			boundaries.add(wordRange.endOffset);
-		}
-	}
-
-	if (selection) {
-		boundaries.add(selection.startOffset);
-		boundaries.add(selection.endOffset);
+	if (selection && intersects(segmentRange.startOffset, segmentRange.endOffset, selection)) {
+		boundaries.add(Math.max(segmentRange.startOffset, selection.startOffset));
+		boundaries.add(Math.min(segmentRange.endOffset, selection.endOffset));
 	}
 
 	const orderedBoundaries = [...boundaries].sort((a, b) => a - b);
 	for (let index = 0; index < orderedBoundaries.length - 1; index += 1) {
-		pushSpan(
-			orderedBoundaries[index] ?? 0,
-			orderedBoundaries[index + 1] ?? document.fullText.length,
-		);
+		const start = orderedBoundaries[index] ?? segmentRange.startOffset;
+		const end = orderedBoundaries[index + 1] ?? segmentRange.endOffset;
+		if (end <= start) continue;
+		const text = document.fullText.slice(start, end);
+		if (!text) continue;
+		spans.push({
+			key: `${segmentRange.index}:${start}:${end}`,
+			text,
+			isActiveSegment,
+			isActiveWord: intersects(start, end, activeWordRange),
+			isSelected: intersects(start, end, selection),
+		});
 	}
 
 	return spans;
 }
+
+const TranscriptReadRow = memo(function TranscriptReadRow({
+	document,
+	segmentRange,
+	activeSegmentIndex,
+	activeWordIndex,
+	selection,
+	onSelectSegment,
+	onPressSegment,
+}: {
+	document: TranscriptDocument;
+	segmentRange: TranscriptSegmentRange;
+	activeSegmentIndex: number;
+	activeWordIndex: number;
+	selection: TranscriptTextSelection | null;
+	onSelectSegment: (segmentRange: TranscriptSegmentRange) => void;
+	onPressSegment: (segmentRange: TranscriptSegmentRange) => void;
+}) {
+	const spans = useMemo(
+		() =>
+			getVisibleSegmentSpans({
+				document,
+				segmentRange,
+				activeSegmentIndex,
+				activeWordIndex,
+				selection,
+			}),
+		[activeSegmentIndex, activeWordIndex, document, segmentRange, selection],
+	);
+
+	return (
+		<Pressable
+			onPress={() => onPressSegment(segmentRange)}
+			onLongPress={() => onSelectSegment(segmentRange)}
+			style={{ paddingVertical: 9 }}
+		>
+			<Text
+				selectable
+				style={{
+					fontSize: 26,
+					lineHeight: 40,
+					textAlign: "right",
+					writingDirection: "rtl",
+					fontWeight: segmentRange.index === activeSegmentIndex ? "700" : "600",
+					color:
+						segmentRange.index === activeSegmentIndex
+							? "rgba(255,255,255,0.86)"
+							: "rgba(255,255,255,0.48)",
+				}}
+			>
+				{spans.map((span) => (
+					<Text
+						key={span.key}
+						selectable
+						style={{
+							backgroundColor: span.isSelected
+								? withAlpha("#ffffff", 0.18)
+								: "transparent",
+							color: span.isActiveWord
+								? "#ffffff"
+								: span.isActiveSegment
+									? "rgba(255,255,255,0.86)"
+									: "rgba(255,255,255,0.48)",
+							fontWeight: span.isActiveWord ? "900" : undefined,
+						}}
+					>
+						{span.text}
+					</Text>
+				))}
+			</Text>
+		</Pressable>
+	);
+});
 
 export function TranscriptReadMode({
 	document,
@@ -116,98 +182,73 @@ export function TranscriptReadMode({
 	positionSecOverride,
 	selection,
 	onSelectionChange,
+	onStartReached,
+	onEndReached,
+	onPressSegment,
 }: TranscriptReadModeProps) {
-	const scrollRef = useRef<ScrollView>(null);
-	const collapsedDragStartOffsetRef = useRef<number | null>(null);
-	const [contentHeight, setContentHeight] = useState(0);
-	const [viewportHeight, setViewportHeight] = useState(0);
+	const listRef = useRef<FlatList<TranscriptSegmentRange>>(null);
 	const [followPaused, setFollowPaused] = useState(false);
+	const lastSegmentTapRef = useRef<{ index: number; at: number } | null>(null);
 	const { activeSegmentIndex, activeWordIndex } = useSyncedTranscript({
 		segments: document.segments,
 		positionSecOverride,
 	});
 
-	const spans = useMemo(
-		() =>
-			getVisibleDocumentSpans({
-				document,
-				activeSegmentIndex,
-				activeWordIndex,
-				selection,
-			}),
-		[activeSegmentIndex, activeWordIndex, document, selection],
-	);
-
-	const handleSelectionChange = useCallback(
-		(event: NativeSyntheticEvent<TextInputSelectionChangeEventData>) => {
-			if (autoScroll) setFollowPaused(true);
-
-			const { start, end } = event.nativeEvent.selection;
-
-			if (end <= start) {
-				collapsedDragStartOffsetRef.current = start;
-				onSelectionChange(null);
+	const scrollToActiveSegment = useCallback(
+		(animated: boolean, options?: { force?: boolean }) => {
+			if (
+				!autoScroll ||
+				(!options?.force && followPaused) ||
+				activeSegmentIndex < 0
+			) {
 				return;
 			}
+			if (activeSegmentIndex >= document.segmentRanges.length) return;
 
-			onSelectionChange(
-				buildTranscriptTextSelection(
-					document,
-					start,
-					end,
-					collapsedDragStartOffsetRef.current,
-				),
-			);
-		},
-		[autoScroll, document, onSelectionChange],
-	);
-
-	const getActiveSegmentScrollY = useCallback(() => {
-		if (activeSegmentIndex < 0) return null;
-		if (!contentHeight || !viewportHeight || !document.fullText.length) {
-			return null;
-		}
-
-		const activeSegmentRange = document.segmentRanges[activeSegmentIndex];
-		if (!activeSegmentRange) return null;
-
-		const estimatedOffset =
-			(activeSegmentRange.startOffset / document.fullText.length) * contentHeight;
-		return Math.max(0, estimatedOffset - viewportHeight * 0.35);
-	}, [
-		activeSegmentIndex,
-		contentHeight,
-		document.fullText.length,
-		document.segmentRanges,
-		viewportHeight,
-	]);
-
-	const scrollToActiveSegment = useCallback(
-		(animated: boolean) => {
-			if (!autoScroll || followPaused) return;
-			const y = getActiveSegmentScrollY();
-			if (y == null) return;
-
-			scrollRef.current?.scrollTo({
-				y,
+			listRef.current?.scrollToIndex({
+				index: activeSegmentIndex,
 				animated,
+				viewPosition: 0.35,
 			});
 		},
-		[autoScroll, followPaused, getActiveSegmentScrollY],
+		[activeSegmentIndex, autoScroll, document.segmentRanges.length, followPaused],
 	);
 
 	const resumeFollowing = useCallback(() => {
 		setFollowPaused(false);
 		requestAnimationFrame(() => {
-			const y = getActiveSegmentScrollY();
-			if (y == null) return;
-
-			scrollRef.current?.scrollTo({
-				y,
-				animated: true,
-			});
+			scrollToActiveSegment(true, { force: true });
 		});
-	}, [getActiveSegmentScrollY]);
+	}, [scrollToActiveSegment]);
+
+	const handleSelectSegment = useCallback(
+		(segmentRange: TranscriptSegmentRange) => {
+			onSelectionChange(selectTranscriptSegment(document, segmentRange.segment));
+			if (autoScroll) setFollowPaused(true);
+		},
+		[autoScroll, document, onSelectionChange],
+	);
+
+	const handlePressSegment = useCallback(
+		(segmentRange: TranscriptSegmentRange) => {
+			const now = Date.now();
+			const lastTap = lastSegmentTapRef.current;
+			lastSegmentTapRef.current = { index: segmentRange.index, at: now };
+			const shouldPlay =
+				lastTap?.index === segmentRange.index && now - lastTap.at < 320;
+			onPressSegment?.(segmentRange.segment, segmentRange.index, shouldPlay);
+		},
+		[onPressSegment],
+	);
+
+	const handleScroll = useCallback(
+		(event: NativeSyntheticEvent<NativeScrollEvent>) => {
+			if (event.nativeEvent.contentOffset.y < 140) {
+				onStartReached?.();
+			}
+		},
+		[onStartReached],
+	);
 
 	React.useEffect(() => {
 		scrollToActiveSegment(true);
@@ -235,81 +276,53 @@ export function TranscriptReadMode({
 
 	return (
 		<View style={{ flex: 1 }}>
-			<ScrollView
-				ref={scrollRef}
-				style={{ flex: 1 }}
-				keyboardShouldPersistTaps="handled"
+			<FlatList
+				ref={listRef}
+				data={document.segmentRanges}
+				keyExtractor={(item) =>
+					[
+						item.segment.id ?? "segment",
+						item.index,
+						item.segment.startSec,
+						item.segment.endSec,
+					].join(":")
+				}
 				showsVerticalScrollIndicator={false}
-				contentContainerStyle={{ paddingHorizontal: 24, paddingVertical: 120 }}
-				onLayout={(event) => {
-					setViewportHeight(event.nativeEvent.layout.height);
+				keyboardShouldPersistTaps="handled"
+				contentContainerStyle={{
+					paddingHorizontal: 24,
+					paddingVertical: 120,
 				}}
-				onContentSizeChange={(_width, height) => {
-					setContentHeight(height);
-				}}
+				initialNumToRender={16}
+				maxToRenderPerBatch={10}
+				windowSize={7}
+				removeClippedSubviews
 				onScrollBeginDrag={() => {
 					if (autoScroll) setFollowPaused(true);
 				}}
-			>
-				<View style={{ position: "relative" }}>
-					<Text
-						style={{
-							fontSize: 26,
-							lineHeight: 40,
-							textAlign: "right",
-							writingDirection: "rtl",
-							fontWeight: "600",
-							color: "rgba(255,255,255,0.48)",
-						}}
-					>
-						{spans.map((span) => (
-							<Text
-								key={span.key}
-								style={{
-									backgroundColor: span.isSelected
-										? withAlpha("#ffffff", 0.18)
-										: "transparent",
-									color: span.isActiveWord
-										? "#ffffff"
-										: span.isActiveSegment
-											? "rgba(255,255,255,0.86)"
-											: "rgba(255,255,255,0.48)",
-									fontWeight: span.isActiveWord ? "900" : undefined,
-								}}
-							>
-								{span.text}
-							</Text>
-						))}
-					</Text>
-
-					<TextInput
-						value={document.fullText}
-						editable
-						multiline
-						scrollEnabled={false}
-						showSoftInputOnFocus={false}
-						caretHidden
-						selectionColor={withAlpha("#ffffff", 0.28)}
-						onChangeText={() => {}}
-						onSelectionChange={handleSelectionChange}
-						style={{
-							position: "absolute",
-							top: 0,
-							right: 0,
-							bottom: 0,
-							left: 0,
-							fontSize: 26,
-							lineHeight: 40,
-							textAlign: "right",
-							writingDirection: "rtl",
-							color: "rgba(255,255,255,0.01)",
-							padding: 0,
-							margin: 0,
-							backgroundColor: "transparent",
-						}}
+				onScroll={handleScroll}
+				scrollEventThrottle={16}
+				onEndReached={onEndReached}
+				onEndReachedThreshold={0.45}
+				onScrollToIndexFailed={(info) => {
+					listRef.current?.scrollToOffset({
+						offset: Math.max(0, info.averageItemLength * info.index),
+						animated: false,
+					});
+					setTimeout(() => scrollToActiveSegment(true), 80);
+				}}
+				renderItem={({ item }) => (
+					<TranscriptReadRow
+						document={document}
+						segmentRange={item}
+						activeSegmentIndex={activeSegmentIndex}
+						activeWordIndex={activeWordIndex}
+						selection={selection}
+						onSelectSegment={handleSelectSegment}
+						onPressSegment={handlePressSegment}
 					/>
-				</View>
-			</ScrollView>
+				)}
+			/>
 			{autoScroll && followPaused ? (
 				<Pressable
 					onPress={resumeFollowing}

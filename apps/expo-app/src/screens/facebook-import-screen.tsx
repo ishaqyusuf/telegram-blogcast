@@ -13,6 +13,7 @@ import {
 } from "@/lib/facebook-media-bridge";
 import { buildTelegramFileProxy } from "@/lib/media-source";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
+import { useAppSettingsStore } from "@/store/app-settings-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { RouterOutputs } from "@api/trpc/routers/_app";
 import { Audio, type AVPlaybackStatus } from "expo-av";
@@ -649,7 +650,12 @@ export default function FacebookImportScreen() {
 		number | null
 	>(null);
 	const [playbackPlaying, setPlaybackPlaying] = useState(false);
-	const facebookBridgeBaseUrl = getDefaultFacebookMediaBridgeUrl();
+	const localServicesIp = useAppSettingsStore((s) => s.localServicesIp);
+	const localApiLastIp = useAppSettingsStore((s) => s.localApiLastIp);
+	const facebookBridgeBaseUrl = getDefaultFacebookMediaBridgeUrl(
+		undefined,
+		localServicesIp ?? localApiLastIp,
+	);
 	const canUseFacebookBridgeUrl =
 		isHttpFacebookMediaBridgeUrl(facebookBridgeBaseUrl);
 	const facebookBridgeInput = canUseFacebookBridgeUrl

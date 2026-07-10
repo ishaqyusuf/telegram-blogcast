@@ -62,6 +62,8 @@ Tracks the current audio playback experience, supporting components, and future 
 - Album suggestions are same-channel audio candidates, ranked by matching tags.
 - Playlists accept audio media only and skip duplicate additions.
 - Transcripts are persisted after successful Local Whisper transcription and read back through the transcript view.
+- Saved transcripts are loaded by time window on the audio screen. The first request targets the current playback minute, playback prefetches nearby windows, and read mode uses virtualized segment rows instead of mounting one full transcript document.
+- Saved transcript windows take precedence over local Whisper chunk generation. Missing/generated chunks still use the local transcriber, but opening or reading an already saved transcript does not require the transcriber to be online.
 - Audio transcript chunks require the local MLX Whisper transcriber. Hosted OpenAI/Gemini transcription is not used for chunk transcription.
 - Web uses the API default local transcriber URL `http://127.0.0.1:8787`; mobile must use a reachable Mac LAN URL such as `http://192.168.x.x:8787`.
 - Transcription controls are disabled when the local transcriber health check fails. Start it with `bun run transcriber:dev`.
@@ -90,6 +92,8 @@ Tracks the current audio playback experience, supporting components, and future 
 - Long audio/album/search/home/text screens use shared scroll chrome: the mini-player hides while scrolling and a centered scroll-to-top button appears after deep scrolling.
 - Direct Local Whisper transcription is routed through the tRPC API with a LAN transcriber URL, keeping web and mobile on the same typed chunk transcription contract. Queued Local Whisper transcription is worker-owned through internal API endpoints and the local Python service.
 - Blog Import can import a single public Telegram audio post link without fetching the full channel. The API resolves the exact message, saves it through the same Blog/File/Media persistence path as the channel fetcher, and returns an existing blog when the channel/message pair is already stored.
+- Settings exposes a shared Local Services IP with saved history. That IP is used to derive the local API, local transcriber, and Facebook media bridge URLs with their service ports, while explicit service URL overrides continue to win.
+- Startup channel-update local API checks degrade silently when the local server is offline or the IP is stale; local-service failures are surfaced from the relevant Settings/import screens instead of interrupting app launch.
 
 ### Future Improvements
 - Stronger offline download and sync behavior

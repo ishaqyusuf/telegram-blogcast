@@ -18,6 +18,7 @@ type AppSettingsState = {
 	readerLineSpacing: ReaderLineSpacing;
 	readerTheme: ReaderTheme;
 	localApiBaseUrl: string | null;
+	localServicesIp: string | null;
 	localApiLastIp: string | null;
 	localApiIpHistory: string[];
 	localTranscriberBaseUrl: string | null;
@@ -29,6 +30,7 @@ type AppSettingsState = {
 	setReaderTheme: (theme: ReaderTheme) => void;
 	resetReaderSettings: () => void;
 	setLocalApiBaseUrl: (url: string | null) => void;
+	setLocalServicesIp: (ip: string | null) => void;
 	rememberLocalApiIp: (ip: string) => void;
 	setLocalTranscriberBaseUrl: (url: string | null) => void;
 	setTranscriptionModel: (model: TranscriptionModel) => void;
@@ -43,6 +45,7 @@ export const useAppSettingsStore = create<AppSettingsState>()(
 			readerLineSpacing: "normal",
 			readerTheme: "default",
 			localApiBaseUrl: null,
+			localServicesIp: null,
 			localApiLastIp: null,
 			localApiIpHistory: [],
 			localTranscriberBaseUrl: null,
@@ -60,11 +63,25 @@ export const useAppSettingsStore = create<AppSettingsState>()(
 					readerTheme: "default",
 				}),
 			setLocalApiBaseUrl: (url) => set({ localApiBaseUrl: url }),
+			setLocalServicesIp: (ip) =>
+				set((state) => {
+					const cleanIp = normalizeLocalApiIpInput(ip);
+					if (!cleanIp) return { localServicesIp: null };
+					return {
+						localServicesIp: cleanIp,
+						localApiLastIp: cleanIp,
+						localApiIpHistory: addLocalApiIpToHistory(
+							state.localApiIpHistory,
+							cleanIp,
+						),
+					};
+				}),
 			rememberLocalApiIp: (ip) =>
 				set((state) => {
 					const cleanIp = normalizeLocalApiIpInput(ip);
 					if (!cleanIp) return state;
 					return {
+						localServicesIp: state.localServicesIp ?? cleanIp,
 						localApiLastIp: cleanIp,
 						localApiIpHistory: addLocalApiIpToHistory(
 							state.localApiIpHistory,

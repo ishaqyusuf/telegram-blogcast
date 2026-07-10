@@ -380,11 +380,16 @@ export function AudioTranscript({
 	const localTranscriberBaseUrl = useAppSettingsStore(
 		(s) => s.localTranscriberBaseUrl,
 	);
+	const localServicesIp = useAppSettingsStore((s) => s.localServicesIp);
+	const localApiLastIp = useAppSettingsStore((s) => s.localApiLastIp);
 
 	const durationSec = Math.floor(durationMs / 1000);
 	const positionSec = positionMs / 1000;
 	const activeChunkStart = getTranscriptChunkStart(positionSec);
-	const transcriberUrl = getDefaultTranscriberUrl(localTranscriberBaseUrl);
+	const transcriberUrl = getDefaultTranscriberUrl(
+		localTranscriberBaseUrl,
+		localServicesIp ?? localApiLastIp,
+	);
 	const canCheckTranscriber = isHttpTranscriberUrl(transcriberUrl);
 
 	const [modelSheetVisible, setModelSheetVisible] = useState(false);

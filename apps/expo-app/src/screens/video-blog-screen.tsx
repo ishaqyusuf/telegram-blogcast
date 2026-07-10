@@ -258,7 +258,12 @@ export default function VideoBlogScreen() {
 	const localTranscriberBaseUrl = useAppSettingsStore(
 		(s) => s.localTranscriberBaseUrl,
 	);
-	const transcriberUrl = getDefaultTranscriberUrl(localTranscriberBaseUrl);
+	const localServicesIp = useAppSettingsStore((s) => s.localServicesIp);
+	const localApiLastIp = useAppSettingsStore((s) => s.localApiLastIp);
+	const transcriberUrl = getDefaultTranscriberUrl(
+		localTranscriberBaseUrl,
+		localServicesIp ?? localApiLastIp,
+	);
 	const canCheckTranscriber = isHttpTranscriberUrl(transcriberUrl);
 	const id = Number(blogId);
 	const canQuery = Number.isFinite(id) && id > 0;

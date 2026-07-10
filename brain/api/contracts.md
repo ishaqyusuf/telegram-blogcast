@@ -34,6 +34,7 @@ Tracks important request/response expectations and typed boundaries between clie
 - `blog.transcribeRange` accepts optional `mediaId`, `model`, and `localTranscriberBaseUrl`; when `mediaId` is present, successful transcription segments are persisted to `Transcript` and `TranscriptSegment`.
 - Supported transcription model values are `gpt-4o-transcribe`, `gpt-4o-mini-transcribe`, `gemini-2.0-flash`, and `whisper-local`. The legacy `provider` input is tolerated for older clients.
 - `blog.getTranscriptChunk` is local-only for audio transcript chunks. It uses `whisper-local`, calls the local transcriber service, requests word timestamps, persists returned segments/words, and must not route chunk transcription to hosted OpenAI/Gemini providers.
+- `blog.getTranscriptWindow` is the saved-transcript read contract for audio screens. It accepts `{ mediaId, anchorSec?, windowStartSec?, windowDurationSec? }`, reads only persisted `TranscriptSegment` rows that overlap the requested time window, and returns transcript status, bounded window metadata, previous/next cursors, duration/coverage hints, and normalized segments with words. It must not call the local transcriber.
 - `blog.checkLocalTranscriber` checks a local Whisper service health endpoint and returns availability/model metadata for web transcript controls and mobile Settings/audio screens.
 - `blog.enqueueTranscriptionJob` stores DB-backed transcription queue rows. Enqueue clients should provide a reachable HTTP(S) `audioUrl`; Telegram file IDs should be resolved before enqueue when possible.
 - `blog.getTranscriptionJobs` returns queue rows with media title/file/blog fallback metadata plus persisted progress fields from `TranscriptionJob`.
@@ -57,6 +58,7 @@ Tracks important request/response expectations and typed boundaries between clie
 
 ### Local API Contracts
 - `GET /health` returns a lightweight API reachability payload for local Expo/APK screens.
+- Expo Settings owns a shared Local Services IP. When set, clients derive the local API URL from that IP and the API port, derive the transcriber URL from the same IP and transcriber port, and derive the Facebook bridge URL from the same IP and bridge port. Explicit service URL overrides still take precedence over IP-derived defaults.
 - `/blog-import` mobile flow talks to the local API over LAN using the tRPC channel procedures: `channel.getChannels`, `channel.syncChannels`, `channel.toggleFetchable`, `channel.startFetch`, `channel.stopFetch`, and `channel.getFetcherState`.
 - `/facebook-import` mobile flow talks to tRPC `facebookImport.getSummary`, `facebookImport.listMediaImports`, `facebookImport.checkBridge`, and `facebookImport.startMediaImport`.
 

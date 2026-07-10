@@ -117,7 +117,12 @@ export function BlogCardOptionsSheet({
 	const localTranscriberBaseUrl = useAppSettingsStore(
 		(s) => s.localTranscriberBaseUrl,
 	);
-	const transcriberUrl = getDefaultTranscriberUrl(localTranscriberBaseUrl);
+	const localServicesIp = useAppSettingsStore((s) => s.localServicesIp);
+	const localApiLastIp = useAppSettingsStore((s) => s.localApiLastIp);
+	const transcriberUrl = getDefaultTranscriberUrl(
+		localTranscriberBaseUrl,
+		localServicesIp ?? localApiLastIp,
+	);
 	const { enqueue } = useTranscriptionQueue(undefined, {
 		autoLoad: false,
 		reloadOnEnqueue: false,

@@ -4,7 +4,9 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
 	checkLocalTranscriber,
+	getTranscriptWindow,
 	getOrTranscribeTranscriptChunk,
+	transcriptWindowSchema,
 	transcribeRange,
 	transcribeRangeSchema,
 	transcriptChunkSchema,
@@ -916,6 +918,12 @@ export const blogRoutes = createTRPCRouter({
 					segments: { orderBy: { startSec: "asc" } },
 				},
 			});
+		}),
+
+	getTranscriptWindow: publicProcedure
+		.input(transcriptWindowSchema)
+		.query(async ({ ctx, input }) => {
+			return getTranscriptWindow(ctx, input);
 		}),
 
 	saveTranscript: publicProcedure
