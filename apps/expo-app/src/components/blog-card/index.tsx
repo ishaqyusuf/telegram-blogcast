@@ -201,10 +201,13 @@ export function BlogCard({
 				<Pressable
 					disabled={isDeletingRef.current}
 					onPress={handlePress}
-					className="border-b border-border bg-background px-4 py-4 active:bg-muted/40"
+          className="border-b bg-background px-4 py-4 active:bg-muted/40"
 					style={{
 						backgroundColor: colors.background,
-						borderBottomColor: colors.border,
+            borderBottomColor:
+              colors.background === "rgb(10, 10, 10)"
+                ? "rgba(255, 255, 255, 0.06)"
+                : colors.border,
 					}}
 				>
 					<CardHeader

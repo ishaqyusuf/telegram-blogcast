@@ -25,6 +25,7 @@ import {
 } from "@/lib/transcribe";
 import { getTranscriptionBadgeState } from "@/lib/transcription-status";
 import { useAppSettingsStore } from "@/store/app-settings-store";
+import { useGlobalAudioBarStore } from "@/store/global-audio-bar-store";
 import { formatDate } from "@acme/utils/dayjs";
 import { type AVPlaybackStatus, ResizeMode, Video } from "expo-av";
 import { LinearGradient } from "expo-linear-gradient";
@@ -44,15 +45,26 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-type BlogMedia = NonNullable<
-	ReturnType<typeof _trpc.blog.getBlog.queryOptions>["queryFn"]
-> extends (...args: any[]) => Promise<infer Blog>
-	? Blog extends { medias?: (infer Media)[] }
-		? Media
-		: never
-	: never;
+type BlogMedia = {
+	id?: number | null;
+	fileId?: string | number | null;
+	mimeType?: string | null;
+	title?: string | null;
+	file?: {
+		duration?: number | null;
+		fileId?: string | number | null;
+		fileName?: string | null;
+		mimeType?: string | null;
+		source?: string | null;
+	} | null;
+};
 
 const CONTROLS_HIDE_DELAY_MS = 2600;
+const VIDEO_RATE_OPTIONS = [1, 1.25, 1.5, 2] as const;
+const VIDEO_META_BOTTOM_OFFSET = 156;
+const VIDEO_ACTIONS_BOTTOM_OFFSET = 86;
+const VIDEO_PROGRESS_BOTTOM_OFFSET = 72;
+const VIDEO_TRANSPORT_BOTTOM_OFFSET = 8;
 
 function formatDuration(seconds?: number | null) {
 	if (!seconds || !Number.isFinite(seconds) || seconds <= 0) return null;
@@ -213,28 +225,36 @@ function ActionButton({
 	onPress,
 	disabled,
 	color,
+	shape = "pill",
 }: {
 	icon: "MessageCircle" | "Share" | "Compass" | "Captions";
 	label: string;
 	onPress: () => void;
 	disabled?: boolean;
 	color?: string;
+	shape?: "pill" | "circle";
 }) {
+	const isCircle = shape === "circle";
+
 	return (
 		<Pressable
 			onPress={onPress}
 			disabled={disabled}
-			className="items-center gap-1.5 active:opacity-80 disabled:opacity-40"
+			accessibilityLabel={label}
+			className={`h-[52px] flex-row items-center justify-center rounded-full border border-white/5 bg-[#17212B] active:opacity-80 disabled:opacity-40 ${
+				isCircle ? "w-[52px]" : "min-w-0 flex-1 gap-2 px-3"
+			}`}
 		>
-			<View className="size-12 items-center justify-center rounded-full bg-black/45">
-				<Icon name={icon} size={22} color={color ?? "#ffffff"} />
-			</View>
-			<Text
-				className="max-w-[64px] text-center text-[11px] font-extrabold"
-				style={{ color: color ?? "#ffffff" }}
-			>
-				{label}
-			</Text>
+			<Icon name={icon} size={isCircle ? 23 : 21} color={color ?? "#ffffff"} />
+			{isCircle ? null : (
+				<Text
+					className="min-w-0 text-[13px] font-extrabold"
+					style={{ color: color ?? "#ffffff" }}
+					numberOfLines={1}
+				>
+					{label}
+				</Text>
+			)}
 		</Pressable>
 	);
 }
@@ -255,6 +275,10 @@ export default function VideoBlogScreen() {
 		() => Date.now() + CONTROLS_HIDE_DELAY_MS,
 	);
 	const [hasPlaybackEnded, setHasPlaybackEnded] = useState(false);
+	const [isMuted, setIsMuted] = useState(false);
+	const [videoRate, setVideoRate] =
+		useState<(typeof VIDEO_RATE_OPTIONS)[number]>(1);
+	const setGlobalAudioBarHidden = useGlobalAudioBarStore((s) => s.setHidden);
 	const localTranscriberBaseUrl = useAppSettingsStore(
 		(s) => s.localTranscriberBaseUrl,
 	);
@@ -282,7 +306,7 @@ export default function VideoBlogScreen() {
 
 	const mediaFile = media?.file;
 	const videoUrl = getMediaFileUrl(mediaFile);
-	const mediaId = media?.id;
+	const mediaId = media?.id ?? undefined;
 	const telegramFileId =
 		mediaFile?.source === "vercel_blob"
 			? null
@@ -315,6 +339,7 @@ export default function VideoBlogScreen() {
 	const commentCount = blog?.blogs?.length ?? 0;
 	const channelLabel =
 		blog?.channel?.title || blog?.channel?.username || "Al-Ghurobaa";
+	const channelInitial = channelLabel.trim().charAt(0).toUpperCase() || "A";
 	const sourceUrl = (blog as any)?.sourceUrl;
 	const isPlaying = Boolean(loadedStatus?.isPlaying);
 	const activeMediaKey = getMediaKey(media);
@@ -417,6 +442,15 @@ export default function VideoBlogScreen() {
 	}, []);
 
 	useEffect(() => {
+		const previousHidden = useGlobalAudioBarStore.getState().hidden;
+		setGlobalAudioBarHidden(true);
+
+		return () => {
+			setGlobalAudioBarHidden(previousHidden);
+		};
+	}, [setGlobalAudioBarHidden]);
+
+	useEffect(() => {
 		if (
 			!videoUrl ||
 			!controlsVisible ||
@@ -470,10 +504,11 @@ export default function VideoBlogScreen() {
 			await videoRef.current.pauseAsync();
 			return;
 		}
+		const durationMillis = loadedStatus?.durationMillis ?? 0;
+		const positionMillis = loadedStatus?.positionMillis ?? 0;
 		const shouldRestart =
 			hasPlaybackEnded ||
-			(Boolean(loadedStatus?.durationMillis) &&
-				loadedStatus.positionMillis >= loadedStatus.durationMillis - 250);
+			(durationMillis > 0 && positionMillis >= durationMillis - 250);
 		if (shouldRestart) {
 			setHasPlaybackEnded(false);
 			await videoRef.current.setPositionAsync(0);
@@ -481,13 +516,27 @@ export default function VideoBlogScreen() {
 		await videoRef.current.playAsync();
 	}, [hasPlaybackEnded, loadedStatus, wakeControls]);
 
+	const cycleVideoRate = useCallback(async () => {
+		const currentIndex = VIDEO_RATE_OPTIONS.findIndex(
+			(rate) => Math.abs(rate - videoRate) < 0.01,
+		);
+		const nextRate =
+			VIDEO_RATE_OPTIONS[(currentIndex + 1) % VIDEO_RATE_OPTIONS.length] ?? 1;
+		setVideoRate(nextRate);
+		wakeControls();
+		await videoRef.current?.setRateAsync(nextRate, true);
+	}, [videoRate, wakeControls]);
+
+	const toggleMuted = useCallback(async () => {
+		const nextMuted = !isMuted;
+		setIsMuted(nextMuted);
+		wakeControls();
+		await videoRef.current?.setIsMutedAsync(nextMuted);
+	}, [isMuted, wakeControls]);
+
 	const handleVideoSurfacePress = useCallback(() => {
-		if (!controlsVisible) {
-			wakeControls();
-			return;
-		}
-		void togglePlayback();
-	}, [controlsVisible, togglePlayback, wakeControls]);
+		wakeControls();
+	}, [wakeControls]);
 
 	const handlePressTranscriptSegment = useCallback(
 		(segment: { startSec: number }, _index: number, shouldPlay: boolean) => {
@@ -671,6 +720,7 @@ export default function VideoBlogScreen() {
 							source={{ uri: videoUrl }}
 							style={{ flex: 1 }}
 							resizeMode={ResizeMode.CONTAIN}
+							isMuted={isMuted}
 							progressUpdateIntervalMillis={500}
 							onPlaybackStatusUpdate={handlePlaybackStatusUpdate}
 						/>
@@ -698,45 +748,100 @@ export default function VideoBlogScreen() {
 
 			{controlsVisible ? (
 				<View
-					className="absolute inset-x-0 flex-row items-center gap-3 px-4"
-					style={{ top: insets.top + 10 }}
+					className="absolute inset-x-0 flex-row items-center justify-between px-6"
+					style={{ top: insets.top + 12 }}
 				>
 					<Pressable
 						onPress={() => router.back()}
-						className="size-11 items-center justify-center rounded-full bg-black/40"
+						className="size-[52px] items-center justify-center rounded-full bg-[#1A2834] active:opacity-80"
 					>
-						<Icon name="ChevronLeft" size={22} className="text-white" />
+						<Icon name="ArrowLeft" size={27} className="text-white" />
 					</Pressable>
 
-					<View className="flex-1 flex-row items-center justify-center gap-3">
-						<Text className="text-sm font-bold text-white/65">For you</Text>
-						<View className="h-1.5 w-1.5 rounded-full bg-primary" />
-						<Text
-							className="text-sm font-extrabold text-white"
-							numberOfLines={1}
-						>
-							{channelLabel}
-						</Text>
-					</View>
-
 					<Pressable
-						onPress={() => router.push("/search")}
-						className="size-11 items-center justify-center rounded-full bg-black/40"
+						onPress={openSource}
+						disabled={!sourceUrl}
+						className="size-[52px] items-center justify-center rounded-full bg-[#1A2834] active:opacity-80 disabled:opacity-45"
 					>
-						<Icon name="Search" size={20} className="text-white" />
+						<Icon
+							name="MoreHorizontal"
+							size={28}
+							className="text-white"
+							style={{ transform: [{ rotate: "90deg" }] }}
+						/>
 					</Pressable>
 				</View>
 			) : null}
 
 			{videoUrl && controlsVisible ? (
-				<View className="absolute inset-0 items-center justify-center">
-					<Pressable
-						onPress={togglePlayback}
-						className="size-20 items-center justify-center rounded-full bg-black/35 active:opacity-80"
-						style={{ opacity: isPlaying ? 0 : 1 }}
+				<View
+					className="absolute inset-x-0 px-6"
+					style={{ bottom: insets.bottom + VIDEO_META_BOTTOM_OFFSET }}
+				>
+					<View className="mb-3 flex-row items-center gap-3">
+						<View
+							className="size-12 items-center justify-center rounded-full border-2 border-white"
+							style={{ backgroundColor: withAlpha(colors.primary, 0.95) }}
+						>
+							<Text className="text-lg font-black text-primary-foreground">
+								{channelInitial}
+							</Text>
+						</View>
+						<View className="min-w-0 flex-1">
+							<Text
+								className="text-[15px] font-black text-white"
+								numberOfLines={1}
+							>
+								{channelLabel}
+							</Text>
+							<Text className="mt-0.5 text-[13px] font-semibold text-white/75">
+								{[
+									durationLabel ? `Video ${durationLabel}` : "Video",
+									date ? formatDate(date, "D MMM YYYY") : null,
+								]
+									.filter(Boolean)
+									.join(" - ")}
+							</Text>
+						</View>
+						<Pressable
+							onPress={openSource}
+							disabled={!sourceUrl}
+							className="h-11 items-center justify-center rounded-full bg-[#1E2B36] px-5 active:opacity-80 disabled:opacity-45"
+						>
+							<Text className="text-[14px] font-black text-white">Source</Text>
+						</Pressable>
+					</View>
+
+					<Text
+						className="text-[16px] font-semibold leading-5 text-white"
+						numberOfLines={2}
 					>
-						<Icon name="Play" size={40} className="text-white" />
-					</Pressable>
+						{title}
+					</Text>
+
+					{caption ? (
+						<Text
+							className="mt-1 text-[14px] font-medium leading-5 text-white/88"
+							numberOfLines={2}
+						>
+							{caption}
+						</Text>
+					) : null}
+
+					{tags.length > 0 ? (
+						<View className="mt-3 flex-row flex-wrap gap-2 pr-6">
+							{tags.slice(0, 4).map((tag: string) => (
+								<View
+									key={tag}
+									className="rounded-full border border-white/15 bg-white/10 px-2.5 py-1"
+								>
+									<Text className="text-[11px] font-bold text-white">
+										#{tag}
+									</Text>
+								</View>
+							))}
+						</View>
+					) : null}
 				</View>
 			) : null}
 
@@ -746,7 +851,9 @@ export default function VideoBlogScreen() {
 					className="absolute inset-x-0"
 					style={{
 						top: insets.top + (controlsVisible ? 104 : 56),
-						bottom: controlsVisible ? insets.bottom + 250 : insets.bottom + 34,
+						bottom: controlsVisible
+							? insets.bottom + VIDEO_META_BOTTOM_OFFSET + 112
+							: insets.bottom + 34,
 					}}
 				>
 					<KaraokeTranscript
@@ -762,105 +869,103 @@ export default function VideoBlogScreen() {
 
 			{controlsVisible ? (
 				<View
-					className="absolute right-4 items-center gap-5"
-					style={{ bottom: insets.bottom + 190 }}
+					className="absolute inset-x-0 px-6"
+					style={{ bottom: insets.bottom + VIDEO_ACTIONS_BOTTOM_OFFSET }}
 				>
-					<ActionButton
-						icon="Captions"
-						label={transcribeActionLabel}
-						onPress={handleVideoTranscriptionPress}
-						disabled={!mediaId}
-						color={transcriptBadge.show ? transcriptBadgeColor : undefined}
-					/>
-					<ActionButton
-						icon="MessageCircle"
-						label={commentCount > 0 ? String(commentCount) : "Comment"}
-						onPress={() => setCommentsOpen(true)}
-					/>
-					<ActionButton icon="Share" label="Share" onPress={shareVideo} />
-					<ActionButton
-						icon="Compass"
-						label="Source"
-						onPress={openSource}
-						disabled={!sourceUrl}
-					/>
+					<View className="flex-row items-center gap-2">
+						<ActionButton
+							icon="MessageCircle"
+							label={commentCount > 0 ? String(commentCount) : "Comment"}
+							onPress={() => setCommentsOpen(true)}
+						/>
+						<ActionButton
+							icon="Captions"
+							label={
+								transcribeActionLabel === "Transcribe"
+									? "Transcript"
+									: transcribeActionLabel
+							}
+							onPress={handleVideoTranscriptionPress}
+							disabled={!mediaId}
+							color={transcriptBadge.show ? transcriptBadgeColor : undefined}
+						/>
+						<ActionButton
+							icon="Compass"
+							label="Source"
+							onPress={openSource}
+							disabled={!sourceUrl}
+						/>
+						<ActionButton
+							icon="Share"
+							label="Share"
+							onPress={shareVideo}
+							shape="circle"
+						/>
+					</View>
 				</View>
 			) : null}
 
 			{controlsVisible ? (
 				<View
-					className="absolute inset-x-0 px-5"
-					style={{ bottom: insets.bottom + 18 }}
+					className="absolute inset-x-0"
+					style={{
+						bottom:
+							Math.max(insets.bottom, 0) + VIDEO_PROGRESS_BOTTOM_OFFSET,
+					}}
 				>
-					<View className="mb-3 flex-row items-center gap-2">
+					<View className="h-[3px] bg-white/20">
 						<View
-							className="size-9 items-center justify-center rounded-full"
-							style={{ backgroundColor: withAlpha(colors.primary, 0.9) }}
-						>
-							<Icon name="Play" size={18} className="text-primary-foreground" />
-						</View>
-						<View className="flex-1">
-							<Text
-								className="text-sm font-extrabold text-white"
-								numberOfLines={1}
-							>
-								{channelLabel}
-							</Text>
-							<Text className="text-[11px] font-semibold text-white/65">
-								{[
-									durationLabel ? `Video ${durationLabel}` : "Video",
-									date ? formatDate(date, "D MMM YYYY") : null,
-								]
-									.filter(Boolean)
-									.join(" - ")}
-							</Text>
-						</View>
+							className="h-full bg-white"
+							style={{ width: `${progress}%` }}
+						/>
 					</View>
+				</View>
+			) : null}
 
-					<Text
-						className="pr-20 text-lg font-extrabold leading-6 text-white"
-						numberOfLines={2}
-					>
-						{title}
-					</Text>
-
-					{caption ? (
-						<Text
-							className="mt-1 pr-20 text-xs font-medium leading-5 text-white/72"
-							numberOfLines={2}
+			{controlsVisible ? (
+				<View
+					className="absolute inset-x-0 px-6"
+					style={{
+						bottom:
+							Math.max(insets.bottom, 8) + VIDEO_TRANSPORT_BOTTOM_OFFSET,
+					}}
+				>
+					<View className="h-14 flex-row items-center">
+						<Pressable
+							onPress={togglePlayback}
+							disabled={!videoUrl}
+							className="size-12 items-center justify-center active:opacity-80 disabled:opacity-40"
 						>
-							{caption}
-						</Text>
-					) : null}
-
-					{tags.length > 0 ? (
-						<View className="mt-3 flex-row flex-wrap gap-2 pr-16">
-							{tags.slice(0, 4).map((tag: string) => (
-								<View
-									key={tag}
-									className="rounded-full border border-white/15 bg-white/10 px-2.5 py-1"
-								>
-									<Text className="text-[11px] font-bold text-white">
-										#{tag}
-									</Text>
-								</View>
-							))}
-						</View>
-					) : null}
-
-					<View className="mt-4 flex-row items-center gap-2">
-						<Text className="w-11 text-[10px] font-bold text-white/65">
+							<Icon
+								name={isPlaying ? "Pause" : "Play"}
+								size={isPlaying ? 34 : 32}
+								color="#FFFFFF"
+								fill="#FFFFFF"
+								style={isPlaying ? undefined : { marginLeft: 2 }}
+							/>
+						</Pressable>
+						<Text className="ml-4 w-16 text-[15px] font-bold text-white/80">
 							{positionLabel ?? "0:00"}
 						</Text>
-						<View className="h-1 flex-1 overflow-hidden rounded-full bg-white/20">
-							<View
-								className="h-full rounded-full bg-primary"
-								style={{ width: `${progress}%` }}
+						<View className="flex-1" />
+						<Pressable
+							onPress={cycleVideoRate}
+							className="h-11 min-w-14 items-center justify-center px-2 active:opacity-80"
+						>
+							<Text className="text-[17px] font-black text-white">
+								{videoRate}x
+							</Text>
+						</Pressable>
+						<Pressable
+							onPress={toggleMuted}
+							className="ml-5 size-11 items-center justify-center active:opacity-80"
+						>
+							<Icon
+								name="Volume2"
+								size={30}
+								color={isMuted ? "rgba(255,255,255,0.45)" : "#FFFFFF"}
 							/>
-						</View>
-						<Text className="w-11 text-right text-[10px] font-bold text-white/65">
-							{durationLabel ?? "0:00"}
-						</Text>
+						</Pressable>
 					</View>
 				</View>
 			) : null}

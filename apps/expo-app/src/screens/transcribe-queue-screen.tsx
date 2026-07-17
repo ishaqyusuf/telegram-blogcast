@@ -3,7 +3,6 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import {
 	ActivityIndicator,
 	Alert,
-	Modal,
 	RefreshControl,
 	ScrollView,
 	Text,
@@ -25,6 +24,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { SafeArea } from "@/components/safe-area";
+import { FloatingBottomSheet } from "@/components/ui/floating-bottom-sheet";
 import { Icon, type IconKeys } from "@/components/ui/icon";
 import { Pressable } from "@/components/ui/pressable";
 import {
@@ -657,62 +657,47 @@ export default function TranscribeQueueScreen() {
 					)}
 				</ScrollView>
 			</SafeArea>
-			<Modal
+			<FloatingBottomSheet
 				visible={Boolean(selectedJob)}
-				transparent
-				animationType="slide"
-				onRequestClose={() => setSelectedJob(null)}
+				onClose={() => setSelectedJob(null)}
+				accessibilityLabel="Transcription options"
 			>
-				<Pressable
-					className="flex-1 justify-end"
-					style={{ backgroundColor: withAlpha(colors.foreground, 0.45) }}
-					onPress={() => setSelectedJob(null)}
-				>
+				<View className="bg-card px-4 pb-8" style={{ backgroundColor: colors.card }}>
+					<Text
+						className="text-base font-bold text-foreground"
+						numberOfLines={1}
+						style={{ color: colors.foreground }}
+					>
+						{selectedJob ? getQueueJobTitle(selectedJob) : "Transcription"}
+					</Text>
 					<Pressable
-						className="rounded-t-[24px] border border-border bg-card px-4 pb-8 pt-3"
-						style={{ backgroundColor: colors.card, borderColor: colors.border }}
-						onPress={() => {}}
+						className="mt-4 min-h-14 flex-row items-center gap-3 rounded-2xl px-3 py-2 active:bg-muted"
+						onPress={resetSelectedJob}
 					>
 						<View
-							className="mb-4 h-1 w-10 self-center rounded-full"
-							style={{ backgroundColor: colors.muted }}
-						/>
-						<Text
-							className="text-base font-bold text-foreground"
-							numberOfLines={1}
-							style={{ color: colors.foreground }}
+							className="size-11 items-center justify-center rounded-full"
+							style={{ backgroundColor: withAlpha(colors.destructive, 0.12) }}
 						>
-							{selectedJob ? getQueueJobTitle(selectedJob) : "Transcription"}
-						</Text>
-						<Pressable
-							className="mt-4 min-h-14 flex-row items-center gap-3 rounded-2xl px-3 py-2 active:bg-muted"
-							onPress={resetSelectedJob}
-						>
-							<View
-								className="size-11 items-center justify-center rounded-full"
-								style={{ backgroundColor: withAlpha(colors.destructive, 0.12) }}
+							<Icon name="RotateCcw" className="text-destructive" />
+						</View>
+						<View className="min-w-0 flex-1">
+							<Text
+								className="text-sm font-bold text-destructive"
+								style={{ color: colors.destructive }}
 							>
-								<Icon name="RotateCcw" className="text-destructive" />
-							</View>
-							<View className="min-w-0 flex-1">
-								<Text
-									className="text-sm font-bold text-destructive"
-									style={{ color: colors.destructive }}
-								>
-									Reset transcribe
-								</Text>
-								<Text
-									className="mt-0.5 text-xs text-muted-foreground"
-									numberOfLines={1}
-									style={{ color: colors.mutedForeground }}
-								>
-									Clear transcript and queue jobs
-								</Text>
-							</View>
-						</Pressable>
+								Reset transcribe
+							</Text>
+							<Text
+								className="mt-0.5 text-xs text-muted-foreground"
+								numberOfLines={1}
+								style={{ color: colors.mutedForeground }}
+							>
+								Clear transcript and queue jobs
+							</Text>
+						</View>
 					</Pressable>
-				</Pressable>
-			</Modal>
+				</View>
+			</FloatingBottomSheet>
 		</View>
 	);
 }

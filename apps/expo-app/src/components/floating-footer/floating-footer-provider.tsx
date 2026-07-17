@@ -5,9 +5,16 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
-import { LayoutChangeEvent, StyleSheet, View } from "react-native";
+import {
+  Animated,
+  Easing,
+  LayoutChangeEvent,
+  StyleSheet,
+  View,
+} from "react-native";
 import { useKeyboardState } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -157,6 +164,31 @@ export function useFloatingFooterLayer(layer: FloatingFooterLayer) {
 
 export function useFloatingFooterInset() {
   return useContext(FloatingFooterContext)?.stackInset ?? 0;
+}
+
+export function useAnimatedFloatingFooterBottom({
+  duration = 180,
+  gap = 8,
+  minimum = 18,
+}: {
+  duration?: number;
+  gap?: number;
+  minimum?: number;
+} = {}) {
+  const stackInset = useFloatingFooterInset();
+  const targetBottom = Math.max(minimum, stackInset + gap);
+  const animatedBottom = useRef(new Animated.Value(targetBottom)).current;
+
+  useEffect(() => {
+    Animated.timing(animatedBottom, {
+      toValue: targetBottom,
+      duration,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [animatedBottom, duration, targetBottom]);
+
+  return animatedBottom;
 }
 
 const styles = StyleSheet.create({

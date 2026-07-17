@@ -363,10 +363,11 @@ export default function UpdatesScreen() {
               </Text>
             </View>
             <Text className="text-sm leading-5 text-muted-foreground">
-              Expo can check for updates when an installed build starts. A
-              published update only applies when it matches this build&apos;s
-              channel and runtime version. Native changes, dependency changes,
-              or a new app version usually need a new EAS build.
+              Expo checks for updates when an installed build starts and when
+              the app returns from the background. A published update only
+              applies when it matches this build&apos;s channel and runtime
+              version. Native changes, dependency changes, or a new app version
+              usually need a new EAS build.
             </Text>
           </View>
 

@@ -1,10 +1,11 @@
 import { Pressable } from "@/components/ui/pressable";
 import { useRouter } from "expo-router";
-import { useCallback } from "react";
-import { Text, View } from "react-native";
+import { useCallback, useState } from "react";
+import { ActivityIndicator, Text, View } from "react-native";
 
 import { Icon } from "@/components/ui/icon";
 import { useColors } from "@/hooks/use-color";
+import { getAudioPlayability } from "@/lib/audio-playability";
 import { withAlpha } from "@/lib/theme";
 import { getTranscriptionBadgeState } from "@/lib/transcription-status";
 import { useAudioStore } from "@/store/audio-store";
@@ -24,15 +25,22 @@ export function CardFooter({
 	const loadedBlogId = useAudioStore((s) => s.blog?.id);
 	const globalIsPlaying = useAudioStore((s) => s.isPlaying);
 	const globalIsLoading = useAudioStore((s) => s.isLoading);
+	const globalIsDownloading = useAudioStore((s) => s.isDownloading);
 	const pauseAudio = useAudioStore((s) => s.pause);
 	const playAudio = useAudioStore((s) => s.play);
 	const loadAudio = useAudioStore((s) => s.loadAudio);
+	const [playbackPending, setPlaybackPending] = useState(false);
 	const hasAudioSource = !!(
 		post.audio?.telegramFileId || (post.audio as any)?.url
 	);
 	const isCurrent = loadedBlogId === post.id;
 	const isPlaying = isCurrent && globalIsPlaying;
-	const isLoading = isCurrent && globalIsLoading;
+	const isLoading =
+		playbackPending ||
+		(isCurrent && (globalIsLoading || globalIsDownloading));
+	const audioPlayability = getAudioPlayability(post.audio as any);
+	const isPlayBlocked = !audioPlayability.canPlay;
+	const isPlayControlDisabled = isLoading || isPlayBlocked;
 	const albumName = (post.audio as any)?.albumName as string | null | undefined;
 	const albumId = (post.audio as any)?.albumId as number | null | undefined;
 	const transcriptBadge = getTranscriptionBadgeState(post.audio as any);
@@ -49,6 +57,8 @@ export function CardFooter({
 	);
 
 	const playPause = useCallback(async () => {
+		if (isPlayControlDisabled) return;
+
 		if (isPlaying) {
 			await pauseAudio();
 			return;
@@ -59,11 +69,24 @@ export function CardFooter({
 			return;
 		}
 
-		await loadAudio(post as any);
-		if (!useAudioStore.getState().error) {
-			await useAudioStore.getState().play();
+		setPlaybackPending(true);
+		try {
+			await loadAudio(post as any);
+			if (!useAudioStore.getState().error) {
+				await useAudioStore.getState().play();
+			}
+		} finally {
+			setPlaybackPending(false);
 		}
-	}, [isCurrent, isPlaying, loadAudio, pauseAudio, playAudio, post]);
+	}, [
+		isCurrent,
+		isPlayControlDisabled,
+		isPlaying,
+		loadAudio,
+		pauseAudio,
+		playAudio,
+		post,
+	]);
 
 	if (hasAudioSource) {
 		return (
@@ -125,19 +148,27 @@ export function CardFooter({
 				</Pressable>
 				<Pressable
 					className="min-h-11 min-w-11 items-center justify-center rounded-full active:bg-muted"
-					disabled={isLoading}
+					accessibilityLabel={audioPlayability.reason ?? "Play audio"}
+					disabled={isPlayControlDisabled}
 					onPress={(e) => {
 						e.stopPropagation();
 						void playPause();
 					}}
 					style={{
-						backgroundColor: withAlpha(colors.primary, isCurrent ? 0.18 : 0.1),
+						backgroundColor: isPlayBlocked
+							? colors.muted
+							: withAlpha(colors.primary, isCurrent ? 0.18 : 0.1),
+						opacity: isPlayBlocked ? 0.62 : 1,
 					}}
 				>
-					<Icon
-						name={isPlaying ? "Pause" : isLoading ? "Loader" : "Play"}
-						className="text-primary"
-					/>
+					{isLoading ? (
+						<ActivityIndicator size="small" color={colors.primary} />
+					) : (
+						<Icon
+							name={isPlayBlocked ? "Lock" : isPlaying ? "Pause" : "Play"}
+							color={isPlayBlocked ? colors.mutedForeground : colors.primary}
+						/>
+					)}
 				</Pressable>
 			</View>
 		);

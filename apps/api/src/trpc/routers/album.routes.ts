@@ -43,6 +43,13 @@ const albumPlaybackQueueInput = z.object({
 	limit: z.number().int().min(1).max(1000).optional().default(1000),
 });
 
+const albumTrackOrderBy = [
+	{ blog: { blogDate: "asc" } },
+	{ blog: { telegramMessageId: "asc" } },
+	{ albumAudioIndex: { index: "asc" } },
+	{ id: "asc" },
+] satisfies Prisma.MediaOrderByWithRelationInput[];
+
 const albumThumbnailUploadSchema = z.object({
 	url: z.string().url(),
 	downloadUrl: z.string().url().optional(),
@@ -660,7 +667,7 @@ export const albumRoutes = createTRPCRouter({
 							},
 							albumAudioIndex: true,
 						},
-						orderBy: { albumAudioIndex: { index: "asc" } },
+						orderBy: albumTrackOrderBy,
 					},
 				},
 			});
@@ -684,7 +691,7 @@ export const albumRoutes = createTRPCRouter({
 					where,
 					take: input.limit + 1,
 					...(input.cursor ? { cursor: { id: input.cursor }, skip: 1 } : {}),
-					orderBy: [{ albumAudioIndex: { index: "asc" } }, { id: "asc" }],
+					orderBy: albumTrackOrderBy,
 					include: albumTrackInclude,
 				}),
 				ctx.db.media.count({ where }),
@@ -713,7 +720,7 @@ export const albumRoutes = createTRPCRouter({
 			return ctx.db.media.findMany({
 				where: { albumId: input.albumId },
 				take: input.limit,
-				orderBy: [{ albumAudioIndex: { index: "asc" } }, { id: "asc" }],
+				orderBy: albumTrackOrderBy,
 				include: {
 					file: true,
 					blog: {

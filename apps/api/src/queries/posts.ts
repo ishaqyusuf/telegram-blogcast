@@ -39,7 +39,7 @@ const hasContentOrMediaWhere = {
   ],
 };
 
-const visibleMainBlogWhere = {
+export const visibleMainBlogWhere = {
   OR: [
     { source: null },
     { source: { not: "facebook" } },
@@ -54,6 +54,19 @@ const visibleMainBlogWhere = {
     },
   ],
 };
+
+export function isVisibleMainBlogRecord(blog: {
+  source?: string | null;
+  medias?: Array<{
+    fileId?: number | string | null;
+    file?: { fileId?: string | null } | null;
+  }>;
+}) {
+  if (blog.source !== "facebook") return true;
+  return Boolean(
+    blog.medias?.some((media) => media.fileId != null || media.file?.fileId),
+  );
+}
 
 const pdfMediaWhere = {
   medias: {
@@ -238,7 +251,7 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
     },
   });
   return await response(
-    data.filter(hasBlogPayload).map((blog) => {
+    data.filter(isVisibleMainBlogRecord).filter(hasBlogPayload).map((blog) => {
       const type: BlogType = blog.type as any;
       const serializeFile = (file: any) =>
         file

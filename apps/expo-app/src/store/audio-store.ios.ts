@@ -7,6 +7,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
 import type { ItemProps } from "@/components/home-feed/home-feed-post-card";
+import { getAudioPlayability, isAudioPlayable } from "@/lib/audio-playability";
 import { getTelegramFileUrl } from "@/lib/get-telegram-file";
 
 const Paths = {
@@ -105,17 +106,26 @@ function resolveNextAlbumQueueItem(
 	);
 
 	if (state.playMode === "album-sequence") {
-		const nextItem = queue[currentIndex + 1];
+		const nextItem = queue
+			.slice(currentIndex + 1)
+			.find((item) => isAudioPlayable((item as any).audio));
 		return nextItem
 			? { item: nextItem, shuffleHistory: state.shuffleHistory }
 			: null;
 	}
 
 	if (state.playMode === "repeat-album") {
-		return {
-			item: queue[(currentIndex + 1) % queue.length]!,
-			shuffleHistory: state.shuffleHistory,
-		};
+		for (let offset = 1; offset <= queue.length; offset++) {
+			const item = queue[(currentIndex + offset) % queue.length]!;
+			if (!isAudioPlayable((item as any).audio)) continue;
+
+			return {
+				item,
+				shuffleHistory: state.shuffleHistory,
+			};
+		}
+
+		return null;
 	}
 
 	if (state.playMode !== "shuffle-album") return null;
@@ -124,15 +134,25 @@ function resolveNextAlbumQueueItem(
 		? state.shuffleHistory
 		: [...state.shuffleHistory, currentKey].filter(Boolean);
 	const visited = new Set(currentHistory);
-	let candidates = queue.filter((item) => !visited.has(getAudioTrackKey(item)));
+	let candidates = queue.filter(
+		(item) =>
+			isAudioPlayable((item as any).audio) &&
+			!visited.has(getAudioTrackKey(item)),
+	);
 
 	if (candidates.length === 0) {
-		candidates = queue.filter((item) => getAudioTrackKey(item) !== currentKey);
+		candidates = queue.filter(
+			(item) =>
+				isAudioPlayable((item as any).audio) &&
+				getAudioTrackKey(item) !== currentKey,
+		);
 	}
 
 	if (candidates.length === 0) {
-		candidates = queue;
+		candidates = queue.filter((item) => isAudioPlayable((item as any).audio));
 	}
+
+	if (candidates.length === 0) return null;
 
 	const nextItem = candidates[Math.floor(Math.random() * candidates.length)];
 	if (!nextItem) return null;
@@ -230,6 +250,13 @@ export const useAudioStore = create<AudioState>()(
 				const shouldResetAlbumMode = !incomingAlbumId || !nextAlbumQueue?.length;
 
 				try {
+					const audioPlayability = getAudioPlayability(blog?.audio as any);
+					if (!audioPlayability.canPlay) {
+						throw new Error(
+							audioPlayability.reason ?? "Audio cannot be played.",
+						);
+					}
+
 					const currentSound = get().sound;
 					const currentBlogId = get().blog?.id;
 

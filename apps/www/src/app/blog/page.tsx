@@ -244,6 +244,22 @@ function hasBlogPayload(row: {
     );
 }
 
+const visibleMainBlogWhere = {
+    OR: [
+        { source: null },
+        { source: { not: "facebook" } },
+        {
+            medias: {
+                some: {
+                    fileId: {
+                        not: null,
+                    },
+                },
+            },
+        },
+    ],
+};
+
 async function getBlogFeed(input: {
     query: string;
     filterType: BlogFilterType;
@@ -271,6 +287,7 @@ async function getBlogFeed(input: {
                     },
                 ],
             },
+            visibleMainBlogWhere,
         ],
     };
 

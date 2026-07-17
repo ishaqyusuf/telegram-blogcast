@@ -53,26 +53,23 @@ export function BlogHomeCategoryTabs({ selected, onSelect }: Props) {
             <Pressable
               key={cat}
               onPress={() => onSelect(cat)}
-              className={`px-4 h-9 rounded-full items-center justify-center border ${
-                isActive ? "bg-accent border-accent" : "bg-card border-border"
-              }`}
+              className="h-11 items-center justify-center rounded-full px-5"
               style={{
                 backgroundColor: isActive
-                  ? withAlpha(colors.primary, 0.18)
+                  ? colors.primary
+                  : colors.background === "rgb(10, 10, 10)"
+                    ? "rgb(39, 39, 42)"
                   : colors.card,
-                borderColor: isActive
-                  ? withAlpha(colors.primary, 0.28)
-                  : colors.border,
+                borderWidth: isActive ? 0 : 1,
+                borderColor: withAlpha(colors.foreground, 0.06),
               }}
             >
               <Text
-                className={`text-sm ${
-                  isActive
-                    ? "font-bold text-primary-foreground"
-                    : "text-muted-foreground font-medium"
-                }`}
+                className="text-sm font-semibold"
                 style={{
-                  color: isActive ? colors.primary : colors.mutedForeground,
+                  color: isActive
+                    ? colors.primaryForeground
+                    : colors.foreground,
                 }}
               >
                 {t(CATEGORY_KEYS[cat])}

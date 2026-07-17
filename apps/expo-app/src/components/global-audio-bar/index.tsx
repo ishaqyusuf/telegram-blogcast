@@ -4,7 +4,14 @@ import { useColors } from "@/hooks/use-color";
 import { getAudioDisplayTitle } from "@/lib/audio-title";
 import { usePathname, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Animated, Easing, Pressable, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Animated,
+  Easing,
+  Pressable,
+  Text,
+  View,
+} from "react-native";
 import { Icon, type IconKeys } from "@/components/ui/icon";
 import {
   FLOATING_FOOTER_GLOBAL_AUDIO_ID,
@@ -16,31 +23,26 @@ const SPEED_OPTIONS = [1, 1.25, 1.5, 1.75, 2];
 const STALE_PAUSED_AUDIO_MS = 12 * 60 * 60 * 1000;
 const PLAY_MODE_META: Record<
   AudioPlayMode,
-  { icon: IconKeys; label: string; accessibilityLabel: string }
+  { icon: IconKeys; accessibilityLabel: string }
 > = {
   off: {
     icon: "Circle",
-    label: "Off",
     accessibilityLabel: "Album play mode off",
   },
   "repeat-one": {
     icon: "RefreshCw",
-    label: "1",
     accessibilityLabel: "Repeat current track",
   },
   "album-sequence": {
     icon: "SkipForward",
-    label: "Next",
     accessibilityLabel: "Play next album track",
   },
   "repeat-album": {
     icon: "RotateCw",
-    label: "All",
     accessibilityLabel: "Repeat album",
   },
   "shuffle-album": {
     icon: "Shuffle",
-    label: "Mix",
     accessibilityLabel: "Shuffle album",
   },
 };
@@ -148,6 +150,8 @@ export function GlobalAudioBar() {
 
   const sound = useAudioStore((s) => s.sound);
   const isPlaying = useAudioStore((s) => s.isPlaying);
+  const isLoading = useAudioStore((s) => s.isLoading);
+  const isDownloading = useAudioStore((s) => s.isDownloading);
   const blog = useAudioStore((s) => s.blog);
   const position = useAudioStore((s) => s.position);
   const duration = useAudioStore((s) => s.duration);
@@ -249,7 +253,15 @@ export function GlobalAudioBar() {
       : null;
   const canUseAlbumPlayMode = Boolean(albumName && albumQueue?.length);
   const playModeMeta = PLAY_MODE_META[playMode];
-
+  const isPlaybackBusy = isLoading || isDownloading;
+  const isDark = colors.background === "rgb(10, 10, 10)";
+  const playerBackground = isDark ? "rgb(126, 63, 6)" : colors.card;
+  const playerBorder = isDark ? "rgba(255, 255, 255, 0.12)" : colors.border;
+  const playerMuted = isDark
+    ? "rgba(255, 255, 255, 0.72)"
+    : colors.mutedForeground;
+  const playerText = isDark ? "rgb(255, 255, 255)" : colors.foreground;
+  const playerControl = isDark ? "rgb(34, 197, 94)" : colors.primary;
   const cycleSpeed = () => {
     const idx = SPEED_OPTIONS.findIndex(
       (rate) => Math.abs(playbackRate - rate) < 0.01,
@@ -263,8 +275,8 @@ export function GlobalAudioBar() {
     router.push(`/blog-view-2/${blogId}?openComments=1` as any);
   };
 
-  const CARD_H = 72;
-  const ART = 52;
+  const CARD_H = 64;
+  const ART = 42;
 
   useFloatingFooterLayer({
     id: FLOATING_FOOTER_GLOBAL_AUDIO_ID,
@@ -275,16 +287,16 @@ export function GlobalAudioBar() {
         {/* ── Card ─────────────────────────────────────────────────────────── */}
         <View
           style={{
-            backgroundColor: colors.card,
-            borderRadius: 20,
+            backgroundColor: playerBackground,
+            borderRadius: 12,
             overflow: "hidden",
             shadowColor: "#000",
-            shadowOffset: { width: 0, height: 8 },
-            shadowOpacity: 0.55,
-            shadowRadius: 16,
+            shadowOffset: { width: 0, height: 10 },
+            shadowOpacity: isDark ? 0.48 : 0.22,
+            shadowRadius: 18,
             elevation: 14,
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: playerBorder,
           }}
         >
           {/* ── Top row ─────────────────────────────────────────────────── */}
@@ -292,10 +304,10 @@ export function GlobalAudioBar() {
             style={{
               flexDirection: "row",
               alignItems: "center",
-              paddingHorizontal: 12,
-              paddingTop: 10,
-              paddingBottom: 8,
-              gap: 12,
+              paddingHorizontal: 10,
+              paddingTop: 8,
+              paddingBottom: 7,
+              gap: 8,
               height: CARD_H,
             }}
           >
@@ -305,24 +317,24 @@ export function GlobalAudioBar() {
               style={{
                 width: ART,
                 height: ART,
-                borderRadius: ART / 2,
-                backgroundColor: colors.muted,
+                borderRadius: 8,
+                backgroundColor: isDark ? "rgba(0, 0, 0, 0.24)" : colors.muted,
                 alignItems: "center",
                 justifyContent: "center",
                 overflow: "hidden",
               }}
             >
               <Animated.View style={{ transform: [{ rotate }] }}>
-                <Icon name="Disc3" size={ART - 4} color={colors.primary} />
+                <Icon name="Disc3" size={ART - 12} color={playerControl} />
               </Animated.View>
               {/* Center hub dot */}
               <View
                 style={{
                   position: "absolute",
-                  width: 10,
-                  height: 10,
-                  borderRadius: 5,
-                  backgroundColor: colors.card,
+                  width: 7,
+                  height: 7,
+                  borderRadius: 3.5,
+                  backgroundColor: playerBackground,
                 }}
               />
             </Pressable>
@@ -330,22 +342,24 @@ export function GlobalAudioBar() {
             {/* Track info */}
             <Pressable
               onPress={() => router.push(`/blog-view-2/${blogId}` as any)}
-              style={{ flex: 1, minWidth: 0 }}
+              style={{ flex: 1, minWidth: 86 }}
             >
               <MarqueeText
                 text={title}
                 style={{
                   fontSize: 13,
                   fontWeight: "700",
-                  color: colors.foreground,
+                  color: playerText,
                 }}
               />
               <Text
+                numberOfLines={1}
+                ellipsizeMode="clip"
                 style={{
                   fontSize: 11,
-                  color:
-                    sleepRemaining != null ? "#f59e0b" : colors.mutedForeground,
+                  color: sleepRemaining != null ? "#fbbf24" : playerMuted,
                   marginTop: 2,
+                  fontVariant: ["tabular-nums"],
                 }}
               >
                 {sleepRemaining != null
@@ -361,7 +375,8 @@ export function GlobalAudioBar() {
               style={{
                 flexDirection: "row",
                 alignItems: "center",
-                gap: 6,
+                gap: 4,
+                flexShrink: 0,
               }}
             >
               <Pressable
@@ -369,17 +384,17 @@ export function GlobalAudioBar() {
                 hitSlop={10}
                 style={{
                   minWidth: 34,
-                  paddingHorizontal: 7,
+                  paddingHorizontal: 6,
                   paddingVertical: 5,
                   borderRadius: 8,
-                  backgroundColor: colors.muted,
+                  backgroundColor: isDark ? "rgba(0, 0, 0, 0.2)" : colors.muted,
                   alignItems: "center",
                 }}
               >
                 <Text
                   numberOfLines={1}
                   style={{
-                    color: colors.mutedForeground,
+                    color: playerMuted,
                     fontSize: 11,
                     fontWeight: "800",
                   }}
@@ -394,40 +409,17 @@ export function GlobalAudioBar() {
                   hitSlop={10}
                   accessibilityLabel={playModeMeta.accessibilityLabel}
                   style={{
-                    minWidth: 44,
-                    paddingHorizontal: 7,
-                    paddingVertical: 5,
-                    borderRadius: 8,
-                    backgroundColor:
-                      playMode === "off" ? colors.muted : colors.primary,
+                    width: 28,
+                    height: 28,
                     alignItems: "center",
-                    flexDirection: "row",
                     justifyContent: "center",
-                    gap: 3,
                   }}
                 >
                   <Icon
                     name={playModeMeta.icon}
-                    size={13}
-                    color={
-                      playMode === "off"
-                        ? colors.mutedForeground
-                        : colors.primaryForeground
-                    }
+                    size={19}
+                    color={playMode === "off" ? playerMuted : playerControl}
                   />
-                  <Text
-                    numberOfLines={1}
-                    style={{
-                      color:
-                        playMode === "off"
-                          ? colors.mutedForeground
-                          : colors.primaryForeground,
-                      fontSize: 10,
-                      fontWeight: "900",
-                    }}
-                  >
-                    {playModeMeta.label}
-                  </Text>
                 </Pressable>
               ) : null}
 
@@ -436,37 +428,44 @@ export function GlobalAudioBar() {
                 hitSlop={10}
                 style={{ padding: 4 }}
               >
-                <Icon
-                  name="Backward5"
-                  size={26}
-                  color={colors.mutedForeground}
-                />
+                <Icon name="Backward5" size={26} color={playerMuted} />
               </Pressable>
 
               <Pressable
                 onPress={() => togglePlayPause()}
+                disabled={isLoading}
                 style={{
                   width: 42,
                   height: 42,
                   borderRadius: 21,
-                  backgroundColor: colors.primary,
+                  backgroundColor: isDark
+                    ? "rgba(255, 255, 255, 0.14)"
+                    : colors.primary,
                   alignItems: "center",
                   justifyContent: "center",
-                  shadowColor: colors.primary,
+                  shadowColor: isDark ? "#000" : colors.primary,
                   shadowOffset: { width: 0, height: 3 },
                   shadowOpacity: 0.6,
                   shadowRadius: 6,
                   elevation: 6,
+                  opacity: isLoading ? 0.85 : 1,
                 }}
               >
-                {isPlaying ? (
-                  <Icon name="Pause" size={18} color="#000" fill="#000" />
+                {isPlaybackBusy ? (
+                  <ActivityIndicator size="small" color={playerText} />
+                ) : isPlaying ? (
+                  <Icon
+                    name="Pause"
+                    size={18}
+                    color={playerText}
+                    fill={playerText}
+                  />
                 ) : (
                   <Icon
                     name="Play"
                     size={18}
-                    color="#000"
-                    fill="#000"
+                    color={playerText}
+                    fill={playerText}
                     style={{ marginLeft: 2 }}
                   />
                 )}
@@ -477,11 +476,7 @@ export function GlobalAudioBar() {
                 hitSlop={10}
                 style={{ padding: 4 }}
               >
-                <Icon
-                  name="Forward5"
-                  size={26}
-                  color={colors.mutedForeground}
-                />
+                <Icon name="Forward5" size={26} color={playerMuted} />
               </Pressable>
 
               <Pressable
@@ -492,12 +487,14 @@ export function GlobalAudioBar() {
                   height: 34,
                   borderRadius: 17,
                   borderWidth: 1,
-                  borderColor: colors.border,
+                  borderColor: isDark
+                    ? "rgba(255, 255, 255, 0.76)"
+                    : colors.border,
                   alignItems: "center",
                   justifyContent: "center",
                 }}
               >
-                <Icon name="Plus" size={20} color={colors.foreground} />
+                <Icon name="Plus" size={20} color={playerText} />
               </Pressable>
             </View>
           </View>
@@ -506,14 +503,14 @@ export function GlobalAudioBar() {
           <View
             style={{
               height: 3,
-              backgroundColor: colors.muted,
+              backgroundColor: isDark ? "rgba(0, 0, 0, 0.24)" : colors.muted,
             }}
           >
             <View
               style={{
                 height: "100%",
                 width: `${progress * 100}%`,
-                backgroundColor: colors.primary,
+                backgroundColor: playerControl,
                 borderRadius: 2,
               }}
             />

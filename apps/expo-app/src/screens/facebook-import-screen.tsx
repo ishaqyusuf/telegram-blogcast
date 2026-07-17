@@ -4,6 +4,7 @@ import {
 	useFloatingFooterInset,
 	useFloatingFooterLayer,
 } from "@/components/floating-footer";
+import { FloatingBottomSheet } from "@/components/ui/floating-bottom-sheet";
 import { Icon } from "@/components/ui/icon";
 import { Pressable } from "@/components/ui/pressable";
 import { useColors } from "@/hooks/use-color";
@@ -24,7 +25,6 @@ import {
 	Alert,
 	FlatList,
 	Linking,
-	Modal,
 	RefreshControl,
 	ScrollView,
 	Text,
@@ -363,22 +363,23 @@ function ImportPreviewModal({
 	const playbackUrl = getImportItemPlaybackUrl(item);
 
 	return (
-		<Modal visible transparent animationType="slide" onRequestClose={onClose}>
-			<View className="flex-1 justify-end bg-black/50">
-				<Pressable className="flex-1" onPress={onClose} />
-				<View className="gap-4 rounded-t-3xl bg-background px-4 pb-6 pt-4">
-					<View className="flex-row items-center gap-3">
-						<View className="h-1.5 w-12 rounded-full bg-muted" />
-						<Text className="flex-1 text-lg font-extrabold text-foreground">
-							Facebook item
-						</Text>
-						<Pressable
-							onPress={onClose}
-							className="size-9 items-center justify-center rounded-full bg-card"
-						>
-							<Icon name="X" size={18} className="text-foreground" />
-						</Pressable>
-					</View>
+		<FloatingBottomSheet
+			visible
+			onClose={onClose}
+			accessibilityLabel="Facebook item"
+			title="Facebook item"
+			snapPoints={["78%"]}
+			enableDynamicSizing={false}
+		>
+			<View className="gap-4 bg-card px-4 pb-6">
+				<View className="flex-row justify-end">
+					<Pressable
+						onPress={onClose}
+						className="size-9 items-center justify-center rounded-full bg-background"
+					>
+						<Icon name="X" size={18} className="text-foreground" />
+					</Pressable>
+				</View>
 
 					<View className="gap-3 rounded-2xl border border-border bg-card p-4">
 						<View className="flex-row items-start gap-3">
@@ -500,9 +501,8 @@ function ImportPreviewModal({
 							</Text>
 						</Pressable>
 					) : null}
-				</View>
 			</View>
-		</Modal>
+		</FloatingBottomSheet>
 	);
 }
 
@@ -526,27 +526,23 @@ function ChannelFilterSheet({
 	const allSelected = selectedIds.length === 0;
 
 	return (
-		<Modal
+		<FloatingBottomSheet
 			visible={visible}
-			transparent
-			animationType="slide"
-			onRequestClose={onClose}
+			onClose={onClose}
+			accessibilityLabel="Facebook channels"
+			title="Facebook channels"
+			snapPoints={["78%"]}
+			enableDynamicSizing={false}
 		>
-			<View className="flex-1 justify-end bg-black/50">
-				<Pressable className="flex-1" onPress={onClose} />
-				<View className="max-h-[78%] rounded-t-3xl bg-background px-4 pb-6 pt-4">
-					<View className="mb-4 flex-row items-center gap-3">
-						<View className="h-1.5 w-12 rounded-full bg-muted" />
-						<Text className="flex-1 text-lg font-extrabold text-foreground">
-							Facebook channels
-						</Text>
-						<Pressable
-							onPress={onClose}
-							className="size-9 items-center justify-center rounded-full bg-card"
-						>
-							<Icon name="X" size={18} className="text-foreground" />
-						</Pressable>
-					</View>
+			<View className="bg-card px-4 pb-6">
+				<View className="mb-4 flex-row justify-end">
+					<Pressable
+						onPress={onClose}
+						className="size-9 items-center justify-center rounded-full bg-background"
+					>
+						<Icon name="X" size={18} className="text-foreground" />
+					</Pressable>
+				</View>
 
 					<ScrollView
 						showsVerticalScrollIndicator={false}
@@ -620,9 +616,8 @@ function ChannelFilterSheet({
 							Done
 						</Text>
 					</Pressable>
-				</View>
 			</View>
-		</Modal>
+		</FloatingBottomSheet>
 	);
 }
 

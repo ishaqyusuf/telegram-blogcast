@@ -11,6 +11,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
 import type { ItemProps } from "@/components/home-feed/home-feed-post-card";
+import { getAudioPlayability, isAudioPlayable } from "@/lib/audio-playability";
 import { getAudioDisplayTitle } from "@/lib/audio-title";
 import { getTelegramFileUrl } from "@/lib/get-telegram-file";
 import { setupTrackPlayer } from "@/services/audio-player/setup-track-player";
@@ -21,6 +22,7 @@ const CONTEXT_REWIND_THRESHOLD_MS = CONTEXT_REWIND_MS;
 const END_REPLAY_RESET_THRESHOLD_MS = 750;
 const POSITION_POLL_MS = 250;
 const STALE_AUDIO_MS = 12 * 60 * 60 * 1000;
+const PRIVATE_AUDIO_FOLDER = "al-ghurobaa/media";
 const PUBLIC_AUDIO_ROOT = "Al-ghurobaa";
 const PUBLIC_AUDIO_FOLDER = "media";
 const DEFAULT_ARTWORK = Image.resolveAssetSource(
@@ -71,7 +73,9 @@ function isOlderThan(timestamp: number | null | undefined, maxAgeMs: number) {
 }
 
 function isAtAudioEnd(positionMs: number, durationMs: number) {
-	return durationMs > 0 && positionMs >= durationMs - END_REPLAY_RESET_THRESHOLD_MS;
+  return (
+    durationMs > 0 && positionMs >= durationMs - END_REPLAY_RESET_THRESHOLD_MS
+  );
 }
 
 function getPlaybackStateName(
@@ -83,6 +87,13 @@ function getPlaybackStateName(
 function sanitizePublicFileName(fileName: string) {
 	const sanitized = fileName.replace(/[\\/:*?"<>|]/g, "-").trim();
 	return sanitized || "audio.mp3";
+}
+
+function joinFileUri(root: string, ...parts: string[]) {
+  return `${root.replace(/\/+$/g, "")}/${parts
+    .map((part) => part.replace(/^\/+|\/+$/g, ""))
+    .filter(Boolean)
+    .join("/")}`;
 }
 
 function getSafEntryName(uri: string) {
@@ -129,12 +140,47 @@ async function getUsableSafFile(parentUri: string, name: string) {
 	return fileUri;
 }
 
-async function ensurePublicAudioFolder(storedUri?: string | null) {
+async function getUsableFileUri(uri: string) {
+  const info = await LegacyFileSystem.getInfoAsync(uri).catch(() => null);
+  if (!info?.exists || (typeof info.size === "number" && info.size <= 0)) {
+    if (info?.exists) {
+      await LegacyFileSystem.deleteAsync(uri, { idempotent: true }).catch(
+        () => undefined,
+      );
+    }
+    return null;
+  }
+
+  return uri;
+}
+
+async function ensurePrivateAudioFile(fileName: string) {
+  if (!LegacyFileSystem.documentDirectory) {
+    throw new Error("Audio storage is not available");
+  }
+
+  const directoryUri = joinFileUri(
+    LegacyFileSystem.documentDirectory,
+    PRIVATE_AUDIO_FOLDER,
+  );
+  await LegacyFileSystem.makeDirectoryAsync(directoryUri, {
+    intermediates: true,
+  }).catch(() => undefined);
+
+  return joinFileUri(directoryUri, sanitizePublicFileName(fileName));
+}
+
+async function ensurePublicAudioFolder(
+  storedUri?: string | null,
+  requestIfMissing = true,
+) {
 	if (Platform.OS !== "android") return null;
 
 	if (storedUri && (await canReadSafDirectory(storedUri))) {
 		return storedUri;
 	}
+
+  if (!requestIfMissing) return null;
 
 	const { StorageAccessFramework } = LegacyFileSystem;
 	const appRootUri =
@@ -167,6 +213,31 @@ async function createPublicAudioFile(
 		publicFileName,
 		getAudioMimeType(publicFileName),
 	);
+}
+
+async function copySafFileToPrivateFile(fromUri: string, toUri: string) {
+  await LegacyFileSystem.copyAsync({ from: fromUri, to: toUri });
+  return getUsableFileUri(toUri);
+}
+
+async function copyPrivateFileToPublicFile(
+  fromUri: string,
+  publicFolderUri: string | null,
+  fileName: string,
+) {
+  if (!publicFolderUri) return null;
+
+  try {
+    const publicFileUri = await createPublicAudioFile(
+      publicFolderUri,
+      fileName,
+    );
+    await LegacyFileSystem.copyAsync({ from: fromUri, to: publicFileUri });
+    return publicFileUri;
+  } catch (err) {
+    console.warn("[audio] Public audio copy failed:", err);
+    return null;
+  }
 }
 
 async function requestAndroidNotificationPermission() {
@@ -262,7 +333,12 @@ function withAlbumQueue(blog: ItemProps, albumQueue: ItemProps[] | null) {
 	} as ItemProps;
 }
 
-function resolveNextAlbumQueueItem(state: Pick<AudioState, "albumQueue" | "blog" | "playMode" | "shuffleHistory">) {
+function resolveNextAlbumQueueItem(
+  state: Pick<
+    AudioState,
+    "albumQueue" | "blog" | "playMode" | "shuffleHistory"
+  >,
+) {
 	const queue = state.albumQueue;
 	if (!queue?.length) return null;
 
@@ -273,15 +349,26 @@ function resolveNextAlbumQueueItem(state: Pick<AudioState, "albumQueue" | "blog"
 	);
 
 	if (state.playMode === "album-sequence") {
-		const nextItem = queue[currentIndex + 1];
-		return nextItem ? { item: nextItem, shuffleHistory: state.shuffleHistory } : null;
+		const nextItem = queue
+			.slice(currentIndex + 1)
+			.find((item) => isAudioPlayable((item as any).audio));
+    return nextItem
+      ? { item: nextItem, shuffleHistory: state.shuffleHistory }
+      : null;
 	}
 
 	if (state.playMode === "repeat-album") {
-		return {
-			item: queue[(currentIndex + 1) % queue.length]!,
-			shuffleHistory: state.shuffleHistory,
-		};
+		for (let offset = 1; offset <= queue.length; offset++) {
+			const item = queue[(currentIndex + offset) % queue.length]!;
+			if (!isAudioPlayable((item as any).audio)) continue;
+
+			return {
+				item,
+				shuffleHistory: state.shuffleHistory,
+			};
+		}
+
+		return null;
 	}
 
 	if (state.playMode !== "shuffle-album") return null;
@@ -290,15 +377,25 @@ function resolveNextAlbumQueueItem(state: Pick<AudioState, "albumQueue" | "blog"
 		? state.shuffleHistory
 		: [...state.shuffleHistory, currentKey].filter(Boolean);
 	const visited = new Set(currentHistory);
-	let candidates = queue.filter((item) => !visited.has(getAudioTrackKey(item)));
+	let candidates = queue.filter(
+		(item) =>
+			isAudioPlayable((item as any).audio) &&
+			!visited.has(getAudioTrackKey(item)),
+	);
 
 	if (candidates.length === 0) {
-		candidates = queue.filter((item) => getAudioTrackKey(item) !== currentKey);
+		candidates = queue.filter(
+			(item) =>
+				isAudioPlayable((item as any).audio) &&
+				getAudioTrackKey(item) !== currentKey,
+		);
 	}
 
 	if (candidates.length === 0) {
-		candidates = queue;
+		candidates = queue.filter((item) => isAudioPlayable((item as any).audio));
 	}
+
+	if (candidates.length === 0) return null;
 
 	const nextItem = candidates[Math.floor(Math.random() * candidates.length)];
 	if (!nextItem) return null;
@@ -340,8 +437,7 @@ async function syncPlayerSnapshot() {
 	const durationMs = secondsToMillis(progress.duration) || current.duration;
 	const positionMs = secondsToMillis(progress.position);
 	const hasEnded =
-		playbackStateName === State.Ended ||
-		(!isPlaying && current.hasEnded);
+    playbackStateName === State.Ended || (!isPlaying && current.hasEnded);
 	useAudioStore.setState({
 		duration: durationMs,
 		hasEnded,
@@ -387,9 +483,7 @@ function ensureTrackPlayerListeners() {
 			useAudioStore.setState({
 				duration,
 				hasEnded: current.hasEnded,
-				playedAt: current.isPlaying
-					? Date.now()
-					: current.playedAt,
+        playedAt: current.isPlaying ? Date.now() : current.playedAt,
 				...(current.isSeeking ? {} : { position }),
 			});
 		}),
@@ -403,7 +497,10 @@ function ensureTrackPlayerListeners() {
 		}),
 		TrackPlayer.addEventListener(Event.PlaybackQueueEnded, (event) => {
 			const duration = useAudioStore.getState().duration;
-			void useAudioStore.getState().playNextAlbumTrack().then((playedNext) => {
+      void useAudioStore
+        .getState()
+        .playNextAlbumTrack()
+        .then((playedNext) => {
 				if (playedNext) return;
 
 				useAudioStore.setState({
@@ -457,7 +554,10 @@ interface AudioState {
 	albumQueue: ItemProps[] | null;
 	shuffleHistory: string[];
 
-	loadAudio: (blog: ItemProps) => Promise<void>;
+  loadAudio: (
+    blog: ItemProps,
+    options?: { requestPublicFolder?: boolean },
+  ) => Promise<void>;
 	play: () => Promise<void>;
 	playNextAlbumTrack: () => Promise<boolean>;
 	pause: () => Promise<void>;
@@ -506,7 +606,7 @@ export const useAudioStore = create<AudioState>()(
 			albumQueue: null,
 			shuffleHistory: [],
 
-			loadAudio: async (blog) => {
+      loadAudio: async (blog, options) => {
 				const directUrl = (blog?.audio as any)?.url as string | undefined;
 				const fileName = blog?.audio?.fileName;
 				const nextTrackId = String(blog?.id ?? fileName ?? directUrl ?? "");
@@ -518,9 +618,17 @@ export const useAudioStore = create<AudioState>()(
 					: incomingAlbumId && incomingAlbumId === currentAlbumId
 						? get().albumQueue
 						: null;
-				const shouldResetAlbumMode = !incomingAlbumId || !nextAlbumQueue?.length;
+        const shouldResetAlbumMode =
+          !incomingAlbumId || !nextAlbumQueue?.length;
 
 				try {
+					const audioPlayability = getAudioPlayability(blog?.audio as any);
+					if (!audioPlayability.canPlay) {
+						throw new Error(
+							audioPlayability.reason ?? "Audio cannot be played.",
+						);
+					}
+
 					if (
 						nextTrackId &&
 						get().sound &&
@@ -532,9 +640,7 @@ export const useAudioStore = create<AudioState>()(
 							error: null,
 							isLoading: false,
 							playMode: shouldResetAlbumMode ? "off" : get().playMode,
-							shuffleHistory: shouldResetAlbumMode
-								? []
-								: get().shuffleHistory,
+              shuffleHistory: shouldResetAlbumMode ? [] : get().shuffleHistory,
 						});
 						try {
 							await syncPlayerSnapshot();
@@ -567,8 +673,10 @@ export const useAudioStore = create<AudioState>()(
 					const publicFileName = sanitizePublicFileName(fileName);
 					let publicAudioFolderUri = get().publicAudioFolderUri;
 					try {
-						publicAudioFolderUri =
-							await ensurePublicAudioFolder(publicAudioFolderUri);
+            publicAudioFolderUri = await ensurePublicAudioFolder(
+              publicAudioFolderUri,
+              options?.requestPublicFolder ?? true,
+            );
 						if (publicAudioFolderUri !== get().publicAudioFolderUri) {
 							set({ publicAudioFolderUri });
 						}
@@ -584,34 +692,43 @@ export const useAudioStore = create<AudioState>()(
 								publicFileName,
 							).catch(() => null)
 						: null;
-					let audioSource: string;
-					let downloadTargetUri: string | null = null;
-
-					if (publicAudioUri) {
-						audioSource = publicAudioUri;
-						set({ localPath: publicAudioUri });
-					} else {
+          const privateAudioUri = await ensurePrivateAudioFile(publicFileName);
+          const privateCachedAudioUri = await getUsableFileUri(privateAudioUri);
 						const telegramUrl = blog?.audio?.telegramFileId
 							? (await getTelegramFileUrl(blog.audio.telegramFileId))?.url
 							: null;
 						const sourceUrls = uniqueUrls([directUrl, telegramUrl]);
+          let audioSource: string;
+          let downloadTargetUri: string | null = null;
 
-						if (sourceUrls.length === 0) {
-							throw new Error("Audio URL is not available");
-						}
+          if (privateCachedAudioUri) {
+            audioSource = privateCachedAudioUri;
+            set({ localPath: privateCachedAudioUri });
+          } else {
+            const copiedPublicAudioUri = publicAudioUri
+              ? await copySafFileToPrivateFile(
+                  publicAudioUri,
+                  privateAudioUri,
+                ).catch((err) => {
+                  console.warn("[audio] Public audio import failed:", err);
+                  return null;
+                })
+              : null;
 
+            if (copiedPublicAudioUri) {
+              audioSource = copiedPublicAudioUri;
+              set({ localPath: copiedPublicAudioUri });
+            } else if (sourceUrls.length > 0) {
 						audioSource = sourceUrls[0];
-						if (publicAudioFolderUri) {
-							downloadTargetUri = await createPublicAudioFile(
-								publicAudioFolderUri,
-								publicFileName,
-							);
-						}
+              downloadTargetUri = privateAudioUri;
 						set({
 							downloadProgress: 0,
-							isDownloading: Boolean(downloadTargetUri),
+                isDownloading: true,
 							localPath: null,
 						});
+            } else {
+              throw new Error("Audio URL is not available");
+            }
 					}
 
 					const track = buildTrack(blog, audioSource);
@@ -662,11 +779,15 @@ export const useAudioStore = create<AudioState>()(
 							.downloadAsync()
 							.then((result) => {
 								if (result) {
+                  void copyPrivateFileToPublicFile(
+                    result.uri,
+                    publicAudioUri ? null : publicAudioFolderUri,
+                    publicFileName,
+                  );
 									set({
 										downloadProgress: 1,
 										isDownloading: false,
 										localPath: result.uri,
-										uri: result.uri,
 									});
 								} else {
 									set({ downloadProgress: 0, isDownloading: false });
@@ -674,10 +795,9 @@ export const useAudioStore = create<AudioState>()(
 							})
 							.catch((err) => {
 								console.warn("[audio] Cache download failed:", err);
-								LegacyFileSystem.StorageAccessFramework.deleteAsync(
-									downloadTargetUri,
-									{ idempotent: true },
-								).catch(() => undefined);
+                LegacyFileSystem.deleteAsync(downloadTargetUri, {
+                  idempotent: true,
+                }).catch(() => undefined);
 								set({ downloadProgress: 0, isDownloading: false });
 							});
 					}
@@ -712,9 +832,7 @@ export const useAudioStore = create<AudioState>()(
 					} catch (err) {
 						set({
 							error:
-								err instanceof Error
-									? err.message
-									: "Failed to repeat audio",
+                err instanceof Error ? err.message : "Failed to repeat audio",
 						});
 						return false;
 					}
@@ -739,7 +857,8 @@ export const useAudioStore = create<AudioState>()(
 					await preparePlayer();
 					await ensureNotificationPermission();
 					const progress = await TrackPlayer.getProgress();
-					const durationMs = secondsToMillis(progress.duration) || get().duration;
+          const durationMs =
+            secondsToMillis(progress.duration) || get().duration;
 					const currentPositionMs = secondsToMillis(progress.position);
 					const shouldRestart =
 						get().hasEnded || isAtAudioEnd(currentPositionMs, durationMs);
@@ -924,17 +1043,14 @@ export const useAudioStore = create<AudioState>()(
 				const {
 					blog,
 					isPlaying: wasPlaying,
-					localPath,
 					pausedAt,
 					playedAt,
 					position,
-					uri,
 					volume,
 					playbackRate,
 				} = get();
-				const audioSource = localPath || uri;
 
-				if (!audioSource || !blog) return;
+        if (!blog) return;
 
 				const effectivePausedAt = wasPlaying
 					? pausedAt
@@ -976,12 +1092,10 @@ export const useAudioStore = create<AudioState>()(
 						playedAt: effectivePlayedAt,
 						playSessionStartPosition: null,
 					});
-					await preparePlayer();
-
-					const track = buildTrack(blog, audioSource, get().duration);
-
-					await TrackPlayer.reset();
-					await TrackPlayer.add(track);
+          await get().loadAudio(blog, { requestPublicFolder: false });
+          if (get().error || !get().sound) {
+            throw new Error(get().error ?? "Failed to restore audio");
+          }
 					await TrackPlayer.setVolume(volume);
 					await TrackPlayer.setRate(playbackRate);
 					await TrackPlayer.seekTo(millisToSeconds(position));
@@ -989,7 +1103,6 @@ export const useAudioStore = create<AudioState>()(
 					const progress = await TrackPlayer.getProgress();
 
 					set({
-						activeTrackId: track.id ? String(track.id) : null,
 						duration: secondsToMillis(progress.duration) || get().duration,
 						hasEnded: false,
 						isLoading: false,
@@ -1079,7 +1192,9 @@ export const useAudioStore = create<AudioState>()(
 				set({
 					playMode: canUseAlbumMode ? playMode : "off",
 					shuffleHistory:
-						playMode === "shuffle-album" ? [getAudioTrackKey(get().blog)].filter(Boolean) : [],
+            playMode === "shuffle-album"
+              ? [getAudioTrackKey(get().blog)].filter(Boolean)
+              : [],
 				});
 			},
 

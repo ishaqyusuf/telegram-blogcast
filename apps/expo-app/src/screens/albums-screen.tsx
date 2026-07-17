@@ -4,9 +4,6 @@ import { useRouter } from "expo-router";
 import {
   ActivityIndicator,
   FlatList,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
   RefreshControl,
   Text,
   TextInput,
@@ -16,6 +13,7 @@ import { useCallback, useMemo, useState } from "react";
 
 import { _trpc } from "@/components/static-trpc";
 import { SafeArea } from "@/components/safe-area";
+import { FloatingBottomSheet } from "@/components/ui/floating-bottom-sheet";
 import { Icon } from "@/components/ui/icon";
 import { ScrollToTopButton } from "@/components/ui/scroll-to-top-button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -270,75 +268,59 @@ export default function AlbumsScreen() {
         onPress={albumScroll.scrollToTop}
       />
 
-      <Modal
+      <FloatingBottomSheet
         visible={createVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setCreateVisible(false)}
+        onClose={() => setCreateVisible(false)}
+        accessibilityLabel="Create album"
+        title="Create album"
       >
-        <Pressable
-          onPress={() => setCreateVisible(false)}
-          className="flex-1 justify-end bg-black/60 px-5 pb-6"
-        >
-          <KeyboardAvoidingView
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
-            style={{ width: "100%" }}
-          >
+        <View className="bg-card px-4 pb-8" style={{ backgroundColor: colors.card }}>
+          <View className="mb-4 flex-row items-center gap-2 rounded-xl border border-border bg-muted px-3">
+            <Icon name="Disc3" size={16} className="text-muted-foreground" />
+            <TextInput
+              value={name}
+              onChangeText={setName}
+              placeholder="New album name..."
+              placeholderTextColor={colors.mutedForeground}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={handleCreateAlbum}
+              style={{
+                flex: 1,
+                color: colors.foreground,
+                fontSize: 14,
+                paddingVertical: 12,
+              }}
+            />
+          </View>
+          <View className="flex-row gap-2 rounded-2xl bg-background/60 p-1">
             <Pressable
-              onPress={(event) => event.stopPropagation()}
-              className="rounded-2xl bg-card p-4"
+              onPress={() => setCreateVisible(false)}
+              className="h-11 flex-1 items-center justify-center rounded-xl bg-muted active:opacity-80"
             >
-              <Text className="mb-3 text-base font-bold text-foreground">
-                Create album
+              <Text className="text-sm font-semibold text-foreground">
+                Cancel
               </Text>
-              <View className="mb-4 flex-row items-center gap-2 rounded-xl border border-border bg-muted px-3">
-                <Icon name="Disc3" size={16} className="text-muted-foreground" />
-                <TextInput
-                  value={name}
-                  onChangeText={setName}
-                  placeholder="New album name..."
-                  placeholderTextColor={colors.mutedForeground}
-                  autoFocus
-                  returnKeyType="done"
-                  onSubmitEditing={handleCreateAlbum}
-                  style={{
-                    flex: 1,
-                    color: colors.foreground,
-                    fontSize: 14,
-                    paddingVertical: 12,
-                  }}
-                />
-              </View>
-              <View className="flex-row gap-2 rounded-2xl bg-background/60 p-1">
-                <Pressable
-                  onPress={() => setCreateVisible(false)}
-                  className="h-11 flex-1 items-center justify-center rounded-xl bg-muted active:opacity-80"
-                >
-                  <Text className="text-sm font-semibold text-foreground">
-                    Cancel
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={handleCreateAlbum}
-                  disabled={!name.trim() || createAlbum.isPending}
-                  className="h-11 flex-1 items-center justify-center rounded-xl bg-primary active:opacity-80 disabled:opacity-50"
-                >
-                  {createAlbum.isPending ? (
-                    <ActivityIndicator
-                      size="small"
-                      color={colors.primaryForeground}
-                    />
-                  ) : (
-                    <Text className="text-sm font-bold text-primary-foreground">
-                      Create
-                    </Text>
-                  )}
-                </Pressable>
-              </View>
             </Pressable>
-          </KeyboardAvoidingView>
-        </Pressable>
-      </Modal>
+            <Pressable
+              onPress={handleCreateAlbum}
+              disabled={!name.trim() || createAlbum.isPending}
+              className="h-11 flex-1 items-center justify-center rounded-xl bg-primary active:opacity-80 disabled:opacity-50"
+            >
+              {createAlbum.isPending ? (
+                <ActivityIndicator
+                  size="small"
+                  color={colors.primaryForeground}
+                />
+              ) : (
+                <Text className="text-sm font-bold text-primary-foreground">
+                  Create
+                </Text>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </FloatingBottomSheet>
     </View>
   );
 }

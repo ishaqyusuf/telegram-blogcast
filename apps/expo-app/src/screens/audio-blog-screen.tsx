@@ -54,6 +54,7 @@ import { useColors } from "@/hooks/use-color";
 import { usePlayHistorySync } from "@/hooks/use-play-history-sync";
 import { useScrollChrome } from "@/hooks/use-scroll-chrome";
 import { useTranscriptionQueue } from "@/hooks/use-transcription-queue";
+import { getAudioPlayability } from "@/lib/audio-playability";
 import { getAudioDisplayTitle } from "@/lib/audio-title";
 import { uploadBlogMediaAsset, type BlobMediaUpload } from "@/lib/blob-upload";
 import { getBlogShareUrl } from "@/lib/share-links";
@@ -700,6 +701,7 @@ function AnimatedPlayButton({
 	downloadProgress,
 	onPress,
 	size = 64,
+	disabledReason,
 }: {
 	isPlaying: boolean;
 	isLoading: boolean;
@@ -707,10 +709,12 @@ function AnimatedPlayButton({
 	downloadProgress: number;
 	onPress: () => void;
 	size?: number;
+	disabledReason?: string | null;
 }) {
 	const colors = useColors();
 	const pulse = useRef(new Animated.Value(0)).current;
 	const busy = isLoading || isDownloading;
+	const isDisabled = isLoading || Boolean(disabledReason);
 
 	useEffect(() => {
 		if (!busy) {
@@ -750,14 +754,15 @@ function AnimatedPlayButton({
 	return (
 		<Pressable
 			onPress={onPress}
-			disabled={isLoading}
+			disabled={isDisabled}
+			accessibilityLabel={disabledReason ?? "Play audio"}
 			className="items-center justify-center active:opacity-90"
 			style={{
 				width: size,
 				height: size,
 				borderRadius: size / 2,
-				backgroundColor: colors.primary,
-				opacity: isLoading ? 0.92 : 1,
+				backgroundColor: disabledReason ? colors.muted : colors.primary,
+				opacity: isLoading ? 0.92 : disabledReason ? 0.68 : 1,
 			}}
 		>
 			{busy ? (
@@ -819,9 +824,13 @@ function AnimatedPlayButton({
 				</View>
 			) : (
 				<Icon
-					name={isPlaying ? "Pause" : "Play"}
+					name={disabledReason ? "Lock" : isPlaying ? "Pause" : "Play"}
 					size={size >= 60 ? 28 : 22}
-					className="text-primary-foreground"
+					color={
+						disabledReason
+							? colors.mutedForeground
+							: colors.primaryForeground
+					}
 				/>
 			)}
 		</Pressable>
@@ -841,112 +850,70 @@ function SleepTimerModal({
 	const sleepTimerEnd = useAudioStore((s) => s.sleepTimerEnd);
 	const isActive = sleepTimerEnd != null && sleepTimerEnd > Date.now();
 	return (
-		<Modal
+		<FloatingBottomSheet
 			visible={visible}
-			transparent
-			animationType="slide"
-			onRequestClose={onClose}
+			onClose={onClose}
+			accessibilityLabel="Sleep timer"
+			title="Sleep timer"
 		>
-			<Pressable
-				style={{
-					flex: 1,
-					backgroundColor: "rgba(0,0,0,0.6)",
-					justifyContent: "flex-end",
-				}}
-				onPress={onClose}
-			>
-				<Pressable
-					onPress={() => {}}
+			<View style={{ paddingHorizontal: 20, paddingBottom: 28, gap: 4 }}>
+				<View
 					style={{
-						backgroundColor: colors.card,
-						borderTopLeftRadius: 20,
-						borderTopRightRadius: 20,
-						padding: 20,
-						gap: 4,
+						flexDirection: "row",
+						flexWrap: "wrap",
+						justifyContent: "space-around",
+						gap: 8,
 					}}
 				>
-					<View
-						style={{
-							width: 36,
-							height: 4,
-							backgroundColor: colors.muted,
-							borderRadius: 2,
-							alignSelf: "center",
-							marginBottom: 12,
-						}}
-					/>
-					<Text
-						style={{
-							fontSize: 16,
-							fontWeight: "700",
-							color: colors.foreground,
-							textAlign: "center",
-							marginBottom: 12,
-						}}
-					>
-						Sleep timer
-					</Text>
-					<View
-						style={{
-							flexDirection: "row",
-							flexWrap: "wrap",
-							justifyContent: "space-around",
-							gap: 8,
-						}}
-					>
-						{SLEEP_OPTIONS.map((min) => (
-							<Pressable
-								key={min}
-								onPress={() => {
-									setSleepTimer(min);
-									onClose();
-								}}
-								style={{
-									paddingHorizontal: 20,
-									paddingVertical: 12,
-									borderRadius: 12,
-									backgroundColor: colors.muted,
-									minWidth: 70,
-									alignItems: "center",
-								}}
-							>
-								<Text
-									style={{
-										fontSize: 14,
-										fontWeight: "700",
-										color: colors.mutedForeground,
-									}}
-								>
-									{min} min
-								</Text>
-							</Pressable>
-						))}
-					</View>
-					{isActive && (
+					{SLEEP_OPTIONS.map((min) => (
 						<Pressable
+							key={min}
 							onPress={() => {
-								clearSleepTimer();
+								setSleepTimer(min);
 								onClose();
 							}}
 							style={{
-								marginTop: 12,
+								paddingHorizontal: 20,
 								paddingVertical: 12,
 								borderRadius: 12,
-								backgroundColor: "rgba(239,68,68,0.12)",
+								backgroundColor: colors.muted,
+								minWidth: 70,
 								alignItems: "center",
 							}}
 						>
 							<Text
-								style={{ color: "#ef4444", fontWeight: "700", fontSize: 14 }}
+								style={{
+									fontSize: 14,
+									fontWeight: "700",
+									color: colors.mutedForeground,
+								}}
 							>
-								Cancel timer
+								{min} min
 							</Text>
 						</Pressable>
-					)}
-					<View style={{ height: 16 }} />
-				</Pressable>
-			</Pressable>
-		</Modal>
+					))}
+				</View>
+				{isActive && (
+					<Pressable
+						onPress={() => {
+							clearSleepTimer();
+							onClose();
+						}}
+						style={{
+							marginTop: 12,
+							paddingVertical: 12,
+							borderRadius: 12,
+							backgroundColor: "rgba(239,68,68,0.12)",
+							alignItems: "center",
+						}}
+					>
+						<Text style={{ color: "#ef4444", fontWeight: "700", fontSize: 14 }}>
+							Cancel timer
+						</Text>
+					</Pressable>
+				)}
+			</View>
+		</FloatingBottomSheet>
 	);
 }
 
@@ -960,6 +927,7 @@ function PlayerSection({
 	isDownloading,
 	downloadProgress,
 	onPlayPause,
+	playDisabledReason,
 	onSeek,
 	onPlusPress,
 	onReadPress,
@@ -973,6 +941,7 @@ function PlayerSection({
 	isDownloading: boolean;
 	downloadProgress: number;
 	onPlayPause: () => void;
+	playDisabledReason?: string | null;
 	onSeek?: (positionMillis: number) => void | Promise<void>;
 	onPlusPress?: () => void;
 	onReadPress?: () => void;
@@ -1255,6 +1224,7 @@ function PlayerSection({
 						isDownloading={isDownloading}
 						downloadProgress={downloadProgress}
 						onPress={onPlayPause}
+						disabledReason={playDisabledReason}
 					/>
 					<Pressable
 						className="p-2 active:opacity-50"
@@ -1287,6 +1257,7 @@ function FloatingPlayerWidget({
 	isDownloading,
 	downloadProgress,
 	onPlayPause,
+	playDisabledReason,
 	onSeek,
 	onPlusPress,
 }: {
@@ -1299,6 +1270,7 @@ function FloatingPlayerWidget({
 	isDownloading: boolean;
 	downloadProgress: number;
 	onPlayPause: () => void;
+	playDisabledReason?: string | null;
 	onSeek?: (positionMillis: number) => void;
 	onPlusPress?: () => void;
 }) {
@@ -1366,6 +1338,7 @@ function FloatingPlayerWidget({
 						isDownloading={isDownloading}
 						downloadProgress={downloadProgress}
 						onPress={onPlayPause}
+						disabledReason={playDisabledReason}
 						size={48}
 					/>
 					<Pressable
@@ -1656,137 +1629,121 @@ function ChannelPicturePickerSheet({
 	if (!visible) return null;
 
 	return (
-		<Modal
-			visible
-			transparent
-			animationType="slide"
-			statusBarTranslucent
-			onRequestClose={onClose}
+		<FloatingBottomSheet
+			visible={visible}
+			onClose={onClose}
+			accessibilityLabel="Channel pictures"
+			snapPoints={["90%"]}
+			enableDynamicSizing={false}
 		>
-			<Pressable className="flex-1 justify-end bg-black/60" onPress={onClose}>
-				<Pressable
-					onPress={(event) => event.stopPropagation()}
+			<View
+				style={{
+					overflow: "hidden",
+					backgroundColor: colors.background,
+				}}
+			>
+				<View
 					style={{
-						maxHeight: "90%",
-						minHeight: "68%",
-						overflow: "hidden",
-						borderTopLeftRadius: 24,
-						borderTopRightRadius: 24,
-						backgroundColor: colors.background,
+						paddingHorizontal: 16,
+						paddingTop: 4,
+						paddingBottom: 10,
+						borderBottomWidth: 1,
+						borderBottomColor: colors.border,
+						gap: 12,
 					}}
 				>
 					<View
 						style={{
-							paddingHorizontal: 16,
-							paddingTop: 14,
-							paddingBottom: 10,
-							borderBottomWidth: 1,
-							borderBottomColor: colors.border,
+							flexDirection: "row",
+							alignItems: "center",
+							justifyContent: "space-between",
 							gap: 12,
 						}}
 					>
-						<View
+						<Text
 							style={{
-								width: 40,
-								height: 4,
-								borderRadius: 99,
-								alignSelf: "center",
-								backgroundColor: colors.input,
-							}}
-						/>
-						<View
-							style={{
-								flexDirection: "row",
-								alignItems: "center",
-								justifyContent: "space-between",
-								gap: 12,
+								color: colors.foreground,
+								fontSize: 18,
+								fontWeight: "900",
 							}}
 						>
-							<Text
-								style={{
-									color: colors.foreground,
-									fontSize: 18,
-									fontWeight: "900",
-								}}
-							>
-								Channel pictures
-							</Text>
-							<Pressable
-								onPress={onClose}
-								style={{
-									width: 38,
-									height: 38,
-									borderRadius: 999,
-									alignItems: "center",
-									justifyContent: "center",
-									backgroundColor: colors.muted,
-								}}
-							>
-								<Icon name="X" size={17} color={colors.mutedForeground} />
-							</Pressable>
-						</View>
-						<View
+							Channel pictures
+						</Text>
+						<Pressable
+							onPress={onClose}
 							style={{
-								minHeight: 44,
-								borderRadius: 16,
-								borderWidth: 1,
-								borderColor: colors.border,
-								backgroundColor: colors.card,
-								flexDirection: "row",
+								width: 38,
+								height: 38,
+								borderRadius: 999,
 								alignItems: "center",
-								gap: 8,
-								paddingHorizontal: 12,
+								justifyContent: "center",
+								backgroundColor: colors.muted,
 							}}
 						>
-							<Icon name="Search" size={17} color={colors.mutedForeground} />
-							<TextInput
-								value={query}
-								onChangeText={onQueryChange}
-								placeholder="Search pictures and comments"
-								placeholderTextColor={colors.mutedForeground}
-								returnKeyType="search"
-								style={{ flex: 1, color: colors.foreground, fontSize: 14 }}
-							/>
-							{query.length > 0 ? (
-								<Pressable onPress={() => onQueryChange("")} hitSlop={8}>
-									<Icon name="X" size={15} color={colors.mutedForeground} />
-								</Pressable>
-							) : null}
-						</View>
+							<Icon name="X" size={17} color={colors.mutedForeground} />
+						</Pressable>
 					</View>
+					<View
+						style={{
+							minHeight: 44,
+							borderRadius: 16,
+							borderWidth: 1,
+							borderColor: colors.border,
+							backgroundColor: colors.card,
+							flexDirection: "row",
+							alignItems: "center",
+							gap: 8,
+							paddingHorizontal: 12,
+						}}
+					>
+						<Icon name="Search" size={17} color={colors.mutedForeground} />
+						<TextInput
+							value={query}
+							onChangeText={onQueryChange}
+							placeholder="Search pictures and comments"
+							placeholderTextColor={colors.mutedForeground}
+							returnKeyType="search"
+							style={{ flex: 1, color: colors.foreground, fontSize: 14 }}
+						/>
+						{query.length > 0 ? (
+							<Pressable onPress={() => onQueryChange("")} hitSlop={8}>
+								<Icon name="X" size={15} color={colors.mutedForeground} />
+							</Pressable>
+						) : null}
+					</View>
+				</View>
 
-					<FlatList
-						data={posts}
-						keyExtractor={(item) => String(item.id)}
-						keyboardDismissMode="interactive"
-						keyboardShouldPersistTaps="handled"
-						showsVerticalScrollIndicator={false}
-						contentContainerStyle={{ paddingBottom: 28 }}
-						ListEmptyComponent={
-							<View style={{ alignItems: "center", paddingVertical: 48 }}>
-								{isLoading ? (
-									<ActivityIndicator color={colors.primary} />
-								) : (
-									<Text style={{ color: colors.mutedForeground }}>
-										No pictures found
-									</Text>
-								)}
-							</View>
-						}
-						renderItem={({ item }) => (
-							<View style={{ opacity: isSelecting ? 0.65 : 1 }}>
-								<BlogCard
-									post={item}
-									hideChannelName
-									onPress={onSelect}
-									onDelete={onDelete}
-								/>
-							</View>
-						)}
-					/>
-				</Pressable>
-			</Pressable>
-		</Modal>
+				<FlatList
+					data={posts}
+					keyExtractor={(item) => String(item.id)}
+					keyboardDismissMode="interactive"
+					keyboardShouldPersistTaps="handled"
+					showsVerticalScrollIndicator={false}
+					contentContainerStyle={{ paddingBottom: 28 }}
+					ListEmptyComponent={
+						<View style={{ alignItems: "center", paddingVertical: 48 }}>
+							{isLoading ? (
+								<ActivityIndicator color={colors.primary} />
+							) : (
+								<Text style={{ color: colors.mutedForeground }}>
+									No pictures found
+								</Text>
+							)}
+						</View>
+					}
+					renderItem={({ item }) => (
+						<View style={{ opacity: isSelecting ? 0.65 : 1 }}>
+							<BlogCard
+								post={item}
+								hideChannelName
+								onPress={onSelect}
+								onDelete={onDelete}
+							/>
+						</View>
+					)}
+				/>
+			</View>
+		</FloatingBottomSheet>
 	);
 }
 
@@ -1841,33 +1798,31 @@ function MoreMenu({
 		onPress: () => void;
 	}) => (
 		<Pressable
+			haptic
 			onPress={() => {
 				onClose();
 				setTimeout(onPress, 250);
 			}}
-			style={{
-				flexDirection: "row",
-				alignItems: "center",
-				gap: 14,
-				paddingVertical: 14,
-				paddingHorizontal: 8,
-			}}
+			className="min-h-14 flex-row items-center gap-3 rounded-2xl px-3 py-2 active:bg-muted"
 		>
-			<Icon name={icon} size={22} className="text-foreground" />
-			<View style={{ flex: 1 }}>
+			<View
+				className="size-11 items-center justify-center rounded-full"
+				style={{ backgroundColor: colors.muted }}
+			>
+				<Icon name={icon} className="text-foreground" />
+			</View>
+			<View className="min-w-0 flex-1">
 				<Text
+					className="text-sm font-medium text-foreground"
 					style={{
-						fontSize: 15,
 						color: colors.foreground,
-						fontWeight: "500",
 					}}
 				>
 					{label}
 				</Text>
 				<Text
+					className="mt-0.5 text-xs text-muted-foreground"
 					style={{
-						marginTop: 2,
-						fontSize: 12,
 						color: colors.mutedForeground,
 					}}
 					numberOfLines={1}
@@ -1875,44 +1830,54 @@ function MoreMenu({
 					{description}
 				</Text>
 			</View>
+			<Icon name="ChevronRight" className="text-muted-foreground" />
 		</Pressable>
 	);
 	return (
-		<Modal
+		<FloatingBottomSheet
 			visible={visible}
-			transparent
-			animationType="slide"
-			onRequestClose={onClose}
+			onClose={onClose}
+			accessibilityLabel="Audio options"
 		>
-			<Pressable
-				style={{
-					flex: 1,
-					backgroundColor: "rgba(0,0,0,0.6)",
-					justifyContent: "flex-end",
-				}}
-				onPress={onClose}
-			>
-				<Pressable
-					onPress={() => {}}
-					style={{
-						backgroundColor: colors.card,
-						borderTopLeftRadius: 20,
-						borderTopRightRadius: 20,
-						padding: 20,
-						gap: 4,
-					}}
-				>
-					<View
-						style={{
-							width: 36,
-							height: 4,
-							backgroundColor: colors.input,
-							borderRadius: 2,
-							alignSelf: "center",
-							marginBottom: 8,
-						}}
-					/>
+			<View className="px-4 pb-8">
+				<View className="pb-4">
+					<View className="mb-3 flex-row items-center gap-2">
+						<View
+							className="rounded-full px-2.5 py-1"
+							style={{ backgroundColor: withAlpha(colors.primary, 0.1) }}
+						>
+							<Text
+								className="text-xs font-semibold text-primary"
+								style={{ color: colors.primary }}
+							>
+								Audio
+							</Text>
+						</View>
+						{hasAlbum && albumId ? (
+							<Text
+								className="text-xs text-muted-foreground"
+								style={{ color: colors.mutedForeground }}
+							>
+								Album #{albumId}
+							</Text>
+						) : null}
+					</View>
+					<Text
+						className="text-xl font-semibold text-foreground"
+						style={{ color: colors.foreground }}
+					>
+						Audio options
+					</Text>
+					<Text
+						className="mt-1 text-sm leading-5 text-muted-foreground"
+						numberOfLines={2}
+						style={{ color: colors.mutedForeground }}
+					>
+						Choose an action for this audio.
+					</Text>
+				</View>
 
+				<View className="gap-1">
 					{menuAction({
 						icon: "Share",
 						label: "Share",
@@ -1985,11 +1950,9 @@ function MoreMenu({
 						description: "Stop playback automatically",
 						onPress: onSleepTimer,
 					})}
-
-					<View style={{ height: 20 }} />
-				</Pressable>
-			</Pressable>
-		</Modal>
+				</View>
+			</View>
+		</FloatingBottomSheet>
 	);
 }
 
@@ -2019,209 +1982,183 @@ function AddToAlbumPicker({
 	});
 
 	return (
-		<Modal
+		<FloatingBottomSheet
 			visible={visible}
-			transparent
-			animationType="slide"
-			onRequestClose={onClose}
+			onClose={onClose}
+			accessibilityLabel="Add to album"
+			snapPoints={["70%"]}
+			enableDynamicSizing={false}
 		>
-			<Pressable
-				style={{
-					flex: 1,
-					backgroundColor: "rgba(0,0,0,0.6)",
-					justifyContent: "flex-end",
-				}}
-				onPress={onClose}
-			>
-				<Pressable
-					onPress={() => {}}
+			<View style={{ backgroundColor: colors.card, overflow: "hidden" }}>
+				{/* Header */}
+				<View
 					style={{
-						backgroundColor: colors.card,
-						borderTopLeftRadius: 20,
-						borderTopRightRadius: 20,
-						maxHeight: "70%",
+						paddingHorizontal: 20,
+						paddingBottom: 12,
+						borderBottomWidth: 1,
+						borderBottomColor: colors.border,
 					}}
 				>
-					{/* Handle + header */}
 					<View
-						style={{
-							padding: 20,
-							paddingBottom: 12,
-							borderBottomWidth: 1,
-							borderBottomColor: colors.border,
-						}}
-					>
-						<View
-							style={{
-								width: 36,
-								height: 4,
-								backgroundColor: colors.input,
-								borderRadius: 2,
-								alignSelf: "center",
-								marginBottom: 12,
-							}}
-						/>
-						<View
-							style={{
-								flexDirection: "row",
-								alignItems: "center",
-								justifyContent: "space-between",
-							}}
-						>
-							<Pressable onPress={onClose}>
-								<Icon name="X" size={20} className="text-muted-foreground" />
-							</Pressable>
-							<Text
-								style={{
-									fontSize: 15,
-									fontWeight: "700",
-									color: colors.foreground,
-								}}
-							>
-								Add to album
-							</Text>
-							<View style={{ width: 20 }} />
-						</View>
-					</View>
-
-					{/* Album list */}
-					{isLoading ? (
-						<View style={{ alignItems: "center", paddingVertical: 40 }}>
-							<ActivityIndicator color={colors.primary} />
-						</View>
-					) : !albums?.length ? (
-						<View style={{ alignItems: "center", paddingVertical: 40, gap: 8 }}>
-							<Icon name="Disc3" size={36} className="text-muted-foreground" />
-							<Text style={{ color: colors.mutedForeground, fontSize: 14 }}>
-								No albums yet
-							</Text>
-						</View>
-					) : (
-						<FlatList
-							data={albums}
-							keyExtractor={(item) => String(item.id)}
-							contentContainerStyle={{
-								paddingHorizontal: 16,
-								paddingVertical: 8,
-							}}
-							renderItem={({ item }) => {
-								const color = albumColor(item.id);
-								const isThisAdding = isAdding && addingAlbumId === item.id;
-								return (
-									<Pressable
-										onPress={() => onPick(item.id, item.name)}
-										disabled={isAdding}
-										style={{
-											flexDirection: "row",
-											alignItems: "center",
-											gap: 14,
-											paddingVertical: 12,
-											opacity: isAdding && !isThisAdding ? 0.4 : 1,
-										}}
-									>
-										{/* Album art — intentional brand color background, keep white text */}
-										<View
-											style={{
-												width: 44,
-												height: 44,
-												borderRadius: 8,
-												backgroundColor: color,
-												alignItems: "center",
-												justifyContent: "center",
-											}}
-										>
-											{isThisAdding ? (
-												<ActivityIndicator size="small" color="#fff" />
-											) : (
-												<Text
-													style={{
-														fontSize: 16,
-														fontWeight: "800",
-														color: "#fff",
-													}}
-												>
-													{getInitials(item.name)}
-												</Text>
-											)}
-										</View>
-
-										{/* Info */}
-										<View style={{ flex: 1 }}>
-											<Text
-												style={{
-													fontSize: 14,
-													fontWeight: "600",
-													color: colors.foreground,
-													textAlign: "right",
-												}}
-												numberOfLines={1}
-											>
-												{item.name}
-											</Text>
-											<Text
-												style={{
-													fontSize: 12,
-													color: colors.mutedForeground,
-													textAlign: "right",
-												}}
-											>
-												{item._count?.medias ?? 0} tracks
-											</Text>
-										</View>
-
-										<Icon
-											name="ChevronLeft"
-											size={16}
-											className="text-muted-foreground"
-										/>
-									</Pressable>
-								);
-							}}
-						/>
-					)}
-
-					{/* New album shortcut */}
-					<Pressable
-						onPress={() => {
-							onClose();
-							setTimeout(onNewAlbum, 250);
-						}}
 						style={{
 							flexDirection: "row",
 							alignItems: "center",
-							gap: 10,
-							paddingHorizontal: 16,
-							paddingVertical: 16,
-							borderTopWidth: 1,
-							borderTopColor: colors.border,
-							marginBottom: 8,
+							justifyContent: "space-between",
 						}}
 					>
-						<View
-							style={{
-								width: 44,
-								height: 44,
-								borderRadius: 8,
-								backgroundColor: colors.muted,
-								alignItems: "center",
-								justifyContent: "center",
-							}}
-						>
-							<Icon name="Plus" size={20} className="text-muted-foreground" />
-						</View>
+						<Pressable onPress={onClose}>
+							<Icon name="X" size={20} className="text-muted-foreground" />
+						</Pressable>
 						<Text
 							style={{
-								fontSize: 14,
-								fontWeight: "600",
-								color: colors.mutedForeground,
+								fontSize: 15,
+								fontWeight: "700",
+								color: colors.foreground,
 							}}
 						>
-							Create new album
+							Add to album
 						</Text>
-					</Pressable>
+						<View style={{ width: 20 }} />
+					</View>
+				</View>
+
+				{/* Album list */}
+				{isLoading ? (
+					<View style={{ alignItems: "center", paddingVertical: 40 }}>
+						<ActivityIndicator color={colors.primary} />
+					</View>
+				) : !albums?.length ? (
+					<View style={{ alignItems: "center", paddingVertical: 40, gap: 8 }}>
+						<Icon name="Disc3" size={36} className="text-muted-foreground" />
+						<Text style={{ color: colors.mutedForeground, fontSize: 14 }}>
+							No albums yet
+						</Text>
+					</View>
+				) : (
+					<FlatList
+						data={albums}
+						keyExtractor={(item) => String(item.id)}
+						contentContainerStyle={{
+							paddingHorizontal: 16,
+							paddingVertical: 8,
+						}}
+						renderItem={({ item }) => {
+							const color = albumColor(item.id);
+							const isThisAdding = isAdding && addingAlbumId === item.id;
+							return (
+								<Pressable
+									onPress={() => onPick(item.id, item.name)}
+									disabled={isAdding}
+									style={{
+										flexDirection: "row",
+										alignItems: "center",
+										gap: 14,
+										paddingVertical: 12,
+										opacity: isAdding && !isThisAdding ? 0.4 : 1,
+									}}
+								>
+									{/* Album art — intentional brand color background, keep white text */}
+									<View
+										style={{
+											width: 44,
+											height: 44,
+											borderRadius: 8,
+											backgroundColor: color,
+											alignItems: "center",
+											justifyContent: "center",
+										}}
+									>
+										{isThisAdding ? (
+											<ActivityIndicator size="small" color="#fff" />
+										) : (
+											<Text
+												style={{
+													fontSize: 16,
+													fontWeight: "800",
+													color: "#fff",
+												}}
+											>
+												{getInitials(item.name)}
+											</Text>
+										)}
+									</View>
+
+									{/* Info */}
+									<View style={{ flex: 1 }}>
+										<Text
+											style={{
+												fontSize: 14,
+												fontWeight: "600",
+												color: colors.foreground,
+												textAlign: "right",
+											}}
+											numberOfLines={1}
+										>
+											{item.name}
+										</Text>
+										<Text
+											style={{
+												fontSize: 12,
+												color: colors.mutedForeground,
+												textAlign: "right",
+											}}
+										>
+											{item._count?.medias ?? 0} tracks
+										</Text>
+									</View>
+
+									<Icon
+										name="ChevronLeft"
+										size={16}
+										className="text-muted-foreground"
+									/>
+								</Pressable>
+							);
+						}}
+					/>
+				)}
+
+				{/* New album shortcut */}
+				<Pressable
+					onPress={() => {
+						onClose();
+						setTimeout(onNewAlbum, 250);
+					}}
+					style={{
+						flexDirection: "row",
+						alignItems: "center",
+						gap: 10,
+						paddingHorizontal: 16,
+						paddingVertical: 16,
+						borderTopWidth: 1,
+						borderTopColor: colors.border,
+						marginBottom: 8,
+					}}
+				>
+					<View
+						style={{
+							width: 44,
+							height: 44,
+							borderRadius: 8,
+							backgroundColor: colors.muted,
+							alignItems: "center",
+							justifyContent: "center",
+						}}
+					>
+						<Icon name="Plus" size={20} className="text-muted-foreground" />
+					</View>
+					<Text
+						style={{
+							fontSize: 14,
+							fontWeight: "600",
+							color: colors.mutedForeground,
+						}}
+					>
+						Create new album
+					</Text>
 				</Pressable>
-			</Pressable>
-		</Modal>
+			</View>
+		</FloatingBottomSheet>
 	);
 }
 
@@ -2326,6 +2263,7 @@ export default function AudioBlogScreen() {
 	const [viewedPlaybackError, setViewedPlaybackError] = useState<string | null>(
 		null,
 	);
+	const [viewedPlaybackPending, setViewedPlaybackPending] = useState(false);
 
 	const { data: blog } = useQuery(_trpc.blog.getBlog.queryOptions({ id }));
 
@@ -2364,14 +2302,12 @@ export default function AudioBlogScreen() {
 		? activeDurationMs || viewedDurationMs
 		: viewedDurationMs;
 	const playerIsPlaying = isViewedAudioActive && activeIsPlaying;
-	const playerIsLoading = isViewedAudioActive && activeIsLoading;
+	const playerIsLoading =
+		viewedPlaybackPending || (isViewedAudioActive && activeIsLoading);
 	const playerIsDownloading = isViewedAudioActive && activeIsDownloading;
 	const playerDownloadProgress = isViewedAudioActive
 		? activeDownloadProgress
 		: 0;
-	const visibleAudioError = isViewedAudioActive
-		? audioError
-		: viewedPlaybackError;
 	const viewedAudioItem = useMemo(() => {
 		if (!blog || blog.type !== "audio") return null;
 		const media = blog.medias?.[0];
@@ -2386,16 +2322,23 @@ export default function AudioBlogScreen() {
 			date: blog.blogDate,
 			audio: {
 				mediaId: media.id,
-				telegramFileId: file.fileId,
+				source: file.source ?? "telegram",
+				telegramFileId,
 				url: mediaUrl,
 				fileName: file.fileName,
 				title: media.title,
+				size: file.fileSize,
 				duration: file.duration,
 				artwork: audioArtUrl ?? undefined,
 				imageUrl: audioArtUrl ?? undefined,
 			},
 		} as any;
-	}, [audioArtUrl, blog, mediaUrl]);
+	}, [audioArtUrl, blog, mediaUrl, telegramFileId]);
+	const playDisabledReason = viewedAudioItem
+		? getAudioPlayability((viewedAudioItem as any).audio).reason
+		: null;
+	const visibleAudioError =
+		playDisabledReason ?? (isViewedAudioActive ? audioError : viewedPlaybackError);
 	const audioTitle = getAudioDisplayTitle(
 		{ content: blog?.content, media: media as any },
 		"Untitled Audio",
@@ -2864,6 +2807,10 @@ export default function AudioBlogScreen() {
 	const handleViewedPlayPause = useCallback(async () => {
 		if (!viewedAudioItem) return;
 		setViewedPlaybackError(null);
+		if (playDisabledReason) {
+			setViewedPlaybackError(playDisabledReason);
+			return;
+		}
 
 		if (isViewedAudioActive) {
 			await useAudioStore.getState().togglePlayPause();
@@ -2872,17 +2819,22 @@ export default function AudioBlogScreen() {
 			return;
 		}
 
-		await loadAudio(viewedAudioItem);
-		const loadError = useAudioStore.getState().error;
-		if (loadError) {
-			setViewedPlaybackError(loadError);
-			return;
-		}
+		setViewedPlaybackPending(true);
+		try {
+			await loadAudio(viewedAudioItem);
+			const loadError = useAudioStore.getState().error;
+			if (loadError) {
+				setViewedPlaybackError(loadError);
+				return;
+			}
 
-		await useAudioStore.getState().play();
-		const playError = useAudioStore.getState().error;
-		if (playError) setViewedPlaybackError(playError);
-	}, [isViewedAudioActive, loadAudio, viewedAudioItem]);
+			await useAudioStore.getState().play();
+			const playError = useAudioStore.getState().error;
+			if (playError) setViewedPlaybackError(playError);
+		} finally {
+			setViewedPlaybackPending(false);
+		}
+	}, [isViewedAudioActive, loadAudio, playDisabledReason, viewedAudioItem]);
 
 	const { mutate: addToAlbum, isPending: isAdding } = useMutation(
 		_trpc.album.addMediaToAlbum.mutationOptions({
@@ -3672,6 +3624,7 @@ export default function AudioBlogScreen() {
 												isDownloading={playerIsDownloading}
 												downloadProgress={playerDownloadProgress}
 												onPlayPause={handleViewedPlayPause}
+												playDisabledReason={playDisabledReason}
 												onSeek={isViewedAudioActive ? seekAudio : undefined}
 												onPlusPress={
 													media?.album
@@ -3805,6 +3758,7 @@ export default function AudioBlogScreen() {
 					isDownloading={playerIsDownloading}
 					downloadProgress={playerDownloadProgress}
 					onPlayPause={handleViewedPlayPause}
+					playDisabledReason={playDisabledReason}
 					onSeek={isViewedAudioActive ? seekAudio : undefined}
 					onPlusPress={
 						media?.album ? undefined : () => setAlbumPickerVisible(true)

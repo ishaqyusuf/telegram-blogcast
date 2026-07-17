@@ -23,6 +23,7 @@ import { LegendList } from "@legendapp/list";
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";
+import { FloatingBottomSheet } from "@/components/ui/floating-bottom-sheet";
 import {
   getSwipeDeleteThreshold,
   SwipeDeleteAction,
@@ -1205,31 +1206,23 @@ export default function ChannelChatScreen() {
 
       {/* Add to Album bottom sheet */}
       {showAlbumModal && (
-        <Modal
-          transparent
-          animationType="slide"
-          onRequestClose={() => setShowAlbumModal(false)}
+        <FloatingBottomSheet
+          visible={showAlbumModal}
+          onClose={() => setShowAlbumModal(false)}
+          accessibilityLabel="Add to album"
+          snapPoints={["72%"]}
+          enableDynamicSizing={false}
         >
-          <Pressable
-            className="flex-1 justify-end bg-black/60"
-            onPress={() => setShowAlbumModal(false)}
-          >
-            <Pressable
-              onPress={(e) => e.stopPropagation()}
-              style={{ width: "100%" }}
-            >
-              <AddToAlbumModal
-                mediaIds={albumMediaIds}
-                authorId={albumAuthorId}
-                onAdded={handleAlbumAdded}
-                onClose={() => {
-                  setShowAlbumModal(false);
-                  clearSelection();
-                }}
-              />
-            </Pressable>
-          </Pressable>
-        </Modal>
+          <AddToAlbumModal
+            mediaIds={albumMediaIds}
+            authorId={albumAuthorId}
+            onAdded={handleAlbumAdded}
+            onClose={() => {
+              setShowAlbumModal(false);
+              clearSelection();
+            }}
+          />
+        </FloatingBottomSheet>
       )}
 
       <AddToPlaylistModal

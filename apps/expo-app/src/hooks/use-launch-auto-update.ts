@@ -1,5 +1,7 @@
+import Constants from "expo-constants";
 import * as Updates from "expo-updates";
 import { useEffect, useRef, useState } from "react";
+import { AppState, type AppStateStatus } from "react-native";
 
 export type LaunchAutoUpdatePhase =
   | "idle"
@@ -10,9 +12,23 @@ export type LaunchAutoUpdatePhase =
   | "failed";
 
 const STEP_DELAY_MS = 650;
+const DEFAULT_FOREGROUND_CHECK_COOLDOWN_MS = 5 * 60 * 1000;
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function readBooleanFlag(value: unknown, fallback: boolean) {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "string") {
+    return !["0", "false", "off", "no"].includes(value.toLowerCase());
+  }
+  return fallback;
+}
+
+function readPositiveNumber(value: unknown, fallback: number) {
+  const number = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(number) && number > 0 ? number : fallback;
 }
 
 function getErrorMessage(error: unknown) {
@@ -25,19 +41,37 @@ export function useLaunchAutoUpdate() {
   const { downloadProgress } = Updates.useUpdates();
   const [phase, setPhase] = useState<LaunchAutoUpdatePhase>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const startedRef = useRef(false);
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  const isCheckingRef = useRef(false);
+  const lastCheckAtRef = useRef(0);
+  const extra = Constants.expoConfig?.extra;
+  const autoUpdateOnForeground = readBooleanFlag(
+    extra?.autoUpdateOnForeground ??
+      process.env.EXPO_PUBLIC_AUTO_UPDATE_ON_FOREGROUND,
+    true,
+  );
+  const foregroundCheckCooldownMs = readPositiveNumber(
+    extra?.autoUpdateForegroundCooldownMs ??
+      process.env.EXPO_PUBLIC_AUTO_UPDATE_FOREGROUND_COOLDOWN_MS,
+    DEFAULT_FOREGROUND_CHECK_COOLDOWN_MS,
+  );
 
   useEffect(() => {
-    if (startedRef.current) return;
-    startedRef.current = true;
-
     let cancelled = false;
     const setPhaseIfMounted = (nextPhase: LaunchAutoUpdatePhase) => {
       if (!cancelled) setPhase(nextPhase);
     };
 
-    const runUpdateCheck = async () => {
-      if (__DEV__ || !Updates.isEnabled) return;
+    const runUpdateCheck = async (force = false) => {
+      if (__DEV__ || !Updates.isEnabled || isCheckingRef.current) return;
+
+      const now = Date.now();
+      if (!force && now - lastCheckAtRef.current < foregroundCheckCooldownMs) {
+        return;
+      }
+
+      isCheckingRef.current = true;
+      lastCheckAtRef.current = now;
 
       setPhaseIfMounted("checking");
 
@@ -47,11 +81,13 @@ export function useLaunchAutoUpdate() {
       } catch (error) {
         console.warn("[updates] launch check failed", error);
         setPhaseIfMounted("idle");
+        isCheckingRef.current = false;
         return;
       }
 
       if (!checkResult.isAvailable && !checkResult.isRollBackToEmbedded) {
         setPhaseIfMounted("idle");
+        isCheckingRef.current = false;
         return;
       }
 
@@ -63,6 +99,7 @@ export function useLaunchAutoUpdate() {
 
         if (!fetchResult.isNew && !fetchResult.isRollBackToEmbedded) {
           setPhaseIfMounted("idle");
+          isCheckingRef.current = false;
           return;
         }
 
@@ -77,15 +114,35 @@ export function useLaunchAutoUpdate() {
           setErrorMessage(getErrorMessage(error));
           setPhase("failed");
         }
+      } finally {
+        isCheckingRef.current = false;
       }
     };
 
+    void runUpdateCheck(true);
+
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      const previousState = appStateRef.current;
+      appStateRef.current = nextState;
+
+      const wasBackgrounded =
+        previousState === "background" || previousState === "inactive";
+      if (
+        !autoUpdateOnForeground ||
+        nextState !== "active" ||
+        !wasBackgrounded
+      ) {
+        return;
+      }
+
     void runUpdateCheck();
+    });
 
     return () => {
       cancelled = true;
+      subscription.remove();
     };
-  }, []);
+  }, [autoUpdateOnForeground, foregroundCheckCooldownMs]);
 
   return {
     dismissFailure: () => {

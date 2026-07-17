@@ -427,52 +427,20 @@ function EditAlbumModal({
   const [description, setDescription] = useState(album.description ?? "");
 
   return (
-    <Modal
+    <FloatingBottomSheet
       visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
+      onClose={onClose}
+      accessibilityLabel="Edit album"
+      title="Edit album"
     >
-      <Pressable
+      <View
         style={{
-          flex: 1,
-          backgroundColor: "rgba(0,0,0,0.6)",
-          justifyContent: "flex-end",
+          backgroundColor: colors.card,
+          paddingHorizontal: 24,
+          paddingBottom: 28,
+          gap: 16,
         }}
-        onPress={onClose}
       >
-        <Pressable
-          onPress={() => {}} // block tap-through
-          style={{
-            backgroundColor: colors.card,
-            borderTopLeftRadius: 20,
-            borderTopRightRadius: 20,
-            padding: 24,
-            gap: 16,
-          }}
-        >
-          {/* Handle bar */}
-          <View
-            style={{
-              width: 40,
-              height: 4,
-              backgroundColor: colors.input,
-              borderRadius: 2,
-              alignSelf: "center",
-              marginBottom: 4,
-            }}
-          />
-
-          <Text
-            style={{
-              fontSize: 16,
-              fontWeight: "700",
-              color: colors.foreground,
-              textAlign: "left",
-            }}
-          >
-            Edit album
-          </Text>
 
           {/* Name */}
           <View style={{ gap: 6 }}>
@@ -575,9 +543,8 @@ function EditAlbumModal({
               </Text>
             </Pressable>
           </View>
-        </Pressable>
-      </Pressable>
-    </Modal>
+      </View>
+    </FloatingBottomSheet>
   );
 }
 
@@ -883,42 +850,23 @@ function AlbumArtCropSheet({
   }
 
   return (
-    <Modal
+    <FloatingBottomSheet
       visible={Boolean(source)}
-      transparent
-      animationType="slide"
-      statusBarTranslucent
-      onRequestClose={() => {
+      onClose={() => {
         if (!busy) onCancel();
       }}
+      accessibilityLabel="Crop album art"
+      snapPoints={["88%"]}
+      enableDynamicSizing={false}
     >
       <View
         style={{
-          flex: 1,
-          justifyContent: "flex-end",
-          backgroundColor: "rgba(0,0,0,0.72)",
+          backgroundColor: colors.card,
+          paddingHorizontal: 20,
+          paddingBottom: 28,
+          gap: 16,
         }}
       >
-        <View
-          style={{
-            backgroundColor: colors.background,
-            borderTopLeftRadius: 24,
-            borderTopRightRadius: 24,
-            paddingHorizontal: 20,
-            paddingTop: 14,
-            paddingBottom: 28,
-            gap: 16,
-          }}
-        >
-          <View
-            style={{
-              width: 40,
-              height: 4,
-              borderRadius: 99,
-              alignSelf: "center",
-              backgroundColor: colors.input,
-            }}
-          />
           <View
             style={{
               flexDirection: "row",
@@ -1090,9 +1038,8 @@ function AlbumArtCropSheet({
               )}
             </Pressable>
           </View>
-        </View>
       </View>
-    </Modal>
+    </FloatingBottomSheet>
   );
 }
 
@@ -1283,49 +1230,20 @@ function AuthorEditorModal({
   const canSave = Boolean(name.trim() || nameAr.trim());
 
   return (
-    <Modal
+    <FloatingBottomSheet
       visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
+      onClose={onClose}
+      accessibilityLabel={title}
+      title={title}
     >
-      <Pressable
+      <View
         style={{
-          flex: 1,
-          justifyContent: "flex-end",
-          backgroundColor: "rgba(0,0,0,0.62)",
+          backgroundColor: colors.card,
+          paddingHorizontal: 20,
+          paddingBottom: 28,
+          gap: 14,
         }}
-        onPress={onClose}
       >
-        <Pressable
-          onPress={(event) => event.stopPropagation()}
-          style={{
-            backgroundColor: colors.card,
-            borderTopLeftRadius: 20,
-            borderTopRightRadius: 20,
-            padding: 20,
-            gap: 14,
-          }}
-        >
-          <View
-            style={{
-              width: 42,
-              height: 4,
-              borderRadius: 999,
-              backgroundColor: colors.input,
-              alignSelf: "center",
-            }}
-          />
-          <Text
-            style={{
-              fontSize: 16,
-              fontWeight: "800",
-              color: colors.foreground,
-              textAlign: "right",
-            }}
-          >
-            {title}
-          </Text>
           <View style={{ gap: 6 }}>
             <Text
               style={{
@@ -1424,9 +1342,8 @@ function AuthorEditorModal({
               )}
             </Pressable>
           </View>
-        </Pressable>
-      </Pressable>
-    </Modal>
+      </View>
+    </FloatingBottomSheet>
   );
 }
 
@@ -1474,44 +1391,19 @@ function ManageAlbumBooksModal({
   }, [visible]);
 
   return (
-    <Modal
+    <FloatingBottomSheet
       visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
+      onClose={onClose}
+      accessibilityLabel="Album books"
+      snapPoints={["86%"]}
+      enableDynamicSizing={false}
     >
-      <Pressable
-        style={{
-          flex: 1,
-          justifyContent: "flex-end",
-          backgroundColor: "rgba(0,0,0,0.62)",
-        }}
-        onPress={onClose}
-      >
-        <Pressable
-          onPress={(event) => event.stopPropagation()}
-          style={{
-            maxHeight: "86%",
-            backgroundColor: colors.card,
-            borderTopLeftRadius: 22,
-            borderTopRightRadius: 22,
-            overflow: "hidden",
-          }}
-        >
+      <View style={{ backgroundColor: colors.card }}>
           <KeyboardAwareScrollView
             bottomOffset={ALBUM_DETAIL_KEYBOARD_OFFSET}
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={{ padding: 18, gap: 14 }}
           >
-            <View
-              style={{
-                width: 42,
-                height: 4,
-                borderRadius: 999,
-                backgroundColor: colors.input,
-                alignSelf: "center",
-              }}
-            />
             <View
               style={{
                 flexDirection: "row-reverse",
@@ -1798,9 +1690,8 @@ function ManageAlbumBooksModal({
               )}
             </View>
           </KeyboardAwareScrollView>
-        </Pressable>
-      </Pressable>
-    </Modal>
+      </View>
+    </FloatingBottomSheet>
   );
 }
 
@@ -2016,7 +1907,7 @@ function TrackRow({
         </View>
       ) : (
         <Pressable
-          disabled={isRemoving || !canPlay}
+          disabled={isRemoving || !canPlay || isTrackLoading}
           onPress={(event) => {
             event.stopPropagation();
             onPlayPress();
@@ -2312,49 +2203,39 @@ function TrackActionsSheet({
   };
 
   return (
-    <Modal
+    <FloatingBottomSheet
       visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
+      onClose={onClose}
+      accessibilityLabel="Track options"
+      maxDynamicContentSize={Math.min(
+        Math.max(360, windowHeight * 0.72),
+        windowHeight - 24,
+      )}
     >
-      <Pressable
-        onPress={onClose}
-        style={{
-          flex: 1,
-          justifyContent: "flex-end",
-          backgroundColor: "rgba(0,0,0,0.6)",
-        }}
-      >
-        <Pressable
-          onPress={() => {}}
-          style={{
-            width: "100%",
-            maxHeight: Math.min(
-              Math.max(360, windowHeight * 0.72),
-              windowHeight - 24,
-            ),
-            borderTopLeftRadius: 22,
-            borderTopRightRadius: 22,
-            backgroundColor: colors.card,
-            paddingHorizontal: 18,
-            paddingTop: 14,
-            paddingBottom: 28,
-          }}
-        >
+      <View style={{ paddingHorizontal: 18, paddingBottom: 28 }}>
+        <View style={{ gap: 6, paddingBottom: 14 }}>
           <View
             style={{
-              width: 42,
-              height: 4,
+              alignSelf: "flex-end",
               borderRadius: 999,
-              backgroundColor: colors.input,
-              alignSelf: "center",
-              marginBottom: 14,
+              backgroundColor: withAlpha(colors.primary, 0.1),
+              paddingHorizontal: 10,
+              paddingVertical: 4,
             }}
-          />
+          >
+            <Text
+              style={{
+                color: colors.primary,
+                fontSize: 12,
+                fontWeight: "800",
+              }}
+            >
+              Track
+            </Text>
+          </View>
           <Text
             style={{
-              fontSize: 15,
+              fontSize: 20,
               fontWeight: "800",
               color: colors.foreground,
               textAlign: "right",
@@ -2363,104 +2244,103 @@ function TrackActionsSheet({
           >
             {title}
           </Text>
+        </View>
 
-          <ScrollView
-            style={{ marginTop: 14 }}
-            contentContainerStyle={{ paddingBottom: 8 }}
-            showsVerticalScrollIndicator={false}
+        <ScrollView
+          contentContainerStyle={{ paddingBottom: 8 }}
+          showsVerticalScrollIndicator={false}
+        >
+          <View>
+            <TrackActionRow
+              label="Remove from album"
+              description="Keep the post but remove this track here"
+              icon="X"
+              disabled={isBusy}
+              danger
+              onPress={onRemove}
+            />
+            <TrackActionRow
+              label="Move to album"
+              description="Choose another album for this track"
+              icon="ListMusic"
+              disabled={isBusy}
+              onPress={() => runAndClose(onMoveRequest)}
+            />
+          </View>
+
+          <Text
+            style={{
+              marginTop: 18,
+              marginBottom: 8,
+              fontSize: 12,
+              fontWeight: "800",
+              letterSpacing: 0.5,
+              color: colors.mutedForeground,
+              textAlign: "right",
+              textTransform: "uppercase",
+            }}
           >
-            <View>
-              <TrackActionRow
-                label="Remove from album"
-                description="Keep the post but remove this track here"
-                icon="X"
-                disabled={isBusy}
-                danger
-                onPress={onRemove}
-              />
-              <TrackActionRow
-                label="Move to album"
-                description="Choose another album for this track"
-                icon="ListMusic"
-                disabled={isBusy}
-                onPress={() => runAndClose(onMoveRequest)}
-              />
-            </View>
+            Post options
+          </Text>
 
-            <Text
-              style={{
-                marginTop: 18,
-                marginBottom: 8,
-                fontSize: 12,
-                fontWeight: "800",
-                letterSpacing: 0.5,
-                color: colors.mutedForeground,
-                textAlign: "right",
-                textTransform: "uppercase",
-              }}
-            >
-              Post options
-            </Text>
-
-            <View>
-              <TrackActionRow
-                label="Open post"
-                description="View the full post and media"
-                icon="FileText"
-                disabled={!canOpenPost}
-                onPress={() => runAndClose(onOpenPost)}
-              />
-              <TrackActionRow
-                label="Share"
-                description="Send a web link to this post"
-                icon="Share"
-                onPress={() => runAndClose(onShare)}
-              />
-              <TrackActionRow
-                label="Comment"
-                description="Open the discussion for this post"
-                icon="MessageSquare"
-                disabled={!canOpenPost}
-                onPress={() => runAndClose(onComment)}
-              />
-              <TrackActionRow
-                label="Transcribe"
-                description="Queue this audio for local Whisper"
-                icon="Captions"
-                disabled={isBusy || !media?.id}
-                onPress={() => runAndClose(onTranscribe)}
-              />
-              <TrackActionRow
-                label="Reset transcribe"
-                description="Clear transcript and queue jobs"
-                icon="RotateCcw"
-                disabled={isBusy || !media?.id}
-                onPress={() => runAndClose(onResetTranscription)}
-              />
-              <TrackActionRow
-                label="Save"
-                description="Keep this post in saved items"
-                icon="Bookmark"
-                onPress={() => runAndClose(onComingSoon)}
-              />
-              <TrackActionRow
-                label="Like"
-                description="Add this post to liked items"
-                icon="Heart"
-                onPress={() => runAndClose(onComingSoon)}
-              />
-              <TrackActionRow
-                label="Delete post"
-                description="Remove this post from the blog list"
-                icon="Trash2"
-                danger
-                onPress={() => runAndClose(onComingSoon)}
-              />
-            </View>
-          </ScrollView>
-        </Pressable>
-      </Pressable>
-    </Modal>
+          <View>
+            <TrackActionRow
+              label="Open post"
+              description="View the full post and media"
+              icon="FileText"
+              disabled={!canOpenPost}
+              onPress={() => runAndClose(onOpenPost)}
+            />
+            <TrackActionRow
+              label="Share"
+              description="Send a web link to this post"
+              icon="Share"
+              onPress={() => runAndClose(onShare)}
+            />
+            <TrackActionRow
+              label="Comment"
+              description="Open the discussion for this post"
+              icon="MessageSquare"
+              disabled={!canOpenPost}
+              onPress={() => runAndClose(onComment)}
+            />
+            <TrackActionRow
+              label="Transcribe"
+              description="Queue this audio for local Whisper"
+              icon="Captions"
+              disabled={isBusy || !media?.id}
+              onPress={() => runAndClose(onTranscribe)}
+            />
+            <TrackActionRow
+              label="Reset transcribe"
+              description="Clear transcript and queue jobs"
+              icon="RotateCcw"
+              disabled={isBusy || !media?.id}
+              onPress={() => runAndClose(onResetTranscription)}
+            />
+            <TrackActionRow
+              label="Save"
+              description="Keep this post in saved items"
+              icon="Bookmark"
+              onPress={() => runAndClose(onComingSoon)}
+            />
+            <TrackActionRow
+              label="Like"
+              description="Add this post to liked items"
+              icon="Heart"
+              onPress={() => runAndClose(onComingSoon)}
+            />
+            <TrackActionRow
+              label="Delete post"
+              description="Remove this post from the blog list"
+              icon="Trash2"
+              danger
+              onPress={() => runAndClose(onComingSoon)}
+            />
+          </View>
+        </ScrollView>
+      </View>
+    </FloatingBottomSheet>
   );
 }
 
@@ -2488,46 +2368,22 @@ function TrackMoveAlbumSheet({
   const targetAlbums = albums.filter((album) => album.id !== currentAlbumId);
 
   return (
-    <Modal
+    <FloatingBottomSheet
       visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
+      onClose={onClose}
+      accessibilityLabel="Move track"
+      maxDynamicContentSize={Math.min(
+        Math.max(320, windowHeight * 0.62),
+        windowHeight - 24,
+      )}
     >
-      <Pressable
-        onPress={onClose}
+      <View
         style={{
-          flex: 1,
-          justifyContent: "flex-end",
-          backgroundColor: "rgba(0,0,0,0.6)",
+          backgroundColor: colors.card,
+          paddingHorizontal: 18,
+          paddingBottom: 28,
         }}
       >
-        <Pressable
-          onPress={() => {}}
-          style={{
-            width: "100%",
-            maxHeight: Math.min(
-              Math.max(320, windowHeight * 0.62),
-              windowHeight - 24,
-            ),
-            borderTopLeftRadius: 22,
-            borderTopRightRadius: 22,
-            backgroundColor: colors.card,
-            paddingHorizontal: 18,
-            paddingTop: 14,
-            paddingBottom: 28,
-          }}
-        >
-          <View
-            style={{
-              width: 42,
-              height: 4,
-              borderRadius: 999,
-              backgroundColor: colors.input,
-              alignSelf: "center",
-              marginBottom: 14,
-            }}
-          />
           <Text
             style={{
               fontSize: 15,
@@ -2622,9 +2478,8 @@ function TrackMoveAlbumSheet({
               )}
             />
           )}
-        </Pressable>
-      </Pressable>
-    </Modal>
+      </View>
+    </FloatingBottomSheet>
   );
 }
 
@@ -3232,6 +3087,7 @@ export default function AlbumDetailScreen() {
   const activeAudioBlog = useAudioStore((s) => s.blog);
   const activeAudioIsPlaying = useAudioStore((s) => s.isPlaying);
   const activeAudioIsLoading = useAudioStore((s) => s.isLoading);
+  const activeAudioIsDownloading = useAudioStore((s) => s.isDownloading);
   const loadAudio = useAudioStore((s) => s.loadAudio);
   const playAudio = useAudioStore((s) => s.play);
   const pauseAudio = useAudioStore((s) => s.pause);
@@ -3253,6 +3109,9 @@ export default function AlbumDetailScreen() {
   const id = Number(albumId);
   const [trackSearchActive, setTrackSearchActive] = useState(false);
   const [trackSearchQuery, setTrackSearchQuery] = useState("");
+  const [pendingPlaybackMediaId, setPendingPlaybackMediaId] = useState<
+    number | null
+  >(null);
 
   const {
     data: album,
@@ -4252,6 +4111,8 @@ export default function AlbumDetailScreen() {
 
   async function handleTrackPlaybackPress(media: any) {
     if (selectedTrackCount > 0) return;
+    const mediaId = getTrackMediaId(media);
+    if (pendingPlaybackMediaId && pendingPlaybackMediaId !== mediaId) return;
 
     const isActiveTrack = isActiveAlbumTrack(media);
     if (isActiveTrack && activeAudioIsPlaying) {
@@ -4283,9 +4144,16 @@ export default function AlbumDetailScreen() {
       return;
     }
 
-    await loadAudio(audioItem);
-    if (!useAudioStore.getState().error) {
-      await useAudioStore.getState().play();
+    setPendingPlaybackMediaId(mediaId);
+    try {
+      await loadAudio(audioItem);
+      if (!useAudioStore.getState().error) {
+        await useAudioStore.getState().play();
+      }
+    } finally {
+      setPendingPlaybackMediaId((current) =>
+        current === mediaId ? null : current,
+      );
     }
   }
 
@@ -5415,6 +5283,8 @@ export default function AlbumDetailScreen() {
                     <>
                       {displayedTracks.map((media, idx) => {
                         const isActiveTrack = isActiveAlbumTrack(media);
+                        const isPendingTrack =
+                          pendingPlaybackMediaId === getTrackMediaId(media);
                         return (
                           <TrackRow
                             key={media.id}
@@ -5431,7 +5301,10 @@ export default function AlbumDetailScreen() {
                               isActiveTrack && activeAudioIsPlaying
                             }
                             isTrackLoading={
-                              isActiveTrack && activeAudioIsLoading
+                              isPendingTrack ||
+                              (isActiveTrack &&
+                                (activeAudioIsLoading ||
+                                  activeAudioIsDownloading))
                             }
                             canPlay={canPlayAlbumTrack(media)}
                             selectionMode={selectedTrackCount > 0}

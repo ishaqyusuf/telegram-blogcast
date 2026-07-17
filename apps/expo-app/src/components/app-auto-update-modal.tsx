@@ -7,7 +7,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
-import { useColors } from "@/hooks/use-color";
+import { useColorScheme, useColors } from "@/hooks/use-color";
 import { useLaunchAutoUpdate } from "@/hooks/use-launch-auto-update";
 import { withAlpha } from "@/lib/theme";
 import { StatusBar } from "expo-status-bar";
@@ -15,13 +15,9 @@ import { Modal, StyleSheet, View } from "react-native";
 
 export function AppAutoUpdateModal() {
   const colors = useColors();
-  const {
-    dismissFailure,
-    downloadProgress,
-    errorMessage,
-    phase,
-    visible,
-  } = useLaunchAutoUpdate();
+  const { colorScheme } = useColorScheme();
+  const { dismissFailure, downloadProgress, errorMessage, phase, visible } =
+    useLaunchAutoUpdate();
 
   const failed = phase === "failed";
   const progress =
@@ -51,7 +47,7 @@ export function AppAutoUpdateModal() {
       <SafeArea style={{ backgroundColor: colors.background }}>
         <StatusBar
           backgroundColor={colors.background}
-          style={colors.background === "rgb(15, 23, 42)" ? "light" : "dark"}
+          style={colorScheme === "dark" ? "light" : "dark"}
         />
         <View style={styles.content}>
           <View
@@ -99,11 +95,7 @@ export function AppAutoUpdateModal() {
                 {AUTO_UPDATE_STEPS.map((label) => {
                   const state = getAutoUpdateStepState(phase, label);
                   return (
-                    <AppAutoUpdateStep
-                      key={label}
-                      label={label}
-                      {...state}
-                    />
+                    <AppAutoUpdateStep key={label} label={label} {...state} />
                   );
                 })}
               </View>

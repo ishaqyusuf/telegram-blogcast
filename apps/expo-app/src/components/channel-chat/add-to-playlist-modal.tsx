@@ -1,17 +1,11 @@
 import { Pressable } from "@/components/ui/pressable";
 import { _trpc } from "@/components/static-trpc";
+import { FloatingBottomSheet } from "@/components/ui/floating-bottom-sheet";
 import { Icon } from "@/components/ui/icon";
 import { useColors } from "@/hooks/use-color";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { useState } from "react";
-import {
-  ActivityIndicator,
-  FlatList,
-  Modal,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { ActivityIndicator, FlatList, Text, TextInput, View } from "react-native";
 
 type Props = {
   visible: boolean;
@@ -67,22 +61,17 @@ export function AddToPlaylistModal({ visible, mediaIds, onClose }: Props) {
   }
 
   return (
-    <Modal
+    <FloatingBottomSheet
       visible={visible}
-      transparent
-      animationType="slide"
-      onRequestClose={onClose}
+      onClose={onClose}
+      accessibilityLabel="Add to playlist"
+      snapPoints={["75%"]}
+      enableDynamicSizing={false}
     >
-      <Pressable className="flex-1 justify-end bg-black/60" onPress={onClose}>
-        <Pressable
-          onPress={(event) => event.stopPropagation()}
-          className="max-h-[75%] rounded-t-3xl bg-card px-4 pb-8 pt-4"
-          style={{ backgroundColor: colors.card }}
-        >
-          <View
-            className="mb-4 h-1 w-10 self-center rounded-full bg-muted"
-            style={{ backgroundColor: colors.muted }}
-          />
+      <View
+        className="bg-card px-4 pb-8"
+        style={{ backgroundColor: colors.card }}
+      >
           <Text
             className="mb-4 text-base font-bold text-foreground"
             style={{ color: colors.foreground }}
@@ -215,8 +204,7 @@ export function AddToPlaylistModal({ visible, mediaIds, onClose }: Props) {
               Cancel
             </Text>
           </Pressable>
-        </Pressable>
-      </Pressable>
-    </Modal>
+      </View>
+    </FloatingBottomSheet>
   );
 }

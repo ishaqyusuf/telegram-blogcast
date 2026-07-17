@@ -7,19 +7,13 @@ import {
 } from "@/lib/react-query";
 import { useRouter } from "expo-router";
 import { useMemo, useRef, useState, type ReactNode } from "react";
-import {
-  FlatList,
-  Modal,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { FlatList, ScrollView, Text, TextInput, View } from "react-native";
 
 import { BlogCard, type BlogItem } from "@/components/blog-card";
 import { AddToAlbumModal } from "@/components/channel-chat/add-to-album-modal";
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
+import { FloatingBottomSheet } from "@/components/ui/floating-bottom-sheet";
 import { Icon } from "@/components/ui/icon";
 import { ScrollToTopButton } from "@/components/ui/scroll-to-top-button";
 import { useScrollChrome } from "@/hooks/use-scroll-chrome";
@@ -826,28 +820,19 @@ export default function SearchScreen() {
           onPress={emptyScroll.scrollToTop}
         />
         {showAlbumModal && (
-          <Modal
-            transparent
-            animationType="slide"
-            statusBarTranslucent
-            onRequestClose={() => setShowAlbumModal(false)}
+          <FloatingBottomSheet
+            visible={showAlbumModal}
+            onClose={() => setShowAlbumModal(false)}
+            accessibilityLabel="Add to album"
+            snapPoints={["72%"]}
+            enableDynamicSizing={false}
           >
-            <Pressable
-              className="flex-1 justify-end bg-black/60"
-              onPress={() => setShowAlbumModal(false)}
-            >
-              <Pressable
-                onPress={(event) => event.stopPropagation()}
-                style={{ width: "100%" }}
-              >
-                <AddToAlbumModal
-                  mediaIds={albumMediaIds}
-                  onAdded={handleAlbumAdded}
-                  onClose={() => setShowAlbumModal(false)}
-                />
-              </Pressable>
-            </Pressable>
-          </Modal>
+            <AddToAlbumModal
+              mediaIds={albumMediaIds}
+              onAdded={handleAlbumAdded}
+              onClose={() => setShowAlbumModal(false)}
+            />
+          </FloatingBottomSheet>
         )}
       </SafeArea>
     </View>

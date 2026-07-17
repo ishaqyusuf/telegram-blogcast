@@ -1,9 +1,10 @@
-import { View, Text, TouchableOpacity } from "react-native";
-import { useCallback } from "react";
+import { ActivityIndicator, View, Text, TouchableOpacity } from "react-native";
+import { useCallback, useState } from "react";
 import { ItemProps } from "./home-feed-post-card";
 import { useAudioStore } from "@/store/audio-store";
 import { Icon } from "../ui/icon";
 import { useColors } from "@/hooks/use-color";
+import { getAudioPlayability } from "@/lib/audio-playability";
 
 export function HomeFeedAudioPlayer({
   duration,
@@ -14,18 +15,31 @@ export function HomeFeedAudioPlayer({
 }) {
   const store = useAudioStore();
   const colors = useColors();
+  const [playbackPending, setPlaybackPending] = useState(false);
   const isCurrent = store.blog?.id === post?.id;
   const isPlayying = isCurrent && store.isPlaying;
+  const isBusy =
+    playbackPending || (isCurrent && (store.isLoading || store.isDownloading));
+  const audioPlayability = getAudioPlayability(post.audio as any);
+  const isPlayBlocked = !audioPlayability.canPlay;
+  const isDisabled = isBusy || isPlayBlocked;
   const playPause = useCallback(async () => {
+    if (isDisabled) return;
+
     if (isPlayying) {
       await store.pause();
     } else if (isCurrent) {
       await store.play();
     } else {
-      await store.loadAudio(post);
-      await store.play();
+      setPlaybackPending(true);
+      try {
+        await store.loadAudio(post);
+        await store.play();
+      } finally {
+        setPlaybackPending(false);
+      }
     }
-  }, [isPlayying, isCurrent, post, store]);
+  }, [isDisabled, isPlayying, isCurrent, post, store]);
   // A fake waveform for display purposes
   const waveform = [4, 5, 4, 2, 3, 5, 2, 4, 3, 2, 5, 3];
   return (
@@ -33,12 +47,24 @@ export function HomeFeedAudioPlayer({
       <View className="flex-row items-center gap-3">
         <TouchableOpacity
           onPress={playPause}
+          disabled={isDisabled}
           className="w-10 h-10 rounded-full bg-primary items-center justify-center"
+          accessibilityLabel={audioPlayability.reason ?? "Play audio"}
+          style={{
+            backgroundColor: isPlayBlocked ? colors.muted : colors.primary,
+            opacity: isPlayBlocked ? 0.62 : 1,
+          }}
         >
-          <Icon
-            name={isPlayying ? "Pause" : "Play"}
-            className="text-foreground size-16"
-          />
+          {isBusy ? (
+            <ActivityIndicator size="small" color={colors.primaryForeground} />
+          ) : (
+            <Icon
+              name={isPlayBlocked ? "Lock" : isPlayying ? "Pause" : "Play"}
+              color={
+                isPlayBlocked ? colors.mutedForeground : colors.primaryForeground
+              }
+            />
+          )}
           {/* <Play size={24} color="white" fill="white" /> */}
         </TouchableOpacity>
         <View className="flex-1 flex-col gap-1.5">
