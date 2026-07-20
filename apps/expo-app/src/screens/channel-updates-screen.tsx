@@ -1,5 +1,5 @@
 import { SafeArea } from "@/components/safe-area";
-import { _trpc } from "@/components/static-trpc";
+import { useLocalServicesSession } from "@/components/local-services";
 import { Icon } from "@/components/ui/icon";
 import { Pressable } from "@/components/ui/pressable";
 import { Text } from "@/components/ui/text";
@@ -141,8 +141,14 @@ function ChannelProgressRow({ channel }: { channel: ChannelUpdateItem }) {
 
 export default function ChannelUpdatesScreen() {
   const router = useRouter();
+  const { activeIp, localApiClient } = useLocalServicesSession();
   const { data, isFetching, refetch, error } = useQuery({
-    ..._trpc.channel.getRecentUpdateJob.queryOptions(),
+    queryKey: ["local-api", activeIp, "channel-update-job"],
+    queryFn: () => {
+      if (!localApiClient) throw new Error("Local API is not configured.");
+      return localApiClient.channel.getRecentUpdateJob.query();
+    },
+    enabled: Boolean(localApiClient),
     refetchInterval: 1500,
     retry: false,
   });

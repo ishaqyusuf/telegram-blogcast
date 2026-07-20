@@ -1,10 +1,15 @@
 import { SafeArea } from "@/components/safe-area";
+import { useLocalServicesSession } from "@/components/local-services";
 import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";
 import { Pressable } from "@/components/ui/pressable";
 import { useColorScheme, useColors } from "@/hooks/use-color";
 import { useTranslation } from "@/lib/i18n";
 import { checkLocalApiBaseUrl } from "@/lib/local-api-ip-cache";
+import {
+  isValidIpv4Address,
+  normalizeIpv4Input,
+} from "@/lib/local-services-session";
 import { useQuery } from "@/lib/react-query";
 import { setThemeOverride } from "@/lib/theme-preference";
 import {
@@ -30,6 +35,11 @@ const LANGUAGES: AppLanguage[] = ["en", "ar"];
 
 export default function SettingsScreen() {
   const router = useRouter();
+  const {
+    enableWithIp,
+    isEnabled: localServicesEnabled,
+    requestSetup: requestLocalServicesSetup,
+  } = useLocalServicesSession();
   const colors = useColors();
   const { colorScheme, setColorScheme } = useColorScheme();
   const { language, setLanguage, t, textAlign, writingDirection, isRtl } =
@@ -45,7 +55,6 @@ export default function SettingsScreen() {
   const localServicesIp = useAppSettingsStore((s) => s.localServicesIp);
   const localApiLastIp = useAppSettingsStore((s) => s.localApiLastIp);
   const localApiIpHistory = useAppSettingsStore((s) => s.localApiIpHistory);
-  const setLocalServicesIp = useAppSettingsStore((s) => s.setLocalServicesIp);
   const setLocalTranscriberBaseUrl = useAppSettingsStore(
     (s) => s.setLocalTranscriberBaseUrl,
   );
@@ -78,7 +87,7 @@ export default function SettingsScreen() {
           ? (resolvedTranscriberUrl ?? undefined)
           : undefined,
       }),
-      enabled: canCheckTranscriber,
+      enabled: localServicesEnabled && canCheckTranscriber,
       retry: false,
     },
   );
@@ -95,14 +104,15 @@ export default function SettingsScreen() {
   }, [preferredLocalServicesIp]);
 
   async function saveAndCheckLocalServicesIp() {
-    const urls = buildLocalServiceUrls(localServicesIpInput);
-    if (!urls) {
-      setLocalServicesIp(null);
-      setLocalServicesIpMessage("Enter a local services IP.");
+    const normalizedIp = normalizeIpv4Input(localServicesIpInput);
+    if (!isValidIpv4Address(normalizedIp)) {
+      setLocalServicesIpMessage("Enter a valid IPv4 address.");
       return;
     }
+    const urls = buildLocalServiceUrls(normalizedIp);
+    if (!urls) return;
 
-    setLocalServicesIp(urls.ip);
+    enableWithIp(urls.ip);
     setIsCheckingLocalServicesIp(true);
     setLocalServicesIpMessage(`Checking ${urls.apiBaseUrl}...`);
     try {
@@ -209,8 +219,18 @@ export default function SettingsScreen() {
           </Pressable>
 
           <Pressable
-            onPress={() => router.push("/transcribe-queue" as Href)}
-            className="flex-row items-center gap-3 rounded-xl bg-card p-4 active:opacity-80"
+            onPress={() => {
+              if (!localServicesEnabled) {
+                requestLocalServicesSetup();
+                return;
+              }
+              router.push("/transcribe-queue" as Href);
+            }}
+            className={
+              localServicesEnabled
+                ? "flex-row items-center gap-3 rounded-xl bg-card p-4 active:opacity-80"
+                : "flex-row items-center gap-3 rounded-xl bg-card p-4 opacity-60"
+            }
           >
             <View className="size-10 items-center justify-center rounded-full bg-secondary">
               <Icon name="Captions" size={18} className="text-foreground" />
@@ -236,7 +256,9 @@ export default function SettingsScreen() {
                   writingDirection,
                 }}
               >
-                Review local audio transcription jobs and progress.
+                {localServicesEnabled
+                  ? "Review local audio transcription jobs and progress."
+                  : "Enable local services to review transcription jobs."}
               </Text>
             </View>
             <Icon
@@ -285,8 +307,18 @@ export default function SettingsScreen() {
           </Pressable>
 
           <Pressable
-            onPress={() => router.push("/facebook-import" as Href)}
-            className="flex-row items-center gap-3 rounded-xl bg-card p-4 active:opacity-80"
+            onPress={() => {
+              if (!localServicesEnabled) {
+                requestLocalServicesSetup();
+                return;
+              }
+              router.push("/facebook-import" as Href);
+            }}
+            className={
+              localServicesEnabled
+                ? "flex-row items-center gap-3 rounded-xl bg-card p-4 active:opacity-80"
+                : "flex-row items-center gap-3 rounded-xl bg-card p-4 opacity-60"
+            }
           >
             <View className="size-10 items-center justify-center rounded-full bg-secondary">
               <Icon name="Download" size={18} className="text-foreground" />
@@ -312,7 +344,9 @@ export default function SettingsScreen() {
                   writingDirection,
                 }}
               >
-                Download saved Facebook media and attach Telegram file IDs.
+                {localServicesEnabled
+                  ? "Download saved Facebook media and attach Telegram file IDs."
+                  : "Enable local services to import Facebook media."}
               </Text>
             </View>
             <Icon
@@ -392,11 +426,20 @@ export default function SettingsScreen() {
                   Use one LAN IP for Telegram updates, transcription, and
                   Facebook import.
                 </Text>
+                <Text className="mt-1 text-xs font-semibold text-muted-foreground">
+                  {localServicesEnabled
+                    ? "Enabled for this session"
+                    : "Disabled for this session"}
+                </Text>
               </View>
             </View>
 
             <View className="flex-row items-center gap-2 rounded-xl border border-border bg-background px-3">
-              <Icon name="Server" size={16} className="text-muted-foreground" />
+              <Icon
+                name="HardDrive"
+                size={16}
+                className="text-muted-foreground"
+              />
               <TextInput
                 value={localServicesIpInput}
                 onChangeText={setLocalServicesIpInput}
@@ -439,7 +482,10 @@ export default function SettingsScreen() {
                 {localApiIpHistory.map((ip) => (
                   <Pressable
                     key={ip}
-                    onPress={() => setLocalServicesIp(ip)}
+                    onPress={() => {
+                      setLocalServicesIpInput(ip);
+                      enableWithIp(ip);
+                    }}
                     className="rounded-full bg-secondary px-3 py-2 active:opacity-70"
                   >
                     <Text className="text-xs font-semibold text-foreground">

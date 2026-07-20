@@ -1,5 +1,6 @@
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
+import { useLocalServicesSession } from "@/components/local-services";
 import {
 	useFloatingFooterInset,
 	useFloatingFooterLayer,
@@ -8,13 +9,9 @@ import { FloatingBottomSheet } from "@/components/ui/floating-bottom-sheet";
 import { Icon } from "@/components/ui/icon";
 import { Pressable } from "@/components/ui/pressable";
 import { useColors } from "@/hooks/use-color";
-import {
-	getDefaultFacebookMediaBridgeUrl,
-	isHttpFacebookMediaBridgeUrl,
-} from "@/lib/facebook-media-bridge";
+import { isHttpFacebookMediaBridgeUrl } from "@/lib/facebook-media-bridge";
 import { buildTelegramFileProxy } from "@/lib/media-source";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
-import { useAppSettingsStore } from "@/store/app-settings-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { RouterOutputs } from "@api/trpc/routers/_app";
 import { Audio, type AVPlaybackStatus } from "expo-av";
@@ -625,6 +622,7 @@ export default function FacebookImportScreen() {
 	const router = useRouter();
 	const colors = useColors();
 	const qc = useQueryClient();
+	const { urls: localServiceUrls } = useLocalServicesSession();
 	const floatingFooterInset = useFloatingFooterInset();
 	const playbackSoundRef = useRef<Audio.Sound | null>(null);
 	const [status, setStatus] = useState<StatusFilter>(
@@ -645,12 +643,8 @@ export default function FacebookImportScreen() {
 		number | null
 	>(null);
 	const [playbackPlaying, setPlaybackPlaying] = useState(false);
-	const localServicesIp = useAppSettingsStore((s) => s.localServicesIp);
-	const localApiLastIp = useAppSettingsStore((s) => s.localApiLastIp);
-	const facebookBridgeBaseUrl = getDefaultFacebookMediaBridgeUrl(
-		undefined,
-		localServicesIp ?? localApiLastIp,
-	);
+	const facebookBridgeBaseUrl =
+		localServiceUrls?.facebookMediaBridgeBaseUrl ?? null;
 	const canUseFacebookBridgeUrl =
 		isHttpFacebookMediaBridgeUrl(facebookBridgeBaseUrl);
 	const facebookBridgeInput = canUseFacebookBridgeUrl

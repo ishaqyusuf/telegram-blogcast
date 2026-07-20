@@ -15,6 +15,10 @@ import { AppStatusBar } from "@/components/app-status-bar";
 import { ChannelUpdatePrompt } from "@/components/channel-updates/channel-update-prompt";
 import { FloatingFooterProvider } from "@/components/floating-footer";
 import { GlobalAudioBar } from "@/components/global-audio-bar";
+import {
+	LocalServicesSessionProvider,
+	useLocalServicesSession,
+} from "@/components/local-services";
 import { StaticRouter } from "@/components/static-router";
 import { StaticTrpc } from "@/components/static-trpc";
 import { ToastProviderWithViewport } from "@/components/ui/toast";
@@ -106,9 +110,14 @@ function AudioNotificationRouter() {
 	return null;
 }
 
-function TranscriptionQueueObserver() {
+function EnabledTranscriptionQueueObserver() {
 	useTranscriptionQueue();
 	return null;
+}
+
+function TranscriptionQueueObserver() {
+	const { isEnabled } = useLocalServicesSession();
+	return isEnabled ? <EnabledTranscriptionQueueObserver /> : null;
 }
 
 function RootLayout() {
@@ -146,15 +155,16 @@ const InitialLayout = () => {
 	return (
 		<>
 			<TRPCReactProvider>
-				<FloatingFooterProvider>
-					<StaticTrpc />
-					<StaticRouter />
-					<AudioBootstrap />
-					<AudioNotificationRouter />
-					<ChannelUpdatePrompt />
-					<TranscriptionQueueObserver />
-					<AppAutoUpdateModal />
-					<AppStatusBar />
+				<LocalServicesSessionProvider>
+					<FloatingFooterProvider>
+						<StaticTrpc />
+						<StaticRouter />
+						<AudioBootstrap />
+						<AudioNotificationRouter />
+						<ChannelUpdatePrompt />
+						<TranscriptionQueueObserver />
+						<AppAutoUpdateModal />
+						<AppStatusBar />
 					{/* <StatusBar style="auto" /> */}
 
 					<Stack
@@ -251,10 +261,11 @@ const InitialLayout = () => {
 
           <Stack.Screen name="+not-found" />
         </Stack> */}
-					<GlobalAudioBar />
-					<Toast />
-					<PortalHost />
-				</FloatingFooterProvider>
+						<GlobalAudioBar />
+						<Toast />
+						<PortalHost />
+					</FloatingFooterProvider>
+				</LocalServicesSessionProvider>
 			</TRPCReactProvider>
 		</>
 	);

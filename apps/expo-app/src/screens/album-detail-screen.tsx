@@ -56,6 +56,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { SafeArea } from "@/components/safe-area";
+import { useLocalServicesSession } from "@/components/local-services";
 import { _trpc } from "@/components/static-trpc";
 import { Icon, type IconKeys } from "@/components/ui/icon";
 import { ScrollToTopButton } from "@/components/ui/scroll-to-top-button";
@@ -70,10 +71,8 @@ import { getWebUrl } from "@/lib/base-url";
 import { getTelegramFileUrl } from "@/lib/get-telegram-file";
 import { getMediaFileUrl } from "@/lib/media-source";
 import { withAlpha } from "@/lib/theme";
-import { getDefaultTranscriberUrl } from "@/lib/transcribe";
 import { getTranscriptionBadgeState } from "@/lib/transcription-status";
 import { minuteToString } from "@/lib/utils";
-import { useAppSettingsStore } from "@/store/app-settings-store";
 import { useAudioStore } from "@/store/audio-store";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -2094,6 +2093,7 @@ function TrackActionRow({
   onPress,
   disabled,
   danger,
+  inactive,
 }: {
   label: string;
   description: string;
@@ -2101,9 +2101,14 @@ function TrackActionRow({
   onPress: () => void;
   disabled?: boolean;
   danger?: boolean;
+  inactive?: boolean;
 }) {
   const colors = useColors();
-  const actionColor = danger ? colors.destructive : colors.foreground;
+  const actionColor = danger
+    ? colors.destructive
+    : inactive
+      ? colors.mutedForeground
+      : colors.foreground;
 
   return (
     <Pressable
@@ -2116,7 +2121,7 @@ function TrackActionRow({
         alignItems: "center",
         gap: 12,
         paddingHorizontal: 12,
-        opacity: disabled ? 0.5 : 1,
+        opacity: disabled || inactive ? 0.5 : 1,
       }}
     >
       <View
@@ -2134,7 +2139,7 @@ function TrackActionRow({
         <Icon
           name={icon}
           size={18}
-          color={danger ? colors.destructive : colors.foreground}
+          color={actionColor}
         />
       </View>
       <View style={{ flex: 1 }}>
@@ -2190,6 +2195,7 @@ function TrackActionsSheet({
   onRemove: () => void;
 }) {
   const colors = useColors();
+  const { isEnabled: localServicesEnabled } = useLocalServicesSession();
   const { height: windowHeight } = useWindowDimensions();
   const title =
     media?.title || media?.file?.fileName || media?.blog?.content || "Track";
@@ -2305,10 +2311,17 @@ function TrackActionsSheet({
               onPress={() => runAndClose(onComment)}
             />
             <TrackActionRow
-              label="Transcribe"
-              description="Queue this audio for local Whisper"
+              label={
+                localServicesEnabled ? "Transcribe" : "Enable local services"
+              }
+              description={
+                localServicesEnabled
+                  ? "Queue this audio for local Whisper"
+                  : "Choose a network IP before transcribing"
+              }
               icon="Captions"
               disabled={isBusy || !media?.id}
+              inactive={!localServicesEnabled}
               onPress={() => runAndClose(onTranscribe)}
             />
             <TrackActionRow
@@ -3083,6 +3096,11 @@ export default function AlbumDetailScreen() {
   const router = useRouter();
   const qc = useQueryClient();
   const colors = useColors();
+  const {
+    isEnabled: localServicesEnabled,
+    requestSetup: requestLocalServicesSetup,
+    urls: localServiceUrls,
+  } = useLocalServicesSession();
   const floatingFooterInset = useFloatingFooterInset();
   const activeAudioBlog = useAudioStore((s) => s.blog);
   const activeAudioIsPlaying = useAudioStore((s) => s.isPlaying);
@@ -3092,15 +3110,7 @@ export default function AlbumDetailScreen() {
   const playAudio = useAudioStore((s) => s.play);
   const pauseAudio = useAudioStore((s) => s.pause);
   const albumScroll = useScrollChrome<any>();
-  const localTranscriberBaseUrl = useAppSettingsStore(
-    (s) => s.localTranscriberBaseUrl,
-  );
-  const localServicesIp = useAppSettingsStore((s) => s.localServicesIp);
-  const localApiLastIp = useAppSettingsStore((s) => s.localApiLastIp);
-  const transcriberUrl = getDefaultTranscriberUrl(
-    localTranscriberBaseUrl,
-    localServicesIp ?? localApiLastIp,
-  );
+  const transcriberUrl = localServiceUrls?.transcriberBaseUrl ?? null;
   const { enqueue: enqueueTranscription } = useTranscriptionQueue(undefined, {
     autoLoad: false,
     reloadOnEnqueue: false,
@@ -4209,6 +4219,10 @@ export default function AlbumDetailScreen() {
   }
 
   async function queueTrackTranscription(media: any | null) {
+    if (!localServicesEnabled) {
+      requestLocalServicesSetup();
+      return;
+    }
     if (!media?.id) return;
     const telegramFileId =
       media.file?.source === "vercel_blob" ? null : media.file?.fileId;

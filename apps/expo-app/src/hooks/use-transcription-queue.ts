@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useLocalServicesSession } from "@/components/local-services";
 import { vanillaTrpc } from "@/trpc/vanilla-client";
 
 type QueueInput = {
@@ -47,20 +48,32 @@ export function useTranscriptionQueue(
   mediaId?: number,
   options: TranscriptionQueueOptions = {},
 ) {
+  const {
+    isEnabled: localServicesEnabled,
+    requestSetup: requestLocalServicesSetup,
+  } = useLocalServicesSession();
   const autoLoad = options.autoLoad ?? true;
   const reloadOnEnqueue = options.reloadOnEnqueue ?? true;
   const [jobs, setJobs] = useState<TranscriptionJob[]>([]);
   const [isRunning, setIsRunning] = useState(false);
 
   const reload = useCallback(async () => {
+    if (!localServicesEnabled) {
+      setJobs([]);
+      return;
+    }
     const rows = await vanillaTrpc.blog.getTranscriptionJobs.query({
       mediaId,
     });
     setJobs(rows);
-  }, [mediaId]);
+  }, [localServicesEnabled, mediaId]);
 
   const enqueue = useCallback(
     async (input: QueueInput) => {
+      if (!localServicesEnabled) {
+        requestLocalServicesSetup();
+        throw new Error("Enable local services before queueing transcription.");
+      }
       const audioUrl = getReachableAudioUrl(input.audioUrl);
       const fromSec = input.fromSec ?? null;
       const toSec = input.toSec ?? null;
@@ -106,32 +119,45 @@ export function useTranscriptionQueue(
 
       return job;
     },
-    [reload, reloadOnEnqueue],
+    [
+      localServicesEnabled,
+      reload,
+      reloadOnEnqueue,
+      requestLocalServicesSetup,
+    ],
   );
 
   const deleteJob = useCallback(async (id: number) => {
+    if (!localServicesEnabled) {
+      requestLocalServicesSetup();
+      throw new Error("Enable local services to manage transcription jobs.");
+    }
     await vanillaTrpc.blog.deleteTranscriptionJob.mutate({ id });
     setJobs((current) => current.filter((job) => job.id !== id));
-  }, []);
+  }, [localServicesEnabled, requestLocalServicesSetup]);
 
   const runQueued = useCallback(async () => {
+    if (!localServicesEnabled) {
+      requestLocalServicesSetup();
+      return;
+    }
     setIsRunning(true);
     try {
       await reload();
     } finally {
       setIsRunning(false);
     }
-  }, [reload]);
+  }, [localServicesEnabled, reload, requestLocalServicesSetup]);
 
   useEffect(() => {
-    if (!autoLoad) return;
+    if (!autoLoad || !localServicesEnabled) return;
     reload().catch((error) =>
       console.warn("[TranscriptionQueue] load failed", error),
     );
-  }, [autoLoad, reload]);
+  }, [autoLoad, localServicesEnabled, reload]);
 
   useEffect(() => {
-    if (!autoLoad) return;
+    if (!autoLoad || !localServicesEnabled) return;
     const hasActiveJobs = jobs.some(
       (job) => job.status === "queued" || job.status === "running",
     );
@@ -143,7 +169,7 @@ export function useTranscriptionQueue(
       );
     }, 3000);
     return () => clearInterval(timer);
-  }, [autoLoad, jobs, reload]);
+  }, [autoLoad, jobs, localServicesEnabled, reload]);
 
   return {
     jobs,

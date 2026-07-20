@@ -1,5 +1,15 @@
 # Progress
 
+## 2026-07-20
+
+### Preview/Production Local Network Launch
+- Status: Done.
+- Source mode: Direct user request.
+- Source changed: Expo local-services session provider and launch sheet, local API client, startup Telegram prompt/progress client routing, local feature route guards, transcription gating, and Settings session controls.
+- Brain changed: `brain/plans/2026-07-20-feature-preview-production-local-network-launch.md`, `brain/features/mobile-build-variants.md`, `brain/features/blog.md`, `brain/features/audio.md`, `brain/tasks/done.md`, and `brain/progress.md`.
+- Validation passed: focused local-session/local-URL/transcript tests, the repository Bun test suite, focused Expo ESLint with only pre-existing warnings, preview Android export, and `git diff --check`.
+- Validation limitation: the full Expo typecheck still reports pre-existing project diagnostics; hands-on Android UI QA was skipped at the user's request.
+
 ## 2026-07-10
 
 ### Audio Transcript Streaming And Local Services IP

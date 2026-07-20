@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Alert, Clipboard, Share, Text, View } from "react-native";
 
 import { CommentInput } from "@/components/comments-sheet/comment-input";
+import { useLocalServicesSession } from "@/components/local-services";
 import { FloatingBottomSheet } from "@/components/ui/floating-bottom-sheet";
 import { Icon, type IconKeys } from "@/components/ui/icon";
 import { Toast } from "@/components/ui/toast";
@@ -13,8 +14,6 @@ import { updateBlogPostInCache } from "@/lib/blog-post-cache";
 import { getTelegramFileUrl } from "@/lib/get-telegram-file";
 import { getBlogShareUrl } from "@/lib/share-links";
 import { withAlpha } from "@/lib/theme";
-import { getDefaultTranscriberUrl } from "@/lib/transcribe";
-import { useAppSettingsStore } from "@/store/app-settings-store";
 import { useGlobalAudioBarStore } from "@/store/global-audio-bar-store";
 import { vanillaTrpc } from "@/trpc/vanilla-client";
 import { getBlogHref } from "./utils";
@@ -45,21 +44,31 @@ function ActionRow({
 	icon,
 	onPress,
 	danger = false,
+	inactive = false,
 }: {
 	label: string;
 	description: string;
 	icon: IconKeys;
 	onPress: () => void;
 	danger?: boolean;
+	inactive?: boolean;
 }) {
 	const colors = useColors();
-	const actionColor = danger ? colors.destructive : colors.foreground;
+	const actionColor = danger
+		? colors.destructive
+		: inactive
+			? colors.mutedForeground
+			: colors.foreground;
 
 	return (
 		<Pressable
 			haptic
 			onPress={onPress}
-			className="min-h-14 flex-row items-center gap-3 rounded-2xl px-3 py-2 active:bg-muted"
+			className={
+				inactive
+					? "min-h-14 flex-row items-center gap-3 rounded-2xl px-3 py-2 opacity-60 active:bg-muted"
+					: "min-h-14 flex-row items-center gap-3 rounded-2xl px-3 py-2 active:bg-muted"
+			}
 		>
 			<View
 				className="size-11 items-center justify-center rounded-full"
@@ -71,7 +80,13 @@ function ActionRow({
 			>
 				<Icon
 					name={icon}
-					className={danger ? "text-destructive" : "text-foreground"}
+					className={
+						danger
+							? "text-destructive"
+							: inactive
+								? "text-muted-foreground"
+								: "text-foreground"
+					}
 				/>
 			</View>
 			<View className="min-w-0 flex-1">
@@ -113,16 +128,13 @@ export function BlogCardOptionsSheet({
 }: Props) {
 	const router = useRouter();
 	const colors = useColors();
+	const {
+		isEnabled: localServicesEnabled,
+		requestSetup: requestLocalServicesSetup,
+		urls: localServiceUrls,
+	} = useLocalServicesSession();
 	const setGlobalAudioBarHidden = useGlobalAudioBarStore((s) => s.setHidden);
-	const localTranscriberBaseUrl = useAppSettingsStore(
-		(s) => s.localTranscriberBaseUrl,
-	);
-	const localServicesIp = useAppSettingsStore((s) => s.localServicesIp);
-	const localApiLastIp = useAppSettingsStore((s) => s.localApiLastIp);
-	const transcriberUrl = getDefaultTranscriberUrl(
-		localTranscriberBaseUrl,
-		localServicesIp ?? localApiLastIp,
-	);
+	const transcriberUrl = localServiceUrls?.transcriberBaseUrl ?? null;
 	const { enqueue } = useTranscriptionQueue(undefined, {
 		autoLoad: false,
 		reloadOnEnqueue: false,
@@ -186,6 +198,10 @@ export function BlogCardOptionsSheet({
 	);
 
 	const onQueueTranscription = async () => {
+		if (!localServicesEnabled) {
+			requestLocalServicesSetup();
+			return;
+		}
 		if (!canQueueTranscription) return;
 		let reachableAudioUrl =
 			audioUrl?.startsWith("http://") || audioUrl?.startsWith("https://")
@@ -424,10 +440,19 @@ export function BlogCardOptionsSheet({
 					) : null}
 					{canQueueTranscription ? (
 						<ActionRow
-							label="Transcribe"
-							description="Queue this audio for local Whisper"
+							label={
+								localServicesEnabled
+									? "Transcribe"
+									: "Enable local services"
+							}
+							description={
+								localServicesEnabled
+									? "Queue this audio for local Whisper"
+									: "Choose a network IP before transcribing"
+							}
 							icon="Captions"
 							onPress={onTranscribePress}
+							inactive={!localServicesEnabled}
 						/>
 					) : null}
 					{canResetTranscription ? (

@@ -4,6 +4,7 @@ import { useRouter } from "expo-router";
 import { FlatList, Text, View } from "react-native";
 
 import { SafeArea } from "@/components/safe-area";
+import { useLocalServicesSession } from "@/components/local-services";
 import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";
 import { useColors } from "@/hooks/use-color";
@@ -34,6 +35,10 @@ export default function ChannelsScreen() {
   const router = useRouter();
   const colors = useColors();
   const { t } = useTranslation();
+  const {
+    isEnabled: localServicesEnabled,
+    requestSetup: requestLocalServicesSetup,
+  } = useLocalServicesSession();
   const { data: channels = [], isFetching } = useQuery(
     _trpc.channel.getChannels.queryOptions(),
   );
@@ -56,10 +61,33 @@ export default function ChannelsScreen() {
             {t("channels")}
           </Text>
           <Pressable
-            onPress={() => router.push("/channel-updates" as any)}
-            className="size-10 items-center justify-center rounded-full active:bg-muted"
+            onPress={() => {
+              if (!localServicesEnabled) {
+                requestLocalServicesSetup();
+                return;
+              }
+              router.push("/channel-updates" as any);
+            }}
+            className={
+              localServicesEnabled
+                ? "size-10 items-center justify-center rounded-full active:bg-muted"
+                : "h-10 flex-row items-center gap-1.5 rounded-full bg-muted px-3 opacity-70"
+            }
+            accessibilityLabel={
+              localServicesEnabled
+                ? "Channel update history"
+                : "Enable local services"
+            }
           >
-            <Icon name="History" className="size-sm text-foreground" />
+            <Icon
+              name={localServicesEnabled ? "History" : "WifiOff"}
+              className="size-sm text-foreground"
+            />
+            {!localServicesEnabled ? (
+              <Text className="text-xs font-semibold text-foreground">
+                Enable
+              </Text>
+            ) : null}
           </Pressable>
           <View className="px-2 py-0.5 rounded-full bg-muted">
             <Text className="text-xs font-medium text-muted-foreground">

@@ -9,6 +9,8 @@ Tracks Expo/EAS build-variant behavior for the Al-Ghurobaa mobile app.
 - Preview builds use `Al-Ghurobaa Preview`, `alghurobaa-preview`, and `com.alghurobaa.podcast.preview`.
 - Production-style builds keep the canonical name, scheme, and native identity: `Al-Ghurobaa`, `alghurobaa`, and `com.alghurobaa.podcast`.
 - Preview and production currently share the standard launcher and splash artwork.
+- Preview and production show the Local Services IP sheet once per cold process launch after saved settings hydrate. Selecting an IP enables optional LAN services for that session; dismissing disables them for the session.
+- Development builds bypass the launch sheet and retain automatic Expo host/saved-IP local service resolution.
 
 ## Key Files
 - `apps/expo-app/app.config.ts`
@@ -17,3 +19,4 @@ Tracks Expo/EAS build-variant behavior for the Al-Ghurobaa mobile app.
 
 ## Notes
 - Keep native package and bundle identifiers unique for side-by-side installs.
+- Expo/EAS update checks are independent from the local-services session choice.

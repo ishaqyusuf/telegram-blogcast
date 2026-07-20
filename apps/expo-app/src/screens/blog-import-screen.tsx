@@ -1,23 +1,19 @@
 import { SafeArea } from "@/components/safe-area";
+import { useLocalServicesSession } from "@/components/local-services";
 import { Icon } from "@/components/ui/icon";
 import { Pressable } from "@/components/ui/pressable";
 import { useColors } from "@/hooks/use-color";
-import { normalizeTrpcUrl } from "@/lib/base-url";
 import {
-  buildLocalApiBaseUrl,
   checkLocalApiBaseUrl,
-  getCurrentLocalApiIp,
   LOCAL_API_PORT,
-  normalizeLocalApiIpInput,
-  resolveReachableLocalApi,
-  type LocalApiIpSource,
 } from "@/lib/local-api-ip-cache";
+import {
+  isValidIpv4Address,
+  normalizeIpv4Input,
+} from "@/lib/local-services-session";
 import { useAppSettingsStore } from "@/store/app-settings-store";
-import { trpcFetch } from "@/trpc/fetch";
-import type { AppRouter } from "@api/trpc/routers/_app";
-import { createTRPCClient, httpBatchLink } from "@trpc/client";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -25,7 +21,6 @@ import {
   TextInput,
   View,
 } from "react-native";
-import superjson from "superjson";
 
 type ChannelRow = {
   id: number;
@@ -49,64 +44,17 @@ function stripTrpcPath(value: string) {
     .replace(/\/+$/, "");
 }
 
-function getInitialLocalApiIp(input: {
-  sharedIp: string | null;
-  savedIp: string | null;
-  savedUrl: string | null;
-}) {
-  return (
-    input.sharedIp ||
-    input.savedIp ||
-    normalizeLocalApiIpInput(input.savedUrl) ||
-    getCurrentLocalApiIp()
-  );
-}
-
-function createLocalApiClient(baseUrl: string) {
-  return createTRPCClient<AppRouter>({
-    links: [
-      httpBatchLink({
-        url: normalizeTrpcUrl(baseUrl),
-        fetch: trpcFetch,
-        transformer: superjson as any,
-      }),
-    ],
-  });
-}
-
-function formatIpSource(source?: LocalApiIpSource) {
-  if (source === "last") return "last used IP";
-  if (source === "current") return "current local IP";
-  if (source === "history") return "saved IP history";
-  if (source === "manual") return "manual IP";
-  return "local IP";
-}
-
 export default function BlogImportScreen() {
   const router = useRouter();
   const colors = useColors();
-  const savedLocalApiBaseUrl = useAppSettingsStore((s) => s.localApiBaseUrl);
+  const {
+    activeIp,
+    enableWithIp,
+    localApiClient: trpcClient,
+    urls,
+  } = useLocalServicesSession();
   const setLocalApiBaseUrl = useAppSettingsStore((s) => s.setLocalApiBaseUrl);
-  const localServicesIp = useAppSettingsStore((s) => s.localServicesIp);
-  const setLocalServicesIp = useAppSettingsStore((s) => s.setLocalServicesIp);
-  const localApiLastIp = useAppSettingsStore((s) => s.localApiLastIp);
-  const localApiIpHistory = useAppSettingsStore((s) => s.localApiIpHistory);
-  const rememberLocalApiIp = useAppSettingsStore((s) => s.rememberLocalApiIp);
-  const [apiIpInput, setApiIpInput] = useState(() =>
-    getInitialLocalApiIp({
-      sharedIp: localServicesIp,
-      savedIp: localApiLastIp,
-      savedUrl: savedLocalApiBaseUrl,
-    }),
-  );
-  const [baseUrl, setBaseUrl] = useState(() => {
-    const initialIp = getInitialLocalApiIp({
-      sharedIp: localServicesIp,
-      savedIp: localApiLastIp,
-      savedUrl: savedLocalApiBaseUrl,
-    });
-    return initialIp ? buildLocalApiBaseUrl(initialIp) : "";
-  });
+  const [apiIpInput, setApiIpInput] = useState(activeIp ?? "");
   const [status, setStatus] = useState<
     "idle" | "checking" | "online" | "offline"
   >("idle");
@@ -117,47 +65,35 @@ export default function BlogImportScreen() {
   const [attemptLabel, setAttemptLabel] = useState("");
   const [audioLinkInput, setAudioLinkInput] = useState("");
   const [directImportMessage, setDirectImportMessage] = useState("");
-  const didAutoConnect = useRef(false);
-
-  const trpcClient = useMemo(() => {
-    if (!baseUrl.trim()) return null;
-    return createLocalApiClient(baseUrl);
-  }, [baseUrl]);
-
-  const cleanBaseUrl = stripTrpcPath(baseUrl);
+  const loadedIpRef = useRef<string | null>(null);
+  const cleanBaseUrl = stripTrpcPath(urls?.apiBaseUrl ?? "");
 
   const loadApiState = useCallback(
-    async (nextBaseUrl: string, source?: LocalApiIpSource) => {
-      const cleanUrl = stripTrpcPath(nextBaseUrl);
-      if (!cleanUrl) {
+    async () => {
+      if (!trpcClient || !activeIp || !cleanBaseUrl) {
         setStatus("offline");
         setMessage("Enter your local API IP, for example 192.168.1.20.");
         return;
       }
 
       setStatus("checking");
-      const nextIp = normalizeLocalApiIpInput(cleanUrl);
-      setAttemptLabel(nextIp ? `Checking ${nextIp}` : "");
+      setAttemptLabel(`Checking ${activeIp}`);
       setMessage("");
       try {
-        const ok = await checkLocalApiBaseUrl(cleanUrl);
+        const ok = await checkLocalApiBaseUrl(cleanBaseUrl);
         if (!ok) throw new Error("Health check failed.");
-        const client = createLocalApiClient(cleanUrl);
         const [nextChannels, nextFetcherState] = await Promise.all([
-          client.channel.getChannels.query(),
-          client.channel.getFetcherState.query(),
+          trpcClient.channel.getChannels.query(),
+          trpcClient.channel.getFetcherState.query(),
         ]);
         setChannels(nextChannels as ChannelRow[]);
         setFetcherState(nextFetcherState as FetcherState);
-        setBaseUrl(cleanUrl);
-        if (nextIp) setApiIpInput(nextIp);
+        setApiIpInput(activeIp);
         setStatus("online");
         setMessage(
-          `Local API connected using ${formatIpSource(source)}. Import continues in the API process after you start it.`,
+          `Local API connected at ${activeIp}. Import continues in the API process after you start it.`,
         );
-        setLocalApiBaseUrl(cleanUrl);
-        if (source === "manual" && nextIp) setLocalServicesIp(nextIp);
-        if (nextIp) rememberLocalApiIp(nextIp);
+        setLocalApiBaseUrl(cleanBaseUrl);
       } catch (error) {
         setStatus("offline");
         setMessage(
@@ -169,50 +105,34 @@ export default function BlogImportScreen() {
         setAttemptLabel("");
       }
     },
-    [rememberLocalApiIp, setLocalApiBaseUrl, setLocalServicesIp],
+    [activeIp, cleanBaseUrl, setLocalApiBaseUrl, trpcClient],
   );
 
-  const autoConnect = useCallback(async () => {
-    setStatus("checking");
-    setChannels([]);
-    setFetcherState(null);
-    setMessage(`Looking for the local API on port ${LOCAL_API_PORT}.`);
-    const resolved = await resolveReachableLocalApi({
-      lastUsedIp: localServicesIp ?? localApiLastIp,
-      history: localApiIpHistory,
-      onAttempt: (candidate) => {
-        setApiIpInput(candidate.ip);
-        setAttemptLabel(
-          `Trying ${candidate.ip} (${formatIpSource(candidate.source)})`,
-        );
-      },
-    });
-
-    if (resolved) {
-      await loadApiState(resolved.baseUrl, resolved.source);
-      return;
-    }
-
-    setStatus("offline");
-    setAttemptLabel("");
-    setMessage("No saved local API IP responded. Enter your Mac LAN IP below.");
-  }, [loadApiState, localApiIpHistory, localApiLastIp, localServicesIp]);
-
   const connectManualIp = useCallback(async () => {
-    const ip = normalizeLocalApiIpInput(apiIpInput);
-    if (!ip) {
+    const ip = normalizeIpv4Input(apiIpInput);
+    if (!isValidIpv4Address(ip)) {
       setStatus("offline");
-      setMessage("Enter your local API IP, for example 192.168.1.20.");
+      setMessage("Enter a valid IPv4 address, for example 192.168.1.20.");
       return;
     }
-    await loadApiState(buildLocalApiBaseUrl(ip), "manual");
-  }, [apiIpInput, loadApiState]);
+    if (ip === activeIp) {
+      await loadApiState();
+      return;
+    }
+    setStatus("checking");
+    setAttemptLabel(`Switching to ${ip}`);
+    loadedIpRef.current = null;
+    enableWithIp(ip);
+  }, [activeIp, apiIpInput, enableWithIp, loadApiState]);
 
   useEffect(() => {
-    if (didAutoConnect.current) return;
-    didAutoConnect.current = true;
-    autoConnect();
-  }, [autoConnect]);
+    if (!activeIp || !trpcClient || loadedIpRef.current === activeIp) return;
+    loadedIpRef.current = activeIp;
+    setApiIpInput(activeIp);
+    setChannels([]);
+    setFetcherState(null);
+    void loadApiState();
+  }, [activeIp, loadApiState, trpcClient]);
 
   useEffect(() => {
     if (
@@ -236,7 +156,7 @@ export default function BlogImportScreen() {
     setBusyAction(label);
     try {
       await fn();
-      await loadApiState(cleanBaseUrl);
+      await loadApiState();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Action failed.");
     } finally {
@@ -298,7 +218,9 @@ export default function BlogImportScreen() {
             Blog Import
           </Text>
           <Pressable
-            onPress={autoConnect}
+            onPress={() => {
+              void loadApiState();
+            }}
             className="size-9 items-center justify-center rounded-full bg-card active:opacity-70"
           >
             <Icon name="RefreshCcw" size={17} className="text-foreground" />
@@ -313,7 +235,7 @@ export default function BlogImportScreen() {
             <Icon name="Wifi" size={16} className="text-muted-foreground" />
             <TextInput
               value={apiIpInput}
-              onChangeText={setApiIpInput}
+              onChangeText={(value) => setApiIpInput(normalizeIpv4Input(value))}
               onSubmitEditing={connectManualIp}
               autoCapitalize="none"
               autoCorrect={false}

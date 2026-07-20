@@ -26,6 +26,10 @@ export type FloatingBottomSheetProps = {
 	sideInset?: number;
 	overlayOpacity?: number;
 	accessibilityLabel?: string;
+	onDismissed?: () => void;
+	keyboardBehavior?: BottomSheetModalProps["keyboardBehavior"];
+	keyboardBlurBehavior?: BottomSheetModalProps["keyboardBlurBehavior"];
+	androidKeyboardInputMode?: BottomSheetModalProps["android_keyboardInputMode"];
 };
 
 export function FloatingBottomSheet({
@@ -41,6 +45,10 @@ export function FloatingBottomSheet({
 	sideInset = 8,
 	overlayOpacity = 0.38,
 	accessibilityLabel,
+	onDismissed,
+	keyboardBehavior,
+	keyboardBlurBehavior,
+	androidKeyboardInputMode,
 }: FloatingBottomSheetProps) {
 	const ref = useRef<BottomSheetModal>(null);
 	const wasPresentedRef = useRef(false);
@@ -65,7 +73,8 @@ export function FloatingBottomSheet({
 		const wasPresented = wasPresentedRef.current;
 		wasPresentedRef.current = false;
 		if (wasPresented && visible) onClose();
-	}, [onClose, visible]);
+		onDismissed?.();
+	}, [onClose, onDismissed, visible]);
 
 	const renderBackdrop = useCallback(
 		(props: BottomSheetBackdropProps) => (
@@ -131,6 +140,9 @@ export function FloatingBottomSheet({
 			handleComponent={renderHandle}
 			onDismiss={handleDismiss}
 			accessibilityLabel={accessibilityLabel}
+			keyboardBehavior={keyboardBehavior}
+			keyboardBlurBehavior={keyboardBlurBehavior}
+			android_keyboardInputMode={androidKeyboardInputMode}
 		>
 			<BottomSheetView style={styles.content}>{children}</BottomSheetView>
 		</BottomSheetModal>

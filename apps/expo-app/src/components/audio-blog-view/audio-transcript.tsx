@@ -4,6 +4,7 @@ import { Modal, PanResponder, Text, View } from "react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { _trpc } from "@/components/static-trpc";
+import { useLocalServicesSession } from "@/components/local-services";
 import { Icon } from "@/components/ui/icon";
 import { useAudioStore } from "@/store/audio-store";
 import { useAppSettingsStore } from "@/store/app-settings-store";
@@ -15,10 +16,7 @@ import {
 	TRANSCRIPTION_MODELS,
 	type TranscriptionModel,
 } from "@/lib/transcription-models";
-import {
-	getDefaultTranscriberUrl,
-	isHttpTranscriberUrl,
-} from "@/lib/transcribe";
+import { isHttpTranscriberUrl } from "@/lib/transcribe";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -371,25 +369,21 @@ export function AudioTranscript({
 	telegramFileId,
 }: AudioTranscriptProps) {
 	const colors = useColors();
+	const {
+		isEnabled: localServicesEnabled,
+		requestSetup: requestLocalServicesSetup,
+		urls: localServiceUrls,
+	} = useLocalServicesSession();
 	const durationMs = useAudioStore((s) => s.duration);
 	const positionMs = useAudioStore((s) => s.position);
 	const transcriptionModel = useAppSettingsStore((s) => s.transcriptionModel);
 	const setTranscriptionModel = useAppSettingsStore(
 		(s) => s.setTranscriptionModel,
 	);
-	const localTranscriberBaseUrl = useAppSettingsStore(
-		(s) => s.localTranscriberBaseUrl,
-	);
-	const localServicesIp = useAppSettingsStore((s) => s.localServicesIp);
-	const localApiLastIp = useAppSettingsStore((s) => s.localApiLastIp);
-
 	const durationSec = Math.floor(durationMs / 1000);
 	const positionSec = positionMs / 1000;
 	const activeChunkStart = getTranscriptChunkStart(positionSec);
-	const transcriberUrl = getDefaultTranscriberUrl(
-		localTranscriberBaseUrl,
-		localServicesIp ?? localApiLastIp,
-	);
+	const transcriberUrl = localServiceUrls?.transcriberBaseUrl ?? null;
 	const canCheckTranscriber = isHttpTranscriberUrl(transcriberUrl);
 
 	const [modelSheetVisible, setModelSheetVisible] = useState(false);
@@ -409,7 +403,7 @@ export function AudioTranscript({
 		..._trpc.blog.checkLocalTranscriber.queryOptions({
 			baseUrl: canCheckTranscriber ? (transcriberUrl ?? undefined) : undefined,
 		}),
-		enabled: canCheckTranscriber,
+		enabled: localServicesEnabled && canCheckTranscriber,
 		retry: false,
 	});
 	const whisperAvailable = Boolean(localTranscriberHealth?.ok);
@@ -470,6 +464,7 @@ export function AudioTranscript({
 
 	const requestChunk = useCallback(
 		(chunkStartSec: number, options?: { force?: boolean }) => {
+			if (!localServicesEnabled) return;
 			if (!telegramFileId) return;
 			if (
 				TRANSCRIPT_CHUNK_CACHE_ENABLED &&
@@ -498,6 +493,7 @@ export function AudioTranscript({
 		},
 		[
 			canCheckTranscriber,
+			localServicesEnabled,
 			mediaId,
 			telegramFileId,
 			transcriberUrl,
@@ -609,7 +605,9 @@ export function AudioTranscript({
 					<Text
 						style={{ flex: 1, fontSize: 12, color: colors.mutedForeground }}
 					>
-						{localWhisperBlocked
+						{!localServicesEnabled
+							? "Enable local services to load the live transcript"
+							: localWhisperBlocked
 							? "Local Whisper is not reachable"
 							: activeChunkPending
 								? "Transcribing current chunk..."
@@ -622,14 +620,26 @@ export function AudioTranscript({
 					</Text>
 					<Pressable
 						disabled={
-							activeChunkPending || localWhisperBlocked || !telegramFileId
+							activeChunkPending ||
+							(localServicesEnabled && localWhisperBlocked) ||
+							!telegramFileId
 						}
-						onPress={() => requestChunk(activeChunkStart, { force: true })}
+						onPress={() => {
+							if (!localServicesEnabled) {
+								requestLocalServicesSetup();
+								return;
+							}
+							requestChunk(activeChunkStart, { force: true });
+						}}
 						style={{
 							borderRadius: 999,
-							backgroundColor: colors.primary,
+							backgroundColor: localServicesEnabled
+								? colors.primary
+								: colors.muted,
 							opacity:
-								activeChunkPending || localWhisperBlocked || !telegramFileId
+								activeChunkPending ||
+								(localServicesEnabled && localWhisperBlocked) ||
+								!telegramFileId
 									? 0.45
 									: 1,
 							paddingHorizontal: 13,
@@ -638,12 +648,18 @@ export function AudioTranscript({
 					>
 						<Text
 							style={{
-								color: colors.primaryForeground,
+								color: localServicesEnabled
+									? colors.primaryForeground
+									: colors.mutedForeground,
 								fontSize: 12,
 								fontWeight: "800",
 							}}
 						>
-							{activeChunkPending ? "Loading" : "Load chunk"}
+							{!localServicesEnabled
+								? "Enable services"
+								: activeChunkPending
+									? "Loading"
+									: "Load chunk"}
 						</Text>
 					</Pressable>
 				</View>

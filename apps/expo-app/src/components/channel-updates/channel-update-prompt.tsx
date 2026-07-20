@@ -3,9 +3,9 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
-import { useMutation, useQueryClient } from "@/lib/react-query";
+import { useLocalServicesSession } from "@/components/local-services";
+import { useMutation } from "@/lib/react-query";
 import { storage } from "@/store/mmkv";
-import { useTRPC } from "@/trpc/client";
 import type { RouterOutputs } from "@api/trpc/routers/_app";
 import { BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import { useRouter } from "expo-router";
@@ -23,7 +23,7 @@ type SummaryChannel =
   RouterOutputs["channel"]["getUpdatePromptSummary"]["channels"][number];
 type AuthStep = "checking" | "authorized" | "phone" | "otp" | "unavailable";
 
-let didRunPromptThisSession = false;
+let promptedLocalApiIpThisSession: string | null = null;
 const TELEGRAM_LOGIN_PHONE_KEY = "telegram_login_phone";
 
 function formatCount(value: number | null | undefined) {
@@ -170,8 +170,7 @@ function OtpInput({
 export function ChannelUpdatePrompt() {
   const modal = useModal();
   const router = useRouter();
-  const trpc = useTRPC();
-  const queryClient = useQueryClient();
+  const { activeIp, isEnabled, localApiClient } = useLocalServicesSession();
   const [channels, setChannels] = useState<SummaryChannel[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(false);
@@ -182,56 +181,56 @@ export function ChannelUpdatePrompt() {
   const [otpCode, setOtpCode] = useState("");
 
   const selectedCount = selectedIds.size;
-  const updateMutation = useMutation(
-    trpc.channel.startRecentUpdateJob.mutationOptions({
-      onSuccess: () => {
-        queryClient.invalidateQueries({
-          queryKey: trpc.channel.getRecentUpdateJob.queryKey(),
-        });
-        modal.dismiss();
-        router.push("/channel-updates" as any);
-      },
-    }),
-  );
-  const sendCodeMutation = useMutation(
-    trpc.channel.telegramSendCode.mutationOptions({
-      onSuccess: (result) => {
-        if (result.authorized) {
-          void loadPrompt();
-          return;
-        }
-
-        setOtpCode("");
-        setAuthMessage(null);
-        setAuthStep("otp");
-      },
-      onError: (error) => {
-        setAuthMessage(error.message);
-      },
-    }),
-  );
-  const verifyCodeMutation = useMutation(
-    trpc.channel.telegramVerifyCode.mutationOptions({
-      onSuccess: (result) => {
-        if (!result.ok) {
-          setAuthMessage(
-            result.needs2FA
-              ? "This Telegram account requires a password. Password login is not supported here yet."
-              : result.error,
-          );
-          return;
-        }
-
-        queryClient.invalidateQueries({
-          queryKey: trpc.channel.telegramAuthStatus.queryKey(),
-        });
+  const updateMutation = useMutation({
+    mutationFn: (input: { channelIds: number[] }) => {
+      if (!localApiClient) throw new Error("Local API is not configured.");
+      return localApiClient.channel.startRecentUpdateJob.mutate(input);
+    },
+    onSuccess: () => {
+      modal.dismiss();
+      router.push("/channel-updates" as any);
+    },
+  });
+  const sendCodeMutation = useMutation({
+    mutationFn: (input: { phoneNumber: string }) => {
+      if (!localApiClient) throw new Error("Local API is not configured.");
+      return localApiClient.channel.telegramSendCode.mutate(input);
+    },
+    onSuccess: (result) => {
+      if (result.authorized) {
         void loadPrompt();
-      },
-      onError: (error) => {
-        setAuthMessage(error.message);
-      },
-    }),
-  );
+        return;
+      }
+
+      setOtpCode("");
+      setAuthMessage(null);
+      setAuthStep("otp");
+    },
+    onError: (error) => {
+      setAuthMessage(error.message);
+    },
+  });
+  const verifyCodeMutation = useMutation({
+    mutationFn: (input: { phoneNumber: string; code: string }) => {
+      if (!localApiClient) throw new Error("Local API is not configured.");
+      return localApiClient.channel.telegramVerifyCode.mutate(input);
+    },
+    onSuccess: (result) => {
+      if (!result.ok) {
+        setAuthMessage(
+          result.needs2FA
+            ? "This Telegram account requires a password. Password login is not supported here yet."
+            : result.error,
+        );
+        return;
+      }
+
+      void loadPrompt();
+    },
+    onError: (error) => {
+      setAuthMessage(error.message);
+    },
+  });
 
   useEffect(() => {
     let mounted = true;
@@ -270,14 +269,13 @@ export function ChannelUpdatePrompt() {
 
   const loadPrompt = useCallback(
     async (mountedRef?: { current: boolean }) => {
+      if (!isEnabled || !localApiClient) return;
       setLoading(true);
       setAuthStep("checking");
       setAuthMessage(null);
       try {
         try {
-          await queryClient.fetchQuery(
-            trpc.channel.pingFetcher.queryOptions(),
-          );
+          await localApiClient.channel.pingFetcher.query();
         } catch {
           if (mountedRef && !mountedRef.current) return;
           setChannels([]);
@@ -291,9 +289,8 @@ export function ChannelUpdatePrompt() {
           return;
         }
 
-        const authStatus = await queryClient.fetchQuery(
-          trpc.channel.telegramAuthStatus.queryOptions(),
-        );
+        const authStatus =
+          await localApiClient.channel.telegramAuthStatus.query();
         if (mountedRef && !mountedRef.current) return;
 
         if (!authStatus.authorized) {
@@ -305,9 +302,8 @@ export function ChannelUpdatePrompt() {
           return;
         }
 
-        const summary = await queryClient.fetchQuery(
-          trpc.channel.getUpdatePromptSummary.queryOptions(),
-        );
+        const summary =
+          await localApiClient.channel.getUpdatePromptSummary.query();
         if (mountedRef && !mountedRef.current) return;
         setAuthStep("authorized");
         if (summary.channels.length === 0) return;
@@ -333,12 +329,13 @@ export function ChannelUpdatePrompt() {
         if (!mountedRef || mountedRef.current) setLoading(false);
       }
     },
-    [presentPrompt, queryClient, trpc],
+    [isEnabled, localApiClient, presentPrompt],
   );
 
   useEffect(() => {
-    if (didRunPromptThisSession) return;
-    didRunPromptThisSession = true;
+    if (!isEnabled || !localApiClient || !activeIp) return;
+    if (promptedLocalApiIpThisSession === activeIp) return;
+    promptedLocalApiIpThisSession = activeIp;
 
     const mountedRef = { current: true };
     void loadPrompt(mountedRef);
@@ -346,7 +343,7 @@ export function ChannelUpdatePrompt() {
     return () => {
       mountedRef.current = false;
     };
-  }, [loadPrompt]);
+  }, [activeIp, isEnabled, loadPrompt, localApiClient]);
 
   const toggleChannel = (channelId: number) => {
     setSelectedIds((current) => {

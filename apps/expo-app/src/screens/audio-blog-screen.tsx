@@ -42,6 +42,7 @@ import { CommentInput } from "@/components/comments-sheet/comment-input";
 import { CommentsAudioContext } from "@/components/comments-sheet/comments-audio-context";
 import { CommentsHeader } from "@/components/comments-sheet/comments-header";
 import { CommentsList } from "@/components/comments-sheet/comments-list";
+import { useLocalServicesSession } from "@/components/local-services";
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
 import { TranscriptionRequestModal } from "@/components/transcription-request-modal";
@@ -60,13 +61,9 @@ import { uploadBlogMediaAsset, type BlobMediaUpload } from "@/lib/blob-upload";
 import { getBlogShareUrl } from "@/lib/share-links";
 import { getTelegramFileUrl } from "@/lib/get-telegram-file";
 import { getMediaFileUrl } from "@/lib/media-source";
-import {
-	getDefaultTranscriberUrl,
-	isHttpTranscriberUrl,
-} from "@/lib/transcribe";
+import { isHttpTranscriberUrl } from "@/lib/transcribe";
 import { getTranscriptionBadgeState } from "@/lib/transcription-status";
 import { withAlpha } from "@/lib/theme";
-import { useAppSettingsStore } from "@/store/app-settings-store";
 import { useAudioStore } from "@/store/audio-store";
 import { useRecentlyViewedStore } from "@/store/recently-viewed-store";
 import * as DocumentPicker from "expo-document-picker";
@@ -2168,6 +2165,11 @@ export default function AudioBlogScreen() {
 	const router = useRouter();
 	const qc = useQueryClient();
 	const colors = useColors();
+	const {
+		isEnabled: localServicesEnabled,
+		requestSetup: requestLocalServicesSetup,
+		urls: localServiceUrls,
+	} = useLocalServicesSession();
 	const { height: windowHeight } = useWindowDimensions();
 	const mainScroll = useScrollChrome<FlatList<any>>();
 	const {
@@ -2234,15 +2236,7 @@ export default function AudioBlogScreen() {
 	const failedTranscriptChunksRef = useRef<Set<number>>(new Set());
 	const failedTranscriptWindowsRef = useRef<Set<number>>(new Set());
 	const lastTranscriptTapRef = useRef(0);
-	const localTranscriberBaseUrl = useAppSettingsStore(
-		(s) => s.localTranscriberBaseUrl,
-	);
-	const localServicesIp = useAppSettingsStore((s) => s.localServicesIp);
-	const localApiLastIp = useAppSettingsStore((s) => s.localApiLastIp);
-	const transcriberUrl = getDefaultTranscriberUrl(
-		localTranscriberBaseUrl,
-		localServicesIp ?? localApiLastIp,
-	);
+	const transcriberUrl = localServiceUrls?.transcriberBaseUrl ?? null;
 	const canCheckTranscriber = isHttpTranscriberUrl(transcriberUrl);
 	const lastCompletedTranscriptJobRef = useRef<number | null>(null);
 
@@ -2414,7 +2408,7 @@ export default function AudioBlogScreen() {
 		jobs: transcriptionJobs,
 		reload: reloadTranscriptionJobs,
 	} = useTranscriptionQueue(mediaId, {
-		autoLoad: !!mediaId,
+		autoLoad: localServicesEnabled && !!mediaId,
 		reloadOnEnqueue: false,
 	});
 	const mediaTranscriptionJobs = useMemo(
@@ -2458,14 +2452,18 @@ export default function AudioBlogScreen() {
 				: transcriptBadge.tone === "muted"
 					? colors.warn
 					: colors.primary;
-	const transcriptionActionLabel = queuedTranscriptionJob
+	const transcriptionActionLabel = !localServicesEnabled
+		? "Enable local services"
+		: queuedTranscriptionJob
 		? "Queued"
 		: runningTranscriptionJob
 			? "Running"
 			: isCurrentAudioAlreadyTranscribed
 				? "Transcript"
 				: "Transcribe";
-	const transcriptionActionDescription = queuedTranscriptionJob
+	const transcriptionActionDescription = !localServicesEnabled
+		? "Choose a network IP before transcribing"
+		: queuedTranscriptionJob
 		? "Tap to remove this audio from the queue"
 		: runningTranscriptionJob
 			? "Transcription is currently running"
@@ -2476,7 +2474,7 @@ export default function AudioBlogScreen() {
 		..._trpc.blog.checkLocalTranscriber.queryOptions({
 			baseUrl: canCheckTranscriber ? (transcriberUrl ?? undefined) : undefined,
 		}),
-		enabled: canCheckTranscriber,
+		enabled: localServicesEnabled && canCheckTranscriber,
 		retry: false,
 	});
 	const whisperAvailable = Boolean(localTranscriberHealth?.ok);
@@ -2605,6 +2603,7 @@ export default function AudioBlogScreen() {
 
 	const requestTranscriptChunk = useCallback(
 		(chunkStartSec: number) => {
+			if (!localServicesEnabled) return;
 			if (!mediaId || !telegramFileId) return;
 			if (!whisperAvailable) return;
 			if (pendingTranscriptChunksRef.current.includes(chunkStartSec)) return;
@@ -2629,6 +2628,7 @@ export default function AudioBlogScreen() {
 		},
 		[
 			canCheckTranscriber,
+			localServicesEnabled,
 			mediaId,
 			telegramFileId,
 			transcriptChunks,
@@ -3035,6 +3035,10 @@ export default function AudioBlogScreen() {
 	}
 
 	async function queueCurrentTranscription() {
+		if (!localServicesEnabled) {
+			requestLocalServicesSetup();
+			return false;
+		}
 		if (!mediaId) return false;
 		let reachableAudioUrl =
 			mediaUrl?.startsWith("http://") || mediaUrl?.startsWith("https://")
@@ -3140,6 +3144,10 @@ export default function AudioBlogScreen() {
 	}
 
 	function handleQueueCurrentTranscriptionPress() {
+		if (!localServicesEnabled) {
+			requestLocalServicesSetup();
+			return;
+		}
 		if (queuedTranscriptionJob) {
 			confirmRemoveQueuedTranscription(queuedTranscriptionJob.id);
 			return;
@@ -3365,7 +3373,33 @@ export default function AudioBlogScreen() {
 											</Text>
 										</Pressable>
 										<View className="flex-row items-center gap-1">
-											{transcriptBadge.show ? (
+											{!localServicesEnabled ? (
+												<View
+													accessibilityLabel="Enable local services"
+													style={{
+														maxWidth: 168,
+														minHeight: 32,
+														flexDirection: "row",
+														alignItems: "center",
+														gap: 6,
+														borderRadius: 999,
+														paddingHorizontal: 10,
+														backgroundColor: "rgba(255,255,255,0.12)",
+													}}
+												>
+													<Icon name="WifiOff" size={14} color="#ffffff" />
+													<Text
+														numberOfLines={1}
+														style={{
+															color: "#ffffff",
+															fontSize: 11,
+															fontWeight: "800",
+														}}
+													>
+														Enable local services
+													</Text>
+												</View>
+											) : transcriptBadge.show ? (
 												<View
 													accessibilityLabel={transcriptBadge.label}
 													style={{
@@ -3401,7 +3435,16 @@ export default function AudioBlogScreen() {
 											) : null}
 											<Pressable
 												onPress={handleQueueCurrentTranscriptionPress}
-												className="size-10 items-center justify-center rounded-full active:bg-black/20"
+												className={
+													localServicesEnabled
+														? "size-10 items-center justify-center rounded-full active:bg-black/20"
+														: "size-10 items-center justify-center rounded-full opacity-50 active:bg-black/20"
+												}
+												accessibilityLabel={
+													localServicesEnabled
+														? "Transcription"
+														: "Enable local services"
+												}
 											>
 												<Icon
 													name="Captions"

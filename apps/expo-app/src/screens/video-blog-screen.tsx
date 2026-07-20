@@ -9,6 +9,7 @@ import {
 } from "@/components/comments-sheet";
 import { CommentInput } from "@/components/comments-sheet/comment-input";
 import { CommentsList } from "@/components/comments-sheet/comments-list";
+import { useLocalServicesSession } from "@/components/local-services";
 import { _trpc } from "@/components/static-trpc";
 import { TranscriptionRequestModal } from "@/components/transcription-request-modal";
 import { Icon } from "@/components/ui/icon";
@@ -19,12 +20,8 @@ import { getTelegramFileUrl } from "@/lib/get-telegram-file";
 import { getMediaFileUrl } from "@/lib/media-source";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { withAlpha } from "@/lib/theme";
-import {
-	getDefaultTranscriberUrl,
-	isHttpTranscriberUrl,
-} from "@/lib/transcribe";
+import { isHttpTranscriberUrl } from "@/lib/transcribe";
 import { getTranscriptionBadgeState } from "@/lib/transcription-status";
-import { useAppSettingsStore } from "@/store/app-settings-store";
 import { useGlobalAudioBarStore } from "@/store/global-audio-bar-store";
 import { formatDate } from "@acme/utils/dayjs";
 import { type AVPlaybackStatus, ResizeMode, Video } from "expo-av";
@@ -224,6 +221,7 @@ function ActionButton({
 	label,
 	onPress,
 	disabled,
+	inactive,
 	color,
 	shape = "pill",
 }: {
@@ -231,6 +229,7 @@ function ActionButton({
 	label: string;
 	onPress: () => void;
 	disabled?: boolean;
+	inactive?: boolean;
 	color?: string;
 	shape?: "pill" | "circle";
 }) {
@@ -242,6 +241,8 @@ function ActionButton({
 			disabled={disabled}
 			accessibilityLabel={label}
 			className={`h-[52px] flex-row items-center justify-center rounded-full border border-white/5 bg-[#17212B] active:opacity-80 disabled:opacity-40 ${
+				inactive ? "opacity-50 " : ""
+			}${
 				isCircle ? "w-[52px]" : "min-w-0 flex-1 gap-2 px-3"
 			}`}
 		>
@@ -260,6 +261,11 @@ function ActionButton({
 }
 
 export default function VideoBlogScreen() {
+	const {
+		isEnabled: localServicesEnabled,
+		requestSetup: requestLocalServicesSetup,
+		urls: localServiceUrls,
+	} = useLocalServicesSession();
 	const { blogId } = useLocalSearchParams<{ blogId?: string }>();
 	const router = useRouter();
 	const colors = useColors();
@@ -279,15 +285,7 @@ export default function VideoBlogScreen() {
 	const [videoRate, setVideoRate] =
 		useState<(typeof VIDEO_RATE_OPTIONS)[number]>(1);
 	const setGlobalAudioBarHidden = useGlobalAudioBarStore((s) => s.setHidden);
-	const localTranscriberBaseUrl = useAppSettingsStore(
-		(s) => s.localTranscriberBaseUrl,
-	);
-	const localServicesIp = useAppSettingsStore((s) => s.localServicesIp);
-	const localApiLastIp = useAppSettingsStore((s) => s.localApiLastIp);
-	const transcriberUrl = getDefaultTranscriberUrl(
-		localTranscriberBaseUrl,
-		localServicesIp ?? localApiLastIp,
-	);
+	const transcriberUrl = localServiceUrls?.transcriberBaseUrl ?? null;
 	const canCheckTranscriber = isHttpTranscriberUrl(transcriberUrl);
 	const id = Number(blogId);
 	const canQuery = Number.isFinite(id) && id > 0;
@@ -562,6 +560,10 @@ export default function VideoBlogScreen() {
 	}
 
 	async function queueVideoTranscription() {
+		if (!localServicesEnabled) {
+			requestLocalServicesSetup();
+			return false;
+		}
 		if (!mediaId) return false;
 		let reachableVideoUrl =
 			videoUrl?.startsWith("http://") || videoUrl?.startsWith("https://")
@@ -672,6 +674,10 @@ export default function VideoBlogScreen() {
 	}
 
 	function handleVideoTranscriptionPress() {
+		if (!localServicesEnabled) {
+			requestLocalServicesSetup();
+			return;
+		}
 		if (queuedTranscriptionJob) {
 			confirmRemoveQueuedVideoTranscription(queuedTranscriptionJob.id);
 			return;
@@ -881,12 +887,15 @@ export default function VideoBlogScreen() {
 						<ActionButton
 							icon="Captions"
 							label={
-								transcribeActionLabel === "Transcribe"
+								!localServicesEnabled
+									? "Enable local services"
+									: transcribeActionLabel === "Transcribe"
 									? "Transcript"
 									: transcribeActionLabel
 							}
 							onPress={handleVideoTranscriptionPress}
 							disabled={!mediaId}
+							inactive={!localServicesEnabled}
 							color={transcriptBadge.show ? transcriptBadgeColor : undefined}
 						/>
 						<ActionButton

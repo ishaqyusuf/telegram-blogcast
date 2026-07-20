@@ -94,6 +94,7 @@ Tracks the current audio playback experience, supporting components, and future 
 - Blog Import can import a single public Telegram audio post link without fetching the full channel. The API resolves the exact message, saves it through the same Blog/File/Media persistence path as the channel fetcher, and returns an existing blog when the channel/message pair is already stored.
 - Settings exposes a shared Local Services IP with saved history. That IP is used to derive the local API, local transcriber, and Facebook media bridge URLs with their service ports, while explicit service URL overrides continue to win.
 - Startup channel-update local API checks degrade silently when the local server is offline or the IP is stale; local-service failures are surfaced from the relevant Settings/import screens instead of interrupting app launch.
+- Preview/production local transcription is session-gated by the cold-launch Local Services IP choice. Dismissing setup prevents transcriber health checks, automatic missing-chunk generation, queue polling/enqueue, and direct transcription while preserving playback and saved transcript reading.
 
 ### Future Improvements
 - Stronger offline download and sync behavior

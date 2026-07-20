@@ -1,4 +1,5 @@
 import { Pressable } from "@/components/ui/pressable";
+import { useLocalServicesSession } from "@/components/local-services";
 import { Icon } from "@/components/ui/icon";
 import { Text, TextInput, View } from "react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -10,10 +11,9 @@ import {
 import { useAudioStore } from "@/store/audio-store";
 import { useColors } from "@/hooks/use-color";
 import { getTelegramFileUrl } from "@/lib/get-telegram-file";
-import { checkTranscriberHealth, getDefaultTranscriberUrl } from "@/lib/transcribe";
+import { checkTranscriberHealth } from "@/lib/transcribe";
 import { _trpc } from "@/components/static-trpc";
 import { useMutation, useQueryClient } from "@/lib/react-query";
-import { useAppSettingsStore } from "@/store/app-settings-store";
 import { useTranscriptionQueue } from "@/hooks/use-transcription-queue";
 
 function formatSec(sec: number) {
@@ -46,16 +46,15 @@ export function LocalTranscribe({
   audioUrl: remoteAudioUrl,
 }: LocalTranscribeProps) {
   const colors = useColors();
+  const {
+    isEnabled: localServicesEnabled,
+    requestSetup: requestLocalServicesSetup,
+    urls: localServiceUrls,
+  } = useLocalServicesSession();
   const queryClient = useQueryClient();
   const durationMs = useAudioStore((s) => s.duration);
   const uri = useAudioStore((s) => s.uri);
-  const localTranscriberBaseUrl = useAppSettingsStore((s) => s.localTranscriberBaseUrl);
-  const localServicesIp = useAppSettingsStore((s) => s.localServicesIp);
-  const localApiLastIp = useAppSettingsStore((s) => s.localApiLastIp);
-  const transcriberUrl = getDefaultTranscriberUrl(
-    localTranscriberBaseUrl,
-    localServicesIp ?? localApiLastIp,
-  );
+  const transcriberUrl = localServiceUrls?.transcriberBaseUrl ?? null;
   const {
     jobs,
     queuedCount,
@@ -103,6 +102,10 @@ export function LocalTranscribe({
   const hasQueueableAudioSource = Boolean(reachableAudioUrl || telegramFileId);
 
   const queueCurrentRange = useCallback(async () => {
+    if (!localServicesEnabled) {
+      requestLocalServicesSetup();
+      return;
+    }
     setQueueMessage(null);
     if (!hasQueueableAudioSource) {
       setError(
@@ -153,8 +156,10 @@ export function LocalTranscribe({
     enqueue,
     fromSec,
     hasQueueableAudioSource,
+    localServicesEnabled,
     mediaId,
     reachableAudioUrl,
+    requestLocalServicesSetup,
     setError,
     telegramFileId,
     toSec,
@@ -162,6 +167,10 @@ export function LocalTranscribe({
   ]);
 
   const handleTranscribe = useCallback(async () => {
+    if (!localServicesEnabled) {
+      requestLocalServicesSetup();
+      return;
+    }
     reset();
     setQueueMessage(null);
     setResolvingUrl(true);
@@ -223,11 +232,13 @@ export function LocalTranscribe({
     fromSec,
     toSec,
     durationSec,
+    localServicesEnabled,
     transcribe,
     reset,
     setError,
     saveTranscript,
     mediaId,
+    requestLocalServicesSetup,
     transcriberUrl,
   ]);
 

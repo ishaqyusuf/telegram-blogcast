@@ -51,6 +51,7 @@ Tracks the current blog-reading experience and blog-related discovery surfaces.
 - Local import caches local API IPs, tries the last successful IP first, then the current Expo dev-host IP, then previous IP history, and finally asks for manual IP entry. The port comes from `EXPO_PUBLIC_API_PORT`.
 - Telegram/channel import is local API-owned work. The mobile app starts/stops and observes the import, but it does not run the import library itself.
 - Facebook media import is split between API-owned job/status and `services/facebook-media-bridge`, a local FastAPI helper that uses the local browser Facebook session via `yt-dlp --cookies-from-browser`. The app never stores Facebook's short-lived CDN URL; durable state is Telegram file metadata plus `Blog.meta.facebook.mediaDownload`.
+- Preview/production cold launches require an explicit Local Services IP session choice before Telegram update checks or local imports run. Dismissing setup disables Telegram and Facebook import surfaces for the session, while guarded screens can reopen setup without affecting normal blog reading.
 
 ### Product Role
 - Serves as one of the core content-consumption pillars alongside audio and books.
