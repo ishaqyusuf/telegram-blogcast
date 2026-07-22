@@ -1,3 +1,8 @@
+import {
+	TELEGRAM_BOT_DOWNLOAD_LIMIT_BYTES,
+	buildTelegramMessageUrl,
+	getFacebookExternalMedia,
+} from "@acme/blog/facebook-media";
 import type { Database, Prisma } from "@acme/db";
 import { z } from "zod";
 
@@ -13,6 +18,7 @@ export const facebookMediaImportStatusSchema = z.enum([
 	"not_started",
 	"running",
 	"imported",
+	"external",
 	"failed",
 	"skipped",
 ]);
@@ -72,17 +78,29 @@ const bridgeProcessResponseSchema = z.object({
 	ok: z.boolean().default(true),
 	blogId: z.number().int().optional(),
 	status: z.string().optional(),
-	mediaType: z.enum(["image", "video", "document"]).optional(),
+	accessMode: z.enum(["in_app", "external"]).optional(),
+	destination: z.enum(["telegram", "facebook"]).optional(),
+	reason: z
+		.enum(["telegram_download_limit", "telegram_upload_limit"])
+		.nullable()
+		.optional(),
+	externalUrl: z.string().url().nullable().optional(),
+	mediaType: z.enum(["image", "video", "audio", "document"]).optional(),
 	mimeType: z.string().nullable().optional(),
 	fileName: z.string().nullable().optional(),
 	fileSize: z.number().nullable().optional(),
-	telegram: z.object({
-		messageId: z.number().int(),
-		chatId: z.string().or(z.number()).optional(),
-		file: telegramFileSchema,
-		thumbnail: telegramFileSchema.nullable().optional(),
-		raw: z.unknown().optional(),
-	}),
+	duration: z.number().nullable().optional(),
+	telegram: z
+		.object({
+			messageId: z.number().int(),
+			chatId: z.string().or(z.number()).optional(),
+			messageUrl: z.string().url().nullable().optional(),
+			file: telegramFileSchema.nullable().optional(),
+			thumbnail: telegramFileSchema.nullable().optional(),
+			raw: z.unknown().optional(),
+		})
+		.nullable()
+		.optional(),
 	diagnostics: z.unknown().optional(),
 });
 
@@ -124,6 +142,12 @@ type FacebookImportBlog = {
 	meta: unknown;
 	createdAt: Date | null;
 	sourceSyncedAt: Date | null;
+	thumbnail: {
+		id: number;
+		file: {
+			fileId: string;
+		} | null;
+	} | null;
 	medias: Array<{
 		id: number;
 		mimeType: string;
@@ -136,6 +160,7 @@ type FacebookImportBlog = {
 			mimeType: string | null;
 			fileName: string | null;
 			fileSize: number | null;
+			duration: number | null;
 		} | null;
 	}>;
 };
@@ -157,6 +182,12 @@ export type FacebookMediaImportItem = {
 	messageId: number | null;
 	fileId: string | null;
 	fileUniqueId: string | null;
+	fileSize: number | null;
+	duration: number | null;
+	thumbnailFileId: string | null;
+	externalUrl: string | null;
+	externalDestination: "telegram" | "facebook" | null;
+	externalReason: "telegram_download_limit" | "telegram_upload_limit" | null;
 	error: string | null;
 	lastAttemptAt: string | null;
 	importedAt: string | null;
@@ -179,6 +210,7 @@ export type FacebookMediaImportChannel = {
 	username: string | null;
 	totalCount: number;
 	importedCount: number;
+	externalCount: number;
 	failedCount: number;
 	pendingCount: number;
 };
@@ -193,6 +225,7 @@ export type FacebookMediaImportJob = {
 	selectedCount: number;
 	processedCount: number;
 	importedCount: number;
+	externalCount: number;
 	failedCount: number;
 	skippedCount: number;
 	error: string | null;
@@ -342,8 +375,25 @@ function getExistingMediaFile(blog: FacebookImportBlog) {
 function getFacebookMediaImportStatus(
 	blog: FacebookImportBlog,
 ): FacebookMediaImportStatus {
-	if (hasImportedTelegramMedia(blog)) return "imported";
 	const savedStatus = getMetaString(blog.meta, "status");
+	if (savedStatus === "external") return "external";
+	const file = getExistingMediaFile(blog);
+	if (
+		getFacebookExternalMedia({
+			source: FACEBOOK_SOURCE,
+			sourceUrl: blog.sourceUrl,
+			meta: blog.meta,
+			fileSize: file?.fileSize,
+			mediaType: file?.fileType,
+			mimeType: file?.mimeType,
+			fileName: file?.fileName,
+			duration: file?.duration,
+			thumbnailFileId: blog.thumbnail?.file?.fileId,
+		})
+	) {
+		return "external";
+	}
+	if (hasImportedTelegramMedia(blog)) return "imported";
 	if (
 		savedStatus &&
 		facebookMediaImportStatusSchema.safeParse(savedStatus).success
@@ -355,6 +405,17 @@ function getFacebookMediaImportStatus(
 
 function buildImportItem(blog: FacebookImportBlog): FacebookMediaImportItem {
 	const file = getExistingMediaFile(blog);
+	const externalMedia = getFacebookExternalMedia({
+		source: FACEBOOK_SOURCE,
+		sourceUrl: blog.sourceUrl,
+		meta: blog.meta,
+		fileSize: file?.fileSize,
+		mediaType: file?.fileType,
+		mimeType: file?.mimeType,
+		fileName: file?.fileName,
+		duration: file?.duration,
+		thumbnailFileId: blog.thumbnail?.file?.fileId,
+	});
 	return {
 		blogId: blog.id,
 		title: getBlogTitle(blog),
@@ -369,6 +430,14 @@ function buildImportItem(blog: FacebookImportBlog): FacebookMediaImportItem {
 		fileId: file?.fileId ?? getMetaString(blog.meta, "fileId"),
 		fileUniqueId:
 			file?.fileUniqueId ?? getMetaString(blog.meta, "fileUniqueId"),
+		fileSize: file?.fileSize ?? getMetaNumber(blog.meta, "fileSize"),
+		duration: file?.duration ?? getMetaNumber(blog.meta, "duration"),
+		thumbnailFileId:
+			blog.thumbnail?.file?.fileId ??
+			getMetaString(blog.meta, "thumbnailFileId"),
+		externalUrl: externalMedia?.externalUrl ?? null,
+		externalDestination: externalMedia?.destination ?? null,
+		externalReason: externalMedia?.reason ?? null,
 		error: getMetaString(blog.meta, "error"),
 		lastAttemptAt: getMetaString(blog.meta, "lastAttemptAt"),
 		importedAt: getMetaString(blog.meta, "importedAt"),
@@ -397,10 +466,11 @@ function mergeFacebookMediaDownloadMeta(
 }
 
 function inferBlogTypeFromBridge(result: BridgeProcessResponse) {
-	const mimeType = result.telegram.file.mimeType ?? result.mimeType ?? "";
-	const fileType = result.telegram.file.fileType || result.mediaType || "";
+	const mimeType = result.telegram?.file?.mimeType ?? result.mimeType ?? "";
+	const fileType = result.telegram?.file?.fileType || result.mediaType || "";
 	if (mimeType.startsWith("image/") || fileType === "image") return "image";
 	if (mimeType.startsWith("video/") || fileType === "video") return "video";
+	if (mimeType.startsWith("audio/") || fileType === "audio") return "audio";
 	return "text";
 }
 
@@ -463,6 +533,12 @@ async function findFacebookImportBlogs(
 			meta: true,
 			createdAt: true,
 			sourceSyncedAt: true,
+			thumbnail: {
+				select: {
+					id: true,
+					file: { select: { fileId: true } },
+				},
+			},
 			medias: {
 				select: {
 					id: true,
@@ -477,6 +553,7 @@ async function findFacebookImportBlogs(
 							mimeType: true,
 							fileName: true,
 							fileSize: true,
+							duration: true,
 						},
 					},
 				},
@@ -522,7 +599,10 @@ async function selectBlogsForImport(
 		return blogs
 			.filter(
 				(blog) =>
-					input.force || getFacebookMediaImportStatus(blog) !== "imported",
+					input.force ||
+					!["imported", "external"].includes(
+						getFacebookMediaImportStatus(blog),
+					),
 			)
 			.slice(0, input.limit);
 	}
@@ -530,6 +610,7 @@ async function selectBlogsForImport(
 	if (
 		input.status === "failed" ||
 		input.status === "imported" ||
+		input.status === "external" ||
 		input.status === "running"
 	) {
 		return [];
@@ -548,6 +629,7 @@ async function selectBlogsForImport(
 
 		for (const blog of batch) {
 			const status = getFacebookMediaImportStatus(blog);
+			if (status === "external") continue;
 			const matchesStatus =
 				input.status === "skipped"
 					? status === "skipped"
@@ -628,50 +710,17 @@ async function persistBridgeResult(
 	result: BridgeProcessResponse,
 	baseUrl: string,
 ) {
-	const resultFile = result.telegram.file;
-	const fileUniqueId = resultFile.fileUniqueId || resultFile.fileId;
-	const fileType =
-		resultFile.fileType ||
-		result.mediaType ||
-		(resultFile.mimeType?.split("/")[0] ?? "document");
-	const mimeType = resultFile.mimeType ?? result.mimeType ?? null;
-	const fileName = resultFile.fileName ?? result.fileName ?? null;
-	const fileSize = resultFile.fileSize ?? result.fileSize ?? null;
-
-	const file = await db.file.upsert({
-		where: { fileUniqueId },
-		create: {
-			source: "telegram",
-			fileId: resultFile.fileId,
-			fileUniqueId,
-			fileType,
-			mimeType,
-			fileName,
-			fileSize,
-			width: resultFile.width ?? null,
-			height: resultFile.height ?? null,
-			duration: resultFile.duration ?? null,
-		},
-		update: {
-			source: "telegram",
-			fileId: resultFile.fileId,
-			fileType,
-			mimeType,
-			fileName,
-			fileSize,
-			width: resultFile.width ?? null,
-			height: resultFile.height ?? null,
-			duration: resultFile.duration ?? null,
-		},
-	});
-
-	const existingMedia = await db.media.findFirst({
-		where: { blogId: blog.id, fileId: file.id },
-		select: { id: true },
-	});
-
 	const blogType = inferBlogTypeFromBridge(result);
-	const thumbnailFileData = result.telegram.thumbnail ?? null;
+	const resultFile = result.telegram?.file ?? null;
+	const thumbnailFileData = result.telegram?.thumbnail ?? null;
+	const fileType =
+		resultFile?.fileType ||
+		result.mediaType ||
+		(resultFile?.mimeType?.split("/")[0] ?? "document");
+	const mimeType = resultFile?.mimeType ?? result.mimeType ?? null;
+	const fileName = resultFile?.fileName ?? result.fileName ?? null;
+	const fileSize = resultFile?.fileSize ?? result.fileSize ?? null;
+	const duration = resultFile?.duration ?? result.duration ?? null;
 	let thumbnailId: number | null = null;
 
 	if (thumbnailFileData?.fileId) {
@@ -705,37 +754,111 @@ async function persistBridgeResult(
 		});
 
 		const existingThumbnail = await db.thumbnail.findFirst({
-			where: { blogId: blog.id, fileId: thumbnailFile.id, deletedAt: null },
+			where: { blogId: blog.id, deletedAt: null },
 			select: { id: true },
 		});
-		const thumbnail =
-			existingThumbnail ??
-			(await db.thumbnail.create({
-				data: {
-					blogId: blog.id,
-					fileId: thumbnailFile.id,
-				},
-				select: { id: true },
-			}));
+		const thumbnail = existingThumbnail
+			? await db.thumbnail.update({
+					where: { id: existingThumbnail.id },
+					data: { fileId: thumbnailFile.id },
+					select: { id: true },
+				})
+			: await db.thumbnail.create({
+					data: {
+						blogId: blog.id,
+						fileId: thumbnailFile.id,
+					},
+					select: { id: true },
+				});
 		thumbnailId = thumbnail.id;
 	}
 
-	const media = existingMedia
-		? await db.media.update({
-				where: { id: existingMedia.id },
-				data: {
-					mimeType: mimeType ?? blogType,
-					title: getBlogTitle(blog),
-				},
-			})
-		: await db.media.create({
-				data: {
-					blogId: blog.id,
-					fileId: file.id,
-					mimeType: mimeType ?? blogType,
-					title: getBlogTitle(blog),
-				},
-			});
+	const existingMedia = await db.media.findFirst({
+		where: { blogId: blog.id },
+		orderBy: { id: "asc" },
+		select: { id: true },
+	});
+	let mediaId: number | null = null;
+	let persistedFileId: number | null = null;
+	if (resultFile) {
+		const fileUniqueId = resultFile.fileUniqueId || resultFile.fileId;
+		const file = await db.file.upsert({
+			where: { fileUniqueId },
+			create: {
+				source: "telegram",
+				fileId: resultFile.fileId,
+				fileUniqueId,
+				fileType,
+				mimeType,
+				fileName,
+				fileSize,
+				width: resultFile.width ?? null,
+				height: resultFile.height ?? null,
+				duration,
+			},
+			update: {
+				source: "telegram",
+				fileId: resultFile.fileId,
+				fileType,
+				mimeType,
+				fileName,
+				fileSize,
+				width: resultFile.width ?? null,
+				height: resultFile.height ?? null,
+				duration,
+			},
+		});
+		persistedFileId = file.id;
+		const media = existingMedia
+			? await db.media.update({
+					where: { id: existingMedia.id },
+					data: {
+						fileId: file.id,
+						mimeType: mimeType ?? blogType,
+						title: getBlogTitle(blog),
+					},
+				})
+			: await db.media.create({
+					data: {
+						blogId: blog.id,
+						fileId: file.id,
+						mimeType: mimeType ?? blogType,
+						title: getBlogTitle(blog),
+					},
+				});
+		mediaId = media.id;
+	} else if (existingMedia) {
+		await db.media.update({
+			where: { id: existingMedia.id },
+			data: { fileId: null, mimeType: mimeType ?? blogType },
+		});
+		mediaId = existingMedia.id;
+	}
+
+	const isExternal =
+		result.accessMode === "external" ||
+		result.status === "external" ||
+		(typeof fileSize === "number" &&
+			fileSize > TELEGRAM_BOT_DOWNLOAD_LIMIT_BYTES);
+	let destination =
+		result.destination ?? (isExternal ? "facebook" : "telegram");
+	const telegramUrl =
+		result.telegram?.messageUrl ??
+		buildTelegramMessageUrl(
+			result.telegram?.chatId,
+			result.telegram?.messageId,
+		);
+	let externalUrl = result.externalUrl ?? null;
+	if (isExternal && destination === "telegram") {
+		externalUrl = externalUrl ?? telegramUrl;
+		if (!externalUrl) destination = "facebook";
+	}
+	if (isExternal && destination === "facebook") {
+		externalUrl = blog.sourceUrl;
+	}
+	const status: FacebookMediaImportStatus = isExternal
+		? "external"
+		: "imported";
 
 	await db.blog.update({
 		where: { id: blog.id },
@@ -744,20 +867,29 @@ async function persistBridgeResult(
 			...(thumbnailId ? { thumbnailId } : {}),
 			meta: toInputJson(
 				mergeFacebookMediaDownloadMeta(blog.meta, {
-					status: "imported",
-					stage: "telegram_uploaded",
+					status,
+					stage: isExternal
+						? destination === "telegram"
+							? "telegram_external"
+							: "facebook_external"
+						: "telegram_uploaded",
+					accessMode: isExternal ? "external" : "in_app",
+					destination,
+					reason: isExternal ? result.reason : null,
+					externalUrl,
 					importedAt: new Date().toISOString(),
 					lastAttemptAt: new Date().toISOString(),
 					baseUrl,
 					sourceUrl: blog.sourceUrl,
 					mediaType: fileType,
 					mimeType,
-					fileId: resultFile.fileId,
-					fileUniqueId,
-					messageId: result.telegram.messageId,
-					chatId: result.telegram.chatId ?? null,
+					fileId: resultFile?.fileId ?? null,
+					fileUniqueId: resultFile?.fileUniqueId ?? resultFile?.fileId ?? null,
+					messageId: result.telegram?.messageId ?? null,
+					chatId: result.telegram?.chatId ?? null,
 					fileName,
 					fileSize,
+					duration,
 					thumbnailFileId: thumbnailFileData?.fileId ?? null,
 					thumbnailId,
 					error: null,
@@ -766,7 +898,7 @@ async function persistBridgeResult(
 		},
 	});
 
-	return { mediaId: media.id, fileId: file.id, blogType };
+	return { mediaId, fileId: persistedFileId, blogType, status };
 }
 
 async function runFacebookMediaImportJob(
@@ -801,9 +933,10 @@ async function runFacebookMediaImportJob(
 				const result = await callFacebookMediaBridge(job.baseUrl, blog, signal);
 				const saved = await persistBridgeResult(db, blog, result, job.baseUrl);
 
-				job.importedCount += 1;
+				if (saved.status === "external") job.externalCount += 1;
+				else job.importedCount += 1;
 				if (item) {
-					item.status = "imported";
+					item.status = saved.status;
 					item.mediaId = saved.mediaId;
 				}
 			} catch (error) {
@@ -849,7 +982,10 @@ async function runFacebookMediaImportJob(
 				(item) => item.status === "skipped",
 			).length;
 			job.processedCount =
-				job.importedCount + job.failedCount + job.skippedCount;
+				job.importedCount +
+				job.externalCount +
+				job.failedCount +
+				job.skippedCount;
 			job.status = "cancelled";
 			job.error = "Import stopped.";
 		} else {
@@ -893,6 +1029,7 @@ export async function startFacebookMediaImportJob(
 		selectedCount: 0,
 		processedCount: 0,
 		importedCount: 0,
+		externalCount: 0,
 		failedCount: 0,
 		skippedCount: 0,
 		error: null,
@@ -939,6 +1076,9 @@ export async function getFacebookMediaImportSummary(
 	const importedCount = items.filter(
 		(item) => item.status === "imported",
 	).length;
+	const externalCount = items.filter(
+		(item) => item.status === "external",
+	).length;
 	const failedCount = items.filter((item) => item.status === "failed").length;
 	const runningCount = items.filter((item) => item.status === "running").length;
 	const pendingCount = items.filter(
@@ -948,6 +1088,7 @@ export async function getFacebookMediaImportSummary(
 	return {
 		totalCount: items.length,
 		importedCount,
+		externalCount,
 		failedCount,
 		runningCount,
 		pendingCount,
@@ -1010,12 +1151,14 @@ export async function getFacebookMediaImportChannels(db: Database) {
 				username: channel.username,
 				totalCount: 0,
 				importedCount: 0,
+				externalCount: 0,
 				failedCount: 0,
 				pendingCount: 0,
 			} satisfies FacebookMediaImportChannel);
 
 		current.totalCount += 1;
 		if (status === "imported") current.importedCount += 1;
+		else if (status === "external") current.externalCount += 1;
 		else if (status === "failed") current.failedCount += 1;
 		else current.pendingCount += 1;
 

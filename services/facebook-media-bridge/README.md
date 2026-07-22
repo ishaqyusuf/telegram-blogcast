@@ -6,9 +6,9 @@ The API owns the import job and durable DB status. This bridge does the work
 that needs a local authenticated browser session:
 
 1. Resolve the Facebook post URL with `yt-dlp --cookies-from-browser`.
-2. Download the image/video to local cache.
-3. Upload it to the configured Telegram bot channel.
-4. Return Telegram `file_id` and `file_unique_id` to the API.
+2. Probe media metadata before choosing a delivery path.
+3. Download/upload the full media only when it is within Telegram's hosted Bot API limits.
+4. Upload a thumbnail and return either Telegram message metadata or the original Facebook URL for external playback.
 
 The short-lived Facebook CDN URL is not stored.
 
@@ -131,9 +131,18 @@ Response:
 }
 ```
 
+### Size policy
+
+- Up to and including 20 MiB: return normal Telegram file metadata for in-app playback.
+- Above 20 MiB through 50 MiB: upload the full media to Telegram, return `status: "external"`, and open the Telegram message when the user taps its thumbnail.
+- Above 50 MiB: do not download or upload the full media; upload only a preview thumbnail when available and open the original Facebook post.
+
+The same thresholds apply to video and audio. External results are terminal import results, not failures, so automatic batch retries skip them. An explicit per-item Recheck can probe them again.
+
 ## Notes
 
 - The bridge keeps downloads in `services/facebook-media-bridge/cache`.
+- The 20 MiB and 50 MiB boundaries match the hosted Telegram Bot API download and upload limits used by this project.
 - If Facebook blocks the request, open Facebook in the configured browser and
   make sure the saved post is visible in that session.
 - The fallback OpenGraph resolver can handle some public image posts, but

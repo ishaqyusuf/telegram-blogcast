@@ -23,6 +23,7 @@ import { withAlpha } from "@/lib/theme";
 import { isHttpTranscriberUrl } from "@/lib/transcribe";
 import { getTranscriptionBadgeState } from "@/lib/transcription-status";
 import { useGlobalAudioBarStore } from "@/store/global-audio-bar-store";
+import { getFacebookExternalMedia } from "@acme/blog/facebook-media";
 import { formatDate } from "@acme/utils/dayjs";
 import { type AVPlaybackStatus, ResizeMode, Video } from "expo-av";
 import { LinearGradient } from "expo-linear-gradient";
@@ -31,6 +32,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
 	ActivityIndicator,
 	Alert,
+	Image,
 	KeyboardAvoidingView,
 	Linking,
 	Modal,
@@ -49,6 +51,7 @@ type BlogMedia = {
 	title?: string | null;
 	file?: {
 		duration?: number | null;
+		fileSize?: number | null;
 		fileId?: string | number | null;
 		fileName?: string | null;
 		mimeType?: string | null;
@@ -303,10 +306,22 @@ export default function VideoBlogScreen() {
 	const media = defaultMedia;
 
 	const mediaFile = media?.file;
-	const videoUrl = getMediaFileUrl(mediaFile);
+	const externalMedia = getFacebookExternalMedia({
+		source: (blog as any)?.source,
+		sourceUrl: (blog as any)?.sourceUrl,
+		meta: (blog as any)?.meta,
+		fileSize: mediaFile?.fileSize,
+		mediaType: "video",
+		mimeType: mediaFile?.mimeType ?? media?.mimeType,
+		fileName: mediaFile?.fileName,
+		duration: mediaFile?.duration,
+		thumbnailFileId: (blog as any)?.thumbnail?.file?.fileId,
+	});
+	const videoUrl = externalMedia ? null : getMediaFileUrl(mediaFile);
+	const externalThumbnailUrl = getMediaFileUrl((blog as any)?.thumbnail?.file);
 	const mediaId = media?.id ?? undefined;
 	const telegramFileId =
-		mediaFile?.source === "vercel_blob"
+		externalMedia || mediaFile?.source === "vercel_blob"
 			? null
 			: mediaFile?.fileId
 				? String(mediaFile.fileId)
@@ -350,7 +365,7 @@ export default function VideoBlogScreen() {
 		jobs: transcriptionJobs,
 		reload: reloadTranscriptionJobs,
 	} = useTranscriptionQueue(mediaId, {
-		autoLoad: Boolean(mediaId),
+		autoLoad: Boolean(mediaId && !externalMedia),
 		reloadOnEnqueue: false,
 	});
 	const { data: transcriptData } = useQuery({
@@ -550,16 +565,24 @@ export default function VideoBlogScreen() {
 
 	async function shareVideo() {
 		await Share.share({
-			message: videoUrl || sourceUrl || title,
+			message: externalMedia?.externalUrl || videoUrl || sourceUrl || title,
 		});
 	}
 
 	async function openSource() {
-		if (!sourceUrl) return;
-		await Linking.openURL(sourceUrl);
+		const url = externalMedia?.externalUrl || sourceUrl;
+		if (!url) return;
+		await Linking.openURL(url);
 	}
 
 	async function queueVideoTranscription() {
+		if (externalMedia) {
+			Alert.alert(
+				"External video",
+				`Open this video in ${externalMedia.destination === "telegram" ? "Telegram" : "Facebook"}; it is too large for in-app download.`,
+			);
+			return false;
+		}
 		if (!localServicesEnabled) {
 			requestLocalServicesSetup();
 			return false;
@@ -718,7 +741,27 @@ export default function VideoBlogScreen() {
 	return (
 		<View className="flex-1 bg-black">
 			<View className="absolute inset-0 bg-black">
-				{videoUrl ? (
+				{externalMedia ? (
+					<Pressable
+						className="flex-1 items-center justify-center overflow-hidden px-8"
+						onPress={() => void Linking.openURL(externalMedia.externalUrl)}
+						accessibilityRole="link"
+					>
+						{externalThumbnailUrl ? (
+							<Image
+								source={{ uri: externalThumbnailUrl }}
+								className="absolute inset-0 h-full w-full opacity-55"
+								resizeMode="contain"
+							/>
+						) : null}
+						<View className="mb-4 size-16 items-center justify-center rounded-full bg-primary">
+							<Icon name="Share" size={30} className="text-primary-foreground" />
+						</View>
+						<Text className="text-center text-base font-extrabold text-white">
+							Open in {externalMedia.destination === "telegram" ? "Telegram" : "Facebook"}
+						</Text>
+					</Pressable>
+				) : videoUrl ? (
 					<Pressable className="flex-1" onPress={handleVideoSurfacePress}>
 						<Video
 							key={activeMediaKey || videoUrl}

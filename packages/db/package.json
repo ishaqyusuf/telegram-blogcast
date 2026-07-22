@@ -25,9 +25,11 @@
     "pull": "bunx with-env prisma db pull",
     "studio": "bunx with-env prisma studio --port 5556",
     "reset-facebook-media-imports": "bun run with-env bun scripts/reset-facebook-media-imports.ts",
+    "mark-facebook-external-media": "bun run with-env bun scripts/mark-facebook-external-media.ts",
     "with-env": "dotenv -e ../../.env --"
   },
   "dependencies": {
+    "@acme/blog": "workspace:*",
     "@prisma/adapter-pg": "^7.0.0",
     "@prisma/client": "^7.0.0",
     "@t3-oss/env-core": "^0.11.1",

@@ -22,6 +22,7 @@ import {
 	ActivityIndicator,
 	Alert,
 	FlatList,
+	Image,
 	Linking,
 	RefreshControl,
 	ScrollView,
@@ -45,6 +46,7 @@ const FILTERS: { id: StatusFilter; label: string }[] = [
 	{ id: "all", label: "All" },
 	{ id: "not_started", label: "Pending" },
 	{ id: "imported", label: "Imported" },
+	{ id: "external", label: "External" },
 	{ id: "failed", label: "Failed" },
 ];
 const FILTER_IDS = new Set<StatusFilter>(FILTERS.map((filter) => filter.id));
@@ -106,6 +108,8 @@ function statusLabel(status: ImportItem["status"]) {
 			return "Imported";
 		case "failed":
 			return "Failed";
+		case "external":
+			return "External";
 		case "running":
 			return "Running";
 		case "skipped":
@@ -121,6 +125,8 @@ function statusClassName(status: ImportItem["status"]) {
 			return "bg-primary/15 text-primary";
 		case "failed":
 			return "bg-destructive/15 text-destructive";
+		case "external":
+			return "bg-secondary text-foreground";
 		case "running":
 			return "bg-secondary text-foreground";
 		default:
@@ -129,7 +135,7 @@ function statusClassName(status: ImportItem["status"]) {
 }
 
 function canImportItem(item: ImportItem) {
-	return item.status !== "imported" && item.status !== "running";
+	return !["imported", "external", "running"].includes(item.status);
 }
 
 function canBulkImportItem(item: ImportItem) {
@@ -206,6 +212,7 @@ function ImportRow({
 		: item.channel.title;
 	const importable = canImportItem(item);
 	const playbackUrl = getImportItemPlaybackUrl(item);
+	const thumbnailUrl = buildTelegramFileProxy(item.thumbnailFileId);
 	return (
 		<Pressable
 			onPress={() => onOpen(item)}
@@ -218,7 +225,11 @@ function ImportRow({
 			}
 		>
 			<View className="flex-row items-start gap-3">
-				<View className="mt-1 size-9 items-center justify-center rounded-full bg-background">
+				<View className="mt-1 size-12 overflow-hidden rounded-lg bg-background">
+					{thumbnailUrl ? (
+						<Image source={{ uri: thumbnailUrl }} className="size-12" resizeMode="cover" />
+					) : (
+						<View className="size-12 items-center justify-center">
 					{selected ? (
 						<Icon name="CheckCircle2" size={18} className="text-primary" />
 					) : item.status === "running" ? (
@@ -229,6 +240,8 @@ function ImportRow({
 						<Icon name="AlertCircle" size={18} className="text-destructive" />
 					) : (
 						<Icon name="Image" size={18} className="text-muted-foreground" />
+					)}
+						</View>
 					)}
 				</View>
 				<View className="flex-1 gap-1">
@@ -327,6 +340,11 @@ function ImportRow({
 					{item.error}
 				</Text>
 			) : null}
+			{item.externalUrl ? (
+				<Text className="text-xs font-semibold text-primary">
+					Opens in {item.externalDestination === "telegram" ? "Telegram" : "Facebook"}
+				</Text>
+			) : null}
 		</Pressable>
 	);
 }
@@ -337,6 +355,7 @@ function ImportPreviewModal({
 	canImport,
 	onClose,
 	onImport,
+	onRecheck,
 	onOpenImported,
 	onTogglePlayback,
 	playbackActive,
@@ -348,6 +367,7 @@ function ImportPreviewModal({
 	canImport: boolean;
 	onClose: () => void;
 	onImport: (item: ImportItem) => void;
+	onRecheck: (item: ImportItem) => void;
 	onOpenImported: (item: ImportItem) => void;
 	onTogglePlayback: (item: ImportItem) => void;
 	playbackActive: boolean;
@@ -358,11 +378,15 @@ function ImportPreviewModal({
 
 	const importable = canImportItem(item);
 	const isImported = item.status === "imported";
+	const isExternal = item.status === "external";
 	const channelLabel = item.channel.username
 		? `${item.channel.title} · @${item.channel.username}`
 		: item.channel.title;
-	const actionDisabled = isImported ? false : !canImport || !importable || importing;
+	const actionDisabled = isImported || isExternal
+		? false
+		: !canImport || !importable || importing;
 	const playbackUrl = getImportItemPlaybackUrl(item);
+	const thumbnailUrl = buildTelegramFileProxy(item.thumbnailFileId);
 
 	return (
 		<FloatingBottomSheet
@@ -384,6 +408,13 @@ function ImportPreviewModal({
 				</View>
 
 					<View className="gap-3 rounded-2xl border border-border bg-card p-4">
+						{thumbnailUrl ? (
+							<Image
+								source={{ uri: thumbnailUrl }}
+								className="h-40 w-full rounded-xl"
+								resizeMode="cover"
+							/>
+						) : null}
 						<View className="flex-row items-start gap-3">
 							<View className="size-10 items-center justify-center rounded-full bg-secondary">
 								{item.status === "running" || importing ? (
@@ -448,6 +479,10 @@ function ImportPreviewModal({
 								onOpenImported(item);
 								return;
 							}
+							if (isExternal) {
+								openExternalUrl(item.externalUrl);
+								return;
+							}
 							onImport(item);
 						}}
 						className={
@@ -460,7 +495,7 @@ function ImportPreviewModal({
 							<ActivityIndicator size="small" color="#fff" />
 						) : (
 							<Icon
-								name={isImported ? "Eye" : "Send"}
+								name={isImported ? "Eye" : isExternal ? "Share" : "Send"}
 								size={18}
 								className={
 									actionDisabled
@@ -478,11 +513,25 @@ function ImportPreviewModal({
 						>
 							{isImported
 								? "Open blog"
+								: isExternal
+									? `Open in ${item.externalDestination === "telegram" ? "Telegram" : "Facebook"}`
 								: importing || item.status === "running"
 									? "Importing"
 									: "Import"}
 						</Text>
 					</Pressable>
+					{isExternal ? (
+						<Pressable
+							disabled={!canImport || importing}
+							onPress={() => onRecheck(item)}
+							className="flex-row items-center justify-center gap-2 rounded-xl bg-secondary px-4 py-3"
+						>
+							<Icon name="RefreshCw" size={18} className="text-foreground" />
+							<Text className="text-sm font-extrabold text-foreground">
+								Recheck media
+							</Text>
+						</Pressable>
+					) : null}
 					{playbackUrl ? (
 						<Pressable
 							disabled={playbackLoading}
@@ -805,6 +854,7 @@ export default function FacebookImportScreen() {
 	const channels = channelsQuery.data ?? [];
 	const totalCount = summaryQuery.data?.totalCount ?? 0;
 	const importedCount = summaryQuery.data?.importedCount ?? 0;
+	const externalCount = summaryQuery.data?.externalCount ?? 0;
 	const pendingCount = summaryQuery.data?.pendingCount ?? 0;
 	const failedCount = summaryQuery.data?.failedCount ?? 0;
 	const filterCounts = useMemo<Record<StatusFilter, number>>(
@@ -812,11 +862,12 @@ export default function FacebookImportScreen() {
 			all: totalCount,
 			not_started: pendingCount,
 			imported: importedCount,
+			external: externalCount,
 			failed: failedCount,
 			running: runningCount,
 			skipped: 0,
 		}),
-		[failedCount, importedCount, pendingCount, runningCount, totalCount],
+		[externalCount, failedCount, importedCount, pendingCount, runningCount, totalCount],
 	);
 	const bulkStartCount =
 		status === "all" || status === "not_started" ? pendingCount : 0;
@@ -946,6 +997,7 @@ export default function FacebookImportScreen() {
 
 				if (
 					itemStatus === "imported" ||
+					itemStatus === "external" ||
 					itemStatus === "failed" ||
 					itemStatus === "skipped"
 				) {
@@ -954,6 +1006,7 @@ export default function FacebookImportScreen() {
 
 				if (
 					jobStatus === "imported" ||
+					jobStatus === "external" ||
 					jobStatus === "failed" ||
 					jobStatus === "skipped"
 				) {
@@ -1062,6 +1115,42 @@ export default function FacebookImportScreen() {
 					? (facebookBridgeBaseUrl ?? undefined)
 					: undefined,
 			});
+		},
+		[
+			bridgeReady,
+			canUseFacebookBridgeUrl,
+			facebookBridgeBaseUrl,
+			hasRunningJob,
+			selectedChannelIds,
+			startMutation,
+		],
+	);
+
+	const recheckExternalItem = useCallback(
+		(item: ImportItem) => {
+			if (!bridgeReady || startMutation.isPending || hasRunningJob) return;
+			Alert.alert(
+				"Recheck external media?",
+				"This will resolve the Facebook source again and may upload a new Telegram message.",
+				[
+					{ text: "Cancel", style: "cancel" },
+					{
+						text: "Recheck",
+						onPress: () => {
+							setImportingBlogIds([item.blogId]);
+							startMutation.mutate({
+								blogIds: [item.blogId],
+								limit: 1,
+								force: true,
+								channelIds: selectedChannelIds,
+								baseUrl: canUseFacebookBridgeUrl
+									? (facebookBridgeBaseUrl ?? undefined)
+									: undefined,
+							});
+						},
+					},
+				],
+			);
 		},
 		[
 			bridgeReady,
@@ -1283,7 +1372,11 @@ export default function FacebookImportScreen() {
 					</View>
 					<View className="flex-row gap-2">
 						<StatBox label="Pending" value={formatCount(pendingCount)} />
+						<StatBox label="External" value={formatCount(externalCount)} />
+					</View>
+					<View className="flex-row gap-2">
 						<StatBox label="Failed" value={formatCount(failedCount)} />
+						<View className="flex-1" />
 					</View>
 					<Pressable
 						disabled={hasRunningJob ? !canStop : !canStart}
@@ -1396,7 +1489,8 @@ export default function FacebookImportScreen() {
 							</Text>
 						</View>
 						<Text className="text-xs text-muted-foreground">
-							Imported {formatCount(job.importedCount)} · Failed{" "}
+							Imported {formatCount(job.importedCount)} · External{" "}
+							{formatCount(job.externalCount)} · Failed{" "}
 							{formatCount(job.failedCount)} · Started{" "}
 							{formatDate(job.startedAt)}
 						</Text>
@@ -1473,6 +1567,7 @@ export default function FacebookImportScreen() {
 			clearFailedMutation.isPending,
 			colors.background,
 			confirmClearFailedImports,
+			externalCount,
 			failedCount,
 			filterCounts,
 			hasRunningJob,
@@ -1598,6 +1693,7 @@ export default function FacebookImportScreen() {
 					}
 					onClose={() => setPreviewItem(null)}
 					onImport={importSingleItem}
+					onRecheck={recheckExternalItem}
 					onOpenImported={(item) => {
 						setPreviewItem(null);
 						openImportedItem(item);

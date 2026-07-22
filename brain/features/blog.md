@@ -24,7 +24,7 @@ Tracks the current blog-reading experience and blog-related discovery surfaces.
 - Media rendering is source-aware: existing Telegram-imported media remains supported, while new user uploads resolve from Vercel Blob URLs.
 - Channel chat supports selecting exactly two same-channel posts and merging them into one canonical post, preserving media, tags, and comments while soft-deleting the secondary post.
 - Local-only blog import can be controlled from the Expo `/blog-import` screen when the local API is reachable on the device LAN.
-- Settings includes a Facebook Import screen for `Blog.source = "facebook"` rows. It shows media import status and starts a local bridge batch that downloads Facebook media, uploads it to the configured Telegram bot channel, and attaches the returned Telegram file metadata as normal blog media.
+- Settings includes a Facebook Import screen for `Blog.source = "facebook"` rows. It shows media import status and starts a local bridge batch that probes Facebook media, importing files up to 20 MiB normally while treating larger results as thumbnail-backed external media.
 - Blog/search cards are album-aware for audio posts, showing album badges when membership exists and add-to-album actions when eligible.
 - Mobile bottom-sheet portals live inside the shared React Query/tRPC provider, so query-backed blog-card actions such as Add to album retain their QueryClient context when opened.
 - Album suggestion delete actions soft-delete the underlying blog item through `blog.deleteBlog` after a floating bottom confirmation sheet; they do not merely dismiss the suggestion.
@@ -54,6 +54,7 @@ Tracks the current blog-reading experience and blog-related discovery surfaces.
 - Telegram/channel import is local API-owned work. The mobile app starts/stops and observes the import, but it does not run the import library itself.
 - Web recent-update checks compare the latest Telegram message ID with each channel's newest stored message cursor. The ID gap is used only as an availability signal because Telegram IDs are not contiguous. Selected refreshes page forward in small batches, skip the expensive legacy metadata fallback for known-new IDs, and reuse the dashboard's terminal progress UI.
 - Facebook media import is split between API-owned job/status and `services/facebook-media-bridge`, a local FastAPI helper that uses the local browser Facebook session via `yt-dlp --cookies-from-browser`. The app never stores Facebook's short-lived CDN URL; durable state is Telegram file metadata plus `Blog.meta.facebook.mediaDownload`.
+- Facebook video/audio above 20 MiB is terminal `external` media: through 50 MiB the bridge uploads the full file to Telegram and cards open that Telegram message; above 50 MiB the bridge avoids the full download/upload and cards open the original Facebook post. Both paths keep a Telegram thumbnail when available, remain visible in feed/search/detail views, and are excluded from automatic retry unless the user explicitly selects Recheck.
 - Preview/production cold launches require an explicit Local Services IP session choice before Telegram update checks or local imports run. Dismissing setup disables Telegram and Facebook import surfaces for the session, while guarded screens can reopen setup without affecting normal blog reading.
 
 ### Product Role

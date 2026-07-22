@@ -1,8 +1,12 @@
+import {
+  getFacebookExternalMedia,
+  getFacebookMediaDownloadMeta,
+} from "@acme/blog/facebook-media";
+import * as __ from "@acme/db";
 import type { TRPCContext } from "@api/trpc/init";
+import type { AlbumType, BlogType } from "@api/type";
 import { composeQueryData } from "@api/utils/query-response";
 import z from "zod";
-import * as __ from "@acme/db";
-import type { AlbumType, BlogType } from "@api/type";
 /*
 posts: publicProcedure
       .input(postsSchema)
@@ -52,17 +56,32 @@ export const visibleMainBlogWhere = {
         },
       },
     },
+    {
+      meta: {
+        path: ["facebook", "mediaDownload", "status"],
+        equals: "external",
+      },
+    },
   ],
 };
 
 export function isVisibleMainBlogRecord(blog: {
   source?: string | null;
+  meta?: unknown;
   medias?: Array<{
     fileId?: number | string | null;
     file?: { fileId?: string | null } | null;
   }>;
 }) {
   if (blog.source !== "facebook") return true;
+  const mediaDownload = getFacebookMediaDownloadMeta(blog.meta);
+  if (
+    mediaDownload?.status === "external" &&
+    typeof mediaDownload.externalUrl === "string" &&
+    mediaDownload.externalUrl
+  ) {
+    return true;
+  }
   return Boolean(
     blog.medias?.some((media) => media.fileId != null || media.file?.fileId),
   );
@@ -152,6 +171,9 @@ function hasMediaPayload(
 function hasBlogPayload(blog: {
   type?: string | null;
   content?: string | null;
+  source?: string | null;
+  sourceUrl?: string | null;
+  meta?: unknown;
   medias?: {
     mimeType?: string | null;
     file?: {
@@ -161,11 +183,27 @@ function hasBlogPayload(blog: {
       blobDownloadUrl?: string | null;
       mimeType?: string | null;
       fileName?: string | null;
+      fileSize?: number | null;
+      duration?: number | null;
       blobPathname?: string | null;
       blobContentType?: string | null;
     } | null;
   }[];
 }) {
+  const firstFile = blog.medias?.find((media) => media.file)?.file;
+  if (
+    getFacebookExternalMedia({
+      source: blog.source,
+      sourceUrl: blog.sourceUrl,
+      meta: blog.meta,
+      fileSize: firstFile?.fileSize,
+      mediaType: blog.type,
+      mimeType: firstFile?.mimeType,
+      fileName: firstFile?.fileName,
+    })
+  ) {
+    return true;
+  }
   if (blog.type === "text") {
     return Boolean(blog.content?.trim() || hasMediaPayload(blog, "document"));
   }
@@ -274,6 +312,18 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
           : null;
       const coverImageUrl = getMediaUrl(blog.thumbnail?.file);
       const coverImageFile = serializeFile(blog.thumbnail?.file);
+      const primaryMedia = blog.medias.find((media) => media.file) ?? null;
+      const externalMedia = getFacebookExternalMedia({
+        source: blog.source,
+        sourceUrl: blog.sourceUrl,
+        meta: blog.meta,
+        fileSize: primaryMedia?.file?.fileSize,
+        mediaType: primaryMedia?.file?.fileType ?? blog.type,
+        mimeType: primaryMedia?.file?.mimeType ?? primaryMedia?.mimeType,
+        fileName: primaryMedia?.file?.fileName,
+        duration: primaryMedia?.file?.duration,
+        thumbnailFileId: blog.thumbnail?.file?.fileId,
+      });
       const blogAudio = () => {
         const [media] = blog.medias;
         if (!media || !media.file) return null;
@@ -302,7 +352,8 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
           transcriptSegments[transcriptSegments.length - 1]?.endSec ?? null;
         const isFullyTranscribed =
           media.transcript?.status === "done" &&
-          Boolean(durationSec) &&
+          durationSec != null &&
+          durationSec > 0 &&
           transcriptMaxEndSec != null &&
           transcriptMaxEndSec >= durationSec - 3;
 
@@ -310,7 +361,7 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
           title: media.title,
           mediaId: media.id,
           source: media.file.source ?? "telegram",
-          telegramFileId: media.file.fileId,
+          telegramFileId: externalMedia ? null : media.file.fileId,
           url: getMediaUrl(media.file),
           fileName: media.file?.fileName,
           displayName,
@@ -327,6 +378,8 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
           transcriptionJobStatus: media.transcriptionJobs[0]?.status ?? null,
           transcriptSegments,
           isTranscribed: isFullyTranscribed,
+          externalUrl: externalMedia?.externalUrl ?? null,
+          externalDestination: externalMedia?.destination ?? null,
         };
       };
       const isType = <T>(t: BlogType, fn: T) =>
@@ -341,6 +394,9 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
       return {
         type,
         id: blog.id,
+        source: blog.source,
+        sourceUrl: blog.sourceUrl,
+        externalMedia,
         content: blogContent(type, blog.content),
         caption: blogCaption(type, blog.content),
         date: blog.blogDate,

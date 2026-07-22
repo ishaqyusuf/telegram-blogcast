@@ -1,7 +1,7 @@
 import { Pressable } from "@/components/ui/pressable";
 import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
-import { ActivityIndicator, Text, View } from "react-native";
+import { ActivityIndicator, Linking, Text, View } from "react-native";
 
 import { Icon } from "@/components/ui/icon";
 import { useColors } from "@/hooks/use-color";
@@ -55,7 +55,7 @@ export function CardFooter({
 	const canAddToAlbum = Boolean(
 		post.audio?.mediaId && !albumName && !albumId && onAddToAlbum,
 	);
-
+	const externalMedia = (post as any).externalMedia;
 	const playPause = useCallback(async () => {
 		if (isPlayControlDisabled) return;
 
@@ -87,6 +87,27 @@ export function CardFooter({
 		playAudio,
 		post,
 	]);
+
+	if (externalMedia?.externalUrl) {
+		const destinationLabel =
+			externalMedia.destination === "telegram" ? "Telegram" : "Facebook";
+		return (
+			<View className="mt-3 flex-row justify-end">
+				<Pressable
+					onPress={(event) => {
+						event.stopPropagation();
+						void Linking.openURL(externalMedia.externalUrl);
+					}}
+					className="min-h-11 flex-row items-center gap-2 rounded-full bg-primary px-4"
+				>
+					<Icon name="Share" size={16} className="text-primary-foreground" />
+					<Text className="text-xs font-extrabold text-primary-foreground">
+						Open in {destinationLabel}
+					</Text>
+				</Pressable>
+			</View>
+		);
+	}
 
 	if (hasAudioSource) {
 		return (

@@ -1,4 +1,4 @@
-import { ActivityIndicator, View, Text, TouchableOpacity } from "react-native";
+import { ActivityIndicator, Linking, View, Text, TouchableOpacity } from "react-native";
 import { useCallback, useState } from "react";
 import { ItemProps } from "./home-feed-post-card";
 import { useAudioStore } from "@/store/audio-store";
@@ -16,14 +16,19 @@ export function HomeFeedAudioPlayer({
   const store = useAudioStore();
   const colors = useColors();
   const [playbackPending, setPlaybackPending] = useState(false);
+  const externalMedia = (post as any).externalMedia;
   const isCurrent = store.blog?.id === post?.id;
   const isPlayying = isCurrent && store.isPlaying;
   const isBusy =
     playbackPending || (isCurrent && (store.isLoading || store.isDownloading));
   const audioPlayability = getAudioPlayability(post.audio as any);
-  const isPlayBlocked = !audioPlayability.canPlay;
+  const isPlayBlocked = !externalMedia && !audioPlayability.canPlay;
   const isDisabled = isBusy || isPlayBlocked;
   const playPause = useCallback(async () => {
+    if (externalMedia?.externalUrl) {
+      await Linking.openURL(externalMedia.externalUrl);
+      return;
+    }
     if (isDisabled) return;
 
     if (isPlayying) {
@@ -39,7 +44,7 @@ export function HomeFeedAudioPlayer({
         setPlaybackPending(false);
       }
     }
-  }, [isDisabled, isPlayying, isCurrent, post, store]);
+  }, [externalMedia, isDisabled, isPlayying, isCurrent, post, store]);
   // A fake waveform for display purposes
   const waveform = [4, 5, 4, 2, 3, 5, 2, 4, 3, 2, 5, 3];
   return (
@@ -59,7 +64,7 @@ export function HomeFeedAudioPlayer({
             <ActivityIndicator size="small" color={colors.primaryForeground} />
           ) : (
             <Icon
-              name={isPlayBlocked ? "Lock" : isPlayying ? "Pause" : "Play"}
+              name={externalMedia ? "Share" : isPlayBlocked ? "Lock" : isPlayying ? "Pause" : "Play"}
               color={
                 isPlayBlocked ? colors.mutedForeground : colors.primaryForeground
               }

@@ -19,6 +19,7 @@ import { ScrollToTopButton } from "@/components/ui/scroll-to-top-button";
 import { useScrollChrome } from "@/hooks/use-scroll-chrome";
 import { useColors } from "@/hooks/use-color";
 import { useTranslation } from "@/lib/i18n";
+import { getFacebookExternalMedia } from "@acme/blog/facebook-media";
 
 type SearchChannel = {
   id: number;
@@ -49,7 +50,11 @@ type SearchResultItem = {
   id: number;
   content?: string | null;
   type?: string | null;
+  source?: string | null;
+  sourceUrl?: string | null;
+  meta?: unknown;
   blogDate?: Date | string | null;
+  thumbnail?: { file?: SearchMedia["file"] | null } | null;
   medias?: SearchMedia[];
   blogTags?: SearchBlogTag[];
   channel?: {
@@ -179,6 +184,17 @@ function toBlogCardPost(
   const transcriptMaxEndSec =
     transcriptSegments[transcriptSegments.length - 1]?.endSec ?? null;
   const durationSec = audioFile?.duration ?? null;
+  const externalMedia = getFacebookExternalMedia({
+    source: item.source,
+    sourceUrl: item.sourceUrl,
+    meta: item.meta,
+    fileSize: audioFile?.fileSize,
+    mediaType: audioFile?.mimeType?.split("/")[0] ?? type,
+    mimeType: audioFile?.mimeType ?? audioMedia?.mimeType,
+    fileName: audioFile?.fileName,
+    duration: durationSec,
+    thumbnailFileId: item.thumbnail?.file?.fileId,
+  });
   const isFullyTranscribed =
     audioMedia?.transcript?.status === "done" &&
     Boolean(durationSec) &&
@@ -191,7 +207,7 @@ function toBlogCardPost(
           title: audioMedia.title,
           mediaId: audioMedia.id ?? undefined,
           source: audioFile?.source ?? "telegram",
-          telegramFileId: audioFile?.fileId,
+          telegramFileId: externalMedia ? null : audioFile?.fileId,
           url: getMediaUrl(audioFile) ?? audioMedia.url ?? null,
           fileName: audioFile?.fileName,
           displayName: audioFile?.fileName,
@@ -207,12 +223,17 @@ function toBlogCardPost(
             audioMedia.transcriptionJobs?.[0]?.status ?? null,
           transcriptSegments,
           isTranscribed: isFullyTranscribed,
+          externalUrl: externalMedia?.externalUrl ?? null,
+          externalDestination: externalMedia?.destination ?? null,
         }
       : null;
 
   return {
     id: item.id,
     type,
+    source: item.source,
+    sourceUrl: item.sourceUrl,
+    externalMedia,
     content: type === "text" ? (item.content ?? null) : null,
     caption,
     date: item.blogDate ? new Date(item.blogDate) : null,
@@ -241,7 +262,8 @@ function toBlogCardPost(
     channel: item.channel,
     isBookmarked: false,
     likes: 0,
-    coverImageUrl: null,
+    coverImageUrl: getMediaUrl(item.thumbnail?.file),
+    coverImageFile: serializeFile(item.thumbnail?.file),
     artwork: null,
     title: [caption, audio?.fileName || audio?.displayName || audio?.title]
       .filter(Boolean)

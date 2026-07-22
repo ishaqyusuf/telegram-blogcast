@@ -1,5 +1,5 @@
 import { Pressable } from "@/components/ui/pressable";
-import { View, Text, Image, ImageBackground } from "react-native";
+import { Linking, View, Text, Image, ImageBackground } from "react-native";
 import { useRouter } from "expo-router";
 import { HomeFeedPostAuthorHeader } from "./home-feed-post-author-header";
 import { HomeFeedPostFooter } from "./home-feed-post-footer";
@@ -43,6 +43,7 @@ function VideoPost({ post }: { post: ItemProps }) {
   const video = (post as any).video;
   const durationLabel = video?.duration ? minuteToString(video.duration) : null;
   const metaLabel = [durationLabel, video?.fileName].filter(Boolean).join(" · ");
+  const externalMedia = (post as any).externalMedia;
 
   return (
     <>
@@ -60,8 +61,15 @@ function VideoPost({ post }: { post: ItemProps }) {
         imageStyle={{ borderRadius: 12 }}
       >
         <View className="absolute inset-0 bg-black/30" />
-        <Pressable className="w-12 h-12 rounded-full bg-primary/90 items-center justify-center">
-          <Icon name="Play" size={28} className="text-primary-foreground" />
+        <Pressable
+          className="w-12 h-12 rounded-full bg-primary/90 items-center justify-center"
+          onPress={(event) => {
+            if (!externalMedia?.externalUrl) return;
+            event.stopPropagation();
+            void Linking.openURL(externalMedia.externalUrl);
+          }}
+        >
+          <Icon name={externalMedia ? "Share" : "Play"} size={28} className="text-primary-foreground" />
         </Pressable>
         <View className="absolute bottom-2 right-2 bg-black/60 px-2 py-0.5 rounded">
           <Text className="text-xs font-medium text-white">

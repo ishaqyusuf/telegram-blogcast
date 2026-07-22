@@ -1386,7 +1386,11 @@ export const blogRoutes = createTRPCRouter({
 						id: true,
 						content: true,
 						type: true,
+						source: true,
+						sourceUrl: true,
+						meta: true,
 						blogDate: true,
+						thumbnail: { include: { file: true } },
 						medias: {
 							include: {
 								file: true,

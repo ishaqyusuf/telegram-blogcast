@@ -32,6 +32,7 @@
     "apps/api": {
       "name": "@acme/api",
       "dependencies": {
+        "@acme/blog": "workspace:*",
         "@acme/db": "workspace:*",
         "@acme/document": "workspace:*",
         "@acme/telegram": "workspace:*",
@@ -342,6 +343,7 @@
       "name": "@acme/db",
       "version": "1.0.0",
       "dependencies": {
+        "@acme/blog": "workspace:*",
         "@prisma/adapter-pg": "^7.0.0",
         "@prisma/client": "^7.0.0",
         "@t3-oss/env-core": "^0.11.1",

@@ -14,6 +14,7 @@ import {
 	Clipboard,
 	FlatList,
 	KeyboardAvoidingView,
+	Linking,
 	Modal,
 	PanResponder,
 	Platform,
@@ -70,6 +71,7 @@ import { useRecentlyViewedStore } from "@/store/recently-viewed-store";
 import * as DocumentPicker from "expo-document-picker";
 import { Image } from "expo-image";
 import type { RouterInputs } from "@api/trpc/routers/_app";
+import { getFacebookExternalMedia } from "@acme/blog/facebook-media";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -2283,9 +2285,22 @@ export default function AudioBlogScreen() {
 	const mediaId = media?.id;
 	const audioChannelId = blog?.channelId ?? blog?.channel?.id;
 	const audioArtUrl = getMediaFileUrl((blog as any)?.thumbnail?.file);
+	const externalMedia = getFacebookExternalMedia({
+		source: (blog as any)?.source,
+		sourceUrl: (blog as any)?.sourceUrl,
+		meta: (blog as any)?.meta,
+		fileSize: media?.file?.fileSize,
+		mediaType: "audio",
+		mimeType: media?.file?.mimeType ?? media?.mimeType,
+		fileName: media?.file?.fileName,
+		duration: media?.file?.duration,
+		thumbnailFileId: (blog as any)?.thumbnail?.file?.fileId,
+	});
 	const telegramFileId =
-		media?.file?.source === "vercel_blob" ? undefined : media?.file?.fileId;
-	const mediaUrl = getMediaFileUrl(media?.file as any);
+		externalMedia || media?.file?.source === "vercel_blob"
+			? undefined
+			: media?.file?.fileId;
+	const mediaUrl = externalMedia ? null : getMediaFileUrl(media?.file as any);
 	const duration = media?.file?.duration;
 	const viewedDurationMs =
 		typeof duration === "number" ? Math.max(0, duration * 1000) : 0;
@@ -2340,7 +2355,9 @@ export default function AudioBlogScreen() {
 			},
 		} as any;
 	}, [audioArtUrl, blog, mediaUrl, telegramFileId]);
-	const playDisabledReason = viewedAudioItem
+	const playDisabledReason = externalMedia
+		? null
+		: viewedAudioItem
 		? getAudioPlayability((viewedAudioItem as any).audio).reason
 		: null;
 	const visibleAudioError =
@@ -2420,7 +2437,7 @@ export default function AudioBlogScreen() {
 		jobs: transcriptionJobs,
 		reload: reloadTranscriptionJobs,
 	} = useTranscriptionQueue(mediaId, {
-		autoLoad: localServicesEnabled && !!mediaId,
+		autoLoad: localServicesEnabled && !!mediaId && !externalMedia,
 		reloadOnEnqueue: false,
 	});
 	const mediaTranscriptionJobs = useMemo(
@@ -2830,6 +2847,10 @@ export default function AudioBlogScreen() {
 	]);
 
 	const handleViewedPlayPause = useCallback(async () => {
+		if (externalMedia) {
+			await Linking.openURL(externalMedia.externalUrl);
+			return;
+		}
 		if (!viewedAudioItem) return;
 		setViewedPlaybackError(null);
 		if (playDisabledReason) {
@@ -2859,7 +2880,7 @@ export default function AudioBlogScreen() {
 		} finally {
 			setViewedPlaybackPending(false);
 		}
-	}, [isViewedAudioActive, loadAudio, playDisabledReason, viewedAudioItem]);
+	}, [externalMedia, isViewedAudioActive, loadAudio, playDisabledReason, viewedAudioItem]);
 
 	const { mutate: addToAlbum, isPending: isAdding } = useMutation(
 		_trpc.album.addMediaToAlbum.mutationOptions({
@@ -3060,6 +3081,13 @@ export default function AudioBlogScreen() {
 	}
 
 	async function queueCurrentTranscription() {
+		if (externalMedia) {
+			Alert.alert(
+				"External audio",
+				`Open this audio in ${externalMedia.destination === "telegram" ? "Telegram" : "Facebook"}; it is too large for in-app download.`,
+			);
+			return false;
+		}
 		if (!localServicesEnabled) {
 			requestLocalServicesSetup();
 			return false;
@@ -3701,6 +3729,19 @@ export default function AudioBlogScreen() {
 												}
 												onReadPress={openTranscriptModal}
 											/>
+											{externalMedia ? (
+												<Pressable
+													onPress={() =>
+														void Linking.openURL(externalMedia.externalUrl)
+													}
+													className="mt-4 flex-row items-center justify-center gap-2 rounded-full bg-white/15 px-4 py-3"
+												>
+													<Icon name="Share" size={17} color="#fff" />
+													<Text className="text-sm font-extrabold text-white">
+														Open in {externalMedia.destination === "telegram" ? "Telegram" : "Facebook"}
+													</Text>
+												</Pressable>
+											) : null}
 											{visibleAudioError ? (
 												<Text className="pt-3 text-center text-xs text-destructive">
 													{visibleAudioError}

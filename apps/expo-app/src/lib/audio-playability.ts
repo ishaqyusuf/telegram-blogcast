@@ -1,4 +1,6 @@
-export const TELEGRAM_BOT_DOWNLOAD_LIMIT_BYTES = 20 * 1024 * 1024;
+import { TELEGRAM_BOT_DOWNLOAD_LIMIT_BYTES } from "@acme/blog/facebook-media";
+
+export { TELEGRAM_BOT_DOWNLOAD_LIMIT_BYTES } from "@acme/blog/facebook-media";
 
 export const TELEGRAM_BOT_DOWNLOAD_LIMIT_LABEL = "20 MB";
 

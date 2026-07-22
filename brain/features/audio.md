@@ -53,6 +53,7 @@ Tracks the current audio playback experience, supporting components, and future 
 ### UX Notes
 - Persistent mini-player is a core interaction pattern.
 - Opening an audio detail screen is passive: it may show the viewed audio's metadata and duration, but it must not replace, stop, seek, or pause the currently active audio until the user presses play on the viewed audio.
+- Oversized Facebook audio is intentionally not loaded into the in-app player. Its thumbnail and metadata remain visible, and the play action opens the Telegram message for files through 50 MiB or the original Facebook post for larger files.
 - Audio-detail scrub dragging is locally controlled until native seek settles; store progress events must not overwrite the thumb/time label while `isSeeking` is active.
 - Audio-detail time labels preview the seek position while dragging and use hour-aware `HH:MM:SS` formatting for audio at least one hour long.
 - A naturally ended track is remembered as ended. With no repeat or queue play mode active, pressing play again seeks to 0 and restarts instead of resuming at the end or applying pause rewind.

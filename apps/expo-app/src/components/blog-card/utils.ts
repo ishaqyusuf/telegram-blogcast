@@ -95,12 +95,14 @@ export function getPrimaryDocumentUrl(post: BlogItem) {
 }
 
 export function resolveVariant(post: BlogItem): BlogCardVariant {
+  const externalMedia = (post as any).externalMedia;
   const hasAudio = !!(post.audio?.telegramFileId || (post.audio as any)?.url);
   const hasImage = !!getPrimaryImageUrl(post);
   const hasDocument = !!getPrimaryDocumentMedia(post);
   const hasText = !!(post.content?.trim() || post.caption?.trim());
 
   if (post.type === "video") return "video";
+  if (post.type === "audio" && externalMedia?.externalUrl) return "audio";
   if (post.type === "pdf" || hasDocument) return "pdf";
   if (hasAudio) return "audio";
   if (hasImage && hasText) return "text+image";

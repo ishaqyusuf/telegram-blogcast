@@ -162,9 +162,21 @@ function CardVideo({ post }: { post: BlogItem }) {
   const metaLabel = [durationLabel, sizeLabel, video?.fileName]
     .filter(Boolean)
     .join(" · ");
+  const externalMedia = (post as any).externalMedia;
+  const destinationLabel =
+    externalMedia?.destination === "telegram" ? "Telegram" : "Facebook";
 
   return (
-    <View className="mb-1 overflow-hidden rounded-xl bg-black">
+    <Pressable
+      className="mb-1 overflow-hidden rounded-xl bg-black"
+      onPress={(event) => {
+        if (!externalMedia?.externalUrl) return;
+        event.stopPropagation();
+        void Linking.openURL(externalMedia.externalUrl);
+      }}
+      accessibilityRole={externalMedia ? "link" : undefined}
+      accessibilityLabel={externalMedia ? `Open video in ${destinationLabel}` : "Video"}
+    >
       {imageUrl ? (
         <Image
           source={{ uri: imageUrl }}
@@ -190,8 +202,53 @@ function CardVideo({ post }: { post: BlogItem }) {
             {metaLabel}
           </Text>
         ) : null}
+        {externalMedia ? (
+          <View className="mt-2 rounded-full bg-black/70 px-3 py-1">
+            <Text className="text-xs font-bold text-white">
+              Opens in {destinationLabel}
+            </Text>
+          </View>
+        ) : null}
       </View>
-    </View>
+    </Pressable>
+  );
+}
+
+function CardExternalAudio({ post }: { post: BlogItem }) {
+  const externalMedia = (post as any).externalMedia;
+  if (!externalMedia?.externalUrl) return <CardText post={post} />;
+  const imageUrl = getPrimaryImageUrl(post);
+  const destinationLabel =
+    externalMedia.destination === "telegram" ? "Telegram" : "Facebook";
+  return (
+    <>
+      <CardText post={post} />
+      <Pressable
+        className="mb-1 h-36 overflow-hidden rounded-xl bg-black"
+        onPress={(event) => {
+          event.stopPropagation();
+          void Linking.openURL(externalMedia.externalUrl);
+        }}
+        accessibilityRole="link"
+        accessibilityLabel={`Open audio in ${destinationLabel}`}
+      >
+        {imageUrl ? (
+          <Image
+            source={{ uri: imageUrl }}
+            className="absolute inset-0 h-full w-full opacity-60"
+            resizeMode="cover"
+          />
+        ) : null}
+        <View className="flex-1 items-center justify-center gap-2">
+          <View className="size-14 items-center justify-center rounded-full bg-primary">
+            <Icon name="Share" size={25} className="text-primary-foreground" />
+          </View>
+          <Text className="text-sm font-extrabold text-white">
+            Open audio in {destinationLabel}
+          </Text>
+        </View>
+      </Pressable>
+    </>
   );
 }
 
@@ -368,6 +425,7 @@ export function CardMedia({
   const { t } = useTranslation();
   const colors = useColors();
   if (variant === "audio") {
+    if ((post as any).externalMedia) return <CardExternalAudio post={post} />;
     return <CardText post={post} />;
   }
 

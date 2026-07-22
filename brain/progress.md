@@ -2,6 +2,14 @@
 
 ## 2026-07-22
 
+### Oversized Facebook Media External Playback
+- Status: Done.
+- Source mode: User-approved implementation plan.
+- Source changed: Facebook bridge media probing and size policy, normalized API import metadata/status/feed/search output, shared limit/link helpers, Expo feed/card/detail/import external playback, and a dry-run legacy backfill command.
+- Brain changed: `brain/plans/2026-07-22-feature-facebook-large-media-external-playback.md`, `brain/features/blog.md`, `brain/features/audio.md`, `brain/api/contracts.md`, `brain/tasks/done.md`, and `brain/progress.md`.
+- Validation passed: 43-test repository Bun suite, five bridge unit tests plus Python compilation, Blog and DB package typechecks, focused Expo ESLint, focused Biome checks, and `git diff --check`.
+- Validation limitation: the API package typecheck still reports two unrelated existing diagnostics in `blog.routes.ts` and `utils/query-response.ts`; the Expo typecheck also reports its existing project-wide diagnostics.
+
 ### Fix Blog-Card Add-To-Album Query Context
 - Status: Done.
 - Source mode: Direct user report.
