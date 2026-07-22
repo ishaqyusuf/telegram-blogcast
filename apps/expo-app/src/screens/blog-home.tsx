@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
-  Animated,
   LayoutAnimation,
   Platform,
   Text,
@@ -50,7 +49,6 @@ if (
 
 const AUDIO_BAR_SCROLL_HIDE_THRESHOLD = 28;
 const AUDIO_BAR_SCROLL_SHOW_THRESHOLD = -18;
-const HOME_HEADER_ANIMATION_DURATION = 180;
 const CATEGORY_TABS_PIN_HYSTERESIS = 8;
 
 function animatePostListChange() {
@@ -133,9 +131,8 @@ export default function BlogHomeScreen() {
   const isFeedDragActiveRef = useRef(false);
   const pendingHomeHeaderHiddenRef = useRef<boolean | null>(null);
   const categoryTabsPinnedRef = useRef(false);
-  const headerCollapseProgress = useRef(new Animated.Value(1)).current;
   const previousGlobalAudioHiddenRef = useRef<boolean | null>(null);
-  const [homeHeaderHeight, setHomeHeaderHeight] = useState(0);
+  const [homeHeaderHidden, setHomeHeaderHiddenState] = useState(false);
   const [categoryTabsOffsetY, setCategoryTabsOffsetY] = useState<number | null>(
     null,
   );
@@ -358,19 +355,12 @@ export default function BlogHomeScreen() {
     [albumMediaIds],
   );
 
-  const setHomeHeaderHidden = useCallback(
-    (hidden: boolean) => {
-      if (homeHeaderHiddenRef.current === hidden) return;
+  const setHomeHeaderHidden = useCallback((hidden: boolean) => {
+    if (homeHeaderHiddenRef.current === hidden) return;
 
-      homeHeaderHiddenRef.current = hidden;
-      Animated.timing(headerCollapseProgress, {
-        toValue: hidden ? 0 : 1,
-        duration: HOME_HEADER_ANIMATION_DURATION,
-        useNativeDriver: false,
-      }).start();
-    },
-    [headerCollapseProgress],
-  );
+    homeHeaderHiddenRef.current = hidden;
+    setHomeHeaderHiddenState(hidden);
+  }, []);
 
   const requestHomeHeaderHidden = useCallback(
     (hidden: boolean) => {
@@ -438,19 +428,6 @@ export default function BlogHomeScreen() {
       return nextOffsetY;
     });
   }, []);
-
-  const homeHeaderAnimatedStyle = useMemo(() => {
-    if (!homeHeaderHeight) return undefined;
-
-    return {
-      height: headerCollapseProgress.interpolate({
-        inputRange: [0, 1],
-        outputRange: [0, homeHeaderHeight],
-      }),
-      opacity: headerCollapseProgress,
-      overflow: "hidden" as const,
-    };
-  }, [headerCollapseProgress, homeHeaderHeight]);
 
   useEffect(() => {
     setHiddenPostIds(new Set());
@@ -559,22 +536,7 @@ export default function BlogHomeScreen() {
       style={{ backgroundColor: colors.background }}
     >
       <SafeArea>
-        <Animated.View style={homeHeaderAnimatedStyle}>
-          <View
-            onLayout={(event) => {
-              const nextHeight = event.nativeEvent.layout.height;
-              if (nextHeight > 0) {
-                setHomeHeaderHeight((previousHeight) =>
-                  Math.abs(previousHeight - nextHeight) < 1
-                    ? previousHeight
-                    : nextHeight,
-                );
-              }
-            }}
-          >
-            <BlogHomeHeader />
-          </View>
-        </Animated.View>
+        {homeHeaderHidden ? null : <BlogHomeHeader />}
         <View className="flex-1 relative">
           {categoryTabsPinned ? (
             <View
