@@ -19,8 +19,8 @@ describe("local service URLs", () => {
 	test("builds service URLs from a shared IP and per-service ports", () => {
 		expect(buildLocalServiceUrls("192.168.1.44")).toEqual({
 			ip: "192.168.1.44",
-			apiBaseUrl: "http://192.168.1.44:3006",
-			apiTrpcUrl: "http://192.168.1.44:3006/api/trpc",
+			apiBaseUrl: "http://192.168.1.44:3501",
+			apiTrpcUrl: "http://192.168.1.44:3501/api/trpc",
 			transcriberBaseUrl: "http://192.168.1.44:8787",
 			facebookMediaBridgeBaseUrl: "http://192.168.1.44:8790",
 		});

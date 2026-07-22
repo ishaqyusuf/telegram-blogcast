@@ -10,10 +10,11 @@ import { Icon } from "@/components/ui/icon";
 import { Pressable } from "@/components/ui/pressable";
 import { useColors } from "@/hooks/use-color";
 import { isHttpFacebookMediaBridgeUrl } from "@/lib/facebook-media-bridge";
+import { getLocalApiQueryKey } from "@/lib/local-api-query";
 import { buildTelegramFileProxy } from "@/lib/media-source";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import type { RouterOutputs } from "@api/trpc/routers/_app";
+import type { RouterInputs, RouterOutputs } from "@api/trpc/routers/_app";
 import { Audio, type AVPlaybackStatus } from "expo-av";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -33,6 +34,10 @@ type ImportItem =
 type ImportChannel =
 	RouterOutputs["facebookImport"]["getChannels"][number];
 type StatusFilter = "all" | ImportItem["status"];
+type StartMediaImportInput =
+	RouterInputs["facebookImport"]["startMediaImport"];
+type ClearFailedMediaImportsInput =
+	RouterInputs["facebookImport"]["clearFailedMediaImports"];
 const EMPTY_IMPORT_ITEMS: ImportItem[] = [];
 const FACEBOOK_IMPORT_FILTER_STORAGE_KEY = "facebook-import:filters:v1";
 
@@ -622,7 +627,12 @@ export default function FacebookImportScreen() {
 	const router = useRouter();
 	const colors = useColors();
 	const qc = useQueryClient();
-	const { urls: localServiceUrls } = useLocalServicesSession();
+	const {
+		activeIp,
+		connectionStatus,
+		localApiClient,
+		urls: localServiceUrls,
+	} = useLocalServicesSession();
 	const floatingFooterInset = useFloatingFooterInset();
 	const playbackSoundRef = useRef<Audio.Sound | null>(null);
 	const [status, setStatus] = useState<StatusFilter>(
@@ -650,119 +660,125 @@ export default function FacebookImportScreen() {
 	const facebookBridgeInput = canUseFacebookBridgeUrl
 		? { baseUrl: facebookBridgeBaseUrl ?? undefined }
 		: undefined;
+	const localApiReady = connectionStatus === "online" && Boolean(localApiClient);
+	const summaryInput = { channelIds: selectedChannelIds };
+	const itemsInput = {
+		status,
+		channelIds: selectedChannelIds,
+		limit: 50,
+	} as const;
+	const summaryQueryKey = getLocalApiQueryKey(
+		activeIp,
+		"facebookImport.getSummary",
+		summaryInput,
+	);
+	const itemsQueryKey = getLocalApiQueryKey(
+		activeIp,
+		"facebookImport.listMediaImports",
+		itemsInput,
+	);
+	const bridgeQueryKey = getLocalApiQueryKey(
+		activeIp,
+		"facebookImport.checkBridge",
+		facebookBridgeInput,
+	);
+	const channelsQueryKey = getLocalApiQueryKey(
+		activeIp,
+		"facebookImport.getChannels",
+	);
 	const summaryQuery = useQuery({
-		..._trpc.facebookImport.getSummary.queryOptions({
-			channelIds: selectedChannelIds,
-		}),
+		queryKey: summaryQueryKey,
+		queryFn: () => localApiClient!.facebookImport.getSummary.query(summaryInput),
+		enabled: localApiReady,
 		refetchInterval: 2500,
 	});
 	const runningCount = summaryQuery.data?.runningCount ?? 0;
 	const hasRunningJob =
 		summaryQuery.data?.job.activeJob?.status === "running" || runningCount > 0;
 	const bridgeQuery = useQuery({
-		..._trpc.facebookImport.checkBridge.queryOptions(facebookBridgeInput),
+		queryKey: bridgeQueryKey,
+		queryFn: () =>
+			localApiClient!.facebookImport.checkBridge.query(facebookBridgeInput),
+		enabled: localApiReady,
 		retry: false,
 	});
-	const channelsQuery = useQuery(
-		_trpc.facebookImport.getChannels.queryOptions(),
-	);
+	const bridgeReady = localApiReady && Boolean(bridgeQuery.data?.ok);
+	const channelsQuery = useQuery({
+		queryKey: channelsQueryKey,
+		queryFn: () => localApiClient!.facebookImport.getChannels.query(),
+		enabled: localApiReady,
+	});
 	const itemsQuery = useQuery({
-		..._trpc.facebookImport.listMediaImports.queryOptions({
-			status,
-			channelIds: selectedChannelIds,
-			limit: 50,
-		}),
+		queryKey: itemsQueryKey,
+		queryFn: () =>
+			localApiClient!.facebookImport.listMediaImports.query(itemsInput),
+		enabled: localApiReady,
 		refetchInterval: hasRunningJob || importingBlogIds.length > 0 ? 1500 : false,
 	});
-	const startMutation = useMutation(
-		_trpc.facebookImport.startMediaImport.mutationOptions({
-			onSuccess: async (_data, variables) => {
-				if (variables.blogIds?.length) {
-					setSelectedBlogIds((current) =>
-						current.filter((id) => !variables.blogIds?.includes(id)),
-					);
-				}
-				await Promise.all([
-					qc.invalidateQueries({
-						queryKey: _trpc.facebookImport.getSummary.queryKey({
-							channelIds: selectedChannelIds,
-						}),
-					}),
-					qc.invalidateQueries({
-						queryKey: _trpc.facebookImport.listMediaImports.queryKey({
-							status,
-							channelIds: selectedChannelIds,
-							limit: 50,
-						}),
-					}),
-					qc.invalidateQueries({
-						queryKey:
-							_trpc.facebookImport.checkBridge.queryKey(facebookBridgeInput),
-					}),
-				]);
-			},
-			onSettled: (_data, error, variables) => {
-				if (error && variables?.blogIds?.length) {
-					setImportingBlogIds((current) =>
-						current.filter((id) => !variables.blogIds?.includes(id)),
-					);
-				}
-			},
-		}),
-	);
-	const stopMutation = useMutation(
-		_trpc.facebookImport.stopMediaImport.mutationOptions({
-			onSettled: async () => {
-				setImportingBlogIds([]);
-				await Promise.all([
-					qc.invalidateQueries({
-						queryKey: _trpc.facebookImport.getSummary.queryKey({
-							channelIds: selectedChannelIds,
-						}),
-					}),
-					qc.invalidateQueries({
-						queryKey: _trpc.facebookImport.listMediaImports.queryKey({
-							status,
-							channelIds: selectedChannelIds,
-							limit: 50,
-						}),
-					}),
-				]);
-			},
-		}),
-	);
-	const clearFailedMutation = useMutation(
-		_trpc.facebookImport.clearFailedMediaImports.mutationOptions({
-			onSuccess: async () => {
-				setStatus("not_started");
-				setSelectedBlogIds([]);
-				await Promise.all([
-					qc.invalidateQueries({
-						queryKey: _trpc.facebookImport.getSummary.queryKey({
-							channelIds: selectedChannelIds,
-						}),
-					}),
-					qc.invalidateQueries({
-						queryKey: _trpc.facebookImport.listMediaImports.queryKey({
-							status,
-							channelIds: selectedChannelIds,
-							limit: 50,
-						}),
-					}),
-					qc.invalidateQueries({
-						queryKey: _trpc.facebookImport.listMediaImports.queryKey({
+	const startMutation = useMutation({
+		mutationFn: (input: StartMediaImportInput) => {
+			if (!localApiClient) throw new Error("Local API is not configured.");
+			return localApiClient.facebookImport.startMediaImport.mutate(input);
+		},
+		onSuccess: async (_data, variables) => {
+			if (variables.blogIds?.length) {
+				setSelectedBlogIds((current) =>
+					current.filter((id) => !variables.blogIds?.includes(id)),
+				);
+			}
+			await Promise.all([
+				qc.invalidateQueries({ queryKey: summaryQueryKey }),
+				qc.invalidateQueries({ queryKey: itemsQueryKey }),
+				qc.invalidateQueries({ queryKey: bridgeQueryKey }),
+			]);
+		},
+		onSettled: (_data, error, variables) => {
+			if (error && variables?.blogIds?.length) {
+				setImportingBlogIds((current) =>
+					current.filter((id) => !variables.blogIds?.includes(id)),
+				);
+			}
+		},
+	});
+	const stopMutation = useMutation({
+		mutationFn: () => {
+			if (!localApiClient) throw new Error("Local API is not configured.");
+			return localApiClient.facebookImport.stopMediaImport.mutate();
+		},
+		onSettled: async () => {
+			setImportingBlogIds([]);
+			await Promise.all([
+				qc.invalidateQueries({ queryKey: summaryQueryKey }),
+				qc.invalidateQueries({ queryKey: itemsQueryKey }),
+			]);
+		},
+	});
+	const clearFailedMutation = useMutation({
+		mutationFn: (input: ClearFailedMediaImportsInput) => {
+			if (!localApiClient) throw new Error("Local API is not configured.");
+			return localApiClient.facebookImport.clearFailedMediaImports.mutate(input);
+		},
+		onSuccess: async () => {
+			setStatus("not_started");
+			setSelectedBlogIds([]);
+			await Promise.all([
+				qc.invalidateQueries({ queryKey: summaryQueryKey }),
+				qc.invalidateQueries({ queryKey: itemsQueryKey }),
+				qc.invalidateQueries({
+					queryKey: getLocalApiQueryKey(
+						activeIp,
+						"facebookImport.listMediaImports",
+						{
 							status: "not_started",
 							channelIds: selectedChannelIds,
 							limit: 50,
-						}),
-					}),
-					qc.invalidateQueries({
-						queryKey: _trpc.facebookImport.getChannels.queryKey(),
-					}),
-				]);
-			},
-		}),
-	);
+						},
+					),
+				}),
+				qc.invalidateQueries({ queryKey: channelsQueryKey }),
+			]);
+		},
+	});
 
 	const job =
 		summaryQuery.data?.job.activeJob ??
@@ -821,20 +837,25 @@ export default function FacebookImportScreen() {
 				? selectedChannelNames[0]
 				: `${selectedChannelNames.length} channels`;
 	const canStart =
+		bridgeReady &&
 		!startMutation.isPending &&
 		!stopMutation.isPending &&
 		!clearFailedMutation.isPending &&
 		!hasRunningJob &&
 		bulkStartCount > 0;
-	const canStop = hasRunningJob && !stopMutation.isPending;
+	const canStop = localApiReady && hasRunningJob && !stopMutation.isPending;
 	const canImportSelected =
+		bridgeReady &&
 		selectedBlogIds.length > 0 &&
 		!startMutation.isPending &&
 		!stopMutation.isPending &&
 		!clearFailedMutation.isPending &&
 		!hasRunningJob;
 	const canClearFailed =
-		failedCount > 0 && !hasRunningJob && !clearFailedMutation.isPending;
+		localApiReady &&
+		failedCount > 0 &&
+		!hasRunningJob &&
+		!clearFailedMutation.isPending;
 	const confirmClearFailedImports = useCallback(() => {
 		if (!canClearFailed) return;
 		Alert.alert(
@@ -1025,7 +1046,13 @@ export default function FacebookImportScreen() {
 
 	const importSingleItem = useCallback(
 		(item: ImportItem) => {
-			if (!canImportItem(item) || startMutation.isPending || hasRunningJob) return;
+			if (
+				!bridgeReady ||
+				!canImportItem(item) ||
+				startMutation.isPending ||
+				hasRunningJob
+			)
+				return;
 			setImportingBlogIds([item.blogId]);
 			startMutation.mutate({
 				blogIds: [item.blogId],
@@ -1037,6 +1064,7 @@ export default function FacebookImportScreen() {
 			});
 		},
 		[
+			bridgeReady,
 			canUseFacebookBridgeUrl,
 			facebookBridgeBaseUrl,
 			hasRunningJob,
@@ -1199,7 +1227,7 @@ export default function FacebookImportScreen() {
 						<View className="size-10 items-center justify-center rounded-full bg-secondary">
 							{bridgeQuery.isFetching ? (
 								<ActivityIndicator size="small" />
-							) : bridgeQuery.data?.ok ? (
+							) : bridgeReady ? (
 								<Icon name="Wifi" size={18} className="text-primary" />
 							) : (
 								<Icon
@@ -1222,19 +1250,19 @@ export default function FacebookImportScreen() {
 						</View>
 						<View
 							className={
-								bridgeQuery.data?.ok
+								bridgeReady
 									? "rounded-full bg-primary/15 px-2 py-1"
 									: "rounded-full bg-destructive/15 px-2 py-1"
 							}
 						>
 							<Text
 								className={
-									bridgeQuery.data?.ok
+									bridgeReady
 										? "text-[10px] font-bold text-primary"
 										: "text-[10px] font-bold text-destructive"
 								}
 							>
-								{bridgeQuery.data?.ok ? "Ready" : "Offline"}
+								{bridgeReady ? "Ready" : "Offline"}
 							</Text>
 						</View>
 					</View>
@@ -1436,6 +1464,7 @@ export default function FacebookImportScreen() {
 		),
 		[
 			bridgeQuery.data,
+			bridgeReady,
 			bridgeQuery.isFetching,
 			bulkStartCount,
 			canStart,
@@ -1564,7 +1593,9 @@ export default function FacebookImportScreen() {
 						(importingBlogIds.includes(currentPreviewItem.blogId) ||
 							currentPreviewItem.status === "running")
 					}
-					canImport={!startMutation.isPending && !hasRunningJob}
+					canImport={
+						bridgeReady && !startMutation.isPending && !hasRunningJob
+					}
 					onClose={() => setPreviewItem(null)}
 					onImport={importSingleItem}
 					onOpenImported={(item) => {

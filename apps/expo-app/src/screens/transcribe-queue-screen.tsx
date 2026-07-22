@@ -24,6 +24,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { SafeArea } from "@/components/safe-area";
+import { useLocalServicesSession } from "@/components/local-services";
 import { FloatingBottomSheet } from "@/components/ui/floating-bottom-sheet";
 import { Icon, type IconKeys } from "@/components/ui/icon";
 import { Pressable } from "@/components/ui/pressable";
@@ -37,7 +38,6 @@ import {
 	useTranscriptionQueue,
 } from "@/hooks/use-transcription-queue";
 import { withAlpha } from "@/lib/theme";
-import { vanillaTrpc } from "@/trpc/vanilla-client";
 
 type QueueJob = ReturnType<typeof useTranscriptionQueue>["jobs"][number];
 
@@ -398,6 +398,7 @@ function QueueJobRow({
 export default function TranscribeQueueScreen() {
 	const router = useRouter();
 	const colors = useColors();
+	const { connectionStatus, localApiClient } = useLocalServicesSession();
 	const { jobs, queuedCount, isRunning, deleteJob, runQueued, reload } =
 		useTranscriptionQueue();
 	const [isRefreshing, setIsRefreshing] = useState(false);
@@ -478,7 +479,10 @@ export default function TranscribeQueueScreen() {
 					style: "destructive",
 					onPress: async () => {
 						try {
-							await vanillaTrpc.blog.resetTranscript.mutate({ mediaId });
+							if (!localApiClient || connectionStatus !== "online") {
+								throw new Error("The selected local API is offline.");
+							}
+							await localApiClient.blog.resetTranscript.mutate({ mediaId });
 							setSelectedJob(null);
 							await reload();
 							Alert.alert("Queue for transcribing", undefined, [
@@ -487,7 +491,7 @@ export default function TranscribeQueueScreen() {
 									text: "Yes",
 									onPress: async () => {
 										try {
-											await vanillaTrpc.blog.enqueueTranscriptionJob.mutate({
+											await localApiClient.blog.enqueueTranscriptionJob.mutate({
 												mediaId,
 												telegramFileId: jobToReset.telegramFileId ?? null,
 												audioUrl: jobToReset.audioUrl ?? null,

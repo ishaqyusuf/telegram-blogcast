@@ -1,8 +1,14 @@
-export const LOCAL_API_PORT = process.env.EXPO_PUBLIC_API_PORT ?? "3006";
-export const LOCAL_TRANSCRIBER_PORT =
-	process.env.EXPO_PUBLIC_TRANSCRIBER_PORT ?? "8787";
-export const LOCAL_FACEBOOK_MEDIA_BRIDGE_PORT =
-	process.env.EXPO_PUBLIC_FACEBOOK_MEDIA_BRIDGE_PORT ?? "8790";
+import {
+	LOCAL_API_PORT,
+	LOCAL_FACEBOOK_MEDIA_BRIDGE_PORT,
+	LOCAL_TRANSCRIBER_PORT,
+} from "./local-service-ports";
+
+export {
+	LOCAL_API_PORT,
+	LOCAL_FACEBOOK_MEDIA_BRIDGE_PORT,
+	LOCAL_TRANSCRIBER_PORT,
+} from "./local-service-ports";
 
 export type LocalServiceUrls = {
 	ip: string;

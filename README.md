@@ -161,6 +161,10 @@ Telegram Channel
 
 Audio files are fetched using Bot API `file_id` resolution (MTProto forward → Bot API capture) and stored with metadata. The Expo app streams audio directly; the web app uses a custom player component.
 
+### Local services gateway
+
+Development uses the Expo host automatically. Preview and production builds connect optional LAN workflows through the selected host at port `3501`; the Next app exposes `/health` and `/api/trpc`, then coordinates Telegram updates, transcription on `8787`, and the Facebook media bridge on `8790`.
+
 ---
 
 ## Scripts

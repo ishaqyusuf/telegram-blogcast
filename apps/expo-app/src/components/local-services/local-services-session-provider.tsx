@@ -8,14 +8,19 @@ import {
 	type LocalServiceUrls,
 } from "@/lib/local-service-urls";
 import {
-	getInitialLocalServicesSessionStatus,
 	isValidIpv4Address,
 	normalizeIpv4Input,
+	resolveInitialLocalServicesSession,
+	shouldProbeLocalServices,
+	type LocalServicesConnectionStatus,
 	transitionLocalServicesSession,
+	type LocalServicesIpMode,
 	type LocalServicesSessionStatus,
 } from "@/lib/local-services-session";
-import { getDefaultTranscriberUrl } from "@/lib/transcribe";
-import { getCurrentLocalApiIp } from "@/lib/local-api-ip-cache";
+import {
+	checkLocalApiBaseUrl,
+	getCurrentLocalApiIp,
+} from "@/lib/local-api-ip-cache";
 import { useAppSettingsStore } from "@/store/app-settings-store";
 import {
 	createLocalApiClient,
@@ -33,7 +38,7 @@ import {
 	useRef,
 	useState,
 } from "react";
-import { View } from "react-native";
+import { AppState, View } from "react-native";
 
 import { LocalServicesLaunchSheet } from "./local-services-launch-sheet";
 
@@ -42,11 +47,14 @@ type PendingResolution = "enabled" | "disabled" | null;
 type LocalServicesSessionValue = {
 	status: LocalServicesSessionStatus;
 	isEnabled: boolean;
+	ipMode: LocalServicesIpMode;
+	connectionStatus: LocalServicesConnectionStatus;
 	activeIp: string | null;
 	urls: LocalServiceUrls | null;
 	localApiClient: LocalApiClient | null;
 	requestSetup: () => void;
 	enableWithIp: (ip: string) => void;
+	retryConnection: () => void;
 };
 
 const LocalServicesSessionContext =
@@ -90,9 +98,6 @@ export function LocalServicesSessionProvider({
 	const localApiBaseUrl = useAppSettingsStore(
 		(state) => state.localApiBaseUrl,
 	);
-	const localTranscriberBaseUrl = useAppSettingsStore(
-		(state) => state.localTranscriberBaseUrl,
-	);
 	const localApiIpHistory = useAppSettingsStore(
 		(state) => state.localApiIpHistory,
 	);
@@ -101,45 +106,105 @@ export function LocalServicesSessionProvider({
 	);
 	const [status, setStatus] =
 		useState<LocalServicesSessionStatus>("initializing");
+	const [ipMode, setIpMode] = useState<LocalServicesIpMode>("manual");
+	const [connectionStatus, setConnectionStatus] =
+		useState<LocalServicesConnectionStatus>("offline");
 	const [activeIp, setActiveIp] = useState<string | null>(null);
+	const connectionAttemptRef = useRef(0);
 
 	useEffect(() => {
 		if (!hydrated || initializedRef.current) return;
 		initializedRef.current = true;
 
-		const initialStatus = getInitialLocalServicesSessionStatus(
-			getRuntimeAppVariant(),
-		);
+		const appVariant = getRuntimeAppVariant();
 		const preferredIp = getPreferredLocalServiceIp({
 			manualIp: localServicesIp,
 			lastUsedIp: localApiLastIp,
 			savedApiBaseUrl: localApiBaseUrl,
-			currentIp: getCurrentLocalApiIp(),
 		});
-		const normalizedPreferredIp = normalizeIpv4Input(preferredIp);
-		setActiveIp(
-			isValidIpv4Address(normalizedPreferredIp)
-				? normalizedPreferredIp
-				: null,
+		const initial = resolveInitialLocalServicesSession({
+			appVariant,
+			currentIp: getCurrentLocalApiIp(),
+			preferredSavedIp: preferredIp,
+		});
+		setIpMode(initial.ipMode);
+		setActiveIp(initial.activeIp);
+		setConnectionStatus(
+			initial.status === "enabled" && initial.activeIp
+				? "checking"
+				: "offline",
 		);
-		setStatus(initialStatus);
+		setStatus(initial.status);
 	}, [hydrated, localApiBaseUrl, localApiLastIp, localServicesIp]);
 
 	const urls = useMemo(() => {
 		if (!activeIp) return null;
-		const derivedUrls = buildLocalServiceUrls(activeIp);
-		if (!derivedUrls) return null;
-		return {
-			...derivedUrls,
-			transcriberBaseUrl:
-				getDefaultTranscriberUrl(localTranscriberBaseUrl, activeIp) ??
-				derivedUrls.transcriberBaseUrl,
-		};
-	}, [activeIp, localTranscriberBaseUrl]);
+		return buildLocalServiceUrls(activeIp);
+	}, [activeIp]);
 	const localApiClient = useMemo(
 		() => (urls ? createLocalApiClient(urls.apiBaseUrl) : null),
 		[urls],
 	);
+
+	const retryConnection = useCallback(async () => {
+		if (status !== "enabled" || !urls) {
+			setConnectionStatus("offline");
+			return;
+		}
+
+		const attempt = ++connectionAttemptRef.current;
+		setConnectionStatus("checking");
+		try {
+			const online = await checkLocalApiBaseUrl(urls.apiBaseUrl);
+			if (connectionAttemptRef.current === attempt) {
+				setConnectionStatus(online ? "online" : "offline");
+			}
+		} catch {
+			if (connectionAttemptRef.current === attempt) {
+				setConnectionStatus("offline");
+			}
+		}
+	}, [status, urls]);
+
+	useEffect(() => {
+		if (status !== "enabled" || !urls) {
+			connectionAttemptRef.current += 1;
+			setConnectionStatus("offline");
+			return;
+		}
+		void retryConnection();
+	}, [retryConnection, status, urls]);
+
+	useEffect(() => {
+		if (
+			!shouldProbeLocalServices({
+				status,
+				hasActiveIp: Boolean(activeIp),
+				connectionStatus,
+				trigger: "offline-retry",
+			})
+		)
+			return;
+		const timer = setTimeout(() => void retryConnection(), 5_000);
+		return () => clearTimeout(timer);
+	}, [activeIp, connectionStatus, retryConnection, status]);
+
+	useEffect(() => {
+		const subscription = AppState.addEventListener("change", (nextState) => {
+			if (
+				nextState === "active" &&
+				shouldProbeLocalServices({
+					status,
+					hasActiveIp: Boolean(activeIp),
+					connectionStatus,
+					trigger: "foreground",
+				})
+			) {
+				void retryConnection();
+			}
+		});
+		return () => subscription.remove();
+	}, [activeIp, connectionStatus, retryConnection, status]);
 
 	const beginResolution = useCallback(
 		(nextResolution: Exclude<PendingResolution, null>, ip?: string) => {
@@ -148,6 +213,7 @@ export function LocalServicesSessionProvider({
 				if (!isValidIpv4Address(normalizedIp)) return;
 				setLocalServicesIp(normalizedIp);
 				setActiveIp(normalizedIp);
+				setConnectionStatus("checking");
 			}
 			pendingResolutionRef.current = nextResolution;
 			setStatus((current) =>
@@ -161,6 +227,9 @@ export function LocalServicesSessionProvider({
 		const resolution = pendingResolutionRef.current;
 		if (!resolution) return;
 		pendingResolutionRef.current = null;
+		setConnectionStatus(
+			resolution === "enabled" ? "checking" : "offline",
+		);
 		setStatus((current) =>
 			transitionLocalServicesSession(
 				current,
@@ -175,6 +244,7 @@ export function LocalServicesSessionProvider({
 			if (!isValidIpv4Address(normalizedIp)) return;
 			setLocalServicesIp(normalizedIp);
 			setActiveIp(normalizedIp);
+			setConnectionStatus("checking");
 			pendingResolutionRef.current = null;
 			setStatus("enabled");
 		},
@@ -185,6 +255,8 @@ export function LocalServicesSessionProvider({
 		() => ({
 			status,
 			isEnabled: status === "enabled",
+			ipMode,
+			connectionStatus,
 			activeIp,
 			urls,
 			localApiClient,
@@ -195,8 +267,18 @@ export function LocalServicesSessionProvider({
 				);
 			},
 			enableWithIp,
+			retryConnection: () => void retryConnection(),
 		}),
-		[activeIp, enableWithIp, localApiClient, status, urls],
+		[
+			activeIp,
+			connectionStatus,
+			enableWithIp,
+			ipMode,
+			localApiClient,
+			retryConnection,
+			status,
+			urls,
+		],
 	);
 
 	return (

@@ -17,6 +17,8 @@ import {
 	type TranscriptionModel,
 } from "@/lib/transcription-models";
 import { isHttpTranscriberUrl } from "@/lib/transcribe";
+import { getLocalApiQueryKey } from "@/lib/local-api-query";
+import type { RouterInputs } from "@api/trpc/routers/_app";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -370,7 +372,10 @@ export function AudioTranscript({
 }: AudioTranscriptProps) {
 	const colors = useColors();
 	const {
+		activeIp,
+		connectionStatus,
 		isEnabled: localServicesEnabled,
+		localApiClient,
 		requestSetup: requestLocalServicesSetup,
 		urls: localServiceUrls,
 	} = useLocalServicesSession();
@@ -400,13 +405,24 @@ export function AudioTranscript({
 		_trpc.blog.getTranscript.queryOptions({ mediaId }),
 	);
 	const { data: localTranscriberHealth } = useQuery({
-		..._trpc.blog.checkLocalTranscriber.queryOptions({
+		queryKey: getLocalApiQueryKey(activeIp, "blog.checkLocalTranscriber", {
 			baseUrl: canCheckTranscriber ? (transcriberUrl ?? undefined) : undefined,
 		}),
-		enabled: localServicesEnabled && canCheckTranscriber,
+		queryFn: () =>
+			localApiClient!.blog.checkLocalTranscriber.query({
+				baseUrl: canCheckTranscriber
+					? (transcriberUrl ?? undefined)
+					: undefined,
+			}),
+		enabled:
+			localServicesEnabled &&
+			connectionStatus === "online" &&
+			Boolean(localApiClient) &&
+			canCheckTranscriber,
 		retry: false,
 	});
-	const whisperAvailable = Boolean(localTranscriberHealth?.ok);
+	const whisperAvailable =
+		connectionStatus === "online" && Boolean(localTranscriberHealth?.ok);
 
 	useEffect(() => {
 		chunkCacheRef.current = chunks;
@@ -416,22 +432,25 @@ export function AudioTranscript({
 		pendingChunksRef.current = pendingChunks;
 	}, [pendingChunks]);
 
-	const { mutate: getTranscriptChunk } = useMutation(
-		_trpc.blog.getTranscriptChunk.mutationOptions({
-			onSuccess(data) {
-				failedChunksRef.current.delete(data.chunkStartSec);
-				setChunks((prev) => {
-					const next = {
-						...prev,
-						[data.chunkStartSec]: data as TranscriptChunk,
-					};
-					chunkCacheRef.current = next;
-					return next;
-				});
-				setError(null);
-				refetch();
-			},
-			onError(err, variables) {
+	const { mutate: getTranscriptChunk } = useMutation({
+		mutationFn: (input: RouterInputs["blog"]["getTranscriptChunk"]) => {
+			if (!localApiClient) throw new Error("Local API is not configured.");
+			return localApiClient.blog.getTranscriptChunk.mutate(input);
+		},
+		onSuccess(data) {
+			failedChunksRef.current.delete(data.chunkStartSec);
+			setChunks((prev) => {
+				const next = {
+					...prev,
+					[data.chunkStartSec]: data as TranscriptChunk,
+				};
+				chunkCacheRef.current = next;
+				return next;
+			});
+			setError(null);
+			refetch();
+		},
+		onError(err, variables) {
 				const chunkStart = variables?.chunkStartSec ?? activeChunkStart;
 				failedChunksRef.current.add(chunkStart);
 				setError(
@@ -439,17 +458,16 @@ export function AudioTranscript({
 						err.message || "Transcription failed"
 					}`,
 				);
-			},
-			onSettled(_data, _err, variables) {
+		},
+		onSettled(_data, _err, variables) {
 				const chunkStart = variables?.chunkStartSec;
 				if (typeof chunkStart !== "number") return;
 				pendingChunksRef.current = pendingChunksRef.current.filter(
 					(value) => value !== chunkStart,
 				);
 				setPendingChunks(pendingChunksRef.current);
-			},
-		}),
-	);
+		},
+	});
 	const getTranscriptChunkRef = useRef(getTranscriptChunk);
 
 	useEffect(() => {

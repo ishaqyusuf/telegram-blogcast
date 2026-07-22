@@ -61,6 +61,7 @@ import { uploadBlogMediaAsset, type BlobMediaUpload } from "@/lib/blob-upload";
 import { getBlogShareUrl } from "@/lib/share-links";
 import { getTelegramFileUrl } from "@/lib/get-telegram-file";
 import { getMediaFileUrl } from "@/lib/media-source";
+import { getLocalApiQueryKey } from "@/lib/local-api-query";
 import { isHttpTranscriberUrl } from "@/lib/transcribe";
 import { getTranscriptionBadgeState } from "@/lib/transcription-status";
 import { withAlpha } from "@/lib/theme";
@@ -68,6 +69,7 @@ import { useAudioStore } from "@/store/audio-store";
 import { useRecentlyViewedStore } from "@/store/recently-viewed-store";
 import * as DocumentPicker from "expo-document-picker";
 import { Image } from "expo-image";
+import type { RouterInputs } from "@api/trpc/routers/_app";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -2173,7 +2175,10 @@ export default function AudioBlogScreen() {
 	const qc = useQueryClient();
 	const colors = useColors();
 	const {
+		activeIp,
+		connectionStatus,
 		isEnabled: localServicesEnabled,
+		localApiClient,
 		requestSetup: requestLocalServicesSetup,
 		urls: localServiceUrls,
 	} = useLocalServicesSession();
@@ -2478,41 +2483,54 @@ export default function AudioBlogScreen() {
 				? "Clear transcript or transcribe again"
 				: "Queue this audio for local Whisper";
 	const { data: localTranscriberHealth } = useQuery({
-		..._trpc.blog.checkLocalTranscriber.queryOptions({
+		queryKey: getLocalApiQueryKey(activeIp, "blog.checkLocalTranscriber", {
 			baseUrl: canCheckTranscriber ? (transcriberUrl ?? undefined) : undefined,
 		}),
-		enabled: localServicesEnabled && canCheckTranscriber,
+		queryFn: () =>
+			localApiClient!.blog.checkLocalTranscriber.query({
+				baseUrl: canCheckTranscriber
+					? (transcriberUrl ?? undefined)
+					: undefined,
+			}),
+		enabled:
+			localServicesEnabled &&
+			connectionStatus === "online" &&
+			Boolean(localApiClient) &&
+			canCheckTranscriber,
 		retry: false,
 	});
-	const whisperAvailable = Boolean(localTranscriberHealth?.ok);
-	const { mutate: getTranscriptChunk } = useMutation(
-		_trpc.blog.getTranscriptChunk.mutationOptions({
-			onSuccess(data) {
-				failedTranscriptChunksRef.current.delete(data.chunkStartSec);
-				setTranscriptChunks((prev) => ({
-					...prev,
-					[data.chunkStartSec]: {
-						segments: data.segments as RawTranscriptSegment[],
-					},
-				}));
-				setTranscriptError(null);
-			},
-			onError(error, variables) {
-				const chunkStart = variables?.chunkStartSec ?? 0;
-				failedTranscriptChunksRef.current.add(chunkStart);
-				setTranscriptError(error.message || "Could not load transcript.");
-			},
-			onSettled(_data, _error, variables) {
-				const chunkStart = variables?.chunkStartSec;
-				if (typeof chunkStart !== "number") return;
-				pendingTranscriptChunksRef.current =
-					pendingTranscriptChunksRef.current.filter(
-						(value) => value !== chunkStart,
-					);
-				setPendingTranscriptChunks(pendingTranscriptChunksRef.current);
-			},
-		}),
-	);
+	const whisperAvailable =
+		connectionStatus === "online" && Boolean(localTranscriberHealth?.ok);
+	const { mutate: getTranscriptChunk } = useMutation({
+		mutationFn: (input: RouterInputs["blog"]["getTranscriptChunk"]) => {
+			if (!localApiClient) throw new Error("Local API is not configured.");
+			return localApiClient.blog.getTranscriptChunk.mutate(input);
+		},
+		onSuccess(data) {
+			failedTranscriptChunksRef.current.delete(data.chunkStartSec);
+			setTranscriptChunks((prev) => ({
+				...prev,
+				[data.chunkStartSec]: {
+					segments: data.segments as RawTranscriptSegment[],
+				},
+			}));
+			setTranscriptError(null);
+		},
+		onError(error, variables) {
+			const chunkStart = variables?.chunkStartSec ?? 0;
+			failedTranscriptChunksRef.current.add(chunkStart);
+			setTranscriptError(error.message || "Could not load transcript.");
+		},
+		onSettled(_data, _error, variables) {
+			const chunkStart = variables?.chunkStartSec;
+			if (typeof chunkStart !== "number") return;
+			pendingTranscriptChunksRef.current =
+				pendingTranscriptChunksRef.current.filter(
+					(value) => value !== chunkStart,
+				);
+			setPendingTranscriptChunks(pendingTranscriptChunksRef.current);
+		},
+	});
 	const getTranscriptChunkRef = useRef(getTranscriptChunk);
 
 	useEffect(() => {

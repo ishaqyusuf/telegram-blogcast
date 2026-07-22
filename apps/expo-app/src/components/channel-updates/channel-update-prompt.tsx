@@ -4,6 +4,11 @@ import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
 import { useLocalServicesSession } from "@/components/local-services";
+import {
+  completeChannelUpdateCheck,
+  createChannelUpdateCheckState,
+  startChannelUpdateCheck,
+} from "@/lib/channel-update-check-state";
 import { useMutation } from "@/lib/react-query";
 import { storage } from "@/store/mmkv";
 import type { RouterOutputs } from "@api/trpc/routers/_app";
@@ -23,7 +28,8 @@ type SummaryChannel =
   RouterOutputs["channel"]["getUpdatePromptSummary"]["channels"][number];
 type AuthStep = "checking" | "authorized" | "phone" | "otp" | "unavailable";
 
-let promptedLocalApiIpThisSession: string | null = null;
+let channelUpdateCheckState = createChannelUpdateCheckState();
+const offlinePromptedIpsThisSession = new Set<string>();
 const TELEGRAM_LOGIN_PHONE_KEY = "telegram_login_phone";
 
 function formatCount(value: number | null | undefined) {
@@ -170,7 +176,13 @@ function OtpInput({
 export function ChannelUpdatePrompt() {
   const modal = useModal();
   const router = useRouter();
-  const { activeIp, isEnabled, localApiClient } = useLocalServicesSession();
+  const {
+    activeIp,
+    connectionStatus,
+    isEnabled,
+    localApiClient,
+    retryConnection,
+  } = useLocalServicesSession();
   const [channels, setChannels] = useState<SummaryChannel[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [loading, setLoading] = useState(false);
@@ -268,8 +280,8 @@ export function ChannelUpdatePrompt() {
   }, [modal]);
 
   const loadPrompt = useCallback(
-    async (mountedRef?: { current: boolean }) => {
-      if (!isEnabled || !localApiClient) return;
+    async (mountedRef?: { current: boolean }): Promise<boolean> => {
+      if (!isEnabled || !localApiClient) return false;
       setLoading(true);
       setAuthStep("checking");
       setAuthMessage(null);
@@ -277,21 +289,20 @@ export function ChannelUpdatePrompt() {
         try {
           await localApiClient.channel.pingFetcher.query();
         } catch {
-          if (mountedRef && !mountedRef.current) return;
+          if (mountedRef && !mountedRef.current) return false;
           setChannels([]);
           setSelectedIds(new Set());
           setAuthStep("unavailable");
           setAuthMessage(
             "The local API is not reachable. Start the local fetcher and try again.",
           );
-          if (mountedRef) return;
           presentPrompt();
-          return;
+          return false;
         }
 
         const authStatus =
           await localApiClient.channel.telegramAuthStatus.query();
-        if (mountedRef && !mountedRef.current) return;
+        if (mountedRef && !mountedRef.current) return false;
 
         if (!authStatus.authorized) {
           setChannels([]);
@@ -299,14 +310,14 @@ export function ChannelUpdatePrompt() {
           setAuthStep("phone");
           setAuthMessage(authStatus.error);
           presentPrompt();
-          return;
+          return true;
         }
 
         const summary =
           await localApiClient.channel.getUpdatePromptSummary.query();
-        if (mountedRef && !mountedRef.current) return;
+        if (mountedRef && !mountedRef.current) return false;
         setAuthStep("authorized");
-        if (summary.channels.length === 0) return;
+        if (summary.channels.length === 0) return true;
 
         setChannels(summary.channels);
         setSelectedIds(
@@ -317,14 +328,15 @@ export function ChannelUpdatePrompt() {
           ),
         );
         presentPrompt();
+        return true;
       } catch {
-        if (mountedRef && !mountedRef.current) return;
+        if (mountedRef && !mountedRef.current) return false;
         setChannels([]);
         setSelectedIds(new Set());
         setAuthStep("unavailable");
         setAuthMessage("Unable to check Telegram updates right now.");
-        if (mountedRef) return;
         presentPrompt();
+        return false;
       } finally {
         if (!mountedRef || mountedRef.current) setLoading(false);
       }
@@ -332,18 +344,56 @@ export function ChannelUpdatePrompt() {
     [isEnabled, localApiClient, presentPrompt],
   );
 
+  const runUpdateCheck = useCallback(
+    async (mountedRef?: { current: boolean }) => {
+      if (!activeIp) return false;
+      const succeeded = await loadPrompt(mountedRef);
+      channelUpdateCheckState = completeChannelUpdateCheck(
+        channelUpdateCheckState,
+        activeIp,
+        succeeded,
+      );
+      return succeeded;
+    },
+    [activeIp, loadPrompt],
+  );
+
   useEffect(() => {
     if (!isEnabled || !localApiClient || !activeIp) return;
-    if (promptedLocalApiIpThisSession === activeIp) return;
-    promptedLocalApiIpThisSession = activeIp;
+    if (connectionStatus === "offline") {
+      if (offlinePromptedIpsThisSession.has(activeIp)) return;
+      offlinePromptedIpsThisSession.add(activeIp);
+      setChannels([]);
+      setSelectedIds(new Set());
+      setAuthStep("unavailable");
+      setAuthMessage(
+        "The selected local API is offline. Start it and check again.",
+      );
+      presentPrompt();
+      return;
+    }
+    const started = startChannelUpdateCheck(
+      channelUpdateCheckState,
+      activeIp,
+      connectionStatus,
+    );
+    channelUpdateCheckState = started.state;
+    if (!started.shouldStart) return;
 
     const mountedRef = { current: true };
-    void loadPrompt(mountedRef);
+    void runUpdateCheck(mountedRef);
 
     return () => {
       mountedRef.current = false;
     };
-  }, [activeIp, isEnabled, loadPrompt, localApiClient]);
+  }, [
+    activeIp,
+    connectionStatus,
+    isEnabled,
+    localApiClient,
+    presentPrompt,
+    runUpdateCheck,
+  ]);
 
   const toggleChannel = (channelId: number) => {
     setSelectedIds((current) => {
@@ -518,7 +568,10 @@ export function ChannelUpdatePrompt() {
             {authStep === "unavailable" ? (
               <Button
                 disabled={loading}
-                onPress={() => void loadPrompt()}
+                onPress={() => {
+                  retryConnection();
+                  void runUpdateCheck();
+                }}
                 className="min-h-11"
               >
                 {loading ? (

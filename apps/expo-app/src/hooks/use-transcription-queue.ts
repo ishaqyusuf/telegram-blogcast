@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocalServicesSession } from "@/components/local-services";
-import { vanillaTrpc } from "@/trpc/vanilla-client";
+import { shouldApplyLocalApiResult } from "@/lib/local-api-query";
+import type { RouterOutputs } from "@api/trpc/routers/_app";
 
 type QueueInput = {
   mediaId: number;
@@ -17,9 +18,8 @@ type TranscriptionQueueOptions = {
   reloadOnEnqueue?: boolean;
 };
 
-export type TranscriptionJob = Awaited<
-  ReturnType<typeof vanillaTrpc.blog.getTranscriptionJobs.query>
->[number];
+export type TranscriptionJob =
+  RouterOutputs["blog"]["getTranscriptionJobs"][number];
 
 export function getTranscriptionJobProgress(job: TranscriptionJob) {
   if (
@@ -49,30 +49,54 @@ export function useTranscriptionQueue(
   options: TranscriptionQueueOptions = {},
 ) {
   const {
+    activeIp,
+    connectionStatus,
     isEnabled: localServicesEnabled,
+    localApiClient,
     requestSetup: requestLocalServicesSetup,
   } = useLocalServicesSession();
   const autoLoad = options.autoLoad ?? true;
   const reloadOnEnqueue = options.reloadOnEnqueue ?? true;
   const [jobs, setJobs] = useState<TranscriptionJob[]>([]);
   const [isRunning, setIsRunning] = useState(false);
+  const activeIpRef = useRef(activeIp);
+  activeIpRef.current = activeIp;
+
+  useEffect(() => {
+    setJobs([]);
+  }, [activeIp]);
 
   const reload = useCallback(async () => {
     if (!localServicesEnabled) {
       setJobs([]);
       return;
     }
-    const rows = await vanillaTrpc.blog.getTranscriptionJobs.query({
+    if (!localApiClient || connectionStatus !== "online") {
+      setJobs([]);
+      return;
+    }
+    const requestIp = activeIp;
+    const rows = await localApiClient.blog.getTranscriptionJobs.query({
       mediaId,
     });
+    if (!shouldApplyLocalApiResult(requestIp, activeIpRef.current)) return;
     setJobs(rows);
-  }, [localServicesEnabled, mediaId]);
+  }, [
+    activeIp,
+    connectionStatus,
+    localApiClient,
+    localServicesEnabled,
+    mediaId,
+  ]);
 
   const enqueue = useCallback(
     async (input: QueueInput) => {
       if (!localServicesEnabled) {
         requestLocalServicesSetup();
         throw new Error("Enable local services before queueing transcription.");
+      }
+      if (!localApiClient || connectionStatus !== "online") {
+        throw new Error("The selected local API is offline.");
       }
       const audioUrl = getReachableAudioUrl(input.audioUrl);
       const fromSec = input.fromSec ?? null;
@@ -83,7 +107,8 @@ export function useTranscriptionQueue(
         );
       }
 
-      const job = await vanillaTrpc.blog.enqueueTranscriptionJob.mutate({
+      const requestIp = activeIp;
+      const job = await localApiClient.blog.enqueueTranscriptionJob.mutate({
         mediaId: input.mediaId,
         telegramFileId: input.telegramFileId ?? null,
         audioUrl,
@@ -95,7 +120,7 @@ export function useTranscriptionQueue(
 
       if (reloadOnEnqueue) {
         await reload();
-      } else {
+      } else if (shouldApplyLocalApiResult(requestIp, activeIpRef.current)) {
         setJobs((current) => {
           const withoutMatchingFailed = current.filter(
             (currentJob) =>
@@ -121,6 +146,9 @@ export function useTranscriptionQueue(
     },
     [
       localServicesEnabled,
+      activeIp,
+      connectionStatus,
+      localApiClient,
       reload,
       reloadOnEnqueue,
       requestLocalServicesSetup,
@@ -132,9 +160,21 @@ export function useTranscriptionQueue(
       requestLocalServicesSetup();
       throw new Error("Enable local services to manage transcription jobs.");
     }
-    await vanillaTrpc.blog.deleteTranscriptionJob.mutate({ id });
-    setJobs((current) => current.filter((job) => job.id !== id));
-  }, [localServicesEnabled, requestLocalServicesSetup]);
+    if (!localApiClient || connectionStatus !== "online") {
+      throw new Error("The selected local API is offline.");
+    }
+    const requestIp = activeIp;
+    await localApiClient.blog.deleteTranscriptionJob.mutate({ id });
+    if (shouldApplyLocalApiResult(requestIp, activeIpRef.current)) {
+      setJobs((current) => current.filter((job) => job.id !== id));
+    }
+  }, [
+    activeIp,
+    connectionStatus,
+    localApiClient,
+    localServicesEnabled,
+    requestLocalServicesSetup,
+  ]);
 
   const runQueued = useCallback(async () => {
     if (!localServicesEnabled) {

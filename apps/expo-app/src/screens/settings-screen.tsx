@@ -1,25 +1,18 @@
 import { SafeArea } from "@/components/safe-area";
 import { useLocalServicesSession } from "@/components/local-services";
-import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";
 import { Pressable } from "@/components/ui/pressable";
 import { useColorScheme, useColors } from "@/hooks/use-color";
 import { useTranslation } from "@/lib/i18n";
-import { checkLocalApiBaseUrl } from "@/lib/local-api-ip-cache";
+import { getLocalApiQueryKey } from "@/lib/local-api-query";
 import {
   isValidIpv4Address,
   normalizeIpv4Input,
 } from "@/lib/local-services-session";
 import { useQuery } from "@/lib/react-query";
 import { setThemeOverride } from "@/lib/theme-preference";
-import {
-  getDefaultTranscriberUrl,
-  isHttpTranscriberUrl,
-} from "@/lib/transcribe";
-import {
-  buildLocalServiceUrls,
-  getPreferredLocalServiceIp,
-} from "@/lib/local-service-urls";
+import { isHttpTranscriberUrl } from "@/lib/transcribe";
+import { LOCAL_API_PORT } from "@/lib/local-service-urls";
 import {
   TRANSCRIPTION_MODELS,
   formatTranscriptionCost,
@@ -36,9 +29,15 @@ const LANGUAGES: AppLanguage[] = ["en", "ar"];
 export default function SettingsScreen() {
   const router = useRouter();
   const {
+    activeIp,
+    connectionStatus,
     enableWithIp,
+    ipMode,
     isEnabled: localServicesEnabled,
+    localApiClient,
     requestSetup: requestLocalServicesSetup,
+    retryConnection,
+    urls: localServiceUrls,
   } = useLocalServicesSession();
   const colors = useColors();
   const { colorScheme, setColorScheme } = useColorScheme();
@@ -48,87 +47,56 @@ export default function SettingsScreen() {
   const setTranscriptionModel = useAppSettingsStore(
     (s) => s.setTranscriptionModel,
   );
-  const localTranscriberBaseUrl = useAppSettingsStore(
-    (s) => s.localTranscriberBaseUrl,
-  );
-  const localApiBaseUrl = useAppSettingsStore((s) => s.localApiBaseUrl);
-  const localServicesIp = useAppSettingsStore((s) => s.localServicesIp);
-  const localApiLastIp = useAppSettingsStore((s) => s.localApiLastIp);
   const localApiIpHistory = useAppSettingsStore((s) => s.localApiIpHistory);
-  const setLocalTranscriberBaseUrl = useAppSettingsStore(
-    (s) => s.setLocalTranscriberBaseUrl,
-  );
-  const preferredLocalServicesIp = getPreferredLocalServiceIp({
-    manualIp: localServicesIp,
-    lastUsedIp: localApiLastIp,
-    savedApiBaseUrl: localApiBaseUrl,
-  });
-  const localServiceUrls = preferredLocalServicesIp
-    ? buildLocalServiceUrls(preferredLocalServicesIp)
-    : null;
-  const resolvedTranscriberUrl = getDefaultTranscriberUrl(
-    localTranscriberBaseUrl,
-    preferredLocalServicesIp,
-  );
+  const resolvedTranscriberUrl = localServiceUrls?.transcriberBaseUrl ?? null;
   const [localServicesIpInput, setLocalServicesIpInput] = useState(
-    preferredLocalServicesIp ?? "",
+    activeIp ?? "",
   );
   const [localServicesIpMessage, setLocalServicesIpMessage] = useState("");
-  const [isCheckingLocalServicesIp, setIsCheckingLocalServicesIp] =
-    useState(false);
-  const [transcriberUrlInput, setTranscriberUrlInput] = useState(
-    localTranscriberBaseUrl ?? resolvedTranscriberUrl ?? "",
-  );
   const canCheckTranscriber = isHttpTranscriberUrl(resolvedTranscriberUrl);
   const { data: transcriberHealth, isFetching: checkingTranscriber } = useQuery(
     {
-      ..._trpc.blog.checkLocalTranscriber.queryOptions({
+      queryKey: getLocalApiQueryKey(activeIp, "blog.checkLocalTranscriber", {
         baseUrl: canCheckTranscriber
           ? (resolvedTranscriberUrl ?? undefined)
           : undefined,
       }),
-      enabled: localServicesEnabled && canCheckTranscriber,
+      queryFn: () =>
+        localApiClient!.blog.checkLocalTranscriber.query({
+          baseUrl: canCheckTranscriber
+            ? (resolvedTranscriberUrl ?? undefined)
+            : undefined,
+        }),
+      enabled:
+        localServicesEnabled &&
+        connectionStatus === "online" &&
+        Boolean(localApiClient) &&
+        canCheckTranscriber,
       retry: false,
     },
   );
-  const whisperAvailable = Boolean(transcriberHealth?.ok);
+  const whisperAvailable =
+    connectionStatus === "online" && Boolean(transcriberHealth?.ok);
 
   useEffect(() => {
-    setTranscriberUrlInput(
-      localTranscriberBaseUrl ?? resolvedTranscriberUrl ?? "",
-    );
-  }, [localTranscriberBaseUrl, resolvedTranscriberUrl]);
+    setLocalServicesIpInput(activeIp ?? "");
+  }, [activeIp]);
 
-  useEffect(() => {
-    setLocalServicesIpInput(preferredLocalServicesIp ?? "");
-  }, [preferredLocalServicesIp]);
-
-  async function saveAndCheckLocalServicesIp() {
+  function saveAndCheckLocalServicesIp() {
+    if (ipMode === "automatic") {
+      retryConnection();
+      return;
+    }
     const normalizedIp = normalizeIpv4Input(localServicesIpInput);
     if (!isValidIpv4Address(normalizedIp)) {
       setLocalServicesIpMessage("Enter a valid IPv4 address.");
       return;
     }
-    const urls = buildLocalServiceUrls(normalizedIp);
-    if (!urls) return;
-
-    enableWithIp(urls.ip);
-    setIsCheckingLocalServicesIp(true);
-    setLocalServicesIpMessage(`Checking ${urls.apiBaseUrl}...`);
-    try {
-      const ok = await checkLocalApiBaseUrl(urls.apiBaseUrl);
-      setLocalServicesIpMessage(
-        ok
-          ? `Saved. Local API is reachable at ${urls.apiBaseUrl}.`
-          : `Saved. Local API did not respond at ${urls.apiBaseUrl}.`,
-      );
-    } catch {
-      setLocalServicesIpMessage(
-        `Saved. Local API did not respond at ${urls.apiBaseUrl}.`,
-      );
-    } finally {
-      setIsCheckingLocalServicesIp(false);
-    }
+    enableWithIp(normalizedIp);
+    const apiBaseUrl = `http://${normalizedIp}:${LOCAL_API_PORT}`;
+    setLocalServicesIpMessage(
+      `Saved ${apiBaseUrl}. The app will reconnect automatically.`,
+    );
   }
 
   useEffect(() => {
@@ -427,9 +395,11 @@ export default function SettingsScreen() {
                   Facebook import.
                 </Text>
                 <Text className="mt-1 text-xs font-semibold text-muted-foreground">
-                  {localServicesEnabled
-                    ? "Enabled for this session"
-                    : "Disabled for this session"}
+                  {ipMode === "automatic"
+                    ? "Automatic in development"
+                    : localServicesEnabled
+                      ? "Enabled for this session"
+                      : "Disabled for this session"}
                 </Text>
               </View>
             </View>
@@ -444,6 +414,7 @@ export default function SettingsScreen() {
                 value={localServicesIpInput}
                 onChangeText={setLocalServicesIpInput}
                 onSubmitEditing={() => void saveAndCheckLocalServicesIp()}
+                editable={ipMode === "manual"}
                 autoCapitalize="none"
                 autoCorrect={false}
                 placeholder="192.168.1.20"
@@ -460,12 +431,19 @@ export default function SettingsScreen() {
                 onPress={() => {
                   void saveAndCheckLocalServicesIp();
                 }}
-                disabled={isCheckingLocalServicesIp}
                 className="size-8 items-center justify-center rounded-full bg-muted active:opacity-70"
               >
-                <Icon name="Check" size={15} className="text-foreground" />
+                <Icon
+                  name={ipMode === "automatic" ? "RefreshCw" : "Check"}
+                  size={15}
+                  className="text-foreground"
+                />
               </Pressable>
             </View>
+
+            <Text className="text-xs font-semibold text-muted-foreground">
+              Local API: {connectionStatus}
+            </Text>
 
             {localServicesIpMessage ? (
               <Text className="text-xs text-muted-foreground">
@@ -473,7 +451,7 @@ export default function SettingsScreen() {
               </Text>
             ) : null}
 
-            {localApiIpHistory.length > 0 ? (
+            {ipMode === "manual" && localApiIpHistory.length > 0 ? (
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
@@ -692,13 +670,8 @@ export default function SettingsScreen() {
                 </Text>
               </View>
               <TextInput
-                value={transcriberUrlInput}
-                onChangeText={(value) => {
-                  setTranscriberUrlInput(value);
-                  setLocalTranscriberBaseUrl(
-                    value.trim() ? value.trim() : null,
-                  );
-                }}
+                value={resolvedTranscriberUrl ?? ""}
+                editable={false}
                 autoCapitalize="none"
                 autoCorrect={false}
                 placeholder="http://192.168.1.20:8787"

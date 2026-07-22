@@ -1,11 +1,15 @@
 import Constants from "expo-constants";
+import {
+  LOCAL_API_PORT,
+  LOCAL_FACEBOOK_MEDIA_BRIDGE_PORT,
+  LOCAL_TRANSCRIBER_PORT,
+} from "@/lib/local-service-ports";
 
 const PREVIEW_OR_FORCED_BASE_URL =
   process.env.EXPO_PUBLIC_APP_VARIANT === "preview" ||
   process.env.EXPO_PUBLIC_FORCE_BASE_URL === "true";
 const IS_DEV = typeof __DEV__ !== "undefined" && __DEV__;
 const TRPC_PATH = "/api/trpc";
-const DEFAULT_API_PORT = "3501";
 
 export const getLocalNetworkHost = () => {
   const debuggerHost = Constants.expoConfig?.hostUri;
@@ -60,11 +64,11 @@ export const getLocalUrl = (port: string) => {
 };
 
 export const getLocalTranscriberUrl = () => {
-  return getLocalUrl(process.env.EXPO_PUBLIC_TRANSCRIBER_PORT ?? "8787");
+  return getLocalUrl(LOCAL_TRANSCRIBER_PORT);
 };
 
 export const getLocalFacebookMediaBridgeUrl = () => {
-  return getLocalUrl(process.env.EXPO_PUBLIC_FACEBOOK_MEDIA_BRIDGE_PORT ?? "8790");
+  return getLocalUrl(LOCAL_FACEBOOK_MEDIA_BRIDGE_PORT);
 };
 
 export const appendPath = (baseUrl: string, path: string) => {
@@ -96,8 +100,7 @@ export const getBaseUrl = () => {
     return logResolvedUrl("baseUrl", envBaseUrl);
   }
 
-  const apiPort = process.env.EXPO_PUBLIC_API_PORT ?? DEFAULT_API_PORT;
-  return logResolvedUrl("baseUrl", getLocalUrl(apiPort));
+  return logResolvedUrl("baseUrl", getLocalUrl(LOCAL_API_PORT));
 };
 
 export const getTrpcUrl = () => {
@@ -111,7 +114,7 @@ export const getTrpcUrl = () => {
   const trpcPort =
     process.env.EXPO_PUBLIC_TRPC_PORT ??
     process.env.EXPO_PUBLIC_API_PORT ??
-    DEFAULT_API_PORT;
+    LOCAL_API_PORT;
 
   if (IS_DEV && trpcPort) {
     return logResolvedUrl("trpcUrl", appendPath(getLocalUrl(trpcPort), TRPC_PATH));

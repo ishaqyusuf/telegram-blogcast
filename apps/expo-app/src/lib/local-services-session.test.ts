@@ -5,6 +5,8 @@ import {
 	getInitialLocalServicesSessionStatus,
 	isValidIpv4Address,
 	normalizeIpv4Input,
+	resolveInitialLocalServicesSession,
+	shouldProbeLocalServices,
 	transitionLocalServicesSession,
 } from "./local-services-session";
 
@@ -18,6 +20,34 @@ describe("local services launch session", () => {
 			"enabled",
 		);
 		expect(getInitialLocalServicesSessionStatus("dev")).toBe("enabled");
+	});
+
+	test("development uses the current Expo host instead of a stale saved IP", () => {
+		expect(
+			resolveInitialLocalServicesSession({
+				appVariant: "development",
+				currentIp: "192.168.18.3",
+				preferredSavedIp: "10.0.0.5",
+			}),
+		).toEqual({
+			status: "enabled",
+			ipMode: "automatic",
+			activeIp: "192.168.18.3",
+		});
+	});
+
+	test("preview retains the saved IP as a manual suggestion without enabling it", () => {
+		expect(
+			resolveInitialLocalServicesSession({
+				appVariant: "preview",
+				currentIp: "192.168.18.3",
+				preferredSavedIp: "10.0.0.5",
+			}),
+		).toEqual({
+			status: "prompting",
+			ipMode: "manual",
+			activeIp: "10.0.0.5",
+		});
 	});
 
 	test("normalizes numeric IP input and validates IPv4 octets", () => {
@@ -59,5 +89,37 @@ describe("local services launch session", () => {
 		expect(transitionLocalServicesSession("disabled", "request-setup")).toBe(
 			"prompting",
 		);
+	});
+
+	test("probes immediately, retries only while offline, and checks on foreground", () => {
+		const enabled = { status: "enabled" as const, hasActiveIp: true };
+		expect(
+			shouldProbeLocalServices({
+				...enabled,
+				connectionStatus: "checking",
+				trigger: "initial",
+			}),
+		).toBe(true);
+		expect(
+			shouldProbeLocalServices({
+				...enabled,
+				connectionStatus: "online",
+				trigger: "offline-retry",
+			}),
+		).toBe(false);
+		expect(
+			shouldProbeLocalServices({
+				...enabled,
+				connectionStatus: "offline",
+				trigger: "offline-retry",
+			}),
+		).toBe(true);
+		expect(
+			shouldProbeLocalServices({
+				...enabled,
+				connectionStatus: "online",
+				trigger: "foreground",
+			}),
+		).toBe(true);
 	});
 });

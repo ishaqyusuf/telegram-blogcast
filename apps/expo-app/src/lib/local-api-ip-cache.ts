@@ -1,6 +1,7 @@
 import { appendPath, getLocalNetworkHost } from "@/lib/base-url";
+import { LOCAL_API_PORT } from "@/lib/local-service-ports";
 
-export const LOCAL_API_PORT = process.env.EXPO_PUBLIC_API_PORT ?? "3006";
+export { LOCAL_API_PORT } from "@/lib/local-service-ports";
 const MAX_IP_HISTORY = 8;
 const HEALTH_TIMEOUT_MS = 2500;
 
