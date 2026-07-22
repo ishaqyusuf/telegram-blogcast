@@ -4,13 +4,17 @@
 // 🧩 Updated: fetcher fully moved to tRPC API — no SSE hook, no local fetcher
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useQuery, useMutation } from "@acme/ui/tanstack";
 import { _trpc } from "@/components/static-trpc";
 import { invalidateQueries } from "@/lib/invalidate-query";
 import type { RouterOutputs } from "@api/trpc/routers/_app";
 import type { FetcherEvent, FetchedMessage } from "@telegram/message-fetcher";
+import {
+    getChannelUpdateTerminalEvents,
+    type ChannelUpdateTerminalJob,
+} from "@/lib/channel-update-terminal";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -182,7 +186,9 @@ function ChannelRow({
 
 export default function DashboardPage() {
     const router = useRouter();
+    const searchParams = useSearchParams();
     const params = useParams<{ channelSlug?: string }>();
+    const requestedUpdateJobId = searchParams.get("updateJob");
     const channelSlug = params.channelSlug
         ? decodeURIComponent(params.channelSlug)
         : null;
@@ -200,6 +206,8 @@ export default function DashboardPage() {
         null,
     );
     const logEndRef = useRef<HTMLDivElement>(null);
+    const previousUpdateJobRef = useRef<ChannelUpdateTerminalJob | null>(null);
+    const unavailableUpdateJobRef = useRef<string | null>(null);
 
     // ── tRPC queries ────────────────────────────────────────────────────────────
 
@@ -216,6 +224,16 @@ export default function DashboardPage() {
                     ? 2000
                     : false;
             },
+        }),
+    );
+
+    const { data: recentUpdateState } = useQuery(
+        _trpc.channel.getRecentUpdateJob.queryOptions(undefined, {
+            enabled: Boolean(requestedUpdateJobId),
+            refetchInterval: (query) =>
+                query.state.data?.activeJob?.id === requestedUpdateJobId
+                    ? 1000
+                    : false,
         }),
     );
 
@@ -336,6 +354,42 @@ export default function DashboardPage() {
         addLog("system", "tg-blogcast dashboard initialized");
         addLog("system", "channels loaded from Prisma");
     }, []); // eslint-disable-line
+
+    useEffect(() => {
+        if (!requestedUpdateJobId || !recentUpdateState) return;
+        const job =
+            recentUpdateState.activeJob?.id === requestedUpdateJobId
+                ? recentUpdateState.activeJob
+                : recentUpdateState.latestCompletedJob?.id ===
+                    requestedUpdateJobId
+                  ? recentUpdateState.latestCompletedJob
+                  : null;
+        if (!job) {
+            if (unavailableUpdateJobRef.current !== requestedUpdateJobId) {
+                addLog(
+                    "error",
+                    "recent update status is unavailable · the local API may have restarted",
+                );
+                unavailableUpdateJobRef.current = requestedUpdateJobId;
+            }
+            return;
+        }
+
+        const terminalJob: ChannelUpdateTerminalJob = job;
+        unavailableUpdateJobRef.current = null;
+        const events = getChannelUpdateTerminalEvents(
+            previousUpdateJobRef.current,
+            terminalJob,
+        );
+        for (const event of events) {
+            addLog(event.kind, event.text);
+        }
+        previousUpdateJobRef.current = terminalJob;
+
+        if (terminalJob.status === "completed") {
+            invalidateQueries("channel.getChannels");
+        }
+    }, [addLog, recentUpdateState, requestedUpdateJobId]);
 
     useEffect(() => {
         if (!channelSlug || channels.length === 0) return;

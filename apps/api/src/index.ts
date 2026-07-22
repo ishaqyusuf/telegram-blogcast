@@ -4,7 +4,7 @@ import { secureHeaders } from "hono/secure-headers";
 import { cors } from "hono/cors";
 import { trpcServer } from "@hono/trpc-server";
 import { appRouter } from "./trpc/routers/_app";
-import { createTRPCContext } from "./trpc/init";
+import type { TRPCContext } from "./trpc/init";
 import { consoleLog } from "@acme/utils";
 import {
   claimNextTranscriptionJob,
@@ -90,8 +90,9 @@ app.use("/api/trpc/*", async (c) => {
       };
       consoleLog("ERROR", msg);
     },
-    createContext: (c): any => ({
+    createContext: ({ req }): TRPCContext => ({
       db,
+      requestHost: req.headers.get("host") ?? undefined,
       // a: c.req
       // user: c.get("user"),
       // env: env(c),

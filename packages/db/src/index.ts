@@ -91,9 +91,7 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClientSingleton | undefined;
 };
 
-export const db =
-  // globalForPrisma.prisma ??
-  prismaClientSingleton();
+export const db = globalForPrisma.prisma ?? prismaClientSingleton();
 export type Database = typeof db;
 export type Db = Database;
 

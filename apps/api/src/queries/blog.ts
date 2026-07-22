@@ -158,6 +158,7 @@ async function findExistingTelegramBlogs(
   db: TRPCContext["db"],
   channelId: number,
   messageIds: number[],
+  includeLegacyFallback = true,
 ) {
   if (messageIds.length === 0) {
     return new Map<number, { blogId: number; mediaId: number | null }>();
@@ -194,7 +195,7 @@ async function findExistingTelegramBlogs(
   }
 
   const missingIds = messageIds.filter((id) => !existing.has(id));
-  if (missingIds.length === 0) return existing;
+  if (missingIds.length === 0 || !includeLegacyFallback) return existing;
 
   const legacyMetaBlogs = await db.blog.findMany({
     where: {
@@ -224,6 +225,37 @@ async function findExistingTelegramBlogs(
   return existing;
 }
 
+export async function loadExistingTelegramBlogs(
+  db: TRPCContext["db"],
+  channelId: number,
+) {
+  const blogs = await db.blog.findMany({
+    where: { channelId, deletedAt: null },
+    select: {
+      id: true,
+      telegramMessageId: true,
+      meta: true,
+      medias: {
+        select: { id: true },
+        take: 1,
+      },
+    },
+  });
+  const existing = new Map<
+    number,
+    { blogId: number; mediaId: number | null }
+  >();
+  for (const blog of blogs) {
+    const telegramMessageId = getTelegramMessageId(blog);
+    if (!telegramMessageId) continue;
+    existing.set(telegramMessageId, {
+      blogId: blog.id,
+      mediaId: blog.medias?.[0]?.id ?? null,
+    });
+  }
+  return existing;
+}
+
 function isUniqueConstraintError(error: unknown) {
   return (
     typeof error === "object" &&
@@ -245,6 +277,13 @@ function isUniqueConstraintError(error: unknown) {
 export async function saveIncomingMessages(
   ctx: TRPCContext,
   input: SaveBatchSchema,
+  options: {
+    includeLegacyFallback?: boolean;
+    existingTelegramBlogs?: Map<
+      number,
+      { blogId: number; mediaId: number | null }
+    >;
+  } = {},
 ) {
   const { db } = ctx;
   const { channelId, messages } = input;
@@ -253,11 +292,14 @@ export async function saveIncomingMessages(
     return { created: 0, skipped: 0, results: [] };
   }
 
-  const existing = await findExistingTelegramBlogs(
-    db,
-    channelId,
-    messages.map((m) => m.id),
-  );
+  const existing =
+    options.existingTelegramBlogs ??
+    (await findExistingTelegramBlogs(
+      db,
+      channelId,
+      messages.map((m) => m.id),
+      options.includeLegacyFallback,
+    ));
   const createdMessageIds: number[] = [];
   const results: SavedIncomingMessageResult[] = [];
   let created = 0;
@@ -322,9 +364,12 @@ export async function saveIncomingMessages(
         throw error;
       }
 
-      const refreshed = await findExistingTelegramBlogs(db, channelId, [
-        msg.id,
-      ]);
+      const refreshed = await findExistingTelegramBlogs(
+        db,
+        channelId,
+        [msg.id],
+        options.includeLegacyFallback,
+      );
       const existingAfterRace = refreshed.get(msg.id);
       if (!existingAfterRace) {
         throw error;

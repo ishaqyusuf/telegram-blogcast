@@ -1,6 +1,6 @@
 // import { TRPCError } from "@trpc/server";
 import { LRUCache } from "lru-cache";
-import type { db } from "../../../../../packages/db/src-copy";
+import type { Database } from "@acme/db";
 // In-memory cache to check if a user has access to a team
 // Note: This cache is per server instance, and we typically run 1 instance per region.
 // Otherwise, we would need to share this state with Redis or a similar external store.
@@ -9,17 +9,13 @@ const cache = new LRUCache<string, boolean>({
   ttl: 1000 * 60 * 30, // 30 minutes in milliseconds
 });
 
-export const withAuthPermission = async <TReturn>(opts: {
-  ctx: {
-    // session?: Session | null;
-    db: typeof db;
-  };
+export const withAuthPermission = async <
+  TContext extends { db: Database },
+  TReturn,
+>(opts: {
+  ctx: TContext;
   next: (opts: {
-    ctx: {
-      //   session?: Session | null;
-      db: typeof db;
-      //   teamId: string | null;
-    };
+    ctx: TContext;
   }) => Promise<TReturn>;
 }) => {
   const { ctx, next } = opts;
@@ -75,11 +71,5 @@ export const withAuthPermission = async <TReturn>(opts: {
   //     }
   //   }
 
-  return next({
-    ctx: {
-      //   session: ctx.session,
-      //   teamId,
-      db: ctx.db,
-    },
-  });
+  return next({ ctx });
 };

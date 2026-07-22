@@ -5,11 +5,15 @@ import {
   fetchMessages,
 } from "@telegram/message-service";
 import { z } from "zod";
-import { saveBatch, type IncomingMessage } from "./blog";
+import {
+  type IncomingMessage,
+  loadExistingTelegramBlogs,
+  saveIncomingMessages,
+} from "./blog";
 
 export const startRecentUpdateJobSchema = z.object({
   channelIds: z.array(z.number()).min(1),
-  maxPerChannel: z.number().positive().max(100).optional(),
+  maxPerChannel: z.number().positive().max(5000).optional(),
 });
 
 export type StartRecentUpdateJobSchema = z.infer<
@@ -34,6 +38,7 @@ type ChannelUpdateItem = {
   latestKnownCount: number | null;
   latestKnownMessageId: number | null;
   newestStoredMessageId: number | null;
+  includeLegacyFallback: boolean;
   lastFetchedAt: string | null;
   fetchedCount: number;
   finalStoredCount: number | null;
@@ -110,31 +115,34 @@ function refreshJobCounts(job: RecentUpdateJob) {
 
 async function getStoredChannelCounts(
   ctx: TRPCContext,
-  channelIds?: number[],
+  channelIds: number[],
 ) {
-  const where = {
-    ...(channelIds ? { channelId: { in: channelIds } } : {}),
+  const visibleWhere = {
+    deletedAt: null,
+    channelId: { in: channelIds },
   };
-  const [counts, latestDates, blogs] = await Promise.all([
+  const [counts, latestDates, latestMessageIds] = await Promise.all([
     ctx.db.blog.groupBy({
       by: ["channelId"],
-      where,
+      where: visibleWhere,
       _count: { _all: true },
     }),
     ctx.db.blog.groupBy({
       by: ["channelId"],
-      where,
+      where: visibleWhere,
       _max: { blogDate: true },
     }),
-    ctx.db.blog.findMany({
-      where,
-      select: { channelId: true, meta: true },
+    ctx.db.blog.groupBy({
+      by: ["channelId"],
+      where: { channelId: { in: channelIds } },
+      _max: { telegramMessageId: true },
     }),
   ]);
 
   const countMap = new Map<number, number>();
   const latestDateMap = new Map<number, string | null>();
   const newestIdMap = new Map<number, number>();
+  const legacyCursorChannelIds = new Set<number>();
 
   counts.forEach((row: any) => {
     if (row.channelId !== null) countMap.set(row.channelId, row._count._all);
@@ -147,17 +155,43 @@ async function getStoredChannelCounts(
       );
     }
   });
-  blogs.forEach((blog) => {
-    if (blog.channelId === null) return;
-    const id = readTelegramMessageId(blog.meta);
-    if (id === null) return;
-    newestIdMap.set(
-      blog.channelId,
-      Math.max(newestIdMap.get(blog.channelId) ?? 0, id),
-    );
-  });
+  for (const row of latestMessageIds) {
+    if (row.channelId === null || row._max.telegramMessageId === null) continue;
+    newestIdMap.set(row.channelId, row._max.telegramMessageId);
+  }
 
-  return { countMap, latestDateMap, newestIdMap };
+  const missingLegacyIds = channelIds.filter(
+    (channelId) => !newestIdMap.has(channelId),
+  );
+  const legacyRows = await Promise.all(
+    missingLegacyIds.map(async (channelId) => ({
+      channelId,
+      blogs: await ctx.db.blog.findMany({
+        where: { channelId },
+        orderBy: [{ blogDate: "desc" }, { id: "desc" }],
+        take: 100,
+        select: { meta: true },
+      }),
+    })),
+  );
+  for (const channel of legacyRows) {
+    let newestId: number | null = null;
+    for (const blog of channel.blogs) {
+      const messageId = readTelegramMessageId(blog.meta);
+      if (messageId !== null) newestId = Math.max(newestId ?? 0, messageId);
+    }
+    if (newestId !== null) {
+      newestIdMap.set(channel.channelId, newestId);
+      legacyCursorChannelIds.add(channel.channelId);
+    }
+  }
+
+  return {
+    countMap,
+    latestDateMap,
+    newestIdMap,
+    legacyCursorChannelIds,
+  };
 }
 
 async function fetchStatsSafely(username: string) {
@@ -169,31 +203,39 @@ async function fetchStatsSafely(username: string) {
 }
 
 export async function getUpdatePromptSummary(ctx: TRPCContext) {
-  const { countMap, latestDateMap, newestIdMap } =
-    await getStoredChannelCounts(ctx);
-  const fetchedChannelIds = Array.from(countMap.entries())
-    .filter(([, count]) => count > 0)
-    .map(([channelId]) => channelId);
-
-  if (fetchedChannelIds.length === 0) {
-    return { channels: [], generatedAt: nowIso() };
-  }
-
   const channels = await ctx.db.channel.findMany({
-    where: { id: { in: fetchedChannelIds }, deletedAt: null },
+    where: {
+      deletedAt: null,
+      blogs: {
+        some: {
+          deletedAt: null,
+          OR: [{ source: null }, { source: { not: "facebook" } }],
+        },
+      },
+    },
     orderBy: [{ title: "asc" }],
     select: { id: true, title: true, username: true },
   });
+  if (channels.length === 0) {
+    return { channels: [], generatedAt: nowIso() };
+  }
+
+  const { countMap, latestDateMap, newestIdMap } =
+    await getStoredChannelCounts(
+      ctx,
+      channels.map((channel) => channel.id),
+    );
 
   const rows = await Promise.all(
     channels.map(async (channel): Promise<ChannelUpdateSummaryItem> => {
       const stats = await fetchStatsSafely(channel.username);
       const storedCount = countMap.get(channel.id) ?? 0;
       const latestKnownCount = stats.latestKnownCount;
+      const newestStoredMessageId = newestIdMap.get(channel.id) ?? null;
       const delta =
-        latestKnownCount === null
+        stats.latestKnownMessageId === null || newestStoredMessageId === null
           ? null
-          : Math.max(0, latestKnownCount - storedCount);
+          : Math.max(0, stats.latestKnownMessageId - newestStoredMessageId);
 
       return {
         channelId: channel.id,
@@ -202,7 +244,7 @@ export async function getUpdatePromptSummary(ctx: TRPCContext) {
         storedCount,
         latestKnownCount,
         latestKnownMessageId: stats.latestKnownMessageId,
-        newestStoredMessageId: newestIdMap.get(channel.id) ?? null,
+        newestStoredMessageId,
         lastFetchedAt: latestDateMap.get(channel.id) ?? null,
         delta,
         canUpdate:
@@ -224,10 +266,12 @@ async function buildJobItems(
     select: { id: true, title: true, username: true },
   });
   const channelMap = new Map(channels.map((channel) => [channel.id, channel]));
-  const { countMap, latestDateMap, newestIdMap } = await getStoredChannelCounts(
-    ctx,
-    uniqueIds,
-  );
+  const {
+    countMap,
+    latestDateMap,
+    newestIdMap,
+    legacyCursorChannelIds,
+  } = await getStoredChannelCounts(ctx, uniqueIds);
 
   return Promise.all(
     uniqueIds.flatMap((channelId) => {
@@ -243,6 +287,7 @@ async function buildJobItems(
           latestKnownCount: stats.latestKnownCount,
           latestKnownMessageId: stats.latestKnownMessageId,
           newestStoredMessageId: newestIdMap.get(channel.id) ?? null,
+          includeLegacyFallback: legacyCursorChannelIds.has(channel.id),
           lastFetchedAt: latestDateMap.get(channel.id) ?? null,
           fetchedCount: 0,
           finalStoredCount: null,
@@ -257,7 +302,7 @@ async function buildJobItems(
 }
 
 async function countStoredBlogs(ctx: TRPCContext, channelId: number) {
-  return ctx.db.blog.count({ where: { channelId } });
+  return ctx.db.blog.count({ where: { channelId, deletedAt: null } });
 }
 
 async function runChannelUpdate(
@@ -276,23 +321,45 @@ async function runChannelUpdate(
     return;
   }
 
-  const result = await fetchMessages(item.username, {
-    limit,
-    minId: item.newestStoredMessageId,
-    resolveFiles: true,
-  });
-  const mapped: IncomingMessage[] = result.messages.map((message) => ({
-    id: message.id,
-    text: message.text,
-    date: message.date,
-    media: message.media ?? null,
-  }));
-  const saveResult = await saveBatch(ctx, {
-    channelId: item.channelId,
-    messages: mapped,
-  });
+  let startId: number | undefined;
+  let remaining = limit;
+  const existingTelegramBlogs = item.includeLegacyFallback
+    ? await loadExistingTelegramBlogs(ctx.db, item.channelId)
+    : undefined;
+  while (remaining > 0) {
+    const batchLimit = Math.min(50, remaining);
+    const result = await fetchMessages(item.username, {
+      limit: batchLimit,
+      startId,
+      minId: item.newestStoredMessageId,
+      resolveFiles: true,
+    });
+    if (result.lastMessageId === null) break;
 
-  item.fetchedCount = saveResult.created ?? 0;
+    const mapped: IncomingMessage[] = result.messages.map((message) => ({
+      id: message.id,
+      text: message.text,
+      date: message.date,
+      media: message.media ?? null,
+    }));
+    if (mapped.length > 0) {
+      const saveResult = await saveIncomingMessages(
+        ctx,
+        { channelId: item.channelId, messages: mapped },
+        { existingTelegramBlogs, includeLegacyFallback: false },
+      );
+      item.fetchedCount += saveResult.created ?? 0;
+    }
+
+    remaining -= batchLimit;
+    if (
+      result.lastMessageId <= item.newestStoredMessageId ||
+      result.lastMessageId === startId
+    ) {
+      break;
+    }
+    startId = result.lastMessageId;
+  }
   item.finalStoredCount = await countStoredBlogs(ctx, item.channelId);
   item.status = "completed";
   item.finishedAt = nowIso();
@@ -338,14 +405,16 @@ export async function startRecentUpdateJob(
   const uniqueIds = Array.from(new Set(input.channelIds));
   if (uniqueIds.length === 0) throw new Error("Select at least one channel.");
 
-  const existingIds = new Set(
-    activeJob?.channels.map((channel) => channel.channelId) ?? [],
-  );
-  const newIds = uniqueIds.filter((channelId) => !existingIds.has(channelId));
-  const newItems = await buildJobItems(ctx, newIds);
+  const newItems = await buildJobItems(ctx, uniqueIds);
 
   if (activeJob) {
-    activeJob.channels.push(...newItems);
+    const currentIds = new Set(
+      activeJob.channels.map((channel) => channel.channelId),
+    );
+    const uniqueNewItems = newItems.filter(
+      (item) => !currentIds.has(item.channelId),
+    );
+    activeJob.channels.push(...uniqueNewItems);
     refreshJobCounts(activeJob);
     void runJob(ctx, activeJob);
     return snapshotJob(activeJob);
@@ -360,7 +429,7 @@ export async function startRecentUpdateJob(
     status: "running",
     startedAt: nowIso(),
     finishedAt: null,
-    maxPerChannel: input.maxPerChannel ?? 100,
+    maxPerChannel: input.maxPerChannel ?? 1000,
     channels: newItems,
     totalNewChats: 0,
     selectedCount: newItems.length,

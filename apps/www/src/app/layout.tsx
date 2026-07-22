@@ -13,6 +13,7 @@ import { Toaster as MiddayToast, Toaster } from "@acme/ui/toaster";
 
 import { Providers } from "./providers";
 import { Suspense } from "react";
+import { ChannelUpdatePrompt } from "@/components/channel-updates/channel-update-prompt";
 import { StaticTrpc } from "@/components/static-trpc";
 import { constructMetadata } from "@/lib/construct-metadata";
 
@@ -43,6 +44,7 @@ export default async function RootLayout({
                     >
                         <Providers>
                             <StaticTrpc />
+                            <ChannelUpdatePrompt />
                             {children}
                         </Providers>
                     </Suspense>

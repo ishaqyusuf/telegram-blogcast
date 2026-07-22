@@ -31,6 +31,7 @@ Tracks the current blog-reading experience and blog-related discovery surfaces.
 - Search shows live keyword suggestions while typing and hides recent searches until the input is cleared or submitted.
 - Blog post menus can share or copy internal links. Comments render supported internal blog/album links as compact preview cards that open the app route.
 - Comment read mode keeps text selectable and continuous by default, with inline edit controls available on each comment row.
+- Opening the local/admin web Blog or Telegram dashboard checks downloaded Telegram channels once per browser session, presents updated and other downloaded channels in a shared selection dialog, and sends selected refreshes to the dashboard terminal. The Telegram update procedures reject non-local hosts.
 
 ### Important Surface Areas
 - `apps/expo-app/src/screens/blog-home.tsx`
@@ -50,6 +51,7 @@ Tracks the current blog-reading experience and blog-related discovery surfaces.
 - The mobile import screen uses the same local network IP resolution strategy as Expo's local API targeting when available, plus a persisted manual URL fallback for compiled APK/dev-client builds.
 - Local import caches local API IPs, tries the last successful IP first, then the current Expo dev-host IP, then previous IP history, and finally asks for manual IP entry. The port comes from `EXPO_PUBLIC_API_PORT`.
 - Telegram/channel import is local API-owned work. The mobile app starts/stops and observes the import, but it does not run the import library itself.
+- Web recent-update checks compare the latest Telegram message ID with each channel's newest stored message cursor. The ID gap is used only as an availability signal because Telegram IDs are not contiguous. Selected refreshes page forward in small batches, skip the expensive legacy metadata fallback for known-new IDs, and reuse the dashboard's terminal progress UI.
 - Facebook media import is split between API-owned job/status and `services/facebook-media-bridge`, a local FastAPI helper that uses the local browser Facebook session via `yt-dlp --cookies-from-browser`. The app never stores Facebook's short-lived CDN URL; durable state is Telegram file metadata plus `Blog.meta.facebook.mediaDownload`.
 - Preview/production cold launches require an explicit Local Services IP session choice before Telegram update checks or local imports run. Dismissing setup disables Telegram and Facebook import surfaces for the session, while guarded screens can reopen setup without affecting normal blog reading.
 

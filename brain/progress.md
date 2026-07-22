@@ -1,5 +1,15 @@
 # Progress
 
+## 2026-07-22
+
+### Web Telegram Recent-Update Prompt
+- Status: Done.
+- Source mode: Direct user request.
+- Source changed: web Blog/dashboard auto-check dialog and terminal handoff, Telegram recent-update summary/job batching, Telegram connection reuse, Prisma development client reuse, and focused prompt/terminal tests.
+- Brain changed: `brain/features/blog.md` and `brain/progress.md`.
+- Validation passed: focused update/persistence tests (9 tests, 28 assertions), focused Biome checks excluding the pre-existing formatting debt in `packages/db/src/index.ts`, local-host allow/public-host deny API checks, browser UI verification of the selection modal, and a live update of `قناة د. أحمد سعيد` that stored 23 remaining posts and completed at 6,131 saved posts. A follow-up browser run verified the dashboard terminal completion output.
+- Validation limitation: the current full Bun suite has one unrelated concurrent failure in `apps/api/src/queries/posts.test.ts`; full API and web typechecks also report unrelated existing project diagnostics outside this feature.
+
 ## 2026-07-20
 
 ### Preview/Production Local Network Launch

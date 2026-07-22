@@ -9,6 +9,7 @@ export type TRPCContext = {
   //   supabase: SupabaseClient;
   db: Database;
   userId?: number;
+  requestHost?: string;
   // guestId?: string;
   //   geo: ReturnType<typeof getGeoContext>;
   //   teamId?: string;
@@ -26,6 +27,7 @@ export const createTRPCContext = async (
 
   return {
     db,
+    requestHost: c.req.header("host"),
     // userId: Number(userId),
     // guestId,
   };
