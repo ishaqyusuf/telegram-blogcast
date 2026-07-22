@@ -154,17 +154,16 @@ const InitialLayout = () => {
 
 	return (
 		<>
-			<TRPCReactProvider>
-				<LocalServicesSessionProvider>
-					<FloatingFooterProvider>
-						<StaticTrpc />
-						<StaticRouter />
-						<AudioBootstrap />
-						<AudioNotificationRouter />
-						<ChannelUpdatePrompt />
-						<TranscriptionQueueObserver />
-						<AppAutoUpdateModal />
-						<AppStatusBar />
+			<LocalServicesSessionProvider>
+				<FloatingFooterProvider>
+					<StaticTrpc />
+					<StaticRouter />
+					<AudioBootstrap />
+					<AudioNotificationRouter />
+					<ChannelUpdatePrompt />
+					<TranscriptionQueueObserver />
+					<AppAutoUpdateModal />
+					<AppStatusBar />
 					{/* <StatusBar style="auto" /> */}
 
 					<Stack
@@ -261,12 +260,11 @@ const InitialLayout = () => {
 
           <Stack.Screen name="+not-found" />
         </Stack> */}
-						<GlobalAudioBar />
-						<Toast />
-						<PortalHost />
-					</FloatingFooterProvider>
-				</LocalServicesSessionProvider>
-			</TRPCReactProvider>
+					<GlobalAudioBar />
+					<Toast />
+					<PortalHost />
+				</FloatingFooterProvider>
+			</LocalServicesSessionProvider>
 		</>
 	);
 };
@@ -297,10 +295,12 @@ function RootLayoutNav() {
 					<ThemeProvider value={theme}>
 						<AuthProvider value={useCreateAuthContext()}>
 							<ToastProviderWithViewport>
-								<BottomSheetModalProvider>
-									<FlashMessage position="top" />
-									<InitialLayout />
-								</BottomSheetModalProvider>
+								<TRPCReactProvider>
+									<BottomSheetModalProvider>
+										<FlashMessage position="top" />
+										<InitialLayout />
+									</BottomSheetModalProvider>
+								</TRPCReactProvider>
 							</ToastProviderWithViewport>
 						</AuthProvider>
 					</ThemeProvider>

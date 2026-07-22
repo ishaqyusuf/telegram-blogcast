@@ -2,6 +2,13 @@
 
 ## 2026-07-22
 
+### Fix Blog-Card Add-To-Album Query Context
+- Status: Done.
+- Source mode: Direct user report.
+- Source changed: Expo root provider ordering and a regression test that keeps the bottom-sheet portal host inside the React Query provider.
+- Brain changed: `brain/features/blog.md` and `brain/progress.md`.
+- Validation passed: focused Bun regression test, focused Expo ESLint, and `git diff --check`.
+
 ### Web Telegram Recent-Update Prompt
 - Status: Done.
 - Source mode: Direct user request.

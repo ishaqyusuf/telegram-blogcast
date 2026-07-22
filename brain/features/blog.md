@@ -26,6 +26,7 @@ Tracks the current blog-reading experience and blog-related discovery surfaces.
 - Local-only blog import can be controlled from the Expo `/blog-import` screen when the local API is reachable on the device LAN.
 - Settings includes a Facebook Import screen for `Blog.source = "facebook"` rows. It shows media import status and starts a local bridge batch that downloads Facebook media, uploads it to the configured Telegram bot channel, and attaches the returned Telegram file metadata as normal blog media.
 - Blog/search cards are album-aware for audio posts, showing album badges when membership exists and add-to-album actions when eligible.
+- Mobile bottom-sheet portals live inside the shared React Query/tRPC provider, so query-backed blog-card actions such as Add to album retain their QueryClient context when opened.
 - Album suggestion delete actions soft-delete the underlying blog item through `blog.deleteBlog` after a floating bottom confirmation sheet; they do not merely dismiss the suggestion.
 - Home feed de-duplicates album-linked audio posts by album and keeps the most recent visible item while leaving non-album posts visible.
 - Search shows live keyword suggestions while typing and hides recent searches until the input is cleared or submitted.
