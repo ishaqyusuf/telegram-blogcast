@@ -54,6 +54,7 @@ Tracks the current audio playback experience, supporting components, and future 
 - Persistent mini-player is a core interaction pattern.
 - Opening an audio detail screen is passive: it may show the viewed audio's metadata and duration, but it must not replace, stop, seek, or pause the currently active audio until the user presses play on the viewed audio.
 - Audio-detail scrub dragging is locally controlled until native seek settles; store progress events must not overwrite the thumb/time label while `isSeeking` is active.
+- Audio-detail time labels preview the seek position while dragging and use hour-aware `HH:MM:SS` formatting for audio at least one hour long.
 - A naturally ended track is remembered as ended. With no repeat or queue play mode active, pressing play again seeks to 0 and restarts instead of resuming at the end or applying pause rewind.
 - Quick seek controls are part of the intended experience.
 - Android system player controls expose play/pause, seek, and 15-second jump backward/forward actions through media notifications, lock screen, and compatible headset/Bluetooth controls. The operating system owns the final notification/card visual treatment; the app supplies metadata, artwork, progress, and actions.

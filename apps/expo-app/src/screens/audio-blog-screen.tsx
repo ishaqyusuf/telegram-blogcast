@@ -94,10 +94,16 @@ function albumColor(id?: number | null) {
 	return ALBUM_COLORS[id % ALBUM_COLORS.length];
 }
 
-function formatMs(ms: number) {
-	const totalSec = Math.floor(ms / 1000);
-	const m = Math.floor(totalSec / 60);
+function formatMs(ms: number, showHours = false) {
+	const totalSec = Math.max(0, Math.floor(ms / 1000));
+	const h = Math.floor(totalSec / 3600);
+	const m = Math.floor((totalSec % 3600) / 60);
 	const s = totalSec % 60;
+
+	if (showHours || h > 0) {
+		return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+	}
+
 	return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
@@ -962,8 +968,7 @@ function PlayerSection({
 		setPlaybackRate(next);
 	};
 	const [trackWidth, setTrackWidth] = useState(0);
-	// Label ms — updated via Animated listener, drives only the two Text nodes
-	const [labelMs, setLabelMs] = useState(position);
+	const [dragPositionMs, setDragPositionMs] = useState<number | null>(null);
 
 	// Animated value (0–1) drives fill + knob natively, no React re-renders during drag
 	const progressAnim = useRef(new Animated.Value(0)).current;
@@ -1013,17 +1018,24 @@ function PlayerSection({
 		if (!isDragging.current) {
 			const p = duration > 0 ? position / duration : 0;
 			progressAnim.setValue(p);
-			setLabelMs(position);
+			setDragPositionMs(null);
 		}
 	}, [position, duration, progressAnim]);
 
-	// Listen to animated value changes → update time labels (only 2 Text nodes re-render)
-	useEffect(() => {
-		const id = progressAnim.addListener(({ value }) => {
-			setLabelMs(value * durationRef.current);
-		});
-		return () => progressAnim.removeListener(id);
-	}, [progressAnim]);
+	const updateDragPosition = useCallback(
+		(progress: number) => {
+			const targetPosition = progress * durationRef.current;
+			dragValueRef.current = progress;
+			setDragPositionMs(targetPosition);
+			progressAnim.setValue(progress);
+		},
+		[progressAnim],
+	);
+	const finishDragging = useCallback(() => {
+		isDragging.current = false;
+		setDragPositionMs(null);
+		useAudioStore.setState({ isSeeking: false });
+	}, []);
 
 	// Interpolated pixel positions — recalculated only when trackWidth changes
 	const KNOB = 22;
@@ -1056,46 +1068,37 @@ function PlayerSection({
 				Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 				isDragging.current = true;
 				useAudioStore.setState({ isSeeking: true });
-				dragValueRef.current = p;
-				setLabelMs(p * durationRef.current);
-				progressAnim.setValue(p);
+				updateDragPosition(p);
 			},
 			onPanResponderMove: (evt) => {
 				if (!canSeekRef.current) return;
 				const p = getGestureProgress(evt);
 				if (p == null) return;
-				dragValueRef.current = p;
-				setLabelMs(p * durationRef.current);
-				progressAnim.setValue(p);
+				updateDragPosition(p);
 			},
 			onPanResponderRelease: () => {
 				if (!canSeekRef.current) {
-					isDragging.current = false;
-					useAudioStore.setState({ isSeeking: false });
+					finishDragging();
 					return;
 				}
 				const d = durationRef.current;
 				const seek = seekRef.current;
 				if (!seek || d <= 0) {
-					isDragging.current = false;
-					useAudioStore.setState({ isSeeking: false });
+					finishDragging();
 					return;
 				}
 
 				const targetPosition = Math.max(0, Math.min(d, dragValueRef.current * d));
 				void Promise.resolve(seek(targetPosition))
 					.catch(() => undefined)
-					.finally(() => {
-						isDragging.current = false;
-					});
-				// Store isSeeking is cleared by seek() after native seek resolves.
+					.finally(finishDragging);
+				// Keep the drag preview visible until the native seek settles.
 			},
-			onPanResponderTerminate: () => {
-				isDragging.current = false;
-				useAudioStore.setState({ isSeeking: false });
-			},
+			onPanResponderTerminate: finishDragging,
 		}),
 	).current;
+	const displayedPositionMs = dragPositionMs ?? position;
+	const showHours = duration >= 60 * 60 * 1000;
 
 	return (
 		<View className="gap-4">
@@ -1170,12 +1173,16 @@ function PlayerSection({
 					<Text
 						style={{ color: mutedFgColor, fontSize: 12, fontWeight: "500" }}
 					>
-						{formatMs(labelMs)}
+						{formatMs(displayedPositionMs, showHours)}
 					</Text>
 					<Text
 						style={{ color: mutedFgColor, fontSize: 12, fontWeight: "500" }}
 					>
-						-{formatMs(Math.max(0, duration - labelMs))}
+						-
+						{formatMs(
+							Math.max(0, duration - displayedPositionMs),
+							showHours,
+						)}
 					</Text>
 				</View>
 			</View>
