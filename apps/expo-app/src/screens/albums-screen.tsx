@@ -21,6 +21,7 @@ import { useColors } from "@/hooks/use-color";
 import { useScrollChrome } from "@/hooks/use-scroll-chrome";
 import { getMediaFileUrl } from "@/lib/media-source";
 import { Image } from "expo-image";
+import { KeyboardStickyView } from "react-native-keyboard-controller";
 
 const ALBUM_COLORS = [
   "#1e40af",
@@ -46,7 +47,7 @@ function getAlbumArtUrl(album: { thumbnail?: { file?: unknown } | null }) {
 
 function AlbumGridSkeleton() {
   return (
-    <View className="flex-1 px-3 pb-8">
+    <View className="flex-1 px-3 pb-28">
       <View className="flex-row gap-3 mb-3">
         <AlbumTileSkeleton />
         <AlbumTileSkeleton />
@@ -155,34 +156,13 @@ export default function AlbumsScreen() {
           </Pressable>
         </View>
 
-        <View className="px-4 pb-3">
-          <View className="h-11 flex-row items-center gap-2 rounded-xl border border-border bg-card px-3">
-            <Icon name="Search" size={16} className="text-muted-foreground" />
-            <TextInput
-              value={search}
-              onChangeText={setSearch}
-              placeholder="Search albums..."
-              placeholderTextColor={colors.mutedForeground}
-              autoCapitalize="none"
-              style={{
-                flex: 1,
-                color: colors.foreground,
-                fontSize: 14,
-                paddingVertical: 0,
-              }}
-            />
-            {search.length > 0 && (
-              <Pressable onPress={() => setSearch("")} hitSlop={8}>
-                <Icon name="X" size={15} className="text-muted-foreground" />
-              </Pressable>
-            )}
-          </View>
-        </View>
-
         {isLoading ? (
           <AlbumGridSkeleton />
         ) : filteredAlbums.length === 0 ? (
-          <View className="flex-1 items-center justify-center gap-3">
+          <View
+            className="flex-1 items-center justify-center gap-3"
+            style={{ paddingBottom: 104 }}
+          >
             <Icon
               name={search.trim() ? "SearchX" : "Music2"}
               size={48}
@@ -199,8 +179,11 @@ export default function AlbumsScreen() {
             data={filteredAlbums}
             keyExtractor={(item) => String(item.id)}
             numColumns={2}
-            contentContainerClassName="px-3 pb-8"
+            contentContainerClassName="px-3"
+            contentContainerStyle={{ paddingBottom: 104 }}
             columnWrapperClassName="gap-3 mb-3"
+            keyboardDismissMode="interactive"
+            keyboardShouldPersistTaps="handled"
             removeClippedSubviews={false}
             initialNumToRender={8}
             maxToRenderPerBatch={8}
@@ -262,10 +245,51 @@ export default function AlbumsScreen() {
             }}
           />
         )}
+        <KeyboardStickyView
+          offset={{ closed: 0, opened: 0 }}
+          pointerEvents="box-none"
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 20,
+          }}
+        >
+          <View className="bg-background px-4 pb-5 pt-2">
+            <View className="h-12 flex-row items-center gap-2 rounded-xl border border-border bg-card px-3">
+              <Icon name="Search" size={16} className="text-muted-foreground" />
+              <TextInput
+                value={search}
+                onChangeText={setSearch}
+                placeholder="Search albums..."
+                placeholderTextColor={colors.mutedForeground}
+                autoCapitalize="none"
+                returnKeyType="search"
+                style={{
+                  flex: 1,
+                  color: colors.foreground,
+                  fontSize: 14,
+                  paddingVertical: 0,
+                }}
+              />
+              {search.length > 0 && (
+                <Pressable
+                  accessibilityLabel="Clear album search"
+                  onPress={() => setSearch("")}
+                  hitSlop={8}
+                >
+                  <Icon name="X" size={15} className="text-muted-foreground" />
+                </Pressable>
+              )}
+            </View>
+          </View>
+        </KeyboardStickyView>
       </SafeArea>
       <ScrollToTopButton
         visible={albumScroll.showScrollTop}
         onPress={albumScroll.scrollToTop}
+        bottom={104}
       />
 
       <FloatingBottomSheet

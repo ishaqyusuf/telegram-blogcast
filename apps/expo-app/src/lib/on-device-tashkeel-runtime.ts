@@ -1,6 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Asset } from "expo-asset";
-import * as ort from "onnxruntime-react-native";
+import { InferenceSession, Tensor } from "onnxruntime-react-native";
 
 import {
 	type RawiVocabulary,
@@ -23,7 +23,7 @@ type CachedTashkeel = {
 	output: string;
 };
 
-let sessionPromise: Promise<ort.InferenceSession> | null = null;
+let sessionPromise: Promise<InferenceSession> | null = null;
 const memoryCache = new Map<string, CachedTashkeel>();
 const idxToDiac = Object.fromEntries(
 	Object.entries(VOCABULARY.diac_to_idx).map(([diacritic, index]) => [
@@ -83,7 +83,7 @@ async function getSession() {
 			const modelPath = asset.localUri ?? asset.uri;
 			if (!modelPath)
 				throw new Error("The bundled tashkeel model is unavailable.");
-			return ort.InferenceSession.create(modelPath);
+			return InferenceSession.create(modelPath);
 		})().catch((error) => {
 			sessionPromise = null;
 			throw error;
@@ -126,7 +126,7 @@ async function runModel(text: string) {
 	const inputIds = prepared.modelCharacters.map(
 		(character) => VOCABULARY.char_to_idx[character] ?? unknownId,
 	);
-	const input = new ort.Tensor(
+	const input = new Tensor(
 		"int64",
 		BigInt64Array.from(inputIds, (value) => BigInt(value)),
 		[1, inputIds.length],

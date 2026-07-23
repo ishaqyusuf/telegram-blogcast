@@ -26,6 +26,7 @@ export type FloatingBottomSheetProps = {
 	sideInset?: number;
 	overlayOpacity?: number;
 	accessibilityLabel?: string;
+	scrollableContent?: boolean;
 	onDismissed?: () => void;
 	keyboardBehavior?: BottomSheetModalProps["keyboardBehavior"];
 	keyboardBlurBehavior?: BottomSheetModalProps["keyboardBlurBehavior"];
@@ -45,6 +46,7 @@ export function FloatingBottomSheet({
 	sideInset = 8,
 	overlayOpacity = 0.38,
 	accessibilityLabel,
+	scrollableContent = false,
 	onDismissed,
 	keyboardBehavior,
 	keyboardBlurBehavior,
@@ -144,7 +146,11 @@ export function FloatingBottomSheet({
 			keyboardBlurBehavior={keyboardBlurBehavior}
 			android_keyboardInputMode={androidKeyboardInputMode}
 		>
-			<BottomSheetView style={styles.content}>{children}</BottomSheetView>
+			{scrollableContent ? (
+				children
+			) : (
+				<BottomSheetView style={styles.content}>{children}</BottomSheetView>
+			)}
 		</BottomSheetModal>
 	);
 }

@@ -4,22 +4,10 @@ import {
 } from "@/components/audio-blog-view/transcript-segments";
 import { useSyncedTranscript } from "@/components/audio-blog-view/use-synced-transcript";
 import { useAudioStore } from "@/store/audio-store";
+import { LegendList, type LegendListRef } from "@legendapp/list";
 import * as Haptics from "expo-haptics";
-import React, {
-	memo,
-	useCallback,
-	useEffect,
-	useMemo,
-	useRef,
-	useState,
-} from "react";
-import {
-	FlatList,
-	type LayoutChangeEvent,
-	Pressable,
-	Text,
-	View,
-} from "react-native";
+import React, { memo, useCallback, useEffect, useRef, useState } from "react";
+import { Pressable, Text, View } from "react-native";
 
 interface KaraokeTranscriptProps {
 	segments: TranscriptSegmentData[];
@@ -44,27 +32,7 @@ type TranscriptRowProps = {
 	selectable: boolean;
 	onPressSegment: (segment: TranscriptSegmentData, index: number) => void;
 	onLongPressSegment?: (segment: TranscriptSegmentData) => void;
-	onRowLayout: (index: number, event: LayoutChangeEvent) => void;
 };
-
-type WindowedTranscriptSegment = {
-	segment: TranscriptSegmentData;
-	absoluteIndex: number;
-};
-
-const KARAOKE_WINDOW_BEFORE = 80;
-const KARAOKE_WINDOW_AFTER = 120;
-const KARAOKE_CHUNK_SIZE = 80;
-const KARAOKE_WINDOW_EDGE_THRESHOLD = 24;
-
-function getKaraokeWindowForIndex(index: number, total: number) {
-	if (total <= 0) return { start: 0, end: 0 };
-	const safeIndex = Math.min(Math.max(index, 0), total - 1);
-	return {
-		start: Math.max(0, safeIndex - KARAOKE_WINDOW_BEFORE),
-		end: Math.min(total, safeIndex + KARAOKE_WINDOW_AFTER + 1),
-	};
-}
 
 const TranscriptRow = memo(function TranscriptRow({
 	segment,
@@ -74,13 +42,11 @@ const TranscriptRow = memo(function TranscriptRow({
 	selectable,
 	onPressSegment,
 	onLongPressSegment,
-	onRowLayout,
 }: TranscriptRowProps) {
 	return (
 		<Pressable
 			onPress={() => onPressSegment(segment, index)}
 			onLongPress={() => onLongPressSegment?.(segment)}
-			onLayout={(event) => onRowLayout(index, event)}
 		>
 			<Text
 				selectable={selectable}
@@ -127,82 +93,28 @@ export function KaraokeTranscript({
 }: KaraokeTranscriptProps) {
 	const seek = useAudioStore((s) => s.seek);
 	const play = useAudioStore((s) => s.play);
-	const flatListRef = useRef<FlatList<WindowedTranscriptSegment>>(null);
+	const listRef = useRef<LegendListRef>(null);
 	const lastTapRef = useRef<{ key: string; at: number } | null>(null);
-	const rowMetricsRef = useRef(
-		new Map<number, { y: number; height: number }>(),
-	);
-	const viewportHeightRef = useRef(0);
 	const [followPaused, setFollowPaused] = useState(false);
 	const { activeSegmentIndex: activeIdx, activeWordIndex: activeWordIdx } =
 		useSyncedTranscript({ segments, positionSecOverride });
-	const activeIdxRef = useRef(activeIdx);
-	activeIdxRef.current = activeIdx;
-	const [visibleRange, setVisibleRange] = useState(() =>
-		getKaraokeWindowForIndex(0, segments.length),
-	);
-	const windowedSegments = useMemo<WindowedTranscriptSegment[]>(
-		() =>
-			segments
-				.slice(visibleRange.start, visibleRange.end)
-				.map((segment, offset) => ({
-					segment,
-					absoluteIndex: visibleRange.start + offset,
-				})),
-		[segments, visibleRange.end, visibleRange.start],
-	);
-	const segmentMetricsResetKey = useMemo(
-		() =>
-			segments
-				.map((segment, index) => getTranscriptSegmentKey(segment, index))
-				.join("|"),
-		[segments],
-	);
 
 	const scrollToActiveSegment = useCallback(
 		(animated: boolean) => {
 			if (activeIdx < 0 || !segments.length) return;
-			const localActiveIndex = activeIdx - visibleRange.start;
-			if (localActiveIndex < 0 || localActiveIndex >= windowedSegments.length) {
-				return;
-			}
-
-			const metrics = rowMetricsRef.current.get(activeIdx);
-			const viewportHeight = viewportHeightRef.current;
-			if (metrics && viewportHeight > 0) {
-				flatListRef.current?.scrollToOffset({
-					offset: Math.max(
-						0,
-						metrics.y - viewportHeight * 0.5 + metrics.height * 0.5,
-					),
-					animated,
-				});
-				return;
-			}
-
-			flatListRef.current?.scrollToIndex({
-				index: localActiveIndex,
+			listRef.current?.scrollToIndex({
+				index: activeIdx,
 				animated,
 				viewPosition: 0.5,
 			});
 		},
-		[activeIdx, segments.length, visibleRange.start, windowedSegments.length],
+		[activeIdx, segments.length],
 	);
 
 	const resumeFollowing = useCallback(() => {
 		setFollowPaused(false);
 		scrollToActiveSegment(true);
 	}, [scrollToActiveSegment]);
-
-	const handleRowLayout = useCallback(
-		(index: number, event: LayoutChangeEvent) => {
-			rowMetricsRef.current.set(index, {
-				y: event.nativeEvent.layout.y,
-				height: event.nativeEvent.layout.height,
-			});
-		},
-		[],
-	);
 
 	const handlePressSegment = useCallback(
 		(segment: TranscriptSegmentData, index: number) => {
@@ -228,23 +140,21 @@ export function KaraokeTranscript({
 	);
 
 	const renderItem = useCallback(
-		({ item }: { item: WindowedTranscriptSegment; index: number }) => (
+		({ item, index }: { item: TranscriptSegmentData; index: number }) => (
 			<TranscriptRow
-				segment={item.segment}
-				index={item.absoluteIndex}
-				isActive={item.absoluteIndex === activeIdx}
-				activeWordIndex={item.absoluteIndex === activeIdx ? activeWordIdx : -1}
+				segment={item}
+				index={index}
+				isActive={index === activeIdx}
+				activeWordIndex={index === activeIdx ? activeWordIdx : -1}
 				selectable={selectable}
 				onPressSegment={handlePressSegment}
 				onLongPressSegment={onSegmentLongPress}
-				onRowLayout={handleRowLayout}
 			/>
 		),
 		[
 			activeIdx,
 			activeWordIdx,
 			handlePressSegment,
-			handleRowLayout,
 			onSegmentLongPress,
 			selectable,
 		],
@@ -255,61 +165,6 @@ export function KaraokeTranscript({
 			scrollToActiveSegment(true);
 		}
 	}, [autoScroll, followPaused, scrollToActiveSegment]);
-
-	useEffect(() => {
-		if (activeIdx < 0 || !segments.length) return;
-		if (followPaused) return;
-		setVisibleRange((current) => {
-			const activeTooCloseToTop =
-				activeIdx < current.start + KARAOKE_WINDOW_EDGE_THRESHOLD;
-			const activeTooCloseToBottom =
-				activeIdx >= current.end - KARAOKE_WINDOW_EDGE_THRESHOLD;
-			if (!activeTooCloseToTop && !activeTooCloseToBottom) return current;
-			return getKaraokeWindowForIndex(activeIdx, segments.length);
-		});
-	}, [activeIdx, followPaused, segments.length]);
-
-	useEffect(() => {
-		rowMetricsRef.current.clear();
-		setVisibleRange(
-			getKaraokeWindowForIndex(Math.max(activeIdxRef.current, 0), segments.length),
-		);
-		setFollowPaused(false);
-	}, [segmentMetricsResetKey, segments.length]);
-
-	useEffect(() => {
-		if (!autoScroll || followPaused) return;
-		const timeout = setTimeout(() => {
-			scrollToActiveSegment(true);
-		}, 40);
-		return () => clearTimeout(timeout);
-	}, [
-		autoScroll,
-		followPaused,
-		scrollToActiveSegment,
-		visibleRange.end,
-		visibleRange.start,
-	]);
-
-	const loadPreviousChunk = useCallback(() => {
-		setVisibleRange((current) => {
-			if (current.start <= 0) return current;
-			return {
-				start: Math.max(0, current.start - KARAOKE_CHUNK_SIZE),
-				end: current.end,
-			};
-		});
-	}, []);
-
-	const loadNextChunk = useCallback(() => {
-		setVisibleRange((current) => {
-			if (current.end >= segments.length) return current;
-			return {
-				start: current.start,
-				end: Math.min(segments.length, current.end + KARAOKE_CHUNK_SIZE),
-			};
-		});
-	}, [segments.length]);
 
 	if (!segments.length) {
 		return (
@@ -329,47 +184,25 @@ export function KaraokeTranscript({
 
 	return (
 		<View style={{ flex: 1 }}>
-			<FlatList
-				ref={flatListRef}
-				data={windowedSegments}
-				keyExtractor={(item) =>
-					getTranscriptSegmentKey(item.segment, item.absoluteIndex)
-				}
+			<LegendList
+				ref={listRef}
+				data={segments}
+				keyExtractor={getTranscriptSegmentKey}
 				extraData={`${activeIdx}:${activeWordIdx}:${selectable ? 1 : 0}`}
 				showsVerticalScrollIndicator={false}
+				nestedScrollEnabled
+				recycleItems
+				estimatedItemSize={72}
+				drawDistance={480}
 				contentContainerStyle={{
 					paddingHorizontal: 24,
 					paddingVertical: contentPaddingVertical,
 					gap: 16,
 				}}
-				initialNumToRender={18}
-				maxToRenderPerBatch={12}
-				windowSize={7}
-				removeClippedSubviews
-				onLayout={(event) => {
-					viewportHeightRef.current = event.nativeEvent.layout.height;
-				}}
 				onScrollBeginDrag={() => {
 					if (autoScroll) setFollowPaused(true);
 				}}
-				maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
-				onEndReached={loadNextChunk}
-				onEndReachedThreshold={0.35}
-				onScroll={(event) => {
-					if (event.nativeEvent.contentOffset.y < 220) {
-						loadPreviousChunk();
-					}
-				}}
-				scrollEventThrottle={16}
-				onScrollToIndexFailed={(info) => {
-					flatListRef.current?.scrollToOffset({
-						offset: Math.max(0, info.averageItemLength * info.index),
-						animated: false,
-					});
-					setTimeout(() => {
-						scrollToActiveSegment(true);
-					}, 80);
-				}}
+				maintainVisibleContentPosition
 				renderItem={renderItem}
 			/>
 			{autoScroll && followPaused ? (

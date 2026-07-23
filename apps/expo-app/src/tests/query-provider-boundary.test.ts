@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
-const layoutSource = await Bun.file(`${import.meta.dir}/_layout.tsx`).text();
+const layoutSource = await Bun.file(
+	`${import.meta.dir}/../app/_layout.tsx`,
+).text();
 
 describe("root query provider boundary", () => {
 	test("keeps the bottom-sheet portal host inside the React Query provider", () => {

@@ -1,8 +1,3 @@
-import { KaraokeTranscript } from "@/components/audio-blog-view/karaoke-transcript";
-import {
-	type RawTranscriptSegment,
-	normalizeTranscriptSegment,
-} from "@/components/audio-blog-view/transcript-timing";
 import {
 	type CommentsSheetState,
 	useCommentsState,
@@ -19,14 +14,11 @@ import { useTranscriptionQueue } from "@/hooks/use-transcription-queue";
 import { getTelegramFileUrl } from "@/lib/get-telegram-file";
 import { getMediaFileUrl } from "@/lib/media-source";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
-import { withAlpha } from "@/lib/theme";
 import { isHttpTranscriberUrl } from "@/lib/transcribe";
 import { getTranscriptionBadgeState } from "@/lib/transcription-status";
 import { useGlobalAudioBarStore } from "@/store/global-audio-bar-store";
 import { getFacebookExternalMedia } from "@acme/blog/facebook-media";
-import { formatDate } from "@acme/utils/dayjs";
 import { type AVPlaybackStatus, ResizeMode, Video } from "expo-av";
-import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -49,6 +41,12 @@ type BlogMedia = {
 	fileId?: string | number | null;
 	mimeType?: string | null;
 	title?: string | null;
+	author?: {
+		name?: string | null;
+	} | null;
+	album?: {
+		name?: string | null;
+	} | null;
 	file?: {
 		duration?: number | null;
 		fileSize?: number | null;
@@ -59,7 +57,6 @@ type BlogMedia = {
 	} | null;
 };
 
-const CONTROLS_HIDE_DELAY_MS = 2600;
 const VIDEO_RATE_OPTIONS = [1, 1.25, 1.5, 2] as const;
 const VIDEO_META_BOTTOM_OFFSET = 156;
 const VIDEO_ACTIONS_BOTTOM_OFFSET = 86;
@@ -224,17 +221,15 @@ function ActionButton({
 	label,
 	onPress,
 	disabled,
-	inactive,
-	color,
 	shape = "pill",
+	active = false,
 }: {
-	icon: "MessageCircle" | "Share" | "Compass" | "Captions";
-	label: string;
+	icon: "MessageCircle" | "Share" | "Heart";
+	label?: string;
 	onPress: () => void;
 	disabled?: boolean;
-	inactive?: boolean;
-	color?: string;
 	shape?: "pill" | "circle";
+	active?: boolean;
 }) {
 	const isCircle = shape === "circle";
 
@@ -242,23 +237,25 @@ function ActionButton({
 		<Pressable
 			onPress={onPress}
 			disabled={disabled}
-			accessibilityLabel={label}
-			className={`h-[52px] flex-row items-center justify-center rounded-full border border-white/5 bg-[#17212B] active:opacity-80 disabled:opacity-40 ${
-				inactive ? "opacity-50 " : ""
-			}${
-				isCircle ? "w-[52px]" : "min-w-0 flex-1 gap-2 px-3"
+			accessibilityLabel={label ?? icon}
+			className={`h-[52px] flex-row items-center justify-center rounded-full bg-[#1A2834] active:opacity-80 disabled:opacity-40 ${
+				isCircle ? "w-[52px]" : "min-w-[112px] gap-2 px-5"
 			}`}
 		>
-			<Icon name={icon} size={isCircle ? 23 : 21} color={color ?? "#ffffff"} />
-			{isCircle ? null : (
+			<Icon
+				name={icon}
+				size={isCircle ? 25 : 24}
+				color="#FFFFFF"
+				fill={active ? "#FFFFFF" : "none"}
+			/>
+			{!isCircle && label ? (
 				<Text
-					className="min-w-0 text-[13px] font-extrabold"
-					style={{ color: color ?? "#ffffff" }}
+					className="min-w-0 text-[15px] font-semibold text-white"
 					numberOfLines={1}
 				>
 					{label}
 				</Text>
-			)}
+			) : null}
 		</Pressable>
 	);
 }
@@ -280,9 +277,6 @@ export default function VideoBlogScreen() {
 	const [transcriptionModalOpen, setTranscriptionModalOpen] = useState(false);
 	const [isQueueingTranscription, setIsQueueingTranscription] = useState(false);
 	const [controlsVisible, setControlsVisible] = useState(true);
-	const [controlsVisibleUntil, setControlsVisibleUntil] = useState(
-		() => Date.now() + CONTROLS_HIDE_DELAY_MS,
-	);
 	const [hasPlaybackEnded, setHasPlaybackEnded] = useState(false);
 	const [isMuted, setIsMuted] = useState(false);
 	const [videoRate, setVideoRate] =
@@ -329,12 +323,11 @@ export default function VideoBlogScreen() {
 	const title = getVideoTitle(blog, media);
 	const caption = getCaptionPreview(blog, title);
 	const loadedStatus = getLoadedStatus(status);
-	const durationLabel =
-		formatDuration(
-			loadedStatus?.durationMillis ? loadedStatus.durationMillis / 1000 : null,
-		) ?? formatDuration(mediaFile?.duration);
-	const positionLabel = formatDuration(
-		loadedStatus?.positionMillis ? loadedStatus.positionMillis / 1000 : null,
+	const durationSeconds =
+		(loadedStatus?.durationMillis ?? 0) / 1000 || mediaFile?.duration || 0;
+	const positionSeconds = (loadedStatus?.positionMillis ?? 0) / 1000;
+	const remainingLabel = formatDuration(
+		Math.max(0, durationSeconds - positionSeconds),
 	);
 	const progress =
 		loadedStatus?.durationMillis && loadedStatus.durationMillis > 0
@@ -346,13 +339,16 @@ export default function VideoBlogScreen() {
 					),
 				)
 			: 0;
-	const date = blog?.blogDate ?? blog?.createdAt;
-	const tags =
-		blog?.blogTags?.map((tag: any) => tag.tags?.title).filter(Boolean) ?? [];
 	const commentCount = blog?.blogs?.length ?? 0;
 	const channelLabel =
 		blog?.channel?.title || blog?.channel?.username || "Al-Ghurobaa";
 	const channelInitial = channelLabel.trim().charAt(0).toUpperCase() || "A";
+	const channelHandle = blog?.channel?.username
+		? `@${String(blog.channel.username).replace(/^@/, "")}`
+		: null;
+	const sourceLabel =
+		media?.author?.name || media?.album?.name || "Al-Ghurobaa";
+	const sourceInitial = sourceLabel.trim().charAt(0).toUpperCase() || "A";
 	const sourceUrl = (blog as any)?.sourceUrl;
 	const isPlaying = Boolean(loadedStatus?.isPlaying);
 	const activeMediaKey = getMediaKey(media);
@@ -385,13 +381,6 @@ export default function VideoBlogScreen() {
 		latestTranscriptionJob?.status === "completed"
 			? "done"
 			: latestTranscriptionJob?.status;
-	const transcriptSegments = useMemo(
-		() =>
-			(transcriptData?.segments ?? []).map((segment, index) =>
-				normalizeTranscriptSegment(segment as RawTranscriptSegment, index),
-			),
-		[transcriptData?.segments],
-	);
 	const transcriptBadge = getTranscriptionBadgeState({
 		...(media as any),
 		transcript: transcriptData
@@ -410,21 +399,6 @@ export default function VideoBlogScreen() {
 		duration: videoDurationSec,
 	});
 	const isVideoAlreadyTranscribed = transcriptBadge.isFullyTranscribed;
-	const transcriptBadgeColor =
-		transcriptBadge.tone === "success"
-			? colors.success
-			: transcriptBadge.tone === "warn"
-				? colors.warn
-				: transcriptBadge.tone === "muted"
-					? colors.warn
-					: colors.primary;
-	const transcribeActionLabel = queuedTranscriptionJob
-		? "Queued"
-		: runningTranscriptionJob
-			? "Running"
-			: isVideoAlreadyTranscribed
-				? "Transcript"
-				: "Transcribe";
 	const transcriptionStatusLabel = latestTranscriptionJob
 		? `Latest job: ${latestTranscriptionJob.status}`
 		: canCheckTranscriber
@@ -448,11 +422,20 @@ export default function VideoBlogScreen() {
 			onError: (e) => Alert.alert("Could not reset transcription", e.message),
 		}),
 	);
-
-	const wakeControls = useCallback(() => {
-		setControlsVisible(true);
-		setControlsVisibleUntil(Date.now() + CONTROLS_HIDE_DELAY_MS);
-	}, []);
+	const { data: reactions = [] } = useQuery({
+		..._trpc.blog.getReactions.queryOptions({ blogId: id || 0 }),
+		enabled: canQuery,
+	});
+	const heartReaction = reactions.find((reaction) => reaction.emoji === "❤️");
+	const toggleHeart = useMutation(
+		_trpc.blog.addReaction.mutationOptions({
+			onSettled: () => {
+				qc.invalidateQueries(
+					_trpc.blog.getReactions.queryOptions({ blogId: id }),
+				);
+			},
+		}),
+	);
 
 	useEffect(() => {
 		const previousHidden = useGlobalAudioBarStore.getState().hidden;
@@ -464,34 +447,11 @@ export default function VideoBlogScreen() {
 	}, [setGlobalAudioBarHidden]);
 
 	useEffect(() => {
-		if (
-			!videoUrl ||
-			!controlsVisible ||
-			commentsOpen ||
-			transcriptionModalOpen
-		) {
-			return;
-		}
-		const delayMs = Math.max(0, controlsVisibleUntil - Date.now());
-		const timeout = setTimeout(() => {
-			setControlsVisible(false);
-		}, delayMs);
-
-		return () => clearTimeout(timeout);
-	}, [
-		commentsOpen,
-		controlsVisible,
-		controlsVisibleUntil,
-		transcriptionModalOpen,
-		videoUrl,
-	]);
-
-	useEffect(() => {
 		if (!activeMediaKey) return;
 		setStatus(null);
 		setHasPlaybackEnded(false);
-		wakeControls();
-	}, [activeMediaKey, wakeControls]);
+		setControlsVisible(true);
+	}, [activeMediaKey]);
 
 	const handlePlaybackStatusUpdate = useCallback(
 		(nextStatus: AVPlaybackStatus) => {
@@ -500,19 +460,17 @@ export default function VideoBlogScreen() {
 			if (!nextLoadedStatus) return;
 			if (nextLoadedStatus.didJustFinish) {
 				setHasPlaybackEnded(true);
-				wakeControls();
 				return;
 			}
 			if (nextLoadedStatus.isPlaying) {
 				setHasPlaybackEnded(false);
 			}
 		},
-		[wakeControls],
+		[],
 	);
 
 	const togglePlayback = useCallback(async () => {
 		if (!videoRef.current) return;
-		wakeControls();
 		if (loadedStatus?.isPlaying) {
 			await videoRef.current.pauseAsync();
 			return;
@@ -527,7 +485,7 @@ export default function VideoBlogScreen() {
 			await videoRef.current.setPositionAsync(0);
 		}
 		await videoRef.current.playAsync();
-	}, [hasPlaybackEnded, loadedStatus, wakeControls]);
+	}, [hasPlaybackEnded, loadedStatus]);
 
 	const cycleVideoRate = useCallback(async () => {
 		const currentIndex = VIDEO_RATE_OPTIONS.findIndex(
@@ -536,53 +494,35 @@ export default function VideoBlogScreen() {
 		const nextRate =
 			VIDEO_RATE_OPTIONS[(currentIndex + 1) % VIDEO_RATE_OPTIONS.length] ?? 1;
 		setVideoRate(nextRate);
-		wakeControls();
 		await videoRef.current?.setRateAsync(nextRate, true);
-	}, [videoRate, wakeControls]);
+	}, [videoRate]);
 
 	const toggleMuted = useCallback(async () => {
 		const nextMuted = !isMuted;
 		setIsMuted(nextMuted);
-		wakeControls();
 		await videoRef.current?.setIsMutedAsync(nextMuted);
-	}, [isMuted, wakeControls]);
+	}, [isMuted]);
 
 	const handleVideoSurfacePress = useCallback(() => {
-		wakeControls();
-	}, [wakeControls]);
+		setControlsVisible((visible) => !visible);
+	}, []);
 
-	const handlePressTranscriptSegment = useCallback(
-		(segment: { startSec: number }, _index: number, shouldPlay: boolean) => {
-			if (!videoRef.current) return;
-			void videoRef.current
-				.setPositionAsync(segment.startSec * 1000)
-				.then(() => {
-					if (shouldPlay) return videoRef.current?.playAsync();
-				});
-		},
-		[],
-	);
+	const presentFullscreen = useCallback(async () => {
+		await videoRef.current?.presentFullscreenPlayer();
+	}, []);
 
 	async function shareVideo() {
 		await Share.share({
-			message: externalMedia?.externalUrl || videoUrl || sourceUrl || title,
+			message: videoUrl || sourceUrl || title,
 		});
 	}
 
 	async function openSource() {
-		const url = externalMedia?.externalUrl || sourceUrl;
-		if (!url) return;
-		await Linking.openURL(url);
+		if (!sourceUrl) return;
+		await Linking.openURL(sourceUrl);
 	}
 
 	async function queueVideoTranscription() {
-		if (externalMedia) {
-			Alert.alert(
-				"External video",
-				`Open this video in ${externalMedia.destination === "telegram" ? "Telegram" : "Facebook"}; it is too large for in-app download.`,
-			);
-			return false;
-		}
 		if (!localServicesEnabled) {
 			requestLocalServicesSetup();
 			return false;
@@ -719,12 +659,45 @@ export default function VideoBlogScreen() {
 		setTranscriptionModalOpen(true);
 	}
 
+	function handleMorePress() {
+		if (externalMedia) {
+			const destination =
+				externalMedia.destination === "telegram" ? "Telegram" : "Facebook";
+			Alert.alert("Video options", undefined, [
+				{
+					text: `Open in ${destination}`,
+					onPress: () => void Linking.openURL(externalMedia.externalUrl),
+				},
+				{ text: "Cancel", style: "cancel" },
+			]);
+			return;
+		}
+		const transcriptAction = {
+			text: "Transcript",
+			onPress: handleVideoTranscriptionPress,
+		};
+		const cancelAction = { text: "Cancel", style: "cancel" as const };
+
+		if (sourceUrl) {
+			Alert.alert("Video options", undefined, [
+				{
+					text: "Open source",
+					onPress: () => {
+						void openSource();
+					},
+				},
+				transcriptAction,
+				cancelAction,
+			]);
+			return;
+		}
+
+		Alert.alert("Video options", undefined, [transcriptAction, cancelAction]);
+	}
+
 	if (!canQuery || isLoading) {
 		return (
-			<View
-				className="flex-1 items-center justify-center"
-				style={{ backgroundColor: "#05070B" }}
-			>
+			<View className="flex-1 items-center justify-center bg-[#05070B]">
 				{isLoading ? (
 					<ActivityIndicator color={colors.primary} />
 				) : (
@@ -762,7 +735,15 @@ export default function VideoBlogScreen() {
 						</Text>
 					</Pressable>
 				) : videoUrl ? (
-					<Pressable className="flex-1" onPress={handleVideoSurfacePress}>
+					<Pressable
+						className="flex-1"
+						onPress={handleVideoSurfacePress}
+						accessibilityRole="button"
+						accessibilityLabel={
+							controlsVisible ? "Hide video controls" : "Show video controls"
+						}
+						testID="video-controls-surface"
+					>
 						<Video
 							key={activeMediaKey || videoUrl}
 							ref={videoRef}
@@ -787,165 +768,130 @@ export default function VideoBlogScreen() {
 			</View>
 
 			{controlsVisible ? (
-				<LinearGradient
-					pointerEvents="none"
-					colors={["rgba(0,0,0,0.72)", "transparent", "rgba(0,0,0,0.88)"]}
-					locations={[0, 0.38, 1]}
-					className="absolute inset-0"
-				/>
-			) : null}
-
-			{controlsVisible ? (
 				<View
-					className="absolute inset-x-0 flex-row items-center justify-between px-6"
-					style={{ top: insets.top + 12 }}
+					style={{
+						position: "absolute",
+						left: 0,
+						right: 0,
+						top: insets.top + 12,
+					}}
 				>
-					<Pressable
-						onPress={() => router.back()}
-						className="size-[52px] items-center justify-center rounded-full bg-[#1A2834] active:opacity-80"
-					>
-						<Icon name="ArrowLeft" size={27} className="text-white" />
-					</Pressable>
+					<View className="flex-row items-center justify-between px-6">
+						<Pressable
+							onPress={() => router.back()}
+							accessibilityLabel="Go back"
+							className="size-[52px] items-center justify-center rounded-full bg-[#1A2834] active:opacity-80"
+						>
+							<Icon name="ArrowLeft" size={27} color="#FFFFFF" />
+						</Pressable>
 
-					<Pressable
-						onPress={openSource}
-						disabled={!sourceUrl}
-						className="size-[52px] items-center justify-center rounded-full bg-[#1A2834] active:opacity-80 disabled:opacity-45"
-					>
-						<Icon
-							name="MoreHorizontal"
-							size={28}
-							className="text-white"
-							style={{ transform: [{ rotate: "90deg" }] }}
-						/>
-					</Pressable>
+						<Pressable
+							onPress={handleMorePress}
+							accessibilityLabel="Video options"
+							className="size-[52px] items-center justify-center rounded-full bg-[#1A2834] active:opacity-80"
+						>
+							<Icon
+								name="MoreHorizontal"
+								size={28}
+								className="rotate-90 text-white"
+							/>
+						</Pressable>
+					</View>
 				</View>
 			) : null}
 
 			{videoUrl && controlsVisible ? (
 				<View
-					className="absolute inset-x-0 px-6"
-					style={{ bottom: insets.bottom + VIDEO_META_BOTTOM_OFFSET }}
-				>
-					<View className="mb-3 flex-row items-center gap-3">
-						<View
-							className="size-12 items-center justify-center rounded-full border-2 border-white"
-							style={{ backgroundColor: withAlpha(colors.primary, 0.95) }}
-						>
-							<Text className="text-lg font-black text-primary-foreground">
-								{channelInitial}
-							</Text>
-						</View>
-						<View className="min-w-0 flex-1">
-							<Text
-								className="text-[15px] font-black text-white"
-								numberOfLines={1}
-							>
-								{channelLabel}
-							</Text>
-							<Text className="mt-0.5 text-[13px] font-semibold text-white/75">
-								{[
-									durationLabel ? `Video ${durationLabel}` : "Video",
-									date ? formatDate(date, "D MMM YYYY") : null,
-								]
-									.filter(Boolean)
-									.join(" - ")}
-							</Text>
-						</View>
-						<Pressable
-							onPress={openSource}
-							disabled={!sourceUrl}
-							className="h-11 items-center justify-center rounded-full bg-[#1E2B36] px-5 active:opacity-80 disabled:opacity-45"
-						>
-							<Text className="text-[14px] font-black text-white">Source</Text>
-						</Pressable>
-					</View>
-
-					<Text
-						className="text-[16px] font-semibold leading-5 text-white"
-						numberOfLines={2}
-					>
-						{title}
-					</Text>
-
-					{caption ? (
-						<Text
-							className="mt-1 text-[14px] font-medium leading-5 text-white/88"
-							numberOfLines={2}
-						>
-							{caption}
-						</Text>
-					) : null}
-
-					{tags.length > 0 ? (
-						<View className="mt-3 flex-row flex-wrap gap-2 pr-6">
-							{tags.slice(0, 4).map((tag: string) => (
-								<View
-									key={tag}
-									className="rounded-full border border-white/15 bg-white/10 px-2.5 py-1"
-								>
-									<Text className="text-[11px] font-bold text-white">
-										#{tag}
-									</Text>
-								</View>
-							))}
-						</View>
-					) : null}
-				</View>
-			) : null}
-
-			{transcriptSegments.length > 0 ? (
-				<View
-					pointerEvents={controlsVisible ? "none" : "auto"}
-					className="absolute inset-x-0"
 					style={{
-						top: insets.top + (controlsVisible ? 104 : 56),
-						bottom: controlsVisible
-							? insets.bottom + VIDEO_META_BOTTOM_OFFSET + 112
-							: insets.bottom + 34,
+						position: "absolute",
+						left: 0,
+						right: 0,
+						bottom: insets.bottom + VIDEO_META_BOTTOM_OFFSET,
 					}}
 				>
-					<KaraokeTranscript
-						segments={transcriptSegments}
-						positionSecOverride={(loadedStatus?.positionMillis ?? 0) / 1000}
-						autoScroll={isPlaying}
-						playbackEnabled
-						contentPaddingVertical={controlsVisible ? 48 : 120}
-						onPressSegment={handlePressTranscriptSegment}
-					/>
+					<View className="px-6">
+						<View className="mb-3 self-start rounded-lg bg-[#242424] px-3 py-1.5">
+							<View className="flex-row items-center gap-1.5">
+								<Text className="text-[13px] font-medium text-white/60">
+									From
+								</Text>
+								<View className="size-5 items-center justify-center rounded-full bg-primary">
+									<Text className="text-[10px] font-black text-primary-foreground">
+										{sourceInitial}
+									</Text>
+								</View>
+								<Text
+									className="max-w-44 text-[13px] font-black text-white"
+									numberOfLines={1}
+								>
+									{sourceLabel}
+								</Text>
+							</View>
+						</View>
+
+						<View className="mb-3 flex-row items-center gap-3">
+							<View className="size-[52px] items-center justify-center rounded-full border-2 border-white bg-primary">
+								<Text className="text-lg font-black text-primary-foreground">
+									{channelInitial}
+								</Text>
+							</View>
+							<View className="min-w-0 flex-1">
+								<Text
+									className="text-[16px] font-black text-white"
+									numberOfLines={1}
+								>
+									{channelLabel}
+								</Text>
+								{channelHandle ? (
+									<Text
+										className="mt-0.5 text-[13px] font-medium text-white/70"
+										numberOfLines={1}
+									>
+										{channelHandle}
+									</Text>
+								) : null}
+							</View>
+						</View>
+
+						<Text
+							className="text-[16px] font-medium leading-5 text-white"
+							numberOfLines={1}
+						>
+							{title}
+						</Text>
+						{caption ? (
+							<Text
+								className="mt-1 text-[13px] font-medium leading-5 text-white/75"
+								numberOfLines={1}
+							>
+								{caption}
+							</Text>
+						) : null}
+					</View>
 				</View>
 			) : null}
 
 			{controlsVisible ? (
 				<View
-					className="absolute inset-x-0 px-6"
-					style={{ bottom: insets.bottom + VIDEO_ACTIONS_BOTTOM_OFFSET }}
+					style={{
+						position: "absolute",
+						left: 0,
+						right: 0,
+						bottom: insets.bottom + VIDEO_ACTIONS_BOTTOM_OFFSET,
+					}}
 				>
-					<View className="flex-row items-center gap-2">
+					<View className="flex-row items-center gap-2 px-6">
 						<ActionButton
 							icon="MessageCircle"
 							label={commentCount > 0 ? String(commentCount) : "Comment"}
 							onPress={() => setCommentsOpen(true)}
 						/>
 						<ActionButton
-							icon="Captions"
-							label={
-								!localServicesEnabled
-									? "Enable local services"
-									: transcribeActionLabel === "Transcribe"
-									? "Transcript"
-									: transcribeActionLabel
-							}
-							onPress={handleVideoTranscriptionPress}
-							disabled={!mediaId}
-							inactive={!localServicesEnabled}
-							color={transcriptBadge.show ? transcriptBadgeColor : undefined}
-						/>
-						<ActionButton
-							icon="Compass"
-							label="Source"
-							onPress={openSource}
-							disabled={!sourceUrl}
+							icon="Heart"
+							onPress={() => toggleHeart.mutate({ blogId: id, emoji: "❤️" })}
+							disabled={toggleHeart.isPending}
+							active={Boolean(heartReaction?.reacted)}
+							shape="circle"
 						/>
 						<ActionButton
 							icon="Share"
@@ -959,16 +905,20 @@ export default function VideoBlogScreen() {
 
 			{controlsVisible ? (
 				<View
-					className="absolute inset-x-0"
 					style={{
-						bottom:
-							Math.max(insets.bottom, 0) + VIDEO_PROGRESS_BOTTOM_OFFSET,
+						position: "absolute",
+						left: 0,
+						right: 0,
+						bottom: Math.max(insets.bottom, 0) + VIDEO_PROGRESS_BOTTOM_OFFSET,
 					}}
 				>
 					<View className="h-[3px] bg-white/20">
 						<View
-							className="h-full bg-white"
-							style={{ width: `${progress}%` }}
+							style={{
+								height: "100%",
+								backgroundColor: "#FFFFFF",
+								width: `${progress}%`,
+							}}
 						/>
 					</View>
 				</View>
@@ -976,28 +926,30 @@ export default function VideoBlogScreen() {
 
 			{controlsVisible ? (
 				<View
-					className="absolute inset-x-0 px-6"
 					style={{
-						bottom:
-							Math.max(insets.bottom, 8) + VIDEO_TRANSPORT_BOTTOM_OFFSET,
+						position: "absolute",
+						left: 0,
+						right: 0,
+						bottom: Math.max(insets.bottom, 8) + VIDEO_TRANSPORT_BOTTOM_OFFSET,
 					}}
 				>
-					<View className="h-14 flex-row items-center">
+					<View className="h-14 flex-row items-center px-6">
 						<Pressable
 							onPress={togglePlayback}
 							disabled={!videoUrl}
 							className="size-12 items-center justify-center active:opacity-80 disabled:opacity-40"
 						>
-							<Icon
-								name={isPlaying ? "Pause" : "Play"}
-								size={isPlaying ? 34 : 32}
-								color="#FFFFFF"
-								fill="#FFFFFF"
-								style={isPlaying ? undefined : { marginLeft: 2 }}
-							/>
+							<View className={isPlaying ? undefined : "ml-0.5"}>
+								<Icon
+									name={isPlaying ? "Pause" : "Play"}
+									size={isPlaying ? 34 : 32}
+									color="#FFFFFF"
+									fill="#FFFFFF"
+								/>
+							</View>
 						</Pressable>
 						<Text className="ml-4 w-16 text-[15px] font-bold text-white/80">
-							{positionLabel ?? "0:00"}
+							{remainingLabel ? `-${remainingLabel}` : "-0:00"}
 						</Text>
 						<View className="flex-1" />
 						<Pressable
@@ -1010,13 +962,21 @@ export default function VideoBlogScreen() {
 						</Pressable>
 						<Pressable
 							onPress={toggleMuted}
-							className="ml-5 size-11 items-center justify-center active:opacity-80"
+							accessibilityLabel={isMuted ? "Unmute" : "Mute"}
+							className="ml-3 size-11 items-center justify-center active:opacity-80"
 						>
 							<Icon
 								name="Volume2"
 								size={30}
 								color={isMuted ? "rgba(255,255,255,0.45)" : "#FFFFFF"}
 							/>
+						</Pressable>
+						<Pressable
+							onPress={presentFullscreen}
+							accessibilityLabel="Enter fullscreen"
+							className="ml-2 size-11 items-center justify-center active:opacity-80"
+						>
+							<Icon name="Fullscreen" size={29} color="#FFFFFF" />
 						</Pressable>
 					</View>
 				</View>

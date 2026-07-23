@@ -1,5 +1,6 @@
 import { Pressable } from "@/components/ui/pressable";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
+import { BottomSheetFlatList } from "@gorhom/bottom-sheet";
 import { useFocusEffect } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
@@ -30,12 +31,12 @@ import { KaraokeTranscript } from "@/components/audio-blog-view/karaoke-transcri
 import { TashkeelToggle } from "@/components/audio-blog-view/tashkeel-toggle";
 import { TranscriptReadMode } from "@/components/audio-blog-view/transcript-read-mode";
 import {
-	buildTranscriptDocument,
-	normalizeTranscriptSegment,
-	selectTranscriptSegment,
 	type RawTranscriptSegment,
 	type TranscriptSegmentData,
 	type TranscriptTextSelection,
+	buildTranscriptDocument,
+	normalizeTranscriptSegment,
+	selectTranscriptSegment,
 } from "@/components/audio-blog-view/transcript-timing";
 import { BlogCard, type BlogItem } from "@/components/blog-card";
 import { AddToPlaylistModal } from "@/components/channel-chat/add-to-playlist-modal";
@@ -60,22 +61,22 @@ import { useTashkeelTranscript } from "@/hooks/use-tashkeel-transcript";
 import { useTranscriptionQueue } from "@/hooks/use-transcription-queue";
 import { getAudioPlayability } from "@/lib/audio-playability";
 import { getAudioDisplayTitle } from "@/lib/audio-title";
-import { uploadBlogMediaAsset, type BlobMediaUpload } from "@/lib/blob-upload";
-import { getBlogShareUrl } from "@/lib/share-links";
+import { type BlobMediaUpload, uploadBlogMediaAsset } from "@/lib/blob-upload";
 import { getTelegramFileUrl } from "@/lib/get-telegram-file";
-import { getMediaFileUrl } from "@/lib/media-source";
 import { getLocalApiQueryKey } from "@/lib/local-api-query";
+import { getMediaFileUrl } from "@/lib/media-source";
+import { getBlogShareUrl } from "@/lib/share-links";
+import { withAlpha } from "@/lib/theme";
 import { isHttpTranscriberUrl } from "@/lib/transcribe";
 import { getTranscriptionBadgeState } from "@/lib/transcription-status";
-import { withAlpha } from "@/lib/theme";
 import { getNextPlaybackRate } from "@/services/audio-player/notification-controls";
 import { useAppSettingsStore } from "@/store/app-settings-store";
 import { useAudioStore } from "@/store/audio-store";
 import { useRecentlyViewedStore } from "@/store/recently-viewed-store";
+import { getFacebookExternalMedia } from "@acme/blog/facebook-media";
+import type { RouterInputs } from "@api/trpc/routers/_app";
 import * as DocumentPicker from "expo-document-picker";
 import { Image } from "expo-image";
-import type { RouterInputs } from "@api/trpc/routers/_app";
-import { getFacebookExternalMedia } from "@acme/blog/facebook-media";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -837,9 +838,7 @@ function AnimatedPlayButton({
 					name={disabledReason ? "Lock" : isPlaying ? "Pause" : "Play"}
 					size={size >= 60 ? 28 : 22}
 					color={
-						disabledReason
-							? colors.mutedForeground
-							: colors.primaryForeground
+						disabledReason ? colors.mutedForeground : colors.primaryForeground
 					}
 				/>
 			)}
@@ -1091,7 +1090,10 @@ function PlayerSection({
 					return;
 				}
 
-				const targetPosition = Math.max(0, Math.min(d, dragValueRef.current * d));
+				const targetPosition = Math.max(
+					0,
+					Math.min(d, dragValueRef.current * d),
+				);
 				void Promise.resolve(seek(targetPosition))
 					.catch(() => undefined)
 					.finally(finishDragging);
@@ -1181,11 +1183,7 @@ function PlayerSection({
 					<Text
 						style={{ color: mutedFgColor, fontSize: 12, fontWeight: "500" }}
 					>
-						-
-						{formatMs(
-							Math.max(0, duration - displayedPositionMs),
-							showHours,
-						)}
+						-{formatMs(Math.max(0, duration - displayedPositionMs), showHours)}
 					</Text>
 				</View>
 			</View>
@@ -1991,8 +1989,15 @@ function AddToAlbumPicker({
 			accessibilityLabel="Add to album"
 			snapPoints={["70%"]}
 			enableDynamicSizing={false}
+			scrollableContent
 		>
-			<View style={{ backgroundColor: colors.card, overflow: "hidden" }}>
+			<View
+				style={{
+					flex: 1,
+					backgroundColor: colors.card,
+					overflow: "hidden",
+				}}
+			>
 				{/* Header */}
 				<View
 					style={{
@@ -2027,19 +2032,33 @@ function AddToAlbumPicker({
 
 				{/* Album list */}
 				{isLoading ? (
-					<View style={{ alignItems: "center", paddingVertical: 40 }}>
+					<View
+						style={{
+							flex: 1,
+							alignItems: "center",
+							justifyContent: "center",
+						}}
+					>
 						<ActivityIndicator color={colors.primary} />
 					</View>
 				) : !albums?.length ? (
-					<View style={{ alignItems: "center", paddingVertical: 40, gap: 8 }}>
+					<View
+						style={{
+							flex: 1,
+							alignItems: "center",
+							justifyContent: "center",
+							gap: 8,
+						}}
+					>
 						<Icon name="Disc3" size={36} className="text-muted-foreground" />
 						<Text style={{ color: colors.mutedForeground, fontSize: 14 }}>
 							No albums yet
 						</Text>
 					</View>
 				) : (
-					<FlatList
+					<BottomSheetFlatList
 						data={albums}
+						style={{ flex: 1 }}
 						keyExtractor={(item) => String(item.id)}
 						contentContainerStyle={{
 							paddingHorizontal: 16,
@@ -2242,12 +2261,13 @@ export default function AudioBlogScreen() {
 	const [pendingTranscriptWindows, setPendingTranscriptWindows] = useState<
 		number[]
 	>([]);
-	const [transcriptWindowChecked, setTranscriptWindowChecked] =
-		useState(false);
+	const [transcriptWindowChecked, setTranscriptWindowChecked] = useState(false);
 	const [transcriptError, setTranscriptError] = useState<string | null>(null);
 	const pendingTranscriptChunksRef = useRef<number[]>([]);
 	const pendingTranscriptWindowsRef = useRef<number[]>([]);
-	const transcriptWindowsRef = useRef<Record<number, SavedTranscriptWindow>>({});
+	const transcriptWindowsRef = useRef<Record<number, SavedTranscriptWindow>>(
+		{},
+	);
 	const failedTranscriptChunksRef = useRef<Set<number>>(new Set());
 	const failedTranscriptWindowsRef = useRef<Set<number>>(new Set());
 	const lastTranscriptTapRef = useRef(0);
@@ -2308,8 +2328,11 @@ export default function AudioBlogScreen() {
 	const isViewedAudioActive = Boolean(blog && loadedBlog?.id === blog.id);
 	const playerPositionMs = isViewedAudioActive ? positionMs : 0;
 	const playerPositionSec = playerPositionMs / 1000;
-	const transcriptAnchorSec =
-		isViewedAudioActive ? playerPositionSec : hasSeekTarget ? seekTargetSec : 0;
+	const transcriptAnchorSec = isViewedAudioActive
+		? playerPositionSec
+		: hasSeekTarget
+			? seekTargetSec
+			: 0;
 	const activeTranscriptChunkStart =
 		getTranscriptChunkStart(transcriptAnchorSec);
 	const activeTranscriptWindowStart =
@@ -2359,10 +2382,11 @@ export default function AudioBlogScreen() {
 	const playDisabledReason = externalMedia
 		? null
 		: viewedAudioItem
-		? getAudioPlayability((viewedAudioItem as any).audio).reason
-		: null;
+			? getAudioPlayability((viewedAudioItem as any).audio).reason
+			: null;
 	const visibleAudioError =
-		playDisabledReason ?? (isViewedAudioActive ? audioError : viewedPlaybackError);
+		playDisabledReason ??
+		(isViewedAudioActive ? audioError : viewedPlaybackError);
 	const audioTitle = getAudioDisplayTitle(
 		{ content: blog?.content, media: media as any },
 		"Untitled Audio",
@@ -2375,18 +2399,18 @@ export default function AudioBlogScreen() {
 	});
 	const showRelatedAlbumSuggestion = Boolean(
 		relatedAlbumSuggestion &&
-		mediaId &&
-		!media?.albumId &&
-		dismissedRelatedAlbumMediaId !== mediaId &&
-		!albumPickerVisible &&
-		!playlistPickerVisible &&
-		!moreMenuVisible &&
-		!sleepTimerVisible &&
-		!transcriptModalVisible &&
-		!audioArtSheetVisible &&
-		!channelPicturePickerVisible &&
-		!showFloatingControls &&
-		!showComments,
+			mediaId &&
+			!media?.albumId &&
+			dismissedRelatedAlbumMediaId !== mediaId &&
+			!albumPickerVisible &&
+			!playlistPickerVisible &&
+			!moreMenuVisible &&
+			!sleepTimerVisible &&
+			!transcriptModalVisible &&
+			!audioArtSheetVisible &&
+			!channelPicturePickerVisible &&
+			!showFloatingControls &&
+			!showComments,
 	);
 
 	const {
@@ -2400,8 +2424,7 @@ export default function AudioBlogScreen() {
 			q: channelPictureSearch.trim() || undefined,
 			size: 60,
 		}),
-		enabled:
-			channelPicturePickerVisible && typeof audioChannelId === "number",
+		enabled: channelPicturePickerVisible && typeof audioChannelId === "number",
 	});
 	const channelPicturePosts = useMemo(
 		() =>
@@ -2485,21 +2508,21 @@ export default function AudioBlogScreen() {
 	const transcriptionActionLabel = !localServicesEnabled
 		? "Enable local services"
 		: queuedTranscriptionJob
-		? "Queued"
-		: runningTranscriptionJob
-			? "Running"
-			: isCurrentAudioAlreadyTranscribed
-				? "Transcript"
-				: "Transcribe";
+			? "Queued"
+			: runningTranscriptionJob
+				? "Running"
+				: isCurrentAudioAlreadyTranscribed
+					? "Transcript"
+					: "Transcribe";
 	const transcriptionActionDescription = !localServicesEnabled
 		? "Choose a network IP before transcribing"
 		: queuedTranscriptionJob
-		? "Tap to remove this audio from the queue"
-		: runningTranscriptionJob
-			? "Transcription is currently running"
-			: isCurrentAudioAlreadyTranscribed
-				? "Clear transcript or transcribe again"
-				: "Queue this audio for local Whisper";
+			? "Tap to remove this audio from the queue"
+			: runningTranscriptionJob
+				? "Transcription is currently running"
+				: isCurrentAudioAlreadyTranscribed
+					? "Clear transcript or transcribe again"
+					: "Queue this audio for local Whisper";
 	const { data: localTranscriberHealth } = useQuery({
 		queryKey: getLocalApiQueryKey(activeIp, "blog.checkLocalTranscriber", {
 			baseUrl: canCheckTranscriber ? (transcriberUrl ?? undefined) : undefined,
@@ -2567,10 +2590,7 @@ export default function AudioBlogScreen() {
 		async (windowStartSec: number, options?: { force?: boolean }) => {
 			if (!mediaId) return;
 			const normalizedStart = getSavedTranscriptWindowStart(windowStartSec);
-			if (
-				!options?.force &&
-				transcriptWindowsRef.current[normalizedStart]
-			) {
+			if (!options?.force && transcriptWindowsRef.current[normalizedStart]) {
 				setTranscriptWindowChecked(true);
 				return;
 			}
@@ -2783,7 +2803,11 @@ export default function AudioBlogScreen() {
 			firstWindow?.previousWindowStartSec ??
 			Math.max(0, activeTranscriptWindowStart - SAVED_TRANSCRIPT_WINDOW_SEC);
 		void requestTranscriptWindow(target);
-	}, [activeTranscriptWindowStart, requestTranscriptWindow, transcriptWindowValues]);
+	}, [
+		activeTranscriptWindowStart,
+		requestTranscriptWindow,
+		transcriptWindowValues,
+	]);
 	const requestNextTranscriptWindow = useCallback(() => {
 		const lastWindow = transcriptWindowValues.at(-1);
 		if (lastWindow && lastWindow.nextWindowStartSec == null) return;
@@ -2794,7 +2818,11 @@ export default function AudioBlogScreen() {
 				: activeTranscriptWindowStart + SAVED_TRANSCRIPT_WINDOW_SEC);
 		if (target == null) return;
 		void requestTranscriptWindow(target);
-	}, [activeTranscriptWindowStart, requestTranscriptWindow, transcriptWindowValues]);
+	}, [
+		activeTranscriptWindowStart,
+		requestTranscriptWindow,
+		transcriptWindowValues,
+	]);
 
 	const channelName =
 		blog?.channel?.title || blog?.channel?.username || "Unknown channel";
@@ -2898,7 +2926,13 @@ export default function AudioBlogScreen() {
 		} finally {
 			setViewedPlaybackPending(false);
 		}
-	}, [externalMedia, isViewedAudioActive, loadAudio, playDisabledReason, viewedAudioItem]);
+	}, [
+		externalMedia,
+		isViewedAudioActive,
+		loadAudio,
+		playDisabledReason,
+		viewedAudioItem,
+	]);
 
 	const { mutate: addToAlbum, isPending: isAdding } = useMutation(
 		_trpc.album.addMediaToAlbum.mutationOptions({
@@ -3381,6 +3415,7 @@ export default function AudioBlogScreen() {
 						renderItem={() => null}
 						keyExtractor={(_, index) => String(index)}
 						showsVerticalScrollIndicator={false}
+						nestedScrollEnabled
 						scrollEventThrottle={mainScroll.scrollEventThrottle}
 						contentContainerStyle={{
 							paddingBottom: 120,
@@ -3596,13 +3631,13 @@ export default function AudioBlogScreen() {
 													{transcriptError
 														? "Transcript could not load"
 														: pendingTranscriptChunks.length > 0 ||
-															  pendingTranscriptWindows.length > 0
+																pendingTranscriptWindows.length > 0
 															? "Loading transcript..."
 															: !telegramFileId &&
-																  transcriptWindowChecked &&
-																  !hasSavedTranscript
-															? "Transcript unavailable for this audio"
-															: "Transcript will appear here"}
+																	transcriptWindowChecked &&
+																	!hasSavedTranscript
+																? "Transcript unavailable for this audio"
+																: "Transcript will appear here"}
 												</Text>
 												{transcriptError ? (
 													<Text
@@ -3762,7 +3797,10 @@ export default function AudioBlogScreen() {
 												>
 													<Icon name="Share" size={17} color="#fff" />
 													<Text className="text-sm font-extrabold text-white">
-														Open in {externalMedia.destination === "telegram" ? "Telegram" : "Facebook"}
+														Open in{" "}
+														{externalMedia.destination === "telegram"
+															? "Telegram"
+															: "Facebook"}
 													</Text>
 												</Pressable>
 											) : null}
@@ -4016,8 +4054,8 @@ export default function AudioBlogScreen() {
 									!isViewedAudioActive
 										? transcriptAnchorSec
 										: transcriptHighlightPaused
-										? frozenTranscriptPositionSec
-										: undefined
+											? frozenTranscriptPositionSec
+											: undefined
 								}
 							/>
 						</View>

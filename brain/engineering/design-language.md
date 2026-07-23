@@ -25,6 +25,7 @@ Captures the user-experience and visual-language constraints that shape the app 
 - Icons: Hugeicons via the shared `Icon` wrapper; icon color resolution must respect the active NativeWind color scheme.
 - Bottom sheets: `@gorhom/bottom-sheet` v5.
 - Audio UI uses persistent mini-player patterns and quick transport controls.
+- Full-screen video opens with its contextual controls visible and keeps them visible until the user taps the video surface. A surface tap toggles a distraction-free, video-only state; interacting with an individual control must not auto-hide the rest of the player UI.
 
 ### Maintenance Notes
 - When theme tokens or interaction patterns change, reflect the update here and in the relevant feature docs.

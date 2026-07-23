@@ -825,18 +825,20 @@ index 7190c9018f9c332a8f20658a498f4f1419cc3101..75eccb71db7822be377a4df6d2f6715f
      color?: number;
  }
 diff --git a/lib/src/interfaces/events/EventPayloadByEvent.d.ts b/lib/src/interfaces/events/EventPayloadByEvent.d.ts
-index 00082362b41e4d37d2d71f7b72393124014b2fb2..c7689105c745beb2b2c42b2b9b32b7489164d429 100644
+index 00082362b41e4d37d2d71f7b72393124014b2fb2..f45c1d1834c10e3b134fedb1925509affd8e84f8 100644
 --- a/lib/src/interfaces/events/EventPayloadByEvent.d.ts
 +++ b/lib/src/interfaces/events/EventPayloadByEvent.d.ts
-@@ -15,6 +15,7 @@ import type { RemoteJumpBackwardEvent } from './RemoteJumpBackwardEvent';
- import type { RemoteJumpForwardEvent } from './RemoteJumpForwardEvent';
- import type { RemotePlayIdEvent } from './RemotePlayIdEvent';
- import type { RemotePlaySearchEvent } from './RemotePlaySearchEvent';
-+import type { RemoteCustomActionEvent } from './RemoteCustomActionEvent';
+@@ -18,6 +18,9 @@ import type { RemotePlaySearchEvent } from './RemotePlaySearchEvent';
  import type { RemoteSeekEvent } from './RemoteSeekEvent';
  import type { RemoteSetRatingEvent } from './RemoteSetRatingEvent';
  import type { RemoteSkipEvent } from './RemoteSkipEvent';
-@@ -38,6 +39,7 @@ export type EventPayloadByEvent = {
++export interface RemoteCustomActionEvent {
++    id: string;
++}
+ export type EventPayloadByEvent = {
+     [Event.PlayerError]: PlayerErrorEvent;
+     [Event.PlaybackState]: PlaybackState;
+@@ -38,6 +41,7 @@ export type EventPayloadByEvent = {
      [Event.RemotePrevious]: never;
      [Event.RemoteJumpForward]: RemoteJumpForwardEvent;
      [Event.RemoteJumpBackward]: RemoteJumpBackwardEvent;
@@ -844,46 +846,6 @@ index 00082362b41e4d37d2d71f7b72393124014b2fb2..c7689105c745beb2b2c42b2b9b32b748
      [Event.RemoteSeek]: RemoteSeekEvent;
      [Event.RemoteSetRating]: RemoteSetRatingEvent;
      [Event.RemoteDuck]: RemoteDuckEvent;
-diff --git a/lib/src/interfaces/events/RemoteCustomActionEvent.d.ts b/lib/src/interfaces/events/RemoteCustomActionEvent.d.ts
-new file mode 100644
-index 0000000000000000000000000000000000000000..497777ea480a8e53528b3c6c136cf9a04d2f4d60
---- /dev/null
-+++ b/lib/src/interfaces/events/RemoteCustomActionEvent.d.ts
-@@ -0,0 +1,3 @@
-+export interface RemoteCustomActionEvent {
-+    id: string;
-+}
-diff --git a/lib/src/interfaces/events/RemoteCustomActionEvent.js b/lib/src/interfaces/events/RemoteCustomActionEvent.js
-new file mode 100644
-index 0000000000000000000000000000000000000000..cb0ff5c3b541f646105198ee23ac0fc3d805023e
---- /dev/null
-+++ b/lib/src/interfaces/events/RemoteCustomActionEvent.js
-@@ -0,0 +1 @@
-+export {};
-diff --git a/lib/src/interfaces/events/index.d.ts b/lib/src/interfaces/events/index.d.ts
-index 92b5df2a41eaf0d69e835d6c7f65dac011e91753..3a0f78172c87d679988f8e15763d7b7de91f6ea1 100644
---- a/lib/src/interfaces/events/index.d.ts
-+++ b/lib/src/interfaces/events/index.d.ts
-@@ -11,6 +11,7 @@ export * from './RemoteJumpBackwardEvent';
- export * from './RemoteJumpForwardEvent';
- export * from './RemotePlayIdEvent';
- export * from './RemotePlaySearchEvent';
-+export * from './RemoteCustomActionEvent';
- export * from './RemoteSeekEvent';
- export * from './RemoteSetRatingEvent';
- export * from './RemoteSkipEvent';
-diff --git a/lib/src/interfaces/events/index.js b/lib/src/interfaces/events/index.js
-index 92b5df2a41eaf0d69e835d6c7f65dac011e91753..3a0f78172c87d679988f8e15763d7b7de91f6ea1 100644
---- a/lib/src/interfaces/events/index.js
-+++ b/lib/src/interfaces/events/index.js
-@@ -11,6 +11,7 @@ export * from './RemoteJumpBackwardEvent';
- export * from './RemoteJumpForwardEvent';
- export * from './RemotePlayIdEvent';
- export * from './RemotePlaySearchEvent';
-+export * from './RemoteCustomActionEvent';
- export * from './RemoteSeekEvent';
- export * from './RemoteSetRatingEvent';
- export * from './RemoteSkipEvent';
 diff --git a/lib/src/trackPlayer.js b/lib/src/trackPlayer.js
 index 191e5dea7ce96f145d0a2ea16d9d925136ce4454..e8143775ff6ddc841bc56279755a124b96b39bd3 100644
 --- a/lib/src/trackPlayer.js
@@ -984,18 +946,21 @@ index 9657caec9a817093f3240cfa3cd4a572e664e172..eff67fe07bb3088b684c26eb07a329fa
    color?: number;
  }
 diff --git a/src/interfaces/events/EventPayloadByEvent.ts b/src/interfaces/events/EventPayloadByEvent.ts
-index a9d11920a69f0e3c6d358cd3aae796fb3dd1bad3..603027c61e139cadfa1695223811563f6659ec04 100644
+index a9d11920a69f0e3c6d358cd3aae796fb3dd1bad3..3dc97a38dad544c4d16cebc0743554e3fff809aa 100644
 --- a/src/interfaces/events/EventPayloadByEvent.ts
 +++ b/src/interfaces/events/EventPayloadByEvent.ts
-@@ -16,6 +16,7 @@ import type { RemoteJumpBackwardEvent } from './RemoteJumpBackwardEvent';
- import type { RemoteJumpForwardEvent } from './RemoteJumpForwardEvent';
- import type { RemotePlayIdEvent } from './RemotePlayIdEvent';
- import type { RemotePlaySearchEvent } from './RemotePlaySearchEvent';
-+import type { RemoteCustomActionEvent } from './RemoteCustomActionEvent';
- import type { RemoteSeekEvent } from './RemoteSeekEvent';
+@@ -20,6 +20,10 @@ import type { RemoteSeekEvent } from './RemoteSeekEvent';
  import type { RemoteSetRatingEvent } from './RemoteSetRatingEvent';
  import type { RemoteSkipEvent } from './RemoteSkipEvent';
-@@ -40,6 +41,7 @@ export type EventPayloadByEvent = {
+ 
++export interface RemoteCustomActionEvent {
++  id: string;
++}
++
+ export type EventPayloadByEvent = {
+   [Event.PlayerError]: PlayerErrorEvent;
+   [Event.PlaybackState]: PlaybackState;
+@@ -40,6 +44,7 @@ export type EventPayloadByEvent = {
    [Event.RemotePrevious]: never;
    [Event.RemoteJumpForward]: RemoteJumpForwardEvent;
    [Event.RemoteJumpBackward]: RemoteJumpBackwardEvent;
@@ -1003,27 +968,6 @@ index a9d11920a69f0e3c6d358cd3aae796fb3dd1bad3..603027c61e139cadfa1695223811563f
    [Event.RemoteSeek]: RemoteSeekEvent;
    [Event.RemoteSetRating]: RemoteSetRatingEvent;
    [Event.RemoteDuck]: RemoteDuckEvent;
-diff --git a/src/interfaces/events/RemoteCustomActionEvent.ts b/src/interfaces/events/RemoteCustomActionEvent.ts
-new file mode 100644
-index 0000000000000000000000000000000000000000..3c86d8281923428546b8b1f08a54ab3af2c12ed8
---- /dev/null
-+++ b/src/interfaces/events/RemoteCustomActionEvent.ts
-@@ -0,0 +1,3 @@
-+export interface RemoteCustomActionEvent {
-+  id: string;
-+}
-diff --git a/src/interfaces/events/index.ts b/src/interfaces/events/index.ts
-index 92b5df2a41eaf0d69e835d6c7f65dac011e91753..3a0f78172c87d679988f8e15763d7b7de91f6ea1 100644
---- a/src/interfaces/events/index.ts
-+++ b/src/interfaces/events/index.ts
-@@ -11,6 +11,7 @@ export * from './RemoteJumpBackwardEvent';
- export * from './RemoteJumpForwardEvent';
- export * from './RemotePlayIdEvent';
- export * from './RemotePlaySearchEvent';
-+export * from './RemoteCustomActionEvent';
- export * from './RemoteSeekEvent';
- export * from './RemoteSetRatingEvent';
- export * from './RemoteSkipEvent';
 diff --git a/src/trackPlayer.ts b/src/trackPlayer.ts
 index 6f6d7234979f31e4a2fdab0fdecb891f200c0892..09a2493e78492c7371e775342a76dad535a6a569 100644
 --- a/src/trackPlayer.ts
