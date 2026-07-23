@@ -1,84 +1,102 @@
+import {
+	AUDIO_JUMP_SECONDS,
+	type TrackPlayerAndroidCustomAction,
+	buildTrackPlayerNotificationOptions,
+	normalizePlaybackRate,
+} from "./notification-controls";
 import TrackPlayer, {
-  AndroidAudioContentType,
-  AppKilledPlaybackBehavior,
-  Capability,
-  isTrackPlayerAvailable,
+	AndroidAudioContentType,
+	AppKilledPlaybackBehavior,
+	Capability,
+	isTrackPlayerAvailable,
 } from "./track-player-safe";
 
 let setupPromise: Promise<void> | null = null;
 
-export const AUDIO_JUMP_SECONDS = 5;
+export { AUDIO_JUMP_SECONDS } from "./notification-controls";
 
-const playerCapabilities = [
-  Capability.Play,
-  Capability.Pause,
-  Capability.SeekTo,
-  Capability.SkipToPrevious,
-  Capability.JumpBackward,
-  Capability.JumpForward,
-  Capability.SkipToNext,
-];
+const notificationIcons = {
+	comments: "notification_comments",
+	jumpBackward: "notification_jump_backward_5",
+	jumpForward: "notification_jump_forward_5",
+	"speed-1": "notification_speed_1",
+	"speed-1-25": "notification_speed_1_25",
+	"speed-1-5": "notification_speed_1_5",
+	"speed-1-75": "notification_speed_1_75",
+	"speed-2": "notification_speed_2",
+} as const;
 
-const notificationCapabilities = [
-  Capability.SkipToPrevious,
-  Capability.JumpBackward,
-  Capability.Play,
-  Capability.JumpForward,
-  Capability.SkipToNext,
-];
+type TrackPlayerUpdateOptions = Parameters<
+	typeof TrackPlayer.updateOptions
+>[0] & {
+	androidCustomActions: TrackPlayerAndroidCustomAction[];
+};
 
-const notificationSpeedIcon = require("../../../assets/notification/notification_speed_1x.png");
-const notificationPlusIcon = require("../../../assets/notification/notification_plus.png");
+function getTrackPlayerUpdateOptions(
+	playbackRate: number,
+): TrackPlayerUpdateOptions {
+	const supportedPlaybackRate = normalizePlaybackRate(playbackRate);
 
-export async function setupTrackPlayer() {
-  if (!isTrackPlayerAvailable) {
-    throw new Error(
-      "Audio playback needs a fresh Expo development build with react-native-track-player included.",
-    );
-  }
+	return {
+		android: {
+			appKilledPlaybackBehavior: AppKilledPlaybackBehavior.ContinuePlayback,
+			alwaysPauseOnInterruption: true,
+		},
+		backwardJumpInterval: AUDIO_JUMP_SECONDS,
+		forwardJumpInterval: AUDIO_JUMP_SECONDS,
+		progressUpdateEventInterval: 0.25,
+		...buildTrackPlayerNotificationOptions({
+			capability: {
+				jumpBackward: Capability.JumpBackward,
+				jumpForward: Capability.JumpForward,
+				pause: Capability.Pause,
+				play: Capability.Play,
+				seekTo: Capability.SeekTo,
+			},
+			icons: notificationIcons,
+			playbackRate: supportedPlaybackRate,
+		}),
+	};
+}
 
-  if (!setupPromise) {
-    setupPromise = TrackPlayer.setupPlayer({
-      androidAudioContentType: AndroidAudioContentType.Speech,
-      autoHandleInterruptions: true,
-      autoUpdateMetadata: true,
-      minBuffer: 10,
-      maxBuffer: 50,
-      playBuffer: 1.5,
-      backBuffer: 30,
-    }).catch((error: unknown) => {
-      const code =
-        typeof error === "object" && error && "code" in error
-          ? String((error as { code?: unknown }).code)
-          : null;
+export async function setupTrackPlayer(playbackRate = 1) {
+	if (!isTrackPlayerAvailable) {
+		throw new Error(
+			"Audio playback needs a fresh Expo development build with react-native-track-player included.",
+		);
+	}
 
-      if (code === "player_already_initialized") {
-        return;
-      }
+	if (!setupPromise) {
+		setupPromise = TrackPlayer.setupPlayer({
+			androidAudioContentType: AndroidAudioContentType.Speech,
+			autoHandleInterruptions: true,
+			autoUpdateMetadata: true,
+			minBuffer: 10,
+			maxBuffer: 50,
+			playBuffer: 1.5,
+			backBuffer: 30,
+		}).catch((error: unknown) => {
+			const code =
+				typeof error === "object" && error && "code" in error
+					? String((error as { code?: unknown }).code)
+					: null;
 
-      setupPromise = null;
-      throw error;
-    });
-  }
+			if (code === "player_already_initialized") {
+				return;
+			}
 
-  await setupPromise;
+			setupPromise = null;
+			throw error;
+		});
+	}
 
-  await TrackPlayer.updateOptions({
-    android: {
-      appKilledPlaybackBehavior: AppKilledPlaybackBehavior.ContinuePlayback,
-      alwaysPauseOnInterruption: true,
-    },
-    backwardJumpInterval: AUDIO_JUMP_SECONDS,
-    capabilities: playerCapabilities,
-    compactCapabilities: [
-      Capability.JumpBackward,
-      Capability.Play,
-      Capability.JumpForward,
-    ],
-    forwardJumpInterval: AUDIO_JUMP_SECONDS,
-    previousIcon: notificationSpeedIcon,
-    nextIcon: notificationPlusIcon,
-    notificationCapabilities,
-    progressUpdateEventInterval: 0.25,
-  });
+	await setupPromise;
+
+	await TrackPlayer.updateOptions(getTrackPlayerUpdateOptions(playbackRate));
+}
+
+export async function refreshTrackPlayerNotificationOptions(
+	playbackRate: number,
+) {
+	await TrackPlayer.updateOptions(getTrackPlayerUpdateOptions(playbackRate));
 }

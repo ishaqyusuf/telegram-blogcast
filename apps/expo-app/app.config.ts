@@ -75,7 +75,7 @@ const config: ExpoConfig = {
 	name: variantConfig.name,
 	slug: "alghurobaa",
 	// slug: "prodesk",
-	version: "1.0.108",
+	version: "1.0.109",
 	orientation: "portrait",
 	icon: variantConfig.icons.app,
 	scheme: variantConfig.scheme,
@@ -135,6 +135,7 @@ const config: ExpoConfig = {
 
 	plugins: [
 		"./plugins/with-image-clipboard",
+		"./plugins/with-audio-notification-icons",
 		"expo-router",
 		[
 			"@sentry/react-native/expo",

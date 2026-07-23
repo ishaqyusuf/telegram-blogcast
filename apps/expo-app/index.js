@@ -1,11 +1,17 @@
-try {
-  const TrackPlayer = require("react-native-track-player").default;
+const { Platform } = require("react-native");
+const {
+	registerAndroidPlaybackService,
+} = require("./src/services/audio-player/register-playback-service");
 
-  TrackPlayer?.registerPlaybackService?.(
-    () => require("./src/services/audio-player/playback-service").playbackService,
-  );
-} catch (error) {
-  console.warn("[audio] Skipping TrackPlayer service registration", error);
+if (Platform.OS === "android") {
+	const TrackPlayer = require("react-native-track-player").default;
+
+	registerAndroidPlaybackService({
+		platform: Platform.OS,
+		register: (factory) => TrackPlayer.registerPlaybackService(factory),
+		serviceFactory: () =>
+			require("./src/services/audio-player/playback-service").playbackService,
+	});
 }
 
 require("expo-router/entry");

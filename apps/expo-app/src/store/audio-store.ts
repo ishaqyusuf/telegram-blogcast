@@ -1,6 +1,12 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as LegacyFileSystem from "expo-file-system/legacy";
-import { Image, PermissionsAndroid, Platform } from "react-native";
+import {
+	AppState,
+	DeviceEventEmitter,
+	Image,
+	PermissionsAndroid,
+	Platform,
+} from "react-native";
 import TrackPlayer, {
 	Event,
 	State,
@@ -14,7 +20,19 @@ import type { ItemProps } from "@/components/home-feed/home-feed-post-card";
 import { getAudioPlayability, isAudioPlayable } from "@/lib/audio-playability";
 import { getAudioDisplayTitle } from "@/lib/audio-title";
 import { getTelegramFileUrl } from "@/lib/get-telegram-file";
-import { setupTrackPlayer } from "@/services/audio-player/setup-track-player";
+import {
+	REMOTE_PLAYBACK_SNAPSHOT_EVENT,
+	type RemotePlaybackSnapshot,
+} from "@/services/audio-player/playback-service-handlers";
+import {
+	normalizePlaybackRate,
+	synchronizePlaybackRate,
+} from "@/services/audio-player/notification-controls";
+import { getRemotePlaybackStateUpdate } from "@/services/audio-player/remote-playback-state";
+import {
+	refreshTrackPlayerNotificationOptions,
+	setupTrackPlayer,
+} from "@/services/audio-player/setup-track-player";
 
 const LOADED_SOUND_MARKER = { engine: "track-player" } as const;
 const CONTEXT_REWIND_MS = 1500;
@@ -426,14 +444,21 @@ function buildTrack(blog: ItemProps, url: string, durationMs?: number): Track {
 }
 
 async function syncPlayerSnapshot() {
-	const [playbackState, progress] = await Promise.all([
+	const [playbackState, progress, playbackRate] = await Promise.all([
 		TrackPlayer.getPlaybackState(),
 		TrackPlayer.getProgress(),
+		TrackPlayer.getRate(),
 	]);
 
 	const playbackStateName = getPlaybackStateName(playbackState);
 	const isPlaying = isPlayingState(playbackStateName);
 	const current = useAudioStore.getState();
+	const supportedPlaybackRate = await synchronizePlaybackRate({
+		nativeRate: playbackRate,
+		storedRate: current.playbackRate,
+		setNativeRate: (rate) => TrackPlayer.setRate(rate),
+		refreshNotificationOptions: refreshTrackPlayerNotificationOptions,
+	});
 	const durationMs = secondsToMillis(progress.duration) || current.duration;
 	const positionMs = secondsToMillis(progress.position);
 	const hasEnded =
@@ -442,6 +467,7 @@ async function syncPlayerSnapshot() {
 		duration: durationMs,
 		hasEnded,
 		isPlaying,
+		playbackRate: supportedPlaybackRate,
 		playedAt: isPlaying ? Date.now() : current.playedAt,
 		...(current.isSeeking
 			? {}
@@ -513,6 +539,35 @@ function ensureTrackPlayerListeners() {
 				useAudioStore.getState().stopPositionTracking();
 			});
 		}),
+		DeviceEventEmitter.addListener(
+			REMOTE_PLAYBACK_SNAPSHOT_EVENT,
+			(snapshot: RemotePlaybackSnapshot) => {
+				const current = useAudioStore.getState();
+				useAudioStore.setState(
+					getRemotePlaybackStateUpdate({
+						snapshot,
+						current,
+						now: Date.now(),
+					}),
+				);
+
+				if (snapshot.isPlaying) {
+					useAudioStore.getState().startPositionTracking();
+				} else {
+					useAudioStore.getState().stopPositionTracking();
+				}
+			},
+		),
+		AppState.addEventListener("change", (nextState) => {
+			const state = useAudioStore.getState();
+			if (
+				nextState !== "active" ||
+				(!state.sound && !state.activeTrackId)
+			) {
+				return;
+			}
+			void useAudioStore.getState().syncPlaybackSnapshot();
+		}),
 	];
 
 	listenerCleanup = () => {
@@ -524,7 +579,9 @@ function ensureTrackPlayerListeners() {
 }
 
 async function preparePlayer() {
-	await setupTrackPlayer();
+	await setupTrackPlayer(
+		normalizePlaybackRate(useAudioStore.getState().playbackRate),
+	);
 	ensureTrackPlayerListeners();
 }
 
@@ -1047,8 +1104,30 @@ export const useAudioStore = create<AudioState>()(
 					playedAt,
 					position,
 					volume,
-					playbackRate,
+					playbackRate: persistedPlaybackRate,
 				} = get();
+				const playbackRate = normalizePlaybackRate(persistedPlaybackRate);
+				set({ playbackRate });
+
+				try {
+					await preparePlayer();
+					const activeTrack = await TrackPlayer.getActiveTrack();
+					if (activeTrack) {
+						set({
+							activeTrackId: String(
+								activeTrack.id ?? get().activeTrackId ?? "",
+							),
+							error: null,
+							isLoading: false,
+							playbackRate,
+							sound: LOADED_SOUND_MARKER,
+						});
+						await get().syncPlaybackSnapshot();
+						return;
+					}
+				} catch (err) {
+					console.warn("[audio] Failed to adopt active native track:", err);
+				}
 
         if (!blog) return;
 
@@ -1121,10 +1200,19 @@ export const useAudioStore = create<AudioState>()(
 			},
 
 			syncPlaybackSnapshot: async () => {
-				if (!get().sound) return;
-
 				try {
 					await preparePlayer();
+					const activeTrack = await TrackPlayer.getActiveTrack();
+					if (!activeTrack) {
+						set({ isPlaying: false, sound: null });
+						get().stopPositionTracking();
+						return;
+					}
+
+					set({
+						activeTrackId: String(activeTrack.id ?? get().activeTrackId ?? ""),
+						sound: LOADED_SOUND_MARKER,
+					});
 					const isPlaying = await syncPlayerSnapshot();
 					if (isPlaying) {
 						get().startPositionTracking();
@@ -1167,13 +1255,15 @@ export const useAudioStore = create<AudioState>()(
 			},
 
 			setPlaybackRate: async (rate: number) => {
-				set({ playbackRate: rate });
+				const playbackRate = normalizePlaybackRate(rate);
+				set({ playbackRate });
 
 				if (!get().sound) return;
 
 				try {
 					await preparePlayer();
-					await TrackPlayer.setRate(rate);
+					await TrackPlayer.setRate(playbackRate);
+					await refreshTrackPlayerNotificationOptions(playbackRate);
 				} catch (err) {
 					console.warn("[audio] setRate error", err);
 				}

@@ -54,9 +54,21 @@ function AudioBootstrap() {
 	const restoreAudio = useAudioStore((s) => s.restoreAudio);
 
 	useEffect(() => {
-		restoreAudio().catch((error) => {
-			console.warn("[audio] restore failed", error);
-		});
+		let didRestore = false;
+		const restoreOnce = () => {
+			if (didRestore) return;
+			didRestore = true;
+			restoreAudio().catch((error) => {
+				console.warn("[audio] restore failed", error);
+			});
+		};
+		const unsubscribe = useAudioStore.persist.onFinishHydration(restoreOnce);
+
+		if (useAudioStore.persist.hasHydrated()) {
+			restoreOnce();
+		}
+
+		return unsubscribe;
 	}, [restoreAudio]);
 
 	return null;

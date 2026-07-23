@@ -2,6 +2,7 @@ import { useAudioStore, type AudioPlayMode } from "@/store/audio-store";
 import { useGlobalAudioBarStore } from "@/store/global-audio-bar-store";
 import { useColors } from "@/hooks/use-color";
 import { getAudioDisplayTitle } from "@/lib/audio-title";
+import { getNextPlaybackRate } from "@/services/audio-player/notification-controls";
 import { usePathname, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -19,7 +20,6 @@ import {
   useFloatingFooterLayer,
 } from "@/components/floating-footer";
 
-const SPEED_OPTIONS = [1, 1.25, 1.5, 1.75, 2];
 const STALE_PAUSED_AUDIO_MS = 12 * 60 * 60 * 1000;
 const PLAY_MODE_META: Record<
   AudioPlayMode,
@@ -263,11 +263,7 @@ export function GlobalAudioBar() {
   const playerText = isDark ? "rgb(255, 255, 255)" : colors.foreground;
   const playerControl = isDark ? "rgb(34, 197, 94)" : colors.primary;
   const cycleSpeed = () => {
-    const idx = SPEED_OPTIONS.findIndex(
-      (rate) => Math.abs(playbackRate - rate) < 0.01,
-    );
-    const next = SPEED_OPTIONS[(idx + 1) % SPEED_OPTIONS.length]!;
-    setPlaybackRate(next);
+    setPlaybackRate(getNextPlaybackRate(playbackRate));
   };
 
   const openComments = () => {

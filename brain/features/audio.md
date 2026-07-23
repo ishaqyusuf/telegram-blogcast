@@ -38,9 +38,9 @@ Tracks the current audio playback experience, supporting components, and future 
 - iOS currently keeps the previous `expo-av` playback path; iOS lock-screen / Control Center support is intentionally deferred.
 - Android native service:
   - `apps/expo-app/index.js` registers the playback service before Expo Router starts.
-  - `apps/expo-app/src/services/audio-player/playback-service.ts` handles remote play, pause, seek, duck/interruption, and 15-second jump events.
-  - `apps/expo-app/src/services/audio-player/setup-track-player.ts` configures media notification capabilities and background behavior.
-  - `apps/expo-app/src/store/audio-store.ts` requests Android 13+ notification permission before playback starts so media controls can appear.
+  - `apps/expo-app/src/services/audio-player/playback-service.ts` handles remote play, pause, seek, duck/interruption, five-second jumps, playback-rate cycling, and comments navigation.
+  - `apps/expo-app/src/services/audio-player/setup-track-player.ts` configures media notification capabilities, custom Android actions, and background behavior.
+  - `apps/expo-app/src/store/audio-store.ts` requests Android 13+ notification permission before playback starts and synchronizes completed remote-action snapshots into the foreground player state.
 - Known tracked state:
   - URI
   - Local path
@@ -58,8 +58,10 @@ Tracks the current audio playback experience, supporting components, and future 
 - Audio-detail time labels preview the seek position while dragging and use hour-aware `HH:MM:SS` formatting for audio at least one hour long.
 - A naturally ended track is remembered as ended. With no repeat or queue play mode active, pressing play again seeks to 0 and restarts instead of resuming at the end or applying pause rewind.
 - Quick seek controls are part of the intended experience.
-- Android system player controls expose play/pause, seek, and 15-second jump backward/forward actions through media notifications, lock screen, and compatible headset/Bluetooth controls. The operating system owns the final notification/card visual treatment; the app supplies metadata, artwork, progress, and actions.
-- Custom skip icons exist because the desired transport affordance was not available out of the box.
+- Android system player controls mirror the mini-player: playback speed, back five seconds, system-managed play/pause, forward five seconds, and open comments. Android owns final placement and may reorder the expanded actions.
+- Speed and comments are real app-specific media-session actions rather than disguised previous/next controls. Album previous/next capabilities remain reserved for real queue navigation.
+- Notification speed cycles through `1× → 1.25× → 1.5× → 1.75× → 2× → 1×`; refreshing Track Player options updates the monochrome speed-state icon.
+- These controls depend on the checked-in native `react-native-track-player` patch and require a new Android development/preview binary. An OTA update alone cannot install this behavior.
 - Audio comments default to timestamp metadata on the play screen and render seekable timestamp chips.
 - Album suggestions are same-channel audio candidates, ranked by matching tags.
 - Playlists accept audio media only and skip duplicate additions.

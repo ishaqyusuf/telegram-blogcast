@@ -66,6 +66,7 @@ import { getLocalApiQueryKey } from "@/lib/local-api-query";
 import { isHttpTranscriberUrl } from "@/lib/transcribe";
 import { getTranscriptionBadgeState } from "@/lib/transcription-status";
 import { withAlpha } from "@/lib/theme";
+import { getNextPlaybackRate } from "@/services/audio-player/notification-controls";
 import { useAudioStore } from "@/store/audio-store";
 import { useRecentlyViewedStore } from "@/store/recently-viewed-store";
 import * as DocumentPicker from "expo-document-picker";
@@ -698,7 +699,6 @@ function AudioBookReferences({
 
 // ── Player controls ───────────────────────────────────────────────────────────
 
-const SPEED_OPTIONS = [0.75, 1.0, 1.25, 1.5, 2.0] as const;
 const SLEEP_OPTIONS = [5, 10, 15, 30, 45, 60] as const;
 
 function AnimatedPlayButton({
@@ -965,11 +965,7 @@ function PlayerSection({
 		theme === "dark" ? "rgba(255,255,255,0.2)" : colors.muted;
 
 	const cycleSpeed = () => {
-		const idx = SPEED_OPTIONS.findIndex(
-			(r) => Math.abs(playbackRate - r) < 0.01,
-		);
-		const next = SPEED_OPTIONS[(idx + 1) % SPEED_OPTIONS.length]!;
-		setPlaybackRate(next);
+		setPlaybackRate(getNextPlaybackRate(playbackRate));
 	};
 	const [trackWidth, setTrackWidth] = useState(0);
 	const [dragPositionMs, setDragPositionMs] = useState<number | null>(null);
@@ -1288,11 +1284,7 @@ function FloatingPlayerWidget({
 	const canSeek = isActiveAudio && Boolean(onSeek) && duration > 0;
 
 	const cycleSpeed = () => {
-		const idx = SPEED_OPTIONS.findIndex(
-			(rate) => Math.abs(playbackRate - rate) < 0.01,
-		);
-		const next = SPEED_OPTIONS[(idx + 1) % SPEED_OPTIONS.length]!;
-		setPlaybackRate(next);
+		setPlaybackRate(getNextPlaybackRate(playbackRate));
 	};
 
 	if (!visible) return null;
