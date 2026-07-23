@@ -27,6 +27,7 @@ import {
 } from "react-native";
 
 import { KaraokeTranscript } from "@/components/audio-blog-view/karaoke-transcript";
+import { TashkeelToggle } from "@/components/audio-blog-view/tashkeel-toggle";
 import { TranscriptReadMode } from "@/components/audio-blog-view/transcript-read-mode";
 import {
 	buildTranscriptDocument,
@@ -55,6 +56,7 @@ import { Toast } from "@/components/ui/toast";
 import { useColors } from "@/hooks/use-color";
 import { usePlayHistorySync } from "@/hooks/use-play-history-sync";
 import { useScrollChrome } from "@/hooks/use-scroll-chrome";
+import { useTashkeelTranscript } from "@/hooks/use-tashkeel-transcript";
 import { useTranscriptionQueue } from "@/hooks/use-transcription-queue";
 import { getAudioPlayability } from "@/lib/audio-playability";
 import { getAudioDisplayTitle } from "@/lib/audio-title";
@@ -67,6 +69,7 @@ import { isHttpTranscriberUrl } from "@/lib/transcribe";
 import { getTranscriptionBadgeState } from "@/lib/transcription-status";
 import { withAlpha } from "@/lib/theme";
 import { getNextPlaybackRate } from "@/services/audio-player/notification-controls";
+import { useAppSettingsStore } from "@/store/app-settings-store";
 import { useAudioStore } from "@/store/audio-store";
 import { useRecentlyViewedStore } from "@/store/recently-viewed-store";
 import * as DocumentPicker from "expo-document-picker";
@@ -2168,6 +2171,12 @@ export default function AudioBlogScreen() {
 	const router = useRouter();
 	const qc = useQueryClient();
 	const colors = useColors();
+	const transcriptTashkeelEnabled = useAppSettingsStore(
+		(state) => state.transcriptTashkeelEnabled,
+	);
+	const setTranscriptTashkeelEnabled = useAppSettingsStore(
+		(state) => state.setTranscriptTashkeelEnabled,
+	);
 	const {
 		activeIp,
 		connectionStatus,
@@ -2719,7 +2728,7 @@ export default function AudioBlogScreen() {
 		]);
 	}, [id, mediaId, mediaTranscriptionJobs, qc]);
 
-	const transcriptSegments = useMemo(() => {
+	const sourceTranscriptSegments = useMemo(() => {
 		const segmentsByKey = new Map<
 			string,
 			ReturnType<typeof normalizeTranscriptSegment>
@@ -2747,10 +2756,27 @@ export default function AudioBlogScreen() {
 
 		return [...segmentsByKey.values()].sort((a, b) => a.startSec - b.startSec);
 	}, [transcriptChunks, transcriptWindowValues]);
+	const {
+		segments: transcriptSegments,
+		isLoading: isTashkeelLoading,
+		error: tashkeelError,
+	} = useTashkeelTranscript(
+		sourceTranscriptSegments,
+		transcriptTashkeelEnabled,
+	);
 	const transcriptDocument = useMemo(
 		() => buildTranscriptDocument(transcriptSegments),
 		[transcriptSegments],
 	);
+	const toggleTranscriptTashkeel = useCallback(() => {
+		setMarkedTranscriptSelection(null);
+		setTranscriptTashkeelEnabled(!transcriptTashkeelEnabled);
+	}, [setTranscriptTashkeelEnabled, transcriptTashkeelEnabled]);
+
+	useEffect(() => {
+		if (!tashkeelError || !transcriptTashkeelEnabled) return;
+		Alert.alert("Arabic vowels unavailable", tashkeelError);
+	}, [tashkeelError, transcriptTashkeelEnabled]);
 	const requestPreviousTranscriptWindow = useCallback(() => {
 		const firstWindow = transcriptWindowValues[0];
 		const target =
@@ -3497,6 +3523,12 @@ export default function AudioBlogScreen() {
 													color={transcriptBadgeColor}
 												/>
 											</Pressable>
+											<TashkeelToggle
+												enabled={transcriptTashkeelEnabled}
+												isLoading={isTashkeelLoading}
+												onPress={toggleTranscriptTashkeel}
+												size="compact"
+											/>
 											<Pressable
 												onPress={() => setMoreMenuVisible(true)}
 												className="size-10 items-center justify-center rounded-full active:bg-black/20"
@@ -3940,6 +3972,11 @@ export default function AudioBlogScreen() {
 								{audioTitle}
 							</Text>
 							<View className="flex-row items-center gap-2">
+								<TashkeelToggle
+									enabled={transcriptTashkeelEnabled}
+									isLoading={isTashkeelLoading}
+									onPress={toggleTranscriptTashkeel}
+								/>
 								<Pressable
 									onPress={toggleTranscriptHighlightPause}
 									className="size-11 items-center justify-center rounded-full active:bg-white/10"

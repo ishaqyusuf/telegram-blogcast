@@ -135,6 +135,7 @@ const config: ExpoConfig = {
 
 	plugins: [
 		"./plugins/with-image-clipboard",
+		"./plugins/with-onnxruntime-package",
 		"./plugins/with-audio-notification-icons",
 		"expo-router",
 		[

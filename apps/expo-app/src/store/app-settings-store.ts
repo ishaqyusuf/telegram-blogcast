@@ -24,6 +24,7 @@ type AppSettingsState = {
 	localTranscriberBaseUrl: string | null;
 	transcriptionModel: TranscriptionModel;
 	albumOrganizerModel: AlbumOrganizerModel;
+	transcriptTashkeelEnabled: boolean;
 	setLanguage: (language: AppLanguage) => void;
 	setReaderFontSize: (fontSize: number) => void;
 	setReaderLineSpacing: (lineSpacing: ReaderLineSpacing) => void;
@@ -35,6 +36,7 @@ type AppSettingsState = {
 	setLocalTranscriberBaseUrl: (url: string | null) => void;
 	setTranscriptionModel: (model: TranscriptionModel) => void;
 	setAlbumOrganizerModel: (model: AlbumOrganizerModel) => void;
+	setTranscriptTashkeelEnabled: (enabled: boolean) => void;
 };
 
 export const useAppSettingsStore = create<AppSettingsState>()(
@@ -51,6 +53,7 @@ export const useAppSettingsStore = create<AppSettingsState>()(
 			localTranscriberBaseUrl: null,
 			transcriptionModel: "whisper-local",
 			albumOrganizerModel: "deepseek",
+			transcriptTashkeelEnabled: false,
 			setLanguage: (language) => set({ language }),
 			setReaderFontSize: (fontSize) =>
 				set({ readerFontSize: Math.max(14, Math.min(28, fontSize)) }),
@@ -93,6 +96,8 @@ export const useAppSettingsStore = create<AppSettingsState>()(
 				set({ localTranscriberBaseUrl: url }),
 			setTranscriptionModel: (model) => set({ transcriptionModel: model }),
 			setAlbumOrganizerModel: (model) => set({ albumOrganizerModel: model }),
+			setTranscriptTashkeelEnabled: (transcriptTashkeelEnabled) =>
+				set({ transcriptTashkeelEnabled }),
 		}),
 		{
 			name: "app-settings",
