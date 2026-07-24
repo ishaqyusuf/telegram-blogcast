@@ -1,83 +1,30 @@
 export type LocalServicesSessionStatus =
 	| "initializing"
-	| "prompting"
 	| "enabled"
 	| "disabled";
 
 export type LocalServicesIpMode = "automatic" | "manual";
-export type LocalServicesConnectionStatus =
-	| "checking"
-	| "online"
-	| "offline";
-export type LocalServicesProbeTrigger =
-	| "initial"
-	| "offline-retry"
-	| "foreground";
-
-export type LocalServicesSessionEvent =
-	| "request-setup"
-	| "begin-resolution"
-	| "finish-enabled"
-	| "finish-disabled";
+export type LocalServicesConnectionStatus = "checking" | "online" | "offline";
+export type LocalServicesDiscoveryProgress = {
+	attempted: number;
+	total: number;
+} | null;
 
 const MAX_RECENT_IPS = 8;
 
 export function getInitialLocalServicesSessionStatus(
-	appVariant: string | null | undefined,
+	_appVariant: string | null | undefined,
 ): LocalServicesSessionStatus {
+	return "initializing";
+}
+
+export function getLocalServicesIpMode(
+	appVariant: string | null | undefined,
+): LocalServicesIpMode {
 	const normalized = (appVariant ?? "production").toLowerCase();
 	return normalized === "development" || normalized === "dev"
-		? "enabled"
-		: "prompting";
-}
-
-export function resolveInitialLocalServicesSession(input: {
-	appVariant: string | null | undefined;
-	currentIp?: string | null;
-	preferredSavedIp?: string | null;
-}): {
-	status: LocalServicesSessionStatus;
-	ipMode: LocalServicesIpMode;
-	activeIp: string | null;
-} {
-	const status = getInitialLocalServicesSessionStatus(input.appVariant);
-	const ipMode: LocalServicesIpMode =
-		status === "enabled" ? "automatic" : "manual";
-	const candidate = normalizeIpv4Input(
-		ipMode === "automatic"
-			? (input.currentIp ?? "")
-			: (input.preferredSavedIp ?? ""),
-	);
-
-	return {
-		status,
-		ipMode,
-		activeIp: isValidIpv4Address(candidate) ? candidate : null,
-	};
-}
-
-export function shouldProbeLocalServices(input: {
-	status: LocalServicesSessionStatus;
-	hasActiveIp: boolean;
-	connectionStatus: LocalServicesConnectionStatus;
-	trigger: LocalServicesProbeTrigger;
-}) {
-	if (input.status !== "enabled" || !input.hasActiveIp) return false;
-	if (input.trigger === "offline-retry") {
-		return input.connectionStatus === "offline";
-	}
-	return true;
-}
-
-export function transitionLocalServicesSession(
-	current: LocalServicesSessionStatus,
-	event: LocalServicesSessionEvent,
-): LocalServicesSessionStatus {
-	if (event === "request-setup") return "prompting";
-	if (event === "begin-resolution") return "initializing";
-	if (event === "finish-enabled") return "enabled";
-	if (event === "finish-disabled") return "disabled";
-	return current;
+		? "automatic"
+		: "manual";
 }
 
 export function normalizeIpv4Input(value: string) {

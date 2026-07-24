@@ -82,9 +82,9 @@ export default function SettingsScreen() {
     setLocalServicesIpInput(activeIp ?? "");
   }, [activeIp]);
 
-  function saveAndCheckLocalServicesIp() {
+  async function saveAndCheckLocalServicesIp() {
     if (ipMode === "automatic") {
-      retryConnection();
+      await retryConnection();
       return;
     }
     const normalizedIp = normalizeIpv4Input(localServicesIpInput);
@@ -92,10 +92,13 @@ export default function SettingsScreen() {
       setLocalServicesIpMessage("Enter a valid IPv4 address.");
       return;
     }
-    enableWithIp(normalizedIp);
+    setLocalServicesIpMessage(`Checking ${normalizedIp}…`);
+    const connected = await enableWithIp(normalizedIp);
     const apiBaseUrl = `http://${normalizedIp}:${LOCAL_API_PORT}`;
     setLocalServicesIpMessage(
-      `Saved ${apiBaseUrl}. The app will reconnect automatically.`,
+      connected
+        ? `Connected to ${apiBaseUrl}. The app will reconnect automatically.`
+        : `Could not connect to ${apiBaseUrl}. Check the computer and network.`,
     );
   }
 
@@ -462,7 +465,7 @@ export default function SettingsScreen() {
                     key={ip}
                     onPress={() => {
                       setLocalServicesIpInput(ip);
-                      enableWithIp(ip);
+                      void enableWithIp(ip);
                     }}
                     className="rounded-full bg-secondary px-3 py-2 active:opacity-70"
                   >

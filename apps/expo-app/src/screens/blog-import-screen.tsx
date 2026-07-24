@@ -3,10 +3,7 @@ import { useLocalServicesSession } from "@/components/local-services";
 import { Icon } from "@/components/ui/icon";
 import { Pressable } from "@/components/ui/pressable";
 import { useColors } from "@/hooks/use-color";
-import {
-  checkLocalApiBaseUrl,
-  LOCAL_API_PORT,
-} from "@/lib/local-api-ip-cache";
+import { checkLocalApiBaseUrl, LOCAL_API_PORT } from "@/lib/local-api-ip-cache";
 import {
   isValidIpv4Address,
   normalizeIpv4Input,
@@ -68,45 +65,42 @@ export default function BlogImportScreen() {
   const loadedIpRef = useRef<string | null>(null);
   const cleanBaseUrl = stripTrpcPath(urls?.apiBaseUrl ?? "");
 
-  const loadApiState = useCallback(
-    async () => {
-      if (!trpcClient || !activeIp || !cleanBaseUrl) {
-        setStatus("offline");
-        setMessage("Enter your local API IP, for example 192.168.1.20.");
-        return;
-      }
+  const loadApiState = useCallback(async () => {
+    if (!trpcClient || !activeIp || !cleanBaseUrl) {
+      setStatus("offline");
+      setMessage("Enter your local API IP, for example 192.168.1.20.");
+      return;
+    }
 
-      setStatus("checking");
-      setAttemptLabel(`Checking ${activeIp}`);
-      setMessage("");
-      try {
-        const ok = await checkLocalApiBaseUrl(cleanBaseUrl);
-        if (!ok) throw new Error("Health check failed.");
-        const [nextChannels, nextFetcherState] = await Promise.all([
-          trpcClient.channel.getChannels.query(),
-          trpcClient.channel.getFetcherState.query(),
-        ]);
-        setChannels(nextChannels as ChannelRow[]);
-        setFetcherState(nextFetcherState as FetcherState);
-        setApiIpInput(activeIp);
-        setStatus("online");
-        setMessage(
-          `Local API connected at ${activeIp}. Import continues in the API process after you start it.`,
-        );
-        setLocalApiBaseUrl(cleanBaseUrl);
-      } catch (error) {
-        setStatus("offline");
-        setMessage(
-          error instanceof Error
-            ? error.message
-            : "Could not reach the local API.",
-        );
-      } finally {
-        setAttemptLabel("");
-      }
-    },
-    [activeIp, cleanBaseUrl, setLocalApiBaseUrl, trpcClient],
-  );
+    setStatus("checking");
+    setAttemptLabel(`Checking ${activeIp}`);
+    setMessage("");
+    try {
+      const ok = await checkLocalApiBaseUrl(cleanBaseUrl);
+      if (!ok) throw new Error("Health check failed.");
+      const [nextChannels, nextFetcherState] = await Promise.all([
+        trpcClient.channel.getChannels.query(),
+        trpcClient.channel.getFetcherState.query(),
+      ]);
+      setChannels(nextChannels as ChannelRow[]);
+      setFetcherState(nextFetcherState as FetcherState);
+      setApiIpInput(activeIp);
+      setStatus("online");
+      setMessage(
+        `Local API connected at ${activeIp}. Import continues in the API process after you start it.`,
+      );
+      setLocalApiBaseUrl(cleanBaseUrl);
+    } catch (error) {
+      setStatus("offline");
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Could not reach the local API.",
+      );
+    } finally {
+      setAttemptLabel("");
+    }
+  }, [activeIp, cleanBaseUrl, setLocalApiBaseUrl, trpcClient]);
 
   const connectManualIp = useCallback(async () => {
     const ip = normalizeIpv4Input(apiIpInput);
@@ -122,7 +116,12 @@ export default function BlogImportScreen() {
     setStatus("checking");
     setAttemptLabel(`Switching to ${ip}`);
     loadedIpRef.current = null;
-    enableWithIp(ip);
+    const connected = await enableWithIp(ip);
+    if (!connected) {
+      setStatus("offline");
+      setAttemptLabel("");
+      setMessage(`Could not reach the local API at ${ip}.`);
+    }
   }, [activeIp, apiIpInput, enableWithIp, loadApiState]);
 
   useEffect(() => {

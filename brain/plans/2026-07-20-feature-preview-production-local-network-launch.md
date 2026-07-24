@@ -1,7 +1,11 @@
 # Preview/Production Local Network Launch
 
 ## Status
-Done
+Superseded
+
+The cold-launch prompt behavior was replaced by the silent discovery and
+home-header status flow documented in
+`brain/plans/2026-07-24-feature-silent-local-services-discovery-status.md`.
 
 ## Created Date
 2026-07-20

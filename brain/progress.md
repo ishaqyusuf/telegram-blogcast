@@ -1,5 +1,15 @@
 # Progress
 
+## 2026-07-24
+
+### Silent Local Services Discovery And Home Status
+- Status: Done.
+- Source mode: User-approved implementation plan.
+- Source changed: selected-IP-first Local Services discovery, bounded history probing, strict gateway health identity, foreground/network/backoff retries, verified-availability feature gating, connected/checking/offline floating sheet, home-header status control, and manual Settings/import connection feedback.
+- Brain changed: `brain/plans/2026-07-24-feature-silent-local-services-discovery-status.md`, the superseded cold-launch plan, mobile build-variant behavior, completed tasks, and progress.
+- Validation passed: 13 focused Local Services tests, 62-test repository Bun suite, focused Expo ESLint, preview Android export, scoped `git diff --check`, and physical Android dark-mode QA of the checking/connected home-header states.
+- Validation limitation: the full Expo typecheck still reports its existing project-wide diagnostics; none reference the touched Local Services, header, Settings, or import implementation files.
+
 ## 2026-07-22
 
 ### Oversized Facebook Media External Playback
