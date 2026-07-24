@@ -26,6 +26,7 @@
     "studio": "bunx with-env prisma studio --port 5556",
     "reset-facebook-media-imports": "bun run with-env bun scripts/reset-facebook-media-imports.ts",
     "mark-facebook-external-media": "bun run with-env bun scripts/mark-facebook-external-media.ts",
+    "normalize-channel-content-types": "bun --env-file=../../.env scripts/normalize-channel-content-types.ts",
     "with-env": "dotenv -e ../../.env --"
   },
   "dependencies": {

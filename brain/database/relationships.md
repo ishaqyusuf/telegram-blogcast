@@ -22,6 +22,7 @@ Captures the important cross-domain relationships in the data model at a high le
   - `AlbumAutoIndexAlbumSuggestion` groups proposed media under an existing album id.
   - `AlbumAutoIndexMediaSuggestion` stores proposed media ids for review before any actual `Media.albumId` updates happen.
 - Imported books are canonical read-only content; user annotations, comments, and audio references live in separate models so they can change without editing source text.
+- A channel owns one global content-filter state directly on `Channel`; its selected type allow-list governs related `Blog` rows in Home, channel, and Search queries.
 
 ### Detailed Mapping TODO
 - Call out many-to-many joins that matter for feature work.

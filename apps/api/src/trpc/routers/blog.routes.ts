@@ -11,6 +11,12 @@ import {
 	transcribeRangeSchema,
 	transcriptChunkSchema,
 } from "../../queries/blog";
+import {
+	CHANNEL_CONTENT_TYPES,
+	channelContentVisibilityWhere,
+	getBlogContentTypeWhere,
+	getEffectiveChannelContentType,
+} from "../../queries/channel-content-filter";
 import { posts, postsSchema } from "../../queries/posts";
 // apps/api/src/routers/blog.route.ts
 import { createTRPCRouter, publicProcedure } from "../init";
@@ -1368,15 +1374,14 @@ export const blogRoutes = createTRPCRouter({
 				...searchWhere,
 				...channelWhere,
 				...albumWhere,
-				AND: [visibleMainBlogWhere],
+				AND: [visibleMainBlogWhere, channelContentVisibilityWhere],
 			};
-			const itemWhere: Prisma.BlogWhereInput = {
-				...baseWhere,
-				...(input.type ? { type: input.type } : {}),
-			};
+			const itemWhere: Prisma.BlogWhereInput = input.type
+				? { AND: [baseWhere, getBlogContentTypeWhere(input.type)] }
+				: baseWhere;
 			const limit = input.limit;
 
-			const [rows, totalCount, allCount, typeGroups] = await Promise.all([
+			const [rows, totalCount, allCount, typeCounts] = await Promise.all([
 				db.blog.findMany({
 					where: itemWhere,
 					take: limit + 1,
@@ -1386,6 +1391,7 @@ export const blogRoutes = createTRPCRouter({
 						id: true,
 						content: true,
 						type: true,
+						telegramMessageId: true,
 						source: true,
 						sourceUrl: true,
 						meta: true,
@@ -1425,29 +1431,31 @@ export const blogRoutes = createTRPCRouter({
 				}),
 				db.blog.count({ where: itemWhere }),
 				db.blog.count({ where: baseWhere }),
-				db.blog.groupBy({
-					by: ["type"],
-					where: baseWhere,
-					_count: { _all: true },
-				}),
+				Promise.all(
+					CHANNEL_CONTENT_TYPES.map(async (type) => ({
+						type,
+						count: await db.blog.count({
+							where: { AND: [baseWhere, getBlogContentTypeWhere(type)] },
+						}),
+					})),
+				),
 			]);
 
 			const hasNextPage = rows.length > limit;
 			const data = hasNextPage ? rows.slice(0, limit) : rows;
+			const normalizedData = data.map((blog) => ({
+				...blog,
+				type: getEffectiveChannelContentType(blog),
+			}));
 			const nextCursor = hasNextPage ? data[data.length - 1]?.id : null;
 
 			return {
-				data,
+				data: normalizedData,
 				meta: {
 					allCount,
 					cursor: nextCursor ?? null,
 					totalCount,
-					typeCounts: typeGroups
-						.map((group) => ({
-							type: group.type,
-							count: group._count._all,
-						}))
-						.sort((a, b) => a.type.localeCompare(b.type)),
+					typeCounts: typeCounts.filter(({ count }) => count > 0),
 				},
 			};
 		}),
@@ -1469,7 +1477,7 @@ export const blogRoutes = createTRPCRouter({
 				deletedAt: null,
 				channelId: { not: null },
 				...searchWhere,
-				AND: [visibleMainBlogWhere],
+				AND: [visibleMainBlogWhere, channelContentVisibilityWhere],
 			};
 
 			const rows = await db.blog.findMany({
@@ -1501,7 +1509,7 @@ export const blogRoutes = createTRPCRouter({
 							deletedAt: null,
 							channelId: channel.id,
 							...searchWhere,
-							AND: [visibleMainBlogWhere],
+							AND: [visibleMainBlogWhere, channelContentVisibilityWhere],
 						},
 					}),
 				),

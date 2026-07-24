@@ -15,6 +15,11 @@ import { Api } from "telegram";
 import { z } from "zod";
 import type { BlogMeta } from "../type";
 import { type IncomingMessage, saveBatch, saveIncomingMessages } from "./blog";
+import {
+  type ChannelContentFilterInput,
+  channelContentFilterInputSchema,
+  getContentFilterUpdateData,
+} from "./channel-content-filter";
 
 let persistFetcherEventHandler:
   | ((event: FetcherEvent) => void | Promise<void>)
@@ -36,6 +41,7 @@ export const clearChannelRecordsSchema = z.object({
 export type ClearChannelRecordsSchema = z.infer<
   typeof clearChannelRecordsSchema
 >;
+export { channelContentFilterInputSchema };
 
 // ── Queries ───────────────────────────────────────────────────────────────────
 // apps/api/src/db/queries/channel.ts
@@ -265,6 +271,54 @@ export async function getChannels(ctx: TRPCContext) {
     orderBy: [{ isFetchable: "desc" }, { title: "asc" }],
   });
   return withChannelStats(ctx, channels);
+}
+
+export async function getContentFilterChannels(ctx: TRPCContext) {
+  return ctx.db.channel.findMany({
+    where: {
+      deletedAt: null,
+      blogs: { some: { deletedAt: null } },
+    },
+    orderBy: [{ title: "asc" }, { username: "asc" }],
+    select: {
+      id: true,
+      title: true,
+      username: true,
+      contentFilterEnabled: true,
+      contentFilterTypes: true,
+      _count: {
+        select: {
+          blogs: { where: { deletedAt: null } },
+        },
+      },
+    },
+  });
+}
+
+export async function updateContentFilter(
+  ctx: TRPCContext,
+  input: ChannelContentFilterInput,
+) {
+  await ctx.db.channel.findFirstOrThrow({
+    where: {
+      id: input.channelId,
+      deletedAt: null,
+      blogs: { some: { deletedAt: null } },
+    },
+    select: { id: true },
+  });
+
+  return ctx.db.channel.update({
+    where: { id: input.channelId },
+    data: getContentFilterUpdateData(input),
+    select: {
+      id: true,
+      title: true,
+      username: true,
+      contentFilterEnabled: true,
+      contentFilterTypes: true,
+    },
+  });
 }
 
 export async function clearChannelRecords(

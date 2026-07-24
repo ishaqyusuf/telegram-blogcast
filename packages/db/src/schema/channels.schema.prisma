@@ -13,6 +13,8 @@ model Channel {
     allFetched    Boolean? @default(false)
 
     isFetchable Boolean? @default(false)
+    contentFilterEnabled Boolean  @default(false)
+    contentFilterTypes   String[] @default([])
     blogs       Blog[]
     albums      Album[]
 

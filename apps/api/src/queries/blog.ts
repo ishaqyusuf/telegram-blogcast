@@ -1,4 +1,5 @@
 // apps/api/src/db/queries/blog.ts
+import { inferBlogMediaContentType } from "@acme/blog";
 import { consoleLog } from "@acme/utils";
 import type { TRPCContext } from "@api/trpc/init";
 import type { BlogMeta } from "@api/type";
@@ -134,15 +135,6 @@ export const transcriptWindowSchema = z.object({
 export type TranscriptWindowSchema = z.infer<typeof transcriptWindowSchema>;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function resolveBlogType(
-  media: MessageMedia | null,
-): "text" | "image" | "audio" {
-  if (!media) return "text";
-  if (media.mimeType.startsWith("audio")) return "audio";
-  if (media.mimeType.startsWith("image")) return "image";
-  return "text";
-}
 
 function getTelegramMessageId(blog: {
   telegramMessageId?: number | null;
@@ -319,7 +311,7 @@ export async function saveIncomingMessages(
     }
 
     const blogDate = new Date(msg.date);
-    const type = resolveBlogType(msg.media);
+    const type = inferBlogMediaContentType(msg.media);
 
     try {
       // ── Blog ────────────────────────────────────────────────────────────────

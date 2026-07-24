@@ -190,6 +190,44 @@ export default function SettingsScreen() {
           </Pressable>
 
           <Pressable
+            onPress={() => router.push("/channel-configuration" as Href)}
+            className={
+              isRtl
+                ? "flex-row-reverse items-center gap-3 rounded-xl bg-card p-4 active:opacity-80"
+                : "flex-row items-center gap-3 rounded-xl bg-card p-4 active:opacity-80"
+            }
+          >
+            <View className="size-10 items-center justify-center rounded-full bg-secondary">
+              <Icon name="Layers" size={18} className="text-foreground" />
+            </View>
+            <View className="flex-1 gap-1">
+              <Text
+                className={
+                  isRtl
+                    ? "text-right text-[15px] font-bold text-foreground"
+                    : "text-left text-[15px] font-bold text-foreground"
+                }
+              >
+                {t("channelConfiguration")}
+              </Text>
+              <Text
+                className={
+                  isRtl
+                    ? "text-right text-[13px] leading-[19px] text-muted-foreground"
+                    : "text-left text-[13px] leading-[19px] text-muted-foreground"
+                }
+              >
+                {t("channelConfigurationDescription")}
+              </Text>
+            </View>
+            <Icon
+              name={isRtl ? "ChevronLeft" : "ChevronRight"}
+              size={18}
+              className="text-muted-foreground"
+            />
+          </Pressable>
+
+          <Pressable
             onPress={() => {
               if (!localServicesEnabled) {
                 requestLocalServicesSetup();

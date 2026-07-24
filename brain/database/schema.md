@@ -32,6 +32,7 @@ Summarizes where the database schema lives and which major data domains exist.
 - Physical home-library cataloging is modeled separately from digital books with `LibraryItem`, `LibraryVolume`, `LibraryLocation`, and `LibraryLabel`.
 - `File` records are source-aware. Existing imported Telegram media uses `source = "telegram"` and Telegram file IDs; new compose uploads use `source = "vercel_blob"` with Blob URL, download URL, pathname, content type, ETag, and metadata fields.
 - `Blog.telegramMessageId` stores the Telegram source message ID alongside existing JSON meta. The nullable unique `(channelId, telegramMessageId)` pair prevents duplicate Telegram imports while allowing non-Telegram/manual posts.
+- `Channel.contentFilterEnabled` and `Channel.contentFilterTypes` store the global channel-level blog type allow-list. Disabled or empty configurations do not constrain blog visibility.
 - Update `brain/database/relationships.md` when cross-model ownership changes.
 - Books schema now also owns import/audit records:
   - `BookImportHistory` for book-level imports from source links

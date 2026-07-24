@@ -2,6 +2,14 @@
 
 ## 2026-07-24
 
+### Channel Content Filter Configuration
+- Status: Done.
+- Source mode: Direct user request refined into an implementation plan.
+- Source changed: global channel allow-list state, typed channel list/update procedures, shared Prisma visibility policy for Home/channel/Search, canonical Telegram PDF/video import typing with legacy MIME fallback, dry-run normalizer, and the Expo Settings/list/floating-selector experience.
+- Brain changed: `brain/plans/2026-07-24-feature-channel-content-filter-configuration.md`, Blog behavior, API contracts, database schema/relationships, completed tasks, and progress.
+- Validation passed: 10 focused API policy/visibility tests, 70-test repository Bun suite, Blog/DB package typechecks, focused Expo ESLint and API Biome checks, Android export, live schema push, and Android interaction QA in light, dark, English, and Arabic RTL.
+- Validation limitation: the legacy normalizer found 318 PDF and 56 video rows, but its external-data write was not authorized; runtime MIME fallback covers those rows. Full API and Expo typechecks continue to report existing project diagnostics outside this feature.
+
 ### Silent Local Services Discovery And Home Status
 - Status: Done.
 - Source mode: User-approved implementation plan.

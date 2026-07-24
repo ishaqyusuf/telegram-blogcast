@@ -28,6 +28,8 @@ Tracks important request/response expectations and typed boundaries between clie
 - `facebookImport` procedures expose Facebook media import status for DB rows with `Blog.source = "facebook"`. `startMediaImport` launches an API-owned background batch that calls the local Facebook media bridge and stores the normalized result under `Blog.meta.facebook.mediaDownload`. Results at or below 20 MiB persist as normal in-app Telegram media. Larger results use terminal `status/accessMode = "external"` plus `destination`, `reason`, `externalUrl`, media metadata, and an optional thumbnail; bulk retries skip them while explicit forced Recheck is allowed.
 
 ### Blog Contracts
+- `channel.getContentFilterChannels` returns only non-deleted channels with at least one non-deleted blog plus their global content-filter state. `channel.updateContentFilter` enables a non-empty allow-list of `text|image|video|audio|pdf` or disables filtering while retaining saved selections.
+- `blog.posts` and `blog.search` apply enabled channel content filters inside their Prisma where clauses before pagination and counts. Explicit category/type filters intersect with this policy; channel-less blogs and disabled/empty configurations fail open.
 - `blog.mergeBlogs` accepts `{ primaryBlogId, secondaryBlogId, contentStrategy? }`, requires two different non-deleted blogs, rejects cross-channel merges, moves secondary media/tag/comment links to the primary blog, writes merge metadata, and soft-deletes the secondary blog.
 - `blog.addComment` accepts optional `timestampSeconds`; timestamped comments store `meta.audioTimestampSeconds`.
 - `blog.getComments` includes comment `meta` so clients can render timestamp chips.

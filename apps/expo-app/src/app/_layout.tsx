@@ -206,6 +206,7 @@ const InitialLayout = () => {
 						<Stack.Screen name="play-history" />
 						<Stack.Screen name="search" />
 						<Stack.Screen name="settings" />
+						<Stack.Screen name="channel-configuration" />
 						<Stack.Screen name="facebook-import" />
 						<Stack.Screen name="album-organizer/index" />
 						<Stack.Screen name="album-organizer/[channelId]/index" />

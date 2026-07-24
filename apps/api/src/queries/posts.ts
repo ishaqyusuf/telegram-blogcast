@@ -7,6 +7,11 @@ import type { TRPCContext } from "@api/trpc/init";
 import type { AlbumType, BlogType } from "@api/type";
 import { composeQueryData } from "@api/utils/query-response";
 import z from "zod";
+import {
+  channelContentVisibilityWhere,
+  getBlogContentTypeWhere,
+  getEffectiveChannelContentType,
+} from "./channel-content-filter";
 /*
 posts: publicProcedure
       .input(postsSchema)
@@ -86,33 +91,6 @@ export function isVisibleMainBlogRecord(blog: {
     blog.medias?.some((media) => media.fileId != null || media.file?.fileId),
   );
 }
-
-const pdfMediaWhere = {
-  medias: {
-    some: {
-      OR: [
-        { mimeType: { equals: "application/pdf", mode: "insensitive" } },
-        { mimeType: { startsWith: "document/", mode: "insensitive" } },
-        { title: { endsWith: ".pdf", mode: "insensitive" } },
-        {
-          file: {
-            mimeType: { equals: "application/pdf", mode: "insensitive" },
-          },
-        },
-        {
-          file: {
-            blobContentType: {
-              equals: "application/pdf",
-              mode: "insensitive",
-            },
-          },
-        },
-        { file: { fileName: { endsWith: ".pdf", mode: "insensitive" } } },
-        { file: { blobPathname: { endsWith: ".pdf", mode: "insensitive" } } },
-      ],
-    },
-  },
-};
 
 function hasUsableFile(file?: {
   source?: string | null;
@@ -290,7 +268,7 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
   });
   return await response(
     data.filter(isVisibleMainBlogRecord).filter(hasBlogPayload).map((blog) => {
-      const type: BlogType = blog.type as any;
+      const type: BlogType = getEffectiveChannelContentType(blog);
       const serializeFile = (file: any) =>
         file
           ? {
@@ -443,7 +421,11 @@ function wherePosts(query: PostsSchema) {
   const q = query?.q?.trim();
   const where = {
     deletedAt: null,
-    AND: [hasContentOrMediaWhere, visibleMainBlogWhere],
+    AND: [
+      hasContentOrMediaWhere,
+      visibleMainBlogWhere,
+      channelContentVisibilityWhere,
+    ],
     ...(query.channelId ? { channelId: query.channelId } : {}),
   } as any;
 
@@ -517,17 +499,17 @@ function wherePosts(query: PostsSchema) {
   }
 
   if (category === "picture") {
-    where.type = "image";
+    where.AND.push(getBlogContentTypeWhere("image"));
     return where;
   }
 
   if (category === "pdf") {
-    where.AND.push(pdfMediaWhere);
+    where.AND.push(getBlogContentTypeWhere("pdf"));
     return where;
   }
 
   if (category === "audio" || category === "text" || category === "video") {
-    where.type = category;
+    where.AND.push(getBlogContentTypeWhere(category));
     return where;
   }
 

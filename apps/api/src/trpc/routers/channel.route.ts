@@ -4,7 +4,9 @@ import { getClient } from "@telegram/telegram-client";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
+  channelContentFilterInputSchema,
   getChannels,
+  getContentFilterChannels,
   getFetchableChannels,
   syncChannels,
   toggleFetchable,
@@ -17,6 +19,7 @@ import {
   importTelegramAudioLinkSchema,
   stopFetch,
   getFetcherState,
+  updateContentFilter,
 } from "../../queries/channel";
 import {
   getRecentUpdateJob,
@@ -74,6 +77,10 @@ export const channelRoutes = createTRPCRouter({
     return getChannels(props.ctx);
   }),
 
+  getContentFilterChannels: publicProcedure.query(async (props) => {
+    return getContentFilterChannels(props.ctx);
+  }),
+
   getChannel: publicProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ ctx, input }) => {
@@ -105,6 +112,12 @@ export const channelRoutes = createTRPCRouter({
     .input(clearChannelRecordsSchema)
     .mutation(async (props) => {
       return clearChannelRecords(props.ctx, props.input);
+    }),
+
+  updateContentFilter: publicProcedure
+    .input(channelContentFilterInputSchema)
+    .mutation(async (props) => {
+      return updateContentFilter(props.ctx, props.input);
     }),
 
   // ── Fetcher control (runs in API process) ──────────────────────────────────
