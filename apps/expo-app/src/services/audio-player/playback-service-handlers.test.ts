@@ -50,7 +50,7 @@ function createPlayer() {
 }
 
 describe("Android playback service handlers", () => {
-	test("plays, pauses, and bounds five-second jumps while publishing snapshots", async () => {
+	test("plays, pauses, and bounds fifteen-second jumps while publishing snapshots", async () => {
 		const { listeners, player, readPosition } = createPlayer();
 		const snapshots: unknown[] = [];
 
@@ -70,7 +70,7 @@ describe("Android playback service handlers", () => {
 		});
 
 		await listeners.get(REMOTE_PLAYBACK_EVENTS.jumpBackward)?.();
-		expect(readPosition()).toBe(35);
+		expect(readPosition()).toBe(25);
 
 		await listeners.get(REMOTE_PLAYBACK_EVENTS.jumpForward)?.();
 		expect(readPosition()).toBe(40);

@@ -38,21 +38,38 @@ function speedSvg(label) {
 	`;
 }
 
+function jumpSvg(direction) {
+	const isBackward = direction === "backward";
+	const arrow = isBackward
+		? '<path d="M31 18 16 31l15 13"/><path d="M18 31h31a29 29 0 1 1-26 42"/>'
+		: '<path d="m65 18 15 13-15 13"/><path d="M78 31H47a29 29 0 1 0 26 42"/>';
+
+	return `
+		<svg xmlns="http://www.w3.org/2000/svg" width="${SIZE}" height="${SIZE}" viewBox="0 0 96 96">
+			<rect width="96" height="96" fill="none"/>
+			<g fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
+				${arrow}
+			</g>
+			<text
+				x="48"
+				y="67"
+				fill="#fff"
+				font-family="Arial, Helvetica, sans-serif"
+				font-size="28"
+				font-weight="700"
+				text-anchor="middle"
+			>15</text>
+		</svg>
+	`;
+}
+
 const icons = {
 	"notification_comments.png": iconSvg(`
-		<path d="M22 20h52a10 10 0 0 1 10 10v30a10 10 0 0 1-10 10H48L30 84V70h-8A10 10 0 0 1 12 60V30a10 10 0 0 1 10-10Z"/>
-		<path d="M48 35v20M38 45h20"/>
+		<circle cx="48" cy="48" r="32"/>
+		<path d="M48 32v32M32 48h32"/>
 	`),
-	"notification_jump_backward_5.png": iconSvg(`
-		<path d="M29 24 14 37l15 13"/>
-		<path d="M17 37h34a25 25 0 1 1-23 35"/>
-		<path d="M58 38H43l-2 13h12a10 10 0 0 1 0 20H40"/>
-	`),
-	"notification_jump_forward_5.png": iconSvg(`
-		<path d="m67 24 15 13-15 13"/>
-		<path d="M79 37H45a25 25 0 1 0 23 35"/>
-		<path d="M38 38H23l-2 13h12a10 10 0 0 1 0 20H20"/>
-	`),
+	"notification_jump_backward_15.png": jumpSvg("backward"),
+	"notification_jump_forward_15.png": jumpSvg("forward"),
 	"notification_speed_1.png": speedSvg("1×"),
 	"notification_speed_1_25.png": speedSvg("1.25×"),
 	"notification_speed_1_5.png": speedSvg("1.5×"),

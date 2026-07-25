@@ -1,6 +1,6 @@
 import type { ExpoConfig } from "expo/config";
 
-export const UPDATE_VERSION = "2026.07.22";
+export const UPDATE_VERSION = "2026.07.24.04";
 
 const appVariant =
 	process.env.APP_VARIANT ??
@@ -75,7 +75,7 @@ const config: ExpoConfig = {
 	name: variantConfig.name,
 	slug: "alghurobaa",
 	// slug: "prodesk",
-	version: "1.0.109",
+	version: "1.0.110",
 	orientation: "portrait",
 	icon: variantConfig.icons.app,
 	scheme: variantConfig.scheme,

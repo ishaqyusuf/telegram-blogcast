@@ -10,18 +10,18 @@ Implemented; awaiting fresh EAS development/preview device acceptance
 2026-06-23
 
 ## Last Updated
-2026-07-23
+2026-07-24
 
 ## Goal Or Problem
 Android system media notification controls are visible for audio playback, but the user reports that the controls do not work. The screenshot shows Android's media output card with Al-Ghurobaa metadata, progress, a center play button, jump buttons, and outer buttons that use custom speed/comment-style icons.
 
 ## Implementation Outcome
-- The Android notification now mirrors the mini-player with playback speed, back five seconds, system-managed play/pause, forward five seconds, and open comments.
+- The Android notification now uses Spotify-style monochrome controls for playback speed, back fifteen seconds, system-managed play/pause, forward fifteen seconds, and open comments.
 - Speed and comments use stable native custom-action IDs and a `remote-custom-action` event. They no longer overload `SkipToPrevious` or `SkipToNext`.
 - Android 13+ receives four `PlaybackState` custom-action providers; older Android receives equivalent MediaStyle buttons while preserving the same JavaScript action IDs.
-- Completed remote actions publish playback state, progress, and rate snapshots to the audio store, with an additional foreground resync after the app becomes active.
+- Media actions execute in the native player instead of depending on a headless JavaScript callback. Playback events and foreground resync keep the audio store synchronized.
 - Track Player service registration is Android-only, fail-visible, and idempotent before Expo Router loads.
-- The Android app version is `1.0.109`. A new EAS development/preview build is required before device acceptance.
+- The Android app version is `1.0.110`. A new EAS development/preview build is required before device acceptance.
 
 ## Original Context
 Android playback uses `react-native-track-player`; iOS still uses `expo-av`.
@@ -48,11 +48,11 @@ Likely causes:
 - If the currently installed APK/dev client was not rebuilt after adding TrackPlayer service/permission/native config changes, the JS can show the notification metadata while remote buttons still fail because native service registration or manifest state is stale. OTA updates cannot safely fix native service wiring.
 
 ## Implemented Approach
-- Publish back/forward five seconds as native Android media-session custom actions alongside speed and comments. Leave play/pause state-driven and system-managed.
+- Publish back/forward fifteen seconds as native Android media-session custom actions alongside speed and comments. Leave play/pause state-driven and system-managed.
 - Publish speed/comments through stable custom-action IDs instead of previous/next capabilities. Reserve previous/next for real queue navigation.
 - Use explicit monochrome icons for back/forward, comments, and each supported playback-rate state.
-- Fetch playback state, progress, and rate after every completed remote action and synchronize that snapshot into Zustand.
-- Re-register the current notification options after a rate change so the speed-state icon updates.
+- Keep native playback events and foreground resync as the Zustand synchronization path.
+- Re-publish the native custom-action providers after a rate change so the speed-state icon updates immediately.
 - Require a fresh native binary because the Track Player patch cannot be delivered by OTA.
 
 ## Visual Plan
@@ -69,10 +69,10 @@ flowchart TD
 ## Implementation Steps
 - [x] Define and test the exact expanded/compact action contract.
 - [x] Extend the Track Player patch with Android custom options, native providers, and `RemoteCustomAction`.
-- [x] Implement bounded five-second seek, speed cycling, comments navigation, and completed-action snapshots.
+- [x] Implement native fifteen-second seek, speed cycling, comments navigation, and playback-state synchronization.
 - [x] Register the Android playback service exactly once before Expo Router starts.
 - [x] Synchronize remote snapshots and foreground resyncs into the audio store.
-- [x] Add monochrome icons and bump the app version to `1.0.109`.
+- [x] Add monochrome icons and bump the app version to `1.0.110`.
 - [x] Run focused tests and compile the patched Track Player Android module.
 - [ ] Build fresh EAS development and preview binaries and complete device acceptance.
 

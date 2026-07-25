@@ -16,15 +16,15 @@ describe("Android notification controls", () => {
 
 		expect(spec.expandedActionIds).toEqual([
 			"cycle-playback-rate",
-			"jump-backward-5",
+			"jump-backward-15",
 			"play-pause",
-			"jump-forward-5",
+			"jump-forward-15",
 			"open-comments",
 		]);
 		expect(spec.compactActionIds).toEqual([
-			"jump-backward-5",
+			"jump-backward-15",
 			"play-pause",
-			"jump-forward-5",
+			"jump-forward-15",
 		]);
 		expect(spec.customActions).toEqual([
 			{
@@ -90,8 +90,8 @@ describe("Android notification controls", () => {
 			},
 			icons: {
 				comments: "notification_comments",
-				jumpBackward: "notification_jump_backward_5",
-				jumpForward: "notification_jump_forward_5",
+				jumpBackward: "notification_jump_backward_15",
+				jumpForward: "notification_jump_forward_15",
 				"speed-1": "notification_speed_1",
 				"speed-1-25": "notification_speed_1_25",
 				"speed-1-5": "notification_speed_1_5",
@@ -104,8 +104,8 @@ describe("Android notification controls", () => {
 		expect(options.capabilities).toEqual([13, 12, 14, 10, 11]);
 		expect(options.notificationCapabilities).toEqual([10, 13, 11]);
 		expect(options.compactCapabilities).toEqual([10, 13, 11]);
-		expect(options.rewindIcon).toBe("notification_jump_backward_5");
-		expect(options.forwardIcon).toBe("notification_jump_forward_5");
+		expect(options.rewindIcon).toBe("notification_jump_backward_15");
+		expect(options.forwardIcon).toBe("notification_jump_forward_15");
 		expect(options.androidCustomActions).toEqual([
 			{
 				id: "cycle-playback-rate",
@@ -113,6 +113,33 @@ describe("Android notification controls", () => {
 				icon: "notification_speed_1_25",
 				isCompact: false,
 				placement: "start",
+				states: [
+					{
+						value: 1,
+						title: "Playback speed 1×",
+						icon: "notification_speed_1",
+					},
+					{
+						value: 1.25,
+						title: "Playback speed 1.25×",
+						icon: "notification_speed_1_25",
+					},
+					{
+						value: 1.5,
+						title: "Playback speed 1.5×",
+						icon: "notification_speed_1_5",
+					},
+					{
+						value: 1.75,
+						title: "Playback speed 1.75×",
+						icon: "notification_speed_1_75",
+					},
+					{
+						value: 2,
+						title: "Playback speed 2×",
+						icon: "notification_speed_2",
+					},
+				],
 			},
 			{
 				id: "open-comments",

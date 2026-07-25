@@ -1,12 +1,12 @@
 export const ANDROID_NOTIFICATION_ACTION_IDS = {
 	cyclePlaybackRate: "cycle-playback-rate",
-	jumpBackward: "jump-backward-5",
-	jumpForward: "jump-forward-5",
+	jumpBackward: "jump-backward-15",
+	jumpForward: "jump-forward-15",
 	openComments: "open-comments",
 	playPause: "play-pause",
 } as const;
 
-export const AUDIO_JUMP_SECONDS = 5;
+export const AUDIO_JUMP_SECONDS = 15;
 export const AUDIO_PLAYBACK_RATES = [1, 1.25, 1.5, 1.75, 2] as const;
 
 export type AudioPlaybackRate = (typeof AUDIO_PLAYBACK_RATES)[number];
@@ -58,6 +58,11 @@ export interface TrackPlayerAndroidCustomAction {
 	icon: AndroidNotificationIconResource;
 	isCompact: boolean;
 	placement: "start" | "end";
+	states?: {
+		value: number;
+		title: string;
+		icon: AndroidNotificationIconResource;
+	}[];
 }
 
 export interface TrackPlayerNotificationOptions<TCapability = number> {
@@ -192,6 +197,16 @@ export function buildTrackPlayerNotificationOptions<TCapability>({
 			icon: icons[action.iconKey],
 			isCompact: action.compact,
 			placement: action.placement,
+			...(action.id ===
+			ANDROID_NOTIFICATION_ACTION_IDS.cyclePlaybackRate
+				? {
+						states: AUDIO_PLAYBACK_RATES.map((rate) => ({
+							value: rate,
+							title: `Playback speed ${rate}×`,
+							icon: icons[PLAYBACK_RATE_ICON_KEYS[rate]],
+						})),
+					}
+				: {}),
 		})),
 	};
 }

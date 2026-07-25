@@ -1,5 +1,5 @@
 diff --git a/android/proguard-rules.txt b/android/proguard-rules.txt
-index 1b5bf6f9bba6b898e686c141e23e8048cb8332ec..14148dd2146ac820e3cae86c25a52234cdba55ce 100644
+index 1b5bf6f..14148dd 100644
 --- a/android/proguard-rules.txt
 +++ b/android/proguard-rules.txt
 @@ -1,3 +1,14 @@
@@ -18,7 +18,7 @@ index 1b5bf6f9bba6b898e686c141e23e8048cb8332ec..14148dd2146ac820e3cae86c25a52234
 +    private com.google.android.exoplayer2.Player player;
 +}
 diff --git a/android/src/main/java/com/doublesymmetry/trackplayer/module/MusicEvents.kt b/android/src/main/java/com/doublesymmetry/trackplayer/module/MusicEvents.kt
-index 9a2ee90172ab9800fd5196ef8f9281b9ee981fbb..141134a38c098ae5def6d6352fb88db674a652f7 100644
+index 9a2ee90..141134a 100644
 --- a/android/src/main/java/com/doublesymmetry/trackplayer/module/MusicEvents.kt
 +++ b/android/src/main/java/com/doublesymmetry/trackplayer/module/MusicEvents.kt
 @@ -34,6 +34,7 @@ class MusicEvents(private val reactContext: ReactContext) : BroadcastReceiver()
@@ -30,7 +30,7 @@ index 9a2ee90172ab9800fd5196ef8f9281b9ee981fbb..141134a38c098ae5def6d6352fb88db6
  
          // Playback Events
 diff --git a/android/src/main/java/com/doublesymmetry/trackplayer/module/MusicModule.kt b/android/src/main/java/com/doublesymmetry/trackplayer/module/MusicModule.kt
-index b2409a09939164c49c0f7a16bb6d3284e8eab8fb..20e2843318e098963dde2fdce40ec2986dec0ff9 100644
+index b2409a0..20e2843 100644
 --- a/android/src/main/java/com/doublesymmetry/trackplayer/module/MusicModule.kt
 +++ b/android/src/main/java/com/doublesymmetry/trackplayer/module/MusicModule.kt
 @@ -38,6 +38,10 @@ class MusicModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaM
@@ -383,7 +383,7 @@ index b2409a09939164c49c0f7a16bb6d3284e8eab8fb..20e2843318e098963dde2fdce40ec298
          callback.resolve(Arguments.fromBundle(musicService.getPlayerStateBundle(musicService.state)))
      }
 diff --git a/android/src/main/java/com/doublesymmetry/trackplayer/service/MusicService.kt b/android/src/main/java/com/doublesymmetry/trackplayer/service/MusicService.kt
-index afa6b0f335714de0cc8741d5bbdd51b4e04bb3bb..b6f8d4fe12f775dabb22d9193e754b3a3eb33669 100644
+index afa6b0f..268a8ff 100644
 --- a/android/src/main/java/com/doublesymmetry/trackplayer/service/MusicService.kt
 +++ b/android/src/main/java/com/doublesymmetry/trackplayer/service/MusicService.kt
 @@ -3,6 +3,7 @@ package com.doublesymmetry.trackplayer.service
@@ -413,22 +413,29 @@ index afa6b0f335714de0cc8741d5bbdd51b4e04bb3bb..b6f8d4fe12f775dabb22d9193e754b3a
  import com.google.android.exoplayer2.ui.R as ExoPlayerR
  import kotlinx.coroutines.*
  import kotlinx.coroutines.flow.flow
-@@ -42,6 +48,14 @@ import timber.log.Timber
+@@ -42,6 +48,21 @@ import timber.log.Timber
  
  @MainThread
  class MusicService : HeadlessJsTaskService() {
++    private data class AndroidCustomActionState(
++        val value: Float,
++        val title: String,
++        @DrawableRes val icon: Int,
++    )
++
 +    private data class AndroidCustomAction(
 +        val id: String,
 +        val title: String,
 +        @DrawableRes val icon: Int,
 +        val isCompact: Boolean,
 +        val placement: String,
++        val states: List<AndroidCustomActionState>,
 +    )
 +
      private lateinit var player: QueuedAudioPlayer
      private val binder = MusicBinder()
      private val scope = MainScope()
-@@ -92,6 +106,9 @@ class MusicService : HeadlessJsTaskService() {
+@@ -92,6 +113,9 @@ class MusicService : HeadlessJsTaskService() {
      private var capabilities: List<Capability> = emptyList()
      private var notificationCapabilities: List<Capability> = emptyList()
      private var compactCapabilities: List<Capability> = emptyList()
@@ -438,7 +445,18 @@ index afa6b0f335714de0cc8741d5bbdd51b4e04bb3bb..b6f8d4fe12f775dabb22d9193e754b3a
  
      override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
          startTask(getTaskConfig(intent))
-@@ -186,10 +203,24 @@ class MusicService : HeadlessJsTaskService() {
+@@ -141,7 +165,9 @@ class MusicService : HeadlessJsTaskService() {
+ 
+         val cacheConfig = CacheConfig(playerOptions?.getDouble(MAX_CACHE_SIZE_KEY)?.toLong())
+         val playerConfig = PlayerConfig(
+-            interceptPlayerActionsTriggeredExternally = true,
++            // Media controls must remain functional even when the React headless
++            // service is unavailable. Player state events still synchronize JS.
++            interceptPlayerActionsTriggeredExternally = false,
+             handleAudioBecomingNoisy = true,
+             handleAudioFocus = playerOptions?.getBoolean(AUTO_HANDLE_INTERRUPTIONS) ?: false,
+             audioContentType = when(playerOptions?.getString(ANDROID_AUDIO_CONTENT_TYPE)) {
+@@ -186,10 +212,43 @@ class MusicService : HeadlessJsTaskService() {
          capabilities = options.getIntegerArrayList("capabilities")?.map { Capability.values()[it] } ?: emptyList()
          notificationCapabilities = options.getIntegerArrayList("notificationCapabilities")?.map { Capability.values()[it] } ?: emptyList()
          compactCapabilities = options.getIntegerArrayList("compactCapabilities")?.map { Capability.values()[it] } ?: emptyList()
@@ -447,12 +465,31 @@ index afa6b0f335714de0cc8741d5bbdd51b4e04bb3bb..b6f8d4fe12f775dabb22d9193e754b3a
 +                val id = action.getString("id") ?: return@mapNotNull null
 +                val title = action.getString("title") ?: id
 +                val icon = BundleUtils.getIconOrNull(this, action, "icon") ?: return@mapNotNull null
++                val states = action
++                    .getParcelableArrayList<Bundle>(CUSTOM_ACTION_STATES_KEY)
++                    ?.mapNotNull { state ->
++                        val value = state.getDouble("value", Double.NaN)
++                        if (!value.isFinite()) return@mapNotNull null
++                        val stateTitle = state.getString("title") ?: title
++                        val stateIcon = BundleUtils.getIconOrNull(
++                            this,
++                            state,
++                            "icon",
++                        ) ?: return@mapNotNull null
++                        AndroidCustomActionState(
++                            value = value.toFloat(),
++                            title = stateTitle,
++                            icon = stateIcon,
++                        )
++                    }
++                    ?: emptyList()
 +                AndroidCustomAction(
 +                    id = id,
 +                    title = title,
 +                    icon = icon,
 +                    isCompact = action.getBoolean("isCompact", false),
 +                    placement = action.getString("placement") ?: CUSTOM_ACTION_PLACEMENT_END,
++                    states = states,
 +                )
 +            }
 +            ?: emptyList()
@@ -464,7 +501,7 @@ index afa6b0f335714de0cc8741d5bbdd51b4e04bb3bb..b6f8d4fe12f775dabb22d9193e754b3a
              when (it) {
                  Capability.PLAY, Capability.PAUSE -> {
                      val playIcon = BundleUtils.getIconOrNull(this, options, "playIcon")
-@@ -222,7 +253,6 @@ class MusicService : HeadlessJsTaskService() {
+@@ -222,7 +281,6 @@ class MusicService : HeadlessJsTaskService() {
                  else -> { null }
              }
          }
@@ -472,7 +509,7 @@ index afa6b0f335714de0cc8741d5bbdd51b4e04bb3bb..b6f8d4fe12f775dabb22d9193e754b3a
          val openAppIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
              flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
              // Add the Uri data so apps can identify that it was a notification click
-@@ -233,9 +263,22 @@ class MusicService : HeadlessJsTaskService() {
+@@ -233,9 +291,22 @@ class MusicService : HeadlessJsTaskService() {
          val accentColor = BundleUtils.getIntOrNull(options, "color")
          val smallIcon = BundleUtils.getIconOrNull(this, options, "icon")
          val pendingIntent = PendingIntent.getActivity(this, 0, openAppIntent, getPendingIntentFlags())
@@ -498,7 +535,7 @@ index afa6b0f335714de0cc8741d5bbdd51b4e04bb3bb..b6f8d4fe12f775dabb22d9193e754b3a
  
          // setup progress update events if configured
          progressUpdateJob?.cancel()
-@@ -247,6 +290,228 @@ class MusicService : HeadlessJsTaskService() {
+@@ -247,6 +318,305 @@ class MusicService : HeadlessJsTaskService() {
          }
      }
  
@@ -521,14 +558,14 @@ index afa6b0f335714de0cc8741d5bbdd51b4e04bb3bb..b6f8d4fe12f775dabb22d9193e754b3a
 +                add(
 +                    createMediaSessionAction(
 +                        id = JUMP_BACKWARD_ACTION_ID,
-+                        title = "Back 5 seconds",
++                        title = "Back 15 seconds",
 +                        icon = BundleUtils.getIcon(
 +                            this@MusicService,
 +                            options,
 +                            "rewindIcon",
 +                            TrackPlayerR.drawable.rewind,
 +                        ),
-+                        onAction = ::emitJumpBackward,
++                        onAction = ::jumpBackward,
 +                    )
 +                )
 +            }
@@ -536,14 +573,14 @@ index afa6b0f335714de0cc8741d5bbdd51b4e04bb3bb..b6f8d4fe12f775dabb22d9193e754b3a
 +                add(
 +                    createMediaSessionAction(
 +                        id = JUMP_FORWARD_ACTION_ID,
-+                        title = "Forward 5 seconds",
++                        title = "Forward 15 seconds",
 +                        icon = BundleUtils.getIcon(
 +                            this@MusicService,
 +                            options,
 +                            "forwardIcon",
 +                            TrackPlayerR.drawable.forward,
 +                        ),
-+                        onAction = ::emitJumpForward,
++                        onAction = ::jumpForward,
 +                    )
 +                )
 +            }
@@ -553,7 +590,7 @@ index afa6b0f335714de0cc8741d5bbdd51b4e04bb3bb..b6f8d4fe12f775dabb22d9193e754b3a
 +                        id = action.id,
 +                        title = action.title,
 +                        icon = action.icon,
-+                        onAction = { emitCustomAction(action.id) },
++                        onAction = { handleCustomAction(action) },
 +                    )
 +                )
 +            }
@@ -666,8 +703,9 @@ index afa6b0f335714de0cc8741d5bbdd51b4e04bb3bb..b6f8d4fe12f775dabb22d9193e754b3a
 +            }
 +
 +            override fun onCustomAction(player: Player, action: String, intent: Intent) {
-+                if (androidCustomActions.any { it.id == action }) {
-+                    scope.launch { emitCustomAction(action) }
++                val customAction = androidCustomActions.find { it.id == action }
++                if (customAction != null) {
++                    scope.launch { handleCustomAction(customAction) }
 +                } else {
 +                    delegate?.onCustomAction(player, action, intent)
 +                }
@@ -689,6 +727,82 @@ index afa6b0f335714de0cc8741d5bbdd51b4e04bb3bb..b6f8d4fe12f775dabb22d9193e754b3a
 +            override fun onCustomAction(player: Player, action: String, extras: Bundle?) {
 +                scope.launch { onAction() }
 +            }
++        }
++    }
++
++    @MainThread
++    private fun jumpBackward() {
++        val interval = latestOptions?.getDouble(
++            BACKWARD_JUMP_INTERVAL_KEY,
++            DEFAULT_JUMP_INTERVAL,
++        ) ?: DEFAULT_JUMP_INTERVAL
++        seekBy(-interval.toFloat())
++    }
++
++    @MainThread
++    private fun jumpForward() {
++        val interval = latestOptions?.getDouble(
++            FORWARD_JUMP_INTERVAL_KEY,
++            DEFAULT_JUMP_INTERVAL,
++        ) ?: DEFAULT_JUMP_INTERVAL
++        seekBy(interval.toFloat())
++    }
++
++    @MainThread
++    private fun handleCustomAction(action: AndroidCustomAction) {
++        if (action.id == OPEN_COMMENTS_ACTION_ID) {
++            openNotificationRoute()
++            return
++        }
++
++        if (action.states.isEmpty()) {
++            emitCustomAction(action.id)
++            return
++        }
++
++        val currentIndex = action.states.indices.minByOrNull { index ->
++            kotlin.math.abs(action.states[index].value - player.playbackSpeed)
++        } ?: 0
++        val nextState = action.states[(currentIndex + 1) % action.states.size]
++        player.playbackSpeed = nextState.value
++        androidCustomActions = androidCustomActions.map { currentAction ->
++            if (currentAction.id == action.id) {
++                currentAction.copy(
++                    title = nextState.title,
++                    icon = nextState.icon,
++                )
++            } else {
++                currentAction
++            }
++        }
++
++        val options = latestOptions ?: return
++        if (Build.VERSION.SDK_INT >= 33) {
++            configureAndroidCustomActions(options)
++        } else {
++            configureLegacyCustomActions()
++        }
++    }
++
++    @MainThread
++    private fun openNotificationRoute() {
++        val openAppIntent = packageManager.getLaunchIntentForPackage(packageName)?.apply {
++            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
++                Intent.FLAG_ACTIVITY_CLEAR_TOP or
++                Intent.FLAG_ACTIVITY_SINGLE_TOP
++            data = Uri.parse(NOTIFICATION_ROUTE)
++            action = Intent.ACTION_VIEW
++        } ?: return
++
++        runCatching {
++            PendingIntent.getActivity(
++                this,
++                OPEN_COMMENTS_REQUEST_CODE,
++                openAppIntent,
++                getPendingIntentFlags(),
++            ).send()
++        }.onFailure { error ->
++            Timber.e(error, "Unable to open comments from media controls")
 +        }
 +    }
 +
@@ -727,15 +841,16 @@ index afa6b0f335714de0cc8741d5bbdd51b4e04bb3bb..b6f8d4fe12f775dabb22d9193e754b3a
      @MainThread
      private fun progressUpdateEventFlow(interval: Double) = flow {
          while (true) {
-@@ -837,6 +1102,7 @@ class MusicService : HeadlessJsTaskService() {
+@@ -837,6 +1207,8 @@ class MusicService : HeadlessJsTaskService() {
          const val MAX_CACHE_SIZE_KEY = "maxCacheSize"
  
          const val ANDROID_OPTIONS_KEY = "android"
 +        const val ANDROID_CUSTOM_ACTIONS_KEY = "androidCustomActions"
++        const val CUSTOM_ACTION_STATES_KEY = "states"
  
          const val STOPPING_APP_PAUSES_PLAYBACK_KEY = "stoppingAppPausesPlayback"
          const val APP_KILLED_PLAYBACK_BEHAVIOR_KEY = "appKilledPlaybackBehavior"
-@@ -850,5 +1116,17 @@ class MusicService : HeadlessJsTaskService() {
+@@ -850,5 +1222,20 @@ class MusicService : HeadlessJsTaskService() {
  
          const val DEFAULT_JUMP_INTERVAL = 15.0
          const val DEFAULT_STOP_FOREGROUND_GRACE_PERIOD = 5
@@ -749,12 +864,15 @@ index afa6b0f335714de0cc8741d5bbdd51b4e04bb3bb..b6f8d4fe12f775dabb22d9193e754b3a
 +        private const val PLAYER_FIELD = "player"
 +        private const val CUSTOM_ACTION_PLACEMENT_START = "start"
 +        private const val CUSTOM_ACTION_PLACEMENT_END = "end"
-+        private const val JUMP_BACKWARD_ACTION_ID = "jump-backward-5"
-+        private const val JUMP_FORWARD_ACTION_ID = "jump-forward-5"
++        private const val JUMP_BACKWARD_ACTION_ID = "jump-backward-15"
++        private const val JUMP_FORWARD_ACTION_ID = "jump-forward-15"
++        private const val OPEN_COMMENTS_ACTION_ID = "open-comments"
++        private const val OPEN_COMMENTS_REQUEST_CODE = 1
++        private const val NOTIFICATION_ROUTE = "trackplayer://notification.click"
      }
  }
 diff --git a/lib/src/constants/Event.d.ts b/lib/src/constants/Event.d.ts
-index 1abe5418f6c3a143f6c7884f6a33efe343e236f9..264202e1e33b1b7a4760da9485ecc5b7434d5f48 100644
+index 1abe541..264202e 100644
 --- a/lib/src/constants/Event.d.ts
 +++ b/lib/src/constants/Event.d.ts
 @@ -68,6 +68,10 @@ export declare enum Event {
@@ -769,7 +887,7 @@ index 1abe5418f6c3a143f6c7884f6a33efe343e236f9..264202e1e33b1b7a4760da9485ecc5b7
       * Fired when the user changes the position of the timeline.
       * See https://rntp.dev/docs/api/events#remoteseek
 diff --git a/lib/src/constants/Event.js b/lib/src/constants/Event.js
-index 9a5676d066c767b312a2958edf3bf47806a4404f..31d8def9806819de5d4a03589b445eed9a48b200 100644
+index 9a5676d..31d8def 100644
 --- a/lib/src/constants/Event.js
 +++ b/lib/src/constants/Event.js
 @@ -69,6 +69,10 @@ export var Event;
@@ -784,10 +902,10 @@ index 9a5676d066c767b312a2958edf3bf47806a4404f..31d8def9806819de5d4a03589b445eed
       * Fired when the user changes the position of the timeline.
       * See https://rntp.dev/docs/api/events#remoteseek
 diff --git a/lib/src/interfaces/UpdateOptions.d.ts b/lib/src/interfaces/UpdateOptions.d.ts
-index 7190c9018f9c332a8f20658a498f4f1419cc3101..75eccb71db7822be377a4df6d2f6715f866a28c9 100644
+index 7190c90..97022c2 100644
 --- a/lib/src/interfaces/UpdateOptions.d.ts
 +++ b/lib/src/interfaces/UpdateOptions.d.ts
-@@ -2,6 +2,13 @@ import type { AndroidOptions } from './AndroidOptions';
+@@ -2,6 +2,18 @@ import type { AndroidOptions } from './AndroidOptions';
  import type { FeedbackOptions } from './FeedbackOptions';
  import type { ResourceObject } from './ResourceObject';
  import type { RatingType, Capability } from '../constants';
@@ -797,11 +915,16 @@ index 7190c9018f9c332a8f20658a498f4f1419cc3101..75eccb71db7822be377a4df6d2f6715f
 +    icon: ResourceObject | string;
 +    isCompact?: boolean;
 +    placement?: 'start' | 'end';
++    states?: {
++        value: number;
++        title: string;
++        icon: ResourceObject | string;
++    }[];
 +}
  export interface UpdateOptions {
      android?: AndroidOptions;
      ratingType?: RatingType;
-@@ -30,13 +37,14 @@ export interface UpdateOptions {
+@@ -30,13 +42,14 @@ export interface UpdateOptions {
      alwaysPauseOnInterruption?: boolean;
      notificationCapabilities?: Capability[];
      compactCapabilities?: Capability[];
@@ -825,7 +948,7 @@ index 7190c9018f9c332a8f20658a498f4f1419cc3101..75eccb71db7822be377a4df6d2f6715f
      color?: number;
  }
 diff --git a/lib/src/interfaces/events/EventPayloadByEvent.d.ts b/lib/src/interfaces/events/EventPayloadByEvent.d.ts
-index 00082362b41e4d37d2d71f7b72393124014b2fb2..f45c1d1834c10e3b134fedb1925509affd8e84f8 100644
+index 0008236..f45c1d1 100644
 --- a/lib/src/interfaces/events/EventPayloadByEvent.d.ts
 +++ b/lib/src/interfaces/events/EventPayloadByEvent.d.ts
 @@ -18,6 +18,9 @@ import type { RemotePlaySearchEvent } from './RemotePlaySearchEvent';
@@ -847,7 +970,7 @@ index 00082362b41e4d37d2d71f7b72393124014b2fb2..f45c1d1834c10e3b134fedb1925509af
      [Event.RemoteSetRating]: RemoteSetRatingEvent;
      [Event.RemoteDuck]: RemoteDuckEvent;
 diff --git a/lib/src/trackPlayer.js b/lib/src/trackPlayer.js
-index 191e5dea7ce96f145d0a2ea16d9d925136ce4454..e8143775ff6ddc841bc56279755a124b96b39bd3 100644
+index 191e5de..1be35fd 100644
 --- a/lib/src/trackPlayer.js
 +++ b/lib/src/trackPlayer.js
 @@ -17,6 +17,9 @@ function resolveImportedAsset(id) {
@@ -860,7 +983,7 @@ index 191e5dea7ce96f145d0a2ea16d9d925136ce4454..e8143775ff6ddc841bc56279755a124b
  // MARK: - General API
  /**
   * Initializes the player with the specified options.
-@@ -134,14 +137,18 @@ export async function updateOptions({ alwaysPauseOnInterruption, ...options } =
+@@ -134,14 +137,22 @@ export async function updateOptions({ alwaysPauseOnInterruption, ...options } =
              alwaysPauseOnInterruption: options.android?.alwaysPauseOnInterruption ?? alwaysPauseOnInterruption,
              ...options.android,
          },
@@ -883,12 +1006,16 @@ index 191e5dea7ce96f145d0a2ea16d9d925136ce4454..e8143775ff6ddc841bc56279755a124b
 +        androidCustomActions: options.androidCustomActions?.map((action) => ({
 +            ...action,
 +            icon: resolveNotificationIcon(action.icon),
++            states: action.states?.map((state) => ({
++                ...state,
++                icon: resolveNotificationIcon(state.icon),
++            })),
 +        })),
      });
  }
  /**
 diff --git a/src/constants/Event.ts b/src/constants/Event.ts
-index 09149463f9f00a669fb08e8110aee0fa114bdc30..ba462ecc52e07d29931b628b6c1217f1b49e6f05 100644
+index 0914946..ba462ec 100644
 --- a/src/constants/Event.ts
 +++ b/src/constants/Event.ts
 @@ -69,6 +69,10 @@ export enum Event {
@@ -903,10 +1030,10 @@ index 09149463f9f00a669fb08e8110aee0fa114bdc30..ba462ecc52e07d29931b628b6c1217f1
     * Fired when the user changes the position of the timeline.
     * See https://rntp.dev/docs/api/events#remoteseek
 diff --git a/src/interfaces/UpdateOptions.ts b/src/interfaces/UpdateOptions.ts
-index 9657caec9a817093f3240cfa3cd4a572e664e172..eff67fe07bb3088b684c26eb07a329fa267830f9 100644
+index 9657cae..c1c8f7e 100644
 --- a/src/interfaces/UpdateOptions.ts
 +++ b/src/interfaces/UpdateOptions.ts
-@@ -3,6 +3,14 @@ import type { FeedbackOptions } from './FeedbackOptions';
+@@ -3,6 +3,19 @@ import type { FeedbackOptions } from './FeedbackOptions';
  import type { ResourceObject } from './ResourceObject';
  import type { RatingType, Capability } from '../constants';
  
@@ -916,12 +1043,17 @@ index 9657caec9a817093f3240cfa3cd4a572e664e172..eff67fe07bb3088b684c26eb07a329fa
 +  icon: ResourceObject | string;
 +  isCompact?: boolean;
 +  placement?: 'start' | 'end';
++  states?: {
++    value: number;
++    title: string;
++    icon: ResourceObject | string;
++  }[];
 +}
 +
  export interface UpdateOptions {
    android?: AndroidOptions;
    ratingType?: RatingType;
-@@ -36,14 +44,15 @@ export interface UpdateOptions {
+@@ -36,14 +49,15 @@ export interface UpdateOptions {
    alwaysPauseOnInterruption?: boolean;
    notificationCapabilities?: Capability[];
    compactCapabilities?: Capability[];
@@ -946,7 +1078,7 @@ index 9657caec9a817093f3240cfa3cd4a572e664e172..eff67fe07bb3088b684c26eb07a329fa
    color?: number;
  }
 diff --git a/src/interfaces/events/EventPayloadByEvent.ts b/src/interfaces/events/EventPayloadByEvent.ts
-index a9d11920a69f0e3c6d358cd3aae796fb3dd1bad3..3dc97a38dad544c4d16cebc0743554e3fff809aa 100644
+index a9d1192..3dc97a3 100644
 --- a/src/interfaces/events/EventPayloadByEvent.ts
 +++ b/src/interfaces/events/EventPayloadByEvent.ts
 @@ -20,6 +20,10 @@ import type { RemoteSeekEvent } from './RemoteSeekEvent';
@@ -969,7 +1101,7 @@ index a9d11920a69f0e3c6d358cd3aae796fb3dd1bad3..3dc97a38dad544c4d16cebc0743554e3
    [Event.RemoteSetRating]: RemoteSetRatingEvent;
    [Event.RemoteDuck]: RemoteDuckEvent;
 diff --git a/src/trackPlayer.ts b/src/trackPlayer.ts
-index 6f6d7234979f31e4a2fdab0fdecb891f200c0892..09a2493e78492c7371e775342a76dad535a6a569 100644
+index 6f6d723..26220bb 100644
 --- a/src/trackPlayer.ts
 +++ b/src/trackPlayer.ts
 @@ -42,6 +42,10 @@ function resolveImportedAsset(id?: number) {
@@ -983,7 +1115,7 @@ index 6f6d7234979f31e4a2fdab0fdecb891f200c0892..09a2493e78492c7371e775342a76dad5
  // MARK: - General API
  
  /**
-@@ -231,14 +235,18 @@ export async function updateOptions({
+@@ -231,14 +235,22 @@ export async function updateOptions({
          options.android?.alwaysPauseOnInterruption ?? alwaysPauseOnInterruption,
        ...options.android,
      },
@@ -1006,6 +1138,10 @@ index 6f6d7234979f31e4a2fdab0fdecb891f200c0892..09a2493e78492c7371e775342a76dad5
 +    androidCustomActions: options.androidCustomActions?.map((action) => ({
 +      ...action,
 +      icon: resolveNotificationIcon(action.icon),
++      states: action.states?.map((state) => ({
++        ...state,
++        icon: resolveNotificationIcon(state.icon),
++      })),
 +    })),
    });
  }

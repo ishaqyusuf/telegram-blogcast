@@ -16,14 +16,16 @@
 - Keep React Native Track Player at 4.1.2 and extend the checked-in Bun patch with `androidCustomActions` plus a `RemoteCustomAction` event.
 - On Android 13+, register `MediaSessionConnector.CustomActionProvider` instances so the system media surface owns placement and play/pause state.
 - On Android 12 and older, install real `PlayerNotificationManager.CustomActionReceiver` actions into the existing `MediaStyle` notification. Do not disguise custom controls as previous/next.
+- Execute play/pause, fifteen-second seek, speed cycling, and comments routing in the native media session. JavaScript listeners remain synchronization/fallback infrastructure, not a prerequisite for a button tap to work.
 - Use explicit drawable resource names copied by the Expo config plugin so development and preview builds resolve icons without Metro.
 - Retain the private KotlinAudio and ExoPlayer fields used by this bridge in consumer ProGuard rules.
 
 ## Consequences
 - Benefits:
   - Notification, lock-screen, and external media controls keep correct action semantics and accessible titles.
+  - Controls remain responsive when the app process has no active headless JavaScript listener.
   - Previous/next remain available for future queue navigation.
-  - A headless speed change can update the native notification icon before the app UI resumes.
+  - A native speed change updates the notification icon before the app UI resumes.
 - Tradeoffs:
   - Android 12 and older require reflection because KotlinAudio 2.1.0 does not expose its internal `PlayerNotificationManager`.
   - OEMs and Android may reorder expanded actions; arbitrary legacy custom actions cannot be forced into compact `MediaStyle` slots.
