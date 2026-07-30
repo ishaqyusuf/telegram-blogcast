@@ -1,8 +1,11 @@
 # Production-Backed ngrok Gateway Discovery
 
 ## Status
-Implemented; the production database and shared token are configured. Vercel
-deployment, publisher verification, and the preview release remain.
+Implemented and deployed. The production database, shared token, Vercel route,
+live publisher heartbeat, tunneled health check, and graceful lease deletion
+are verified. The preview OTA release remains intentionally pending because the
+Expo worktree contains unrelated uncommitted changes that must not be bundled
+or overwritten.
 
 ## Created Date
 2026-07-30
@@ -52,3 +55,6 @@ production Vercel origin.
   expiry/removal, publisher health waiting, heartbeat, shutdown, non-fatal
   configuration failure, preview lease parsing, unreachable gateways, LAN URL
   preservation, and gateway-scoped local query state.
+- Production smoke verification confirmed the public GET contract, an active
+  ngrok health response, a heartbeat-extended expiry, and an empty lease after
+  graceful runner shutdown.

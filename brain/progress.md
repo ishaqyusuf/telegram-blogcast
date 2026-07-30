@@ -3,8 +3,9 @@
 ## 2026-07-30
 
 ### Production-Backed ngrok Gateway Discovery
-- Status: Implemented; production secret and database schema are configured.
-  Deployment, publisher verification, and preview release remain.
+- Status: Implemented and deployed. Preview OTA release is intentionally
+  pending because unrelated uncommitted Expo changes cannot safely be included
+  or overwritten.
 - Source mode: User-approved implementation plan.
 - Source changed: Expo/Vercel environment URLs, singleton discovery lease and
   authenticated route, web-runner health-gated publisher and heartbeat,
@@ -13,6 +14,19 @@
 - Production database push completed and the Vercel discovery token was added
   as a sensitive production variable; the same value is stored only in the
   ignored local web environment.
+- Production deployment `dpl_L7PQPwGjN6zrvHXGYBmWeiHYd5dL` is live at
+  `https://alghurobaa.vercel.app`. End-to-end verification confirmed public
+  empty lookup, authenticated publication, ngrok `/health`, minute heartbeat
+  expiry renewal, and authenticated deletion on graceful shutdown.
+- Validation passed: 24 focused Expo tests, 8 discovery route/lease tests, 6
+  publisher/ngrok runner tests, focused Expo ESLint, focused web/shared Biome,
+  DB typecheck, Prisma production schema push, Vercel production build, scoped
+  diff checks, and two-axis standards/spec review.
+- Validation limitation: the Android emulator had no compatible preview build,
+  so the new preview-only retry copy was not visually exercised. Publishing an
+  OTA from this worktree would either bundle or overwrite unrelated uncommitted
+  Expo changes. The shared utils typecheck still reports four pre-existing
+  React email/PDF diagnostics outside this feature.
 - Brain changed:
   `brain/plans/2026-07-30-feature-production-backed-ngrok-gateway-discovery.md`,
   mobile build variants, API endpoints/contracts/permissions, database schema,
