@@ -1,5 +1,36 @@
 import { z } from "zod";
 
+function parseRequestHostname(value: string | undefined) {
+	const host = value?.split(",")[0]?.trim().toLowerCase();
+	if (!host) return null;
+	if (host === "::1") return host;
+	if (host.startsWith("[")) {
+		const closingBracket = host.indexOf("]");
+		return closingBracket > 0 ? host.slice(1, closingBracket) : null;
+	}
+	return host.split(":")[0]?.replace(/\.$/, "") || null;
+}
+
+export function isLocalGatewayRequestHost(value: string | undefined) {
+	const hostname = parseRequestHostname(value);
+	if (!hostname) return false;
+	if (
+		hostname === "localhost" ||
+		hostname === "::1" ||
+		hostname.endsWith(".localhost") ||
+		hostname.startsWith("127.") ||
+		hostname.startsWith("10.") ||
+		hostname.startsWith("192.168.") ||
+		hostname.endsWith(".ngrok-free.app")
+	) {
+		return true;
+	}
+
+	const match = /^172\.(\d+)\./.exec(hostname);
+	const secondOctet = match?.[1] ? Number(match[1]) : null;
+	return secondOctet !== null && secondOctet >= 16 && secondOctet <= 31;
+}
+
 export function normalizeNgrokFreeGatewayOrigin(value: unknown) {
 	if (typeof value !== "string") return null;
 

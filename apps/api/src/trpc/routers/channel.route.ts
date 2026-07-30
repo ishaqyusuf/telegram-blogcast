@@ -1,5 +1,6 @@
 // apps/api/src/routers/channel.route.ts
 import { createTRPCRouter, publicProcedure } from "../init";
+import { isLocalGatewayRequestHost } from "@acme/utils/local-gateway-discovery";
 import { getClient } from "@telegram/telegram-client";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -39,30 +40,8 @@ import {
   getLatestMessageId,
 } from "../../queries/blog";
 
-function isLocalChannelUpdateHost(value: string | undefined) {
-  const host = value?.split(",")[0]?.trim();
-  const hostname = host?.startsWith("[")
-    ? host.slice(1, host.indexOf("]"))
-    : host?.split(":")[0];
-  if (!hostname) return false;
-  if (
-    hostname === "localhost" ||
-    hostname === "::1" ||
-    hostname.endsWith(".localhost") ||
-    hostname.startsWith("127.") ||
-    hostname.startsWith("10.") ||
-    hostname.startsWith("192.168.")
-  ) {
-    return true;
-  }
-
-  const match = /^172\.(\d+)\./.exec(hostname);
-  const secondOctet = match?.[1] ? Number(match[1]) : null;
-  return secondOctet !== null && secondOctet >= 16 && secondOctet <= 31;
-}
-
 const channelUpdateProcedure = publicProcedure.use(({ ctx, next }) => {
-  if (!isLocalChannelUpdateHost(ctx.requestHost)) {
+  if (!isLocalGatewayRequestHost(ctx.requestHost)) {
     throw new TRPCError({
       code: "FORBIDDEN",
       message: "Telegram channel updates are available only from the local admin site.",

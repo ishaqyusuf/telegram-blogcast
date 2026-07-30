@@ -26,24 +26,3 @@ export function buildChannelUpdatePromptModel<
 export function isChannelUpdateSurface(pathname: string) {
 	return pathname === "/blog" || /^\/dashboard(?:\/.*)?$/.test(pathname);
 }
-
-export function isLocalChannelUpdateHost(hostname: string) {
-	const normalizedHostname =
-		hostname.startsWith("[") && hostname.endsWith("]")
-			? hostname.slice(1, -1)
-			: hostname;
-	if (
-		normalizedHostname === "localhost" ||
-		normalizedHostname === "::1" ||
-		normalizedHostname.endsWith(".localhost") ||
-		normalizedHostname.startsWith("127.") ||
-		normalizedHostname.startsWith("10.") ||
-		normalizedHostname.startsWith("192.168.")
-	) {
-		return true;
-	}
-
-	const match = /^172\.(\d+)\./.exec(normalizedHostname);
-	const secondOctet = match?.[1] ? Number(match[1]) : null;
-	return secondOctet !== null && secondOctet >= 16 && secondOctet <= 31;
-}

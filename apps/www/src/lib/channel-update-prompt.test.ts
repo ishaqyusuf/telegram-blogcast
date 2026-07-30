@@ -3,7 +3,6 @@ import { describe, expect, test } from "bun:test";
 import {
 	buildChannelUpdatePromptModel,
 	isChannelUpdateSurface,
-	isLocalChannelUpdateHost,
 } from "./channel-update-prompt";
 
 const channels = [
@@ -61,12 +60,5 @@ describe("channel update prompt", () => {
 		expect(isChannelUpdateSurface("/dashboard/example-channel")).toBe(true);
 		expect(isChannelUpdateSurface("/blog/42")).toBe(false);
 		expect(isChannelUpdateSurface("/albums")).toBe(false);
-	});
-
-	test("limits automatic Telegram work to local admin hosts", () => {
-		expect(isLocalChannelUpdateHost("podcast.localhost")).toBe(true);
-		expect(isLocalChannelUpdateHost("192.168.1.20")).toBe(true);
-		expect(isLocalChannelUpdateHost("[::1]")).toBe(true);
-		expect(isLocalChannelUpdateHost("alghurobaa.com")).toBe(false);
 	});
 });

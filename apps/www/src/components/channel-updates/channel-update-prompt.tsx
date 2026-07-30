@@ -3,7 +3,6 @@
 import {
 	buildChannelUpdatePromptModel,
 	isChannelUpdateSurface,
-	isLocalChannelUpdateHost,
 } from "@/lib/channel-update-prompt";
 import { useTRPC } from "@/trpc/client";
 import { Button } from "@acme/ui/button";
@@ -16,6 +15,7 @@ import {
 	DialogTitle,
 } from "@acme/ui/dialog";
 import { useMutation, useQuery } from "@acme/ui/tanstack";
+import { isLocalGatewayRequestHost } from "@acme/utils/local-gateway-discovery";
 import type { RouterOutputs } from "@api/trpc/routers/_app";
 import { Check, Loader2, RefreshCw } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
@@ -113,7 +113,7 @@ export function ChannelUpdatePrompt() {
 	useEffect(() => {
 		if (
 			!isChannelUpdateSurface(pathname) ||
-			!isLocalChannelUpdateHost(window.location.hostname)
+			!isLocalGatewayRequestHost(window.location.hostname)
 		) {
 			setShouldCheck(false);
 			return;
