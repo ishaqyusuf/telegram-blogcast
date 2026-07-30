@@ -38,6 +38,7 @@ export type {
   Device,
   File,
   Location,
+  LocalServiceJob,
   Media,
   MediaBookPageReference,
   MediaLocation,

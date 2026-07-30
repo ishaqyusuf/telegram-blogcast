@@ -25,6 +25,8 @@ export const transcriptionWorkerJobInclude = {
   },
 };
 
+export const DEFAULT_TRANSCRIPTION_WORKER_STALE_MS = 30_000;
+
 export function clampTranscriptionProgress(value: unknown, fallback = 0) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;

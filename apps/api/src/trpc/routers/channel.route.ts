@@ -161,8 +161,8 @@ export const channelRoutes = createTRPCRouter({
       return startRecentUpdateJob(props.ctx, props.input);
     }),
 
-  getRecentUpdateJob: channelUpdateProcedure.query(async () => {
-    return getRecentUpdateJob();
+  getRecentUpdateJob: channelUpdateProcedure.query(async ({ ctx }) => {
+    return getRecentUpdateJob(ctx);
   }),
 
   // ── Blog persistence ───────────────────────────────────────────────────────

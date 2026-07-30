@@ -31,8 +31,8 @@ export const facebookImportRoutes = createTRPCRouter({
 			return listFacebookMediaImports(ctx.db, input);
 		}),
 
-	getMediaImportJob: publicProcedure.query(() => {
-		return getFacebookMediaImportJob();
+	getMediaImportJob: publicProcedure.query(({ ctx }) => {
+		return getFacebookMediaImportJob(ctx.db);
 	}),
 
 	startMediaImport: publicProcedure
@@ -41,8 +41,8 @@ export const facebookImportRoutes = createTRPCRouter({
 			return startFacebookMediaImportJob(ctx.db, input);
 		}),
 
-	stopMediaImport: publicProcedure.mutation(() => {
-		return stopFacebookMediaImportJob();
+	stopMediaImport: publicProcedure.mutation(({ ctx }) => {
+		return stopFacebookMediaImportJob(ctx.db);
 	}),
 
 	clearFailedMediaImports: publicProcedure

@@ -12,6 +12,10 @@ import {
 	type LocalServiceUrls,
 } from "@/lib/local-service-urls";
 import {
+	getOfflineLocalServiceRetryDelay,
+	PREVIEW_GATEWAY_REVALIDATION_MS,
+} from "@/lib/local-service-retry-policy";
+import {
 	getInitialLocalServicesSessionStatus,
 	getLocalServicesIpMode,
 	isValidIpv4Address,
@@ -84,6 +88,8 @@ export function useLocalServicesConnection(): LocalServicesConnectionController 
 	const mountedRef = useRef(true);
 	const connectionAttemptRef = useRef(0);
 	const discoveryAbortRef = useRef<AbortController | null>(null);
+	const remoteRefreshPromiseRef = useRef<Promise<boolean> | null>(null);
+	const transportFailureHandlerRef = useRef<() => void>(() => undefined);
 	const networkSignatureRef = useRef<string | null>(null);
 	const offlineRetryCountRef = useRef(0);
 	const savedIp = useAppSettingsStore((state) => state.localServicesIp);
@@ -117,7 +123,12 @@ export function useLocalServicesConnection(): LocalServicesConnectionController 
 		return buildLocalServiceUrls(activeIp);
 	}, [activeGatewayUrl, activeIp, connectionSource]);
 	const localApiClient = useMemo(
-		() => (urls ? createLocalApiClient(urls.apiBaseUrl) : null),
+		() =>
+			urls
+				? createLocalApiClient(urls.apiBaseUrl, {
+						onTransportError: () => transportFailureHandlerRef.current(),
+					})
+				: null,
 		[urls],
 	);
 
@@ -209,46 +220,69 @@ export function useLocalServicesConnection(): LocalServicesConnectionController 
 		[activeIp, commitLanConnection, connectionStatus, stopCurrentDiscovery],
 	);
 
-	const findRemoteConnection = useCallback(async (background = false) => {
-		stopCurrentDiscovery();
-		const attempt = connectionAttemptRef.current;
-		const controller = new AbortController();
-		discoveryAbortRef.current = controller;
-		if (!background) {
+	const runRemoteConnectionDiscovery = useCallback(
+		async (background = false) => {
+			stopCurrentDiscovery();
+			const attempt = connectionAttemptRef.current;
+			const controller = new AbortController();
+			discoveryAbortRef.current = controller;
+			if (!background) {
+				setConnectionError(null);
+				setStatus("initializing");
+				setConnectionStatus("checking");
+				setCheckingIp(null);
+				setDiscoveryProgress(null);
+			}
+
+			const gatewayUrl = await resolveReachableLocalGateway({
+				productionBaseUrl: process.env.EXPO_PUBLIC_BASE_URL,
+				checkHealth: checkLocalApiBaseUrl,
+				signal: controller.signal,
+			});
+			if (
+				!mountedRef.current ||
+				controller.signal.aborted ||
+				connectionAttemptRef.current !== attempt
+			) {
+				return false;
+			}
+
+			discoveryAbortRef.current = null;
+			if (gatewayUrl) {
+				commitRemoteConnection(gatewayUrl);
+				return true;
+			}
+
+			setConnectionSource(null);
+			setActiveGatewayUrl(null);
+			setActiveIp(null);
+			setConnectionStatus("offline");
+			setStatus("disabled");
 			setConnectionError(null);
-			setStatus("initializing");
-			setConnectionStatus("checking");
-			setCheckingIp(null);
-			setDiscoveryProgress(null);
-		}
-
-		const gatewayUrl = await resolveReachableLocalGateway({
-			productionBaseUrl: process.env.EXPO_PUBLIC_BASE_URL,
-			checkHealth: checkLocalApiBaseUrl,
-			signal: controller.signal,
-		});
-		if (
-			!mountedRef.current ||
-			controller.signal.aborted ||
-			connectionAttemptRef.current !== attempt
-		) {
 			return false;
-		}
+		},
+		[commitRemoteConnection, stopCurrentDiscovery],
+	);
 
-		discoveryAbortRef.current = null;
-		if (gatewayUrl) {
-			commitRemoteConnection(gatewayUrl);
-			return true;
-		}
+	const findRemoteConnection = useCallback(
+		(background = false) => {
+			const existing = remoteRefreshPromiseRef.current;
+			if (existing) return existing;
 
-		setConnectionSource(null);
-		setActiveGatewayUrl(null);
-		setActiveIp(null);
-		setConnectionStatus("offline");
-		setStatus("disabled");
-		setConnectionError(null);
-		return false;
-	}, [commitRemoteConnection, stopCurrentDiscovery]);
+			const refresh = runRemoteConnectionDiscovery(background).finally(() => {
+				if (remoteRefreshPromiseRef.current === refresh) {
+					remoteRefreshPromiseRef.current = null;
+				}
+			});
+			remoteRefreshPromiseRef.current = refresh;
+			return refresh;
+		},
+		[runRemoteConnectionDiscovery],
+	);
+	transportFailureHandlerRef.current = () => {
+		if (appVariantRef.current !== "preview") return;
+		void findRemoteConnection(true);
+	};
 
 	const findConnection = useCallback(async () => {
 		if (appVariantRef.current === "preview") {
@@ -379,7 +413,10 @@ export function useLocalServicesConnection(): LocalServicesConnectionController 
 
 	useEffect(() => {
 		if (!hydrated || connectionStatus !== "offline") return;
-		const delay = Math.min(30_000 * 2 ** offlineRetryCountRef.current, 120_000);
+		const delay = getOfflineLocalServiceRetryDelay(
+			appVariantRef.current,
+			offlineRetryCountRef.current,
+		);
 		const timer = setTimeout(() => {
 			offlineRetryCountRef.current += 1;
 			void findConnection();
@@ -396,7 +433,7 @@ export function useLocalServicesConnection(): LocalServicesConnectionController 
 		}
 		const timer = setInterval(() => {
 			void findRemoteConnection(true);
-		}, 60_000);
+		}, PREVIEW_GATEWAY_REVALIDATION_MS);
 		return () => clearInterval(timer);
 	}, [connectionStatus, findRemoteConnection]);
 

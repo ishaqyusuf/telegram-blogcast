@@ -4,7 +4,20 @@ import {
 	getFacebookExternalMedia,
 } from "@acme/blog/facebook-media";
 import type { Database, Prisma } from "@acme/db";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
+import {
+	claimLocalServiceJob,
+	createLocalServiceJob,
+	findLatestFinishedLocalServiceJob,
+	findRunningLocalServiceJob,
+	finishLocalServiceJob,
+	heartbeatLocalServiceJob,
+	LOCAL_SERVICE_JOB_HEARTBEAT_MS,
+	replaceRunningLocalServiceJobState,
+	saveRunningLocalServiceJob,
+	type StoredLocalServiceJob,
+} from "./local-service-job-store";
 
 const FACEBOOK_SOURCE = "facebook";
 const DEFAULT_FACEBOOK_MEDIA_BRIDGE_BASE_URL = "http://127.0.0.1:8790";
@@ -232,9 +245,61 @@ export type FacebookMediaImportJob = {
 	items: FacebookMediaImportJobItem[];
 };
 
+const FACEBOOK_MEDIA_IMPORT_JOB_KIND = "facebook-media-import";
+const facebookMediaImportRunnerId = `facebook-import:${process.pid}:${randomUUID()}`;
+let activeMediaImportRunnerJobId: string | null = null;
 let activeMediaImportJob: FacebookMediaImportJob | null = null;
-let latestMediaImportJob: FacebookMediaImportJob | null = null;
 let activeMediaImportAbortController: AbortController | null = null;
+
+const facebookMediaImportJobItemSchema = z.object({
+	blogId: z.number(),
+	title: z.string(),
+	sourceUrl: z.string().nullable(),
+	status: facebookMediaImportStatusSchema,
+	mediaId: z.number().nullable(),
+	error: z.string().nullable(),
+});
+
+const facebookMediaImportJobSchema = z.object({
+	id: z.string(),
+	status: z.enum(["running", "completed", "failed", "cancelled"]),
+	baseUrl: z.string(),
+	startedAt: z.string(),
+	finishedAt: z.string().nullable(),
+	cancelRequested: z.boolean(),
+	selectedCount: z.number(),
+	processedCount: z.number(),
+	importedCount: z.number(),
+	externalCount: z.number(),
+	failedCount: z.number(),
+	skippedCount: z.number(),
+	error: z.string().nullable(),
+	items: z.array(facebookMediaImportJobItemSchema),
+});
+
+function snapshotFacebookMediaImportJob(job: FacebookMediaImportJob | null) {
+	if (!job) return null;
+	return {
+		...job,
+		items: job.items.map((item) => ({ ...item })),
+	};
+}
+
+function readStoredFacebookMediaImportJob(
+	record: StoredLocalServiceJob | null,
+) {
+	if (!record) return null;
+	const parsed = facebookMediaImportJobSchema.safeParse(record.state);
+	return parsed.success ? (parsed.data as FacebookMediaImportJob) : null;
+}
+
+function readStoredFacebookMediaImportInput(
+	record: StoredLocalServiceJob | null,
+) {
+	if (!record) return null;
+	const parsed = startFacebookMediaImportSchema.safeParse(record.input);
+	return parsed.success ? parsed.data : null;
+}
 
 function isHostedServerRuntime() {
 	return (
@@ -907,8 +972,13 @@ async function runFacebookMediaImportJob(
 	input: StartFacebookMediaImportInput,
 	signal: AbortSignal,
 ) {
+	const heartbeat = setInterval(() => {
+		void heartbeatLocalServiceJob(db, job.id, facebookMediaImportRunnerId);
+	}, LOCAL_SERVICE_JOB_HEARTBEAT_MS);
 	try {
-		const blogs = await selectBlogsForImport(db, input);
+		let blogs: FacebookImportBlog[];
+		if (job.items.length === 0) {
+			blogs = await selectBlogsForImport(db, input);
 		job.selectedCount = blogs.length;
 		job.items = blogs.map((blog) => ({
 			blogId: blog.id,
@@ -918,11 +988,28 @@ async function runFacebookMediaImportJob(
 			mediaId: null,
 			error: null,
 		}));
+			await saveRunningLocalServiceJob(db, {
+				id: job.id,
+				runnerId: facebookMediaImportRunnerId,
+				state: snapshotFacebookMediaImportJob(job),
+			});
+		} else {
+			const pendingIds = job.items
+				.filter((item) => item.status === "running")
+				.map((item) => item.blogId);
+			blogs = pendingIds.length
+				? await findFacebookImportBlogs(db, {
+						blogIds: pendingIds,
+						limit: pendingIds.length,
+					})
+				: [];
+		}
 
 		for (const blog of blogs) {
 			if (job.cancelRequested || signal.aborted) break;
 
 			const item = job.items.find((entry) => entry.blogId === blog.id);
+			if (!item || item.status !== "running") continue;
 			try {
 				await updateBlogImportMeta(db, blog, {
 					status: "running",
@@ -969,6 +1056,11 @@ async function runFacebookMediaImportJob(
 				}).catch(() => undefined);
 			} finally {
 				job.processedCount += 1;
+				await saveRunningLocalServiceJob(db, {
+					id: job.id,
+					runnerId: facebookMediaImportRunnerId,
+					state: snapshotFacebookMediaImportJob(job),
+				});
 			}
 		}
 
@@ -998,14 +1090,49 @@ async function runFacebookMediaImportJob(
 		job.error =
 			error instanceof Error ? error.message : "Facebook media import failed.";
 	} finally {
-		latestMediaImportJob = job;
-		if (activeMediaImportJob?.id === job.id) {
-			activeMediaImportJob = null;
-		}
-		if (latestMediaImportJob?.id === job.id) {
+		clearInterval(heartbeat);
+		await finishLocalServiceJob(db, {
+			id: job.id,
+			runnerId: facebookMediaImportRunnerId,
+			status: job.status === "running" ? "failed" : job.status,
+			state: snapshotFacebookMediaImportJob(job),
+		});
+		if (activeMediaImportJob?.id === job.id) activeMediaImportJob = null;
+		if (activeMediaImportRunnerJobId === job.id) {
+			activeMediaImportRunnerJobId = null;
 			activeMediaImportAbortController = null;
 		}
 	}
+}
+
+async function ensureFacebookMediaImportRunner(
+	db: Database,
+	record: StoredLocalServiceJob,
+	job: FacebookMediaImportJob,
+	input: StartFacebookMediaImportInput,
+) {
+	if (activeMediaImportRunnerJobId === job.id) return true;
+	const claimed = await claimLocalServiceJob(db, {
+		id: job.id,
+		runnerId: facebookMediaImportRunnerId,
+	});
+	if (!claimed) return false;
+
+	activeMediaImportRunnerJobId = job.id;
+	activeMediaImportJob = job;
+	const abortController = new AbortController();
+	activeMediaImportAbortController = abortController;
+	void runFacebookMediaImportJob(db, job, input, abortController.signal).catch(
+		(error) => {
+			console.error("[facebook-import] durable runner failed", error);
+			if (activeMediaImportRunnerJobId === record.id) {
+				activeMediaImportRunnerJobId = null;
+				activeMediaImportJob = null;
+				activeMediaImportAbortController = null;
+			}
+		},
+	);
+	return true;
 }
 
 export async function startFacebookMediaImportJob(
@@ -1015,12 +1142,27 @@ export async function startFacebookMediaImportJob(
 	const baseUrl = getFacebookMediaBridgeBaseUrl(input.baseUrl);
 	assertFacebookMediaBridgeIsAllowed(baseUrl);
 
-	if (activeMediaImportJob?.status === "running") {
-		return { activeJob: activeMediaImportJob, started: false };
+	const storedActive = await findRunningLocalServiceJob(
+		db,
+		FACEBOOK_MEDIA_IMPORT_JOB_KIND,
+	);
+	const storedJob = readStoredFacebookMediaImportJob(storedActive);
+	const storedInput = readStoredFacebookMediaImportInput(storedActive);
+	if (storedActive && storedJob && storedInput) {
+		await ensureFacebookMediaImportRunner(
+			db,
+			storedActive,
+			storedJob,
+			storedInput,
+		);
+		return {
+			activeJob: snapshotFacebookMediaImportJob(storedJob),
+			started: false,
+		};
 	}
 
 	const job: FacebookMediaImportJob = {
-		id: `facebook-media-import-${Date.now()}`,
+		id: `facebook-media-import-${randomUUID()}`,
 		status: "running",
 		baseUrl,
 		startedAt: new Date().toISOString(),
@@ -1036,31 +1178,80 @@ export async function startFacebookMediaImportJob(
 		items: [],
 	};
 
+	await createLocalServiceJob(db, {
+		id: job.id,
+		kind: FACEBOOK_MEDIA_IMPORT_JOB_KIND,
+		input,
+		state: snapshotFacebookMediaImportJob(job),
+		runnerId: facebookMediaImportRunnerId,
+	});
+	activeMediaImportRunnerJobId = job.id;
 	activeMediaImportJob = job;
-	latestMediaImportJob = job;
 	const abortController = new AbortController();
 	activeMediaImportAbortController = abortController;
-	void runFacebookMediaImportJob(db, job, input, abortController.signal);
+	void runFacebookMediaImportJob(db, job, input, abortController.signal).catch(
+		(error) => {
+			console.error("[facebook-import] durable runner failed", error);
+			activeMediaImportRunnerJobId = null;
+			activeMediaImportJob = null;
+			activeMediaImportAbortController = null;
+		},
+	);
 
-	return { activeJob: job, started: true };
+	return { activeJob: snapshotFacebookMediaImportJob(job), started: true };
 }
 
-export function stopFacebookMediaImportJob() {
-	if (!activeMediaImportJob || activeMediaImportJob.status !== "running") {
-		return { activeJob: activeMediaImportJob, stopped: false };
+export async function stopFacebookMediaImportJob(db: Database) {
+	const storedActive = await findRunningLocalServiceJob(
+		db,
+		FACEBOOK_MEDIA_IMPORT_JOB_KIND,
+	);
+	const storedJob = readStoredFacebookMediaImportJob(storedActive);
+	if (!storedActive || !storedJob) {
+		return { activeJob: null, stopped: false };
 	}
 
-	activeMediaImportJob.cancelRequested = true;
-	activeMediaImportJob.error = "Stopping import...";
-	activeMediaImportAbortController?.abort();
+	const job =
+		activeMediaImportJob?.id === storedJob.id
+			? activeMediaImportJob
+			: storedJob;
+	job.cancelRequested = true;
+	job.error = "Stopping import...";
+	await replaceRunningLocalServiceJobState(
+		db,
+		storedActive.id,
+		snapshotFacebookMediaImportJob(job),
+	);
+	if (activeMediaImportRunnerJobId === job.id) {
+		activeMediaImportAbortController?.abort();
+	}
 
-	return { activeJob: activeMediaImportJob, stopped: true };
+	return {
+		activeJob: snapshotFacebookMediaImportJob(job),
+		stopped: true,
+	};
 }
 
-export function getFacebookMediaImportJob() {
+export async function getFacebookMediaImportJob(db: Database) {
+	const [storedActive, storedLatest] = await Promise.all([
+		findRunningLocalServiceJob(db, FACEBOOK_MEDIA_IMPORT_JOB_KIND),
+		findLatestFinishedLocalServiceJob(db, FACEBOOK_MEDIA_IMPORT_JOB_KIND),
+	]);
+	const storedJob = readStoredFacebookMediaImportJob(storedActive);
+	const storedInput = readStoredFacebookMediaImportInput(storedActive);
+	if (storedActive && storedJob && storedInput) {
+		await ensureFacebookMediaImportRunner(
+			db,
+			storedActive,
+			storedJob,
+			storedInput,
+		);
+	}
 	return {
-		activeJob: activeMediaImportJob,
-		latestCompletedJob: latestMediaImportJob,
+		activeJob: snapshotFacebookMediaImportJob(storedJob),
+		latestCompletedJob: snapshotFacebookMediaImportJob(
+			readStoredFacebookMediaImportJob(storedLatest),
+		),
 	};
 }
 
@@ -1093,7 +1284,7 @@ export async function getFacebookMediaImportSummary(
 		runningCount,
 		pendingCount,
 		baseUrl: getFacebookMediaBridgeBaseUrl(),
-		job: getFacebookMediaImportJob(),
+		job: await getFacebookMediaImportJob(db),
 	};
 }
 

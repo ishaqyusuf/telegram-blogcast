@@ -1,10 +1,23 @@
 import type { TRPCContext } from "@api/trpc/init";
 import type { BlogMeta } from "@api/type";
+import { randomUUID } from "node:crypto";
 import {
   fetchChannelMessageStats,
   fetchMessages,
 } from "@telegram/message-service";
 import { z } from "zod";
+import {
+	claimLocalServiceJob,
+	createLocalServiceJob,
+	findLatestFinishedLocalServiceJob,
+	findRunningLocalServiceJob,
+	finishLocalServiceJob,
+	heartbeatLocalServiceJob,
+	LOCAL_SERVICE_JOB_HEARTBEAT_MS,
+	replaceRunningLocalServiceJobState,
+	saveRunningLocalServiceJob,
+	type StoredLocalServiceJob,
+} from "../services/local-service-job-store";
 import {
   type IncomingMessage,
   loadExistingTelegramBlogs,
@@ -20,16 +33,16 @@ export type StartRecentUpdateJobSchema = z.infer<
   typeof startRecentUpdateJobSchema
 >;
 
-type ChannelUpdateStatus =
+export type ChannelUpdateStatus =
   | "queued"
   | "running"
   | "completed"
   | "failed"
   | "skipped";
 
-type RecentUpdateJobStatus = "running" | "completed";
+export type RecentUpdateJobStatus = "running" | "completed";
 
-type ChannelUpdateItem = {
+export type ChannelUpdateItem = {
   channelId: number;
   title: string | null;
   username: string;
@@ -48,7 +61,7 @@ type ChannelUpdateItem = {
   finishedAt: string | null;
 };
 
-type RecentUpdateJob = {
+export type RecentUpdateJob = {
   id: string;
   status: RecentUpdateJobStatus;
   startedAt: string;
@@ -75,9 +88,42 @@ type ChannelUpdateSummaryItem = {
   canUpdate: boolean;
 };
 
-let activeJob: RecentUpdateJob | null = null;
-let latestCompletedJob: RecentUpdateJob | null = null;
-let runnerActive = false;
+const RECENT_UPDATE_JOB_KIND = "telegram-recent-update";
+const recentUpdateRunnerId = `telegram-update:${process.pid}:${randomUUID()}`;
+let activeRunnerJobId: string | null = null;
+
+const channelUpdateItemSchema = z.object({
+	channelId: z.number(),
+	title: z.string().nullable(),
+	username: z.string(),
+	status: z.enum(["queued", "running", "completed", "failed", "skipped"]),
+	beforeCount: z.number(),
+	latestKnownCount: z.number().nullable(),
+	latestKnownMessageId: z.number().nullable(),
+	newestStoredMessageId: z.number().nullable(),
+	includeLegacyFallback: z.boolean(),
+	lastFetchedAt: z.string().nullable(),
+	fetchedCount: z.number(),
+	finalStoredCount: z.number().nullable(),
+	error: z.string().nullable(),
+	skipReason: z.string().nullable(),
+	startedAt: z.string().nullable(),
+	finishedAt: z.string().nullable(),
+});
+
+const recentUpdateJobSchema = z.object({
+	id: z.string(),
+	status: z.enum(["running", "completed"]),
+	startedAt: z.string(),
+	finishedAt: z.string().nullable(),
+	maxPerChannel: z.number(),
+	channels: z.array(channelUpdateItemSchema),
+	totalNewChats: z.number(),
+	selectedCount: z.number(),
+	completedCount: z.number(),
+	failedCount: z.number(),
+	skippedCount: z.number(),
+});
 
 function nowIso() {
   return new Date().toISOString();
@@ -94,6 +140,12 @@ function snapshotJob(job: RecentUpdateJob | null) {
     ...job,
     channels: job.channels.map((channel) => ({ ...channel })),
   };
+}
+
+function readStoredRecentUpdateJob(record: StoredLocalServiceJob | null) {
+	if (!record) return null;
+	const parsed = recentUpdateJobSchema.safeParse(record.state);
+	return parsed.success ? (parsed.data as RecentUpdateJob) : null;
 }
 
 function refreshJobCounts(job: RecentUpdateJob) {
@@ -113,10 +165,7 @@ function refreshJobCounts(job: RecentUpdateJob) {
   ).length;
 }
 
-async function getStoredChannelCounts(
-  ctx: TRPCContext,
-  channelIds: number[],
-) {
+async function getStoredChannelCounts(ctx: TRPCContext, channelIds: number[]) {
   const visibleWhere = {
     deletedAt: null,
     channelId: { in: channelIds },
@@ -220,8 +269,7 @@ export async function getUpdatePromptSummary(ctx: TRPCContext) {
     return { channels: [], generatedAt: nowIso() };
   }
 
-  const { countMap, latestDateMap, newestIdMap } =
-    await getStoredChannelCounts(
+	const { countMap, latestDateMap, newestIdMap } = await getStoredChannelCounts(
       ctx,
       channels.map((channel) => channel.id),
     );
@@ -266,12 +314,8 @@ async function buildJobItems(
     select: { id: true, title: true, username: true },
   });
   const channelMap = new Map(channels.map((channel) => [channel.id, channel]));
-  const {
-    countMap,
-    latestDateMap,
-    newestIdMap,
-    legacyCursorChannelIds,
-  } = await getStoredChannelCounts(ctx, uniqueIds);
+	const { countMap, latestDateMap, newestIdMap, legacyCursorChannelIds } =
+		await getStoredChannelCounts(ctx, uniqueIds);
 
   return Promise.all(
     uniqueIds.flatMap((channelId) => {
@@ -309,15 +353,18 @@ async function runChannelUpdate(
   ctx: TRPCContext,
   item: ChannelUpdateItem,
   limit: number,
+	onProgress: () => Promise<void>,
 ) {
   item.status = "running";
   item.startedAt = nowIso();
+	await onProgress();
 
   if (item.newestStoredMessageId === null) {
     item.status = "skipped";
     item.skipReason = "skipped_no_existing_messages";
     item.finishedAt = nowIso();
     item.finalStoredCount = item.beforeCount;
+		await onProgress();
     return;
   }
 
@@ -349,6 +396,7 @@ async function runChannelUpdate(
         { existingTelegramBlogs, includeLegacyFallback: false },
       );
       item.fetchedCount += saveResult.created ?? 0;
+			await onProgress();
     }
 
     remaining -= batchLimit;
@@ -363,11 +411,24 @@ async function runChannelUpdate(
   item.finalStoredCount = await countStoredBlogs(ctx, item.channelId);
   item.status = "completed";
   item.finishedAt = nowIso();
+	await onProgress();
 }
 
 async function runJob(ctx: TRPCContext, job: RecentUpdateJob) {
-  if (runnerActive) return;
-  runnerActive = true;
+	if (activeRunnerJobId) return;
+	activeRunnerJobId = job.id;
+	for (const channel of job.channels) {
+		if (channel.status === "running") channel.status = "queued";
+	}
+	refreshJobCounts(job);
+	await saveRunningLocalServiceJob(ctx.db, {
+		id: job.id,
+		runnerId: recentUpdateRunnerId,
+		state: snapshotJob(job),
+	});
+	const heartbeat = setInterval(() => {
+		void heartbeatLocalServiceJob(ctx.db, job.id, recentUpdateRunnerId);
+	}, LOCAL_SERVICE_JOB_HEARTBEAT_MS);
 
   try {
     for (let index = 0; index < job.channels.length; index++) {
@@ -375,27 +436,62 @@ async function runJob(ctx: TRPCContext, job: RecentUpdateJob) {
       if (!item || item.status !== "queued") continue;
 
       try {
-        await runChannelUpdate(ctx, item, job.maxPerChannel);
+				await runChannelUpdate(ctx, item, job.maxPerChannel, async () => {
+					refreshJobCounts(job);
+					await saveRunningLocalServiceJob(ctx.db, {
+						id: job.id,
+						runnerId: recentUpdateRunnerId,
+						state: snapshotJob(job),
+					});
+				});
       } catch (error) {
         item.status = "failed";
         item.error =
           error instanceof Error ? error.message : "Channel update failed.";
         item.finishedAt = nowIso();
-        item.finalStoredCount = await countStoredBlogs(ctx, item.channelId).catch(
-          () => item.beforeCount,
-        );
+				item.finalStoredCount = await countStoredBlogs(
+					ctx,
+					item.channelId,
+				).catch(() => item.beforeCount);
       } finally {
         refreshJobCounts(job);
+				await saveRunningLocalServiceJob(ctx.db, {
+					id: job.id,
+					runnerId: recentUpdateRunnerId,
+					state: snapshotJob(job),
+				});
       }
     }
   } finally {
+		clearInterval(heartbeat);
     refreshJobCounts(job);
     job.status = "completed";
     job.finishedAt = nowIso();
-    latestCompletedJob = snapshotJob(job);
-    activeJob = null;
-    runnerActive = false;
+		await finishLocalServiceJob(ctx.db, {
+			id: job.id,
+			runnerId: recentUpdateRunnerId,
+			status: "completed",
+			state: snapshotJob(job),
+		});
+		activeRunnerJobId = null;
   }
+}
+
+async function ensureRecentUpdateRunner(
+	ctx: TRPCContext,
+	job: RecentUpdateJob,
+) {
+	if (activeRunnerJobId === job.id) return true;
+	const claimed = await claimLocalServiceJob(ctx.db, {
+		id: job.id,
+		runnerId: recentUpdateRunnerId,
+	});
+	if (!claimed) return false;
+	void runJob(ctx, job).catch((error) => {
+		console.error("[channel-update] durable runner failed", error);
+		activeRunnerJobId = null;
+	});
+	return true;
 }
 
 export async function startRecentUpdateJob(
@@ -406,8 +502,13 @@ export async function startRecentUpdateJob(
   if (uniqueIds.length === 0) throw new Error("Select at least one channel.");
 
   const newItems = await buildJobItems(ctx, uniqueIds);
+	const storedActive = await findRunningLocalServiceJob(
+		ctx.db,
+		RECENT_UPDATE_JOB_KIND,
+	);
+	const activeJob = readStoredRecentUpdateJob(storedActive);
 
-  if (activeJob) {
+	if (storedActive && activeJob) {
     const currentIds = new Set(
       activeJob.channels.map((channel) => channel.channelId),
     );
@@ -416,7 +517,12 @@ export async function startRecentUpdateJob(
     );
     activeJob.channels.push(...uniqueNewItems);
     refreshJobCounts(activeJob);
-    void runJob(ctx, activeJob);
+		await replaceRunningLocalServiceJobState(
+			ctx.db,
+			storedActive.id,
+			snapshotJob(activeJob),
+		);
+		await ensureRecentUpdateRunner(ctx, activeJob);
     return snapshotJob(activeJob);
   }
 
@@ -424,8 +530,8 @@ export async function startRecentUpdateJob(
     throw new Error("No valid channels were selected.");
   }
 
-  const job: RecentUpdateJob = {
-    id: `recent-update-${Date.now()}`,
+	const job: RecentUpdateJob = {
+		id: `recent-update-${randomUUID()}`,
     status: "running",
     startedAt: nowIso(),
     finishedAt: null,
@@ -438,12 +544,28 @@ export async function startRecentUpdateJob(
     skippedCount: 0,
   };
 
-  activeJob = job;
-  void runJob(ctx, job);
+	await createLocalServiceJob(ctx.db, {
+		id: job.id,
+		kind: RECENT_UPDATE_JOB_KIND,
+		input,
+		state: snapshotJob(job),
+		runnerId: recentUpdateRunnerId,
+	});
+	void runJob(ctx, job).catch((error) => {
+		console.error("[channel-update] durable runner failed", error);
+		activeRunnerJobId = null;
+	});
   return snapshotJob(job);
 }
 
-export async function getRecentUpdateJob() {
+export async function getRecentUpdateJob(ctx: TRPCContext) {
+	const [storedActive, storedLatest] = await Promise.all([
+		findRunningLocalServiceJob(ctx.db, RECENT_UPDATE_JOB_KIND),
+		findLatestFinishedLocalServiceJob(ctx.db, RECENT_UPDATE_JOB_KIND),
+	]);
+	const activeJob = readStoredRecentUpdateJob(storedActive);
+	const latestCompletedJob = readStoredRecentUpdateJob(storedLatest);
+	if (activeJob) await ensureRecentUpdateRunner(ctx, activeJob);
   return {
     activeJob: snapshotJob(activeJob),
     latestCompletedJob: snapshotJob(latestCompletedJob),

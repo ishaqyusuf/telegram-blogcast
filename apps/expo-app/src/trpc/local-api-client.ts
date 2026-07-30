@@ -4,13 +4,20 @@ import { createTRPCClient, httpBatchLink } from "@trpc/client";
 import superjson from "superjson";
 
 import { trpcFetch } from "./fetch";
+import { createTransportAwareLocalFetch } from "./local-api-transport";
 
-export function createLocalApiClient(baseUrl: string) {
+export function createLocalApiClient(
+	baseUrl: string,
+	options?: { onTransportError?: () => void },
+) {
 	return createTRPCClient<AppRouter>({
 		links: [
 			httpBatchLink({
 				url: normalizeTrpcUrl(baseUrl),
-				fetch: trpcFetch,
+				fetch: createTransportAwareLocalFetch(
+					options?.onTransportError,
+					trpcFetch,
+				),
 				headers: {
 					"ngrok-skip-browser-warning": "1",
 				},

@@ -9,6 +9,7 @@ import { consoleLog } from "@acme/utils";
 import {
   claimNextTranscriptionJob,
   completeTranscriptionJob,
+  DEFAULT_TRANSCRIPTION_WORKER_STALE_MS,
   failTranscriptionJob,
   getWorkerIdFromBody,
   saveTranscriptionJobChunk,
@@ -21,7 +22,8 @@ import { db } from "@acme/db";
 
 const TRANSCRIPTION_WORKER_TOKEN = process.env.TRANSCRIPTION_WORKER_TOKEN;
 const TRANSCRIPTION_WORKER_STALE_MS = Number.parseInt(
-  process.env.TRANSCRIPTION_WORKER_STALE_MS ?? `${10 * 60 * 1000}`,
+  process.env.TRANSCRIPTION_WORKER_STALE_MS ??
+    `${DEFAULT_TRANSCRIPTION_WORKER_STALE_MS}`,
   10,
 );
 const TRANSCRIPTION_WORKER_MAX_RETRIES = Number.parseInt(

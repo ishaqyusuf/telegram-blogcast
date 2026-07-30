@@ -1,10 +1,14 @@
 import { db } from "@acme/db";
-import { getWorkerIdFromBody } from "@api/transcription-worker";
+import {
+    DEFAULT_TRANSCRIPTION_WORKER_STALE_MS,
+    getWorkerIdFromBody,
+} from "@api/transcription-worker";
 
 export const transcriptionWorkerDb = db as any;
 
 export const TRANSCRIPTION_WORKER_STALE_MS = Number.parseInt(
-    process.env.TRANSCRIPTION_WORKER_STALE_MS ?? `${10 * 60 * 1000}`,
+    process.env.TRANSCRIPTION_WORKER_STALE_MS ??
+        `${DEFAULT_TRANSCRIPTION_WORKER_STALE_MS}`,
     10,
 );
 

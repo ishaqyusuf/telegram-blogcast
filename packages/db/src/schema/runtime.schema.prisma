@@ -4,3 +4,21 @@ model LocalGatewayLease {
     expiresAt DateTime
     updatedAt DateTime @updatedAt
 }
+
+model LocalServiceJob {
+    id          String    @id
+    kind        String
+    activeKey   String?   @unique
+    status      String
+    input       Json
+    state       Json
+    runnerId    String?
+    heartbeatAt DateTime?
+    startedAt   DateTime  @default(now())
+    finishedAt  DateTime?
+    createdAt   DateTime  @default(now())
+    updatedAt   DateTime  @updatedAt
+
+    @@index([kind, status, createdAt])
+    @@index([status, heartbeatAt])
+}
