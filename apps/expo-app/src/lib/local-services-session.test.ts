@@ -25,7 +25,7 @@ describe("local services launch session", () => {
 	test("only development can add the Expo runtime host automatically", () => {
 		expect(getLocalServicesIpMode("development")).toBe("automatic");
 		expect(getLocalServicesIpMode("dev")).toBe("automatic");
-		expect(getLocalServicesIpMode("preview")).toBe("manual");
+		expect(getLocalServicesIpMode("preview")).toBe("remote");
 		expect(getLocalServicesIpMode("production")).toBe("manual");
 	});
 

@@ -85,6 +85,10 @@ export async function checkLocalApiBaseUrl(
 	const timeout = setTimeout(() => controller.abort(), HEALTH_TIMEOUT_MS);
 	try {
 		const res = await fetch(`${baseUrl.trim().replace(/\/+$/, "")}/health`, {
+			headers: {
+				Accept: "application/json",
+				"ngrok-skip-browser-warning": "1",
+			},
 			signal: controller.signal,
 		});
 		if (!res.ok) return false;

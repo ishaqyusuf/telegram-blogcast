@@ -163,12 +163,25 @@ Audio files are fetched using Bot API `file_id` resolution (MTProto forward → 
 
 ### Local services gateway
 
-Development uses the Expo host automatically. Preview and production builds connect optional LAN workflows through the selected host at port `3501`; the Next app exposes `/health` and `/api/trpc`, then coordinates Telegram updates, transcription on `8787`, and the Facebook media bridge on `8790`.
+Development uses the Expo host and saved LAN-IP history. Preview builds discover
+the current ngrok gateway through the production API and use it only for
+Telegram updates, local transcription, and Facebook/import operations. Normal
+authentication, content, and media traffic stays on
+`https://alghurobaa.vercel.app`. Production does not use preview discovery.
 
 When `bun dev` starts the web runner, it also starts an ngrok tunnel to port
 `3501`. The public HTTPS URL is printed in the existing `@acme/www#dev` TUI
-pane. Install ngrok and authenticate it once before relying on the tunnel.
-Set `NGROK_ENABLED=0` to keep the web runner local-only.
+pane. After `/health` is ready, the runner publishes the URL to a three-minute
+production lease and renews it once per minute. Install ngrok and authenticate
+it once, then configure matching publisher secrets locally and in Vercel:
+
+```env
+LOCAL_SERVICES_DISCOVERY_URL=https://alghurobaa.vercel.app/api/local-services/discovery
+LOCAL_SERVICES_DISCOVERY_TOKEN=<shared-random-secret>
+```
+
+Publication failures are visible but do not stop local development. Set
+`NGROK_ENABLED=0` to keep the web runner local-only.
 
 ---
 

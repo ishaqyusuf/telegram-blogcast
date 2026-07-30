@@ -11,7 +11,7 @@ export {
 } from "./local-service-ports";
 
 export type LocalServiceUrls = {
-	ip: string;
+	host: string;
 	apiBaseUrl: string;
 	apiTrpcUrl: string;
 	transcriberBaseUrl: string;
@@ -40,12 +40,31 @@ export function buildLocalServiceUrls(ip: string): LocalServiceUrls | null {
 
 	const apiBaseUrl = `http://${cleanIp}:${LOCAL_API_PORT}`;
 	return {
-		ip: cleanIp,
+		host: cleanIp,
 		apiBaseUrl,
 		apiTrpcUrl: `${apiBaseUrl}/api/trpc`,
 		transcriberBaseUrl: `http://${cleanIp}:${LOCAL_TRANSCRIBER_PORT}`,
 		facebookMediaBridgeBaseUrl: `http://${cleanIp}:${LOCAL_FACEBOOK_MEDIA_BRIDGE_PORT}`,
 	};
+}
+
+export function buildRemoteLocalServiceUrls(
+	gatewayBaseUrl: string,
+): LocalServiceUrls | null {
+	try {
+		const url = new URL(gatewayBaseUrl.trim());
+		if (url.protocol !== "https:") return null;
+		const apiBaseUrl = url.origin;
+		return {
+			host: url.hostname,
+			apiBaseUrl,
+			apiTrpcUrl: `${apiBaseUrl}/api/trpc`,
+			transcriberBaseUrl: `http://127.0.0.1:${LOCAL_TRANSCRIBER_PORT}`,
+			facebookMediaBridgeBaseUrl: `http://127.0.0.1:${LOCAL_FACEBOOK_MEDIA_BRIDGE_PORT}`,
+		};
+	} catch {
+		return null;
+	}
 }
 
 export function getPreferredLocalServiceIp(input: {

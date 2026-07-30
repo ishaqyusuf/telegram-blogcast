@@ -14,6 +14,9 @@ Documents authentication and authorization expectations across the API surface.
 - Auth-related middleware exists at `apps/api/src/trpc/middleware/auth-permission.ts`.
 - Shared auth functionality also exists in `packages/auth`.
 - Better Auth is present in app dependencies and project docs.
+- Local gateway discovery reads are public so preview builds can resolve the
+  active lease. `PUT` and `DELETE` require a constant-time-checked bearer token
+  from `LOCAL_SERVICES_DISCOVERY_TOKEN`; the token is never shipped in Expo.
 
 ### Questions To Maintain
 - Which routes are public vs authenticated?

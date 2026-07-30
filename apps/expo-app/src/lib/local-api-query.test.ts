@@ -6,25 +6,31 @@ import {
 } from "./local-api-query";
 
 describe("local API query keys", () => {
-	test("scopes local workflow data by selected IP", () => {
+	test("scopes local workflow data by active gateway URL", () => {
 		expect(
-			getLocalApiQueryKey("192.168.18.3", "facebookImport.checkBridge", {
+			getLocalApiQueryKey("https://demo.ngrok-free.app", "facebookImport.checkBridge", {
 				baseUrl: "http://192.168.18.3:8790",
 			}),
 		).toEqual([
 			"local-api",
-			"192.168.18.3",
+			"https://demo.ngrok-free.app",
 			"facebookImport.checkBridge",
 			{ baseUrl: "http://192.168.18.3:8790" },
 		]);
 	});
 
-	test("rejects a response from an IP that is no longer active", () => {
-		expect(shouldApplyLocalApiResult("192.168.18.3", "192.168.18.4")).toBe(
-			false,
-		);
-		expect(shouldApplyLocalApiResult("192.168.18.4", "192.168.18.4")).toBe(
-			true,
-		);
+	test("rejects a response from a gateway that is no longer active", () => {
+		expect(
+			shouldApplyLocalApiResult(
+				"https://old.ngrok-free.app",
+				"https://new.ngrok-free.app",
+			),
+		).toBe(false);
+		expect(
+			shouldApplyLocalApiResult(
+				"https://new.ngrok-free.app",
+				"https://new.ngrok-free.app",
+			),
+		).toBe(true);
 	});
 });

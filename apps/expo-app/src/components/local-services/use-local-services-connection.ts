@@ -1,3 +1,4 @@
+import { resolveReachableLocalGateway } from "@/lib/local-gateway-discovery";
 import {
 	buildLocalApiBaseUrl,
 	checkLocalApiBaseUrl,
@@ -6,6 +7,7 @@ import {
 import { getCurrentLocalApiIp } from "@/lib/local-api-runtime-host";
 import {
 	buildLocalServiceUrls,
+	buildRemoteLocalServiceUrls,
 	getPreferredLocalServiceIp,
 	type LocalServiceUrls,
 } from "@/lib/local-service-urls";
@@ -35,6 +37,8 @@ export type LocalServicesConnectionController = {
 	isResolving: boolean;
 	ipMode: LocalServicesIpMode;
 	connectionStatus: LocalServicesConnectionStatus;
+	connectionSource: "lan" | "remote" | null;
+	activeGatewayUrl: string | null;
 	activeIp: string | null;
 	savedIp: string | null;
 	checkingIp: string | null;
@@ -95,6 +99,10 @@ export function useLocalServicesConnection(): LocalServicesConnectionController 
 	const [ipMode, setIpMode] = useState<LocalServicesIpMode>("manual");
 	const [connectionStatus, setConnectionStatus] =
 		useState<LocalServicesConnectionStatus>("offline");
+	const [connectionSource, setConnectionSource] = useState<
+		"lan" | "remote" | null
+	>(null);
+	const [activeGatewayUrl, setActiveGatewayUrl] = useState<string | null>(null);
 	const [activeIp, setActiveIp] = useState<string | null>(null);
 	const [checkingIp, setCheckingIp] = useState<string | null>(null);
 	const [connectionError, setConnectionError] = useState<string | null>(null);
@@ -102,9 +110,12 @@ export function useLocalServicesConnection(): LocalServicesConnectionController 
 		useState<LocalServicesDiscoveryProgress>(null);
 
 	const urls = useMemo(() => {
+		if (connectionSource === "remote" && activeGatewayUrl) {
+			return buildRemoteLocalServiceUrls(activeGatewayUrl);
+		}
 		if (!activeIp) return null;
 		return buildLocalServiceUrls(activeIp);
-	}, [activeIp]);
+	}, [activeGatewayUrl, activeIp, connectionSource]);
 	const localApiClient = useMemo(
 		() => (urls ? createLocalApiClient(urls.apiBaseUrl) : null),
 		[urls],
@@ -116,10 +127,12 @@ export function useLocalServicesConnection(): LocalServicesConnectionController 
 		discoveryAbortRef.current = null;
 	}, []);
 
-	const commitConnection = useCallback(
+	const commitLanConnection = useCallback(
 		(ip: string) => {
 			offlineRetryCountRef.current = 0;
 			setLocalServicesIp(ip);
+			setConnectionSource("lan");
+			setActiveGatewayUrl(buildLocalApiBaseUrl(ip));
 			setActiveIp(ip);
 			setConnectionStatus("online");
 			setStatus("enabled");
@@ -129,6 +142,18 @@ export function useLocalServicesConnection(): LocalServicesConnectionController 
 		},
 		[setLocalServicesIp],
 	);
+
+	const commitRemoteConnection = useCallback((gatewayUrl: string) => {
+		offlineRetryCountRef.current = 0;
+		setConnectionSource("remote");
+		setActiveGatewayUrl(gatewayUrl);
+		setActiveIp(null);
+		setConnectionStatus("online");
+		setStatus("enabled");
+		setCheckingIp(null);
+		setDiscoveryProgress(null);
+		setConnectionError(null);
+	}, []);
 
 	const enableWithIp = useCallback(
 		async (ip: string) => {
@@ -170,7 +195,7 @@ export function useLocalServicesConnection(): LocalServicesConnectionController 
 			setCheckingIp(null);
 			setDiscoveryProgress(null);
 			if (online) {
-				commitConnection(normalizedIp);
+				commitLanConnection(normalizedIp);
 				return true;
 			}
 
@@ -181,10 +206,55 @@ export function useLocalServicesConnection(): LocalServicesConnectionController 
 			}
 			return false;
 		},
-		[activeIp, commitConnection, connectionStatus, stopCurrentDiscovery],
+		[activeIp, commitLanConnection, connectionStatus, stopCurrentDiscovery],
 	);
 
+	const findRemoteConnection = useCallback(async (background = false) => {
+		stopCurrentDiscovery();
+		const attempt = connectionAttemptRef.current;
+		const controller = new AbortController();
+		discoveryAbortRef.current = controller;
+		if (!background) {
+			setConnectionError(null);
+			setStatus("initializing");
+			setConnectionStatus("checking");
+			setCheckingIp(null);
+			setDiscoveryProgress(null);
+		}
+
+		const gatewayUrl = await resolveReachableLocalGateway({
+			productionBaseUrl: process.env.EXPO_PUBLIC_BASE_URL,
+			checkHealth: checkLocalApiBaseUrl,
+			signal: controller.signal,
+		});
+		if (
+			!mountedRef.current ||
+			controller.signal.aborted ||
+			connectionAttemptRef.current !== attempt
+		) {
+			return false;
+		}
+
+		discoveryAbortRef.current = null;
+		if (gatewayUrl) {
+			commitRemoteConnection(gatewayUrl);
+			return true;
+		}
+
+		setConnectionSource(null);
+		setActiveGatewayUrl(null);
+		setActiveIp(null);
+		setConnectionStatus("offline");
+		setStatus("disabled");
+		setConnectionError(null);
+		return false;
+	}, [commitRemoteConnection, stopCurrentDiscovery]);
+
 	const findConnection = useCallback(async () => {
+		if (appVariantRef.current === "preview") {
+			return findRemoteConnection();
+		}
+
 		const preferredIp = getPreferredLocalServiceIp({
 			manualIp: savedIp,
 			lastUsedIp: localApiLastIp,
@@ -237,17 +307,22 @@ export function useLocalServicesConnection(): LocalServicesConnectionController 
 		setCheckingIp(null);
 		setDiscoveryProgress(null);
 		if (result) {
-			commitConnection(result.ip);
+			commitLanConnection(result.ip);
 			return true;
 		}
 
+		setConnectionSource(preferredIp ? "lan" : null);
+		setActiveGatewayUrl(
+			preferredIp ? buildLocalApiBaseUrl(preferredIp) : null,
+		);
 		setActiveIp(preferredIp || null);
 		setConnectionStatus("offline");
 		setStatus("disabled");
 		setConnectionError("No saved local-service address is reachable.");
 		return false;
 	}, [
-		commitConnection,
+		commitLanConnection,
+		findRemoteConnection,
 		history,
 		localApiBaseUrl,
 		localApiLastIp,
@@ -256,9 +331,12 @@ export function useLocalServicesConnection(): LocalServicesConnectionController 
 	]);
 
 	const retryConnection = useCallback(async () => {
+		if (connectionSource === "remote" || appVariantRef.current === "preview") {
+			return findConnection();
+		}
 		if (activeIp) return enableWithIp(activeIp);
 		return findConnection();
-	}, [activeIp, enableWithIp, findConnection]);
+	}, [activeIp, connectionSource, enableWithIp, findConnection]);
 
 	useEffect(() => {
 		if (!hydrated || initializedRef.current) return;
@@ -310,6 +388,19 @@ export function useLocalServicesConnection(): LocalServicesConnectionController 
 	}, [connectionStatus, findConnection, hydrated]);
 
 	useEffect(() => {
+		if (
+			appVariantRef.current !== "preview" ||
+			connectionStatus !== "online"
+		) {
+			return;
+		}
+		const timer = setInterval(() => {
+			void findRemoteConnection(true);
+		}, 60_000);
+		return () => clearInterval(timer);
+	}, [connectionStatus, findRemoteConnection]);
+
+	useEffect(() => {
 		mountedRef.current = true;
 		return () => {
 			mountedRef.current = false;
@@ -321,9 +412,11 @@ export function useLocalServicesConnection(): LocalServicesConnectionController 
 		() => ({
 			status,
 			isEnabled: connectionStatus === "online",
-			isResolving: checkingIp !== null,
+			isResolving: connectionStatus === "checking",
 			ipMode,
 			connectionStatus,
+			connectionSource,
+			activeGatewayUrl,
 			activeIp,
 			savedIp,
 			checkingIp,
@@ -338,8 +431,10 @@ export function useLocalServicesConnection(): LocalServicesConnectionController 
 		}),
 		[
 			activeIp,
+			activeGatewayUrl,
 			checkingIp,
 			connectionError,
+			connectionSource,
 			connectionStatus,
 			discoveryProgress,
 			enableWithIp,

@@ -1,29 +1,38 @@
 {
-	"cli": {
-		"version": ">= 16.9.0",
-		"appVersionSource": "remote"
-	},
-	"build": {
-		"development": {
-			"developmentClient": true,
-			"distribution": "internal",
-			"env": {
-				"APP_VARIANT": "development"
-			}
-		},
-		"preview": {
-			"distribution": "internal",
-			"env": {
-				"APP_VARIANT": "preview"
-			},
-			"autoIncrement": true,
-			"channel": "preview"
-		},
-		"production": {
-			"autoIncrement": true
-		}
-	},
-	"submit": {
-		"production": {}
-	}
+  "cli": {
+    "version": ">= 16.9.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "APP_VARIANT": "development"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "env": {
+        "APP_VARIANT": "preview",
+        "EXPO_PUBLIC_APP_VARIANT": "preview",
+        "EXPO_PUBLIC_BASE_URL": "https://alghurobaa.vercel.app",
+        "EXPO_PUBLIC_TRPC_URL": "https://alghurobaa.vercel.app/api/trpc",
+        "EXPO_PUBLIC_WEB_URL": "https://alghurobaa.vercel.app"
+      },
+      "autoIncrement": true,
+      "channel": "preview"
+    },
+    "production": {
+      "env": {
+        "EXPO_PUBLIC_BASE_URL": "https://alghurobaa.vercel.app",
+        "EXPO_PUBLIC_TRPC_URL": "https://alghurobaa.vercel.app/api/trpc",
+        "EXPO_PUBLIC_WEB_URL": "https://alghurobaa.vercel.app"
+      },
+      "autoIncrement": true
+    }
+  },
+  "submit": {
+    "production": {}
+  }
 }

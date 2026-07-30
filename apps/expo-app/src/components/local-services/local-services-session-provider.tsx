@@ -33,7 +33,14 @@ export function LocalServicesSessionProvider({
 }) {
 	const connection = useLocalServicesConnection();
 	const [sheetVisible, setSheetVisible] = useState(false);
-	const requestSetup = useCallback(() => setSheetVisible(true), []);
+	const { ipMode, retryConnection } = connection;
+	const requestSetup = useCallback(() => {
+		if (ipMode === "remote") {
+			void retryConnection();
+			return;
+		}
+		setSheetVisible(true);
+	}, [ipMode, retryConnection]);
 	const value = useMemo(
 		() => ({ ...connection, requestSetup }),
 		[connection, requestSetup],
@@ -71,7 +78,8 @@ export function useLocalServicesSession() {
 
 export function LocalServicesGuard({ children }: { children: ReactNode }) {
 	const router = useRouter();
-	const { isEnabled, requestSetup } = useLocalServicesSession();
+	const { ipMode, isEnabled, requestSetup } = useLocalServicesSession();
+	const usesRemoteDiscovery = ipMode === "remote";
 
 	if (isEnabled) return children;
 
@@ -94,21 +102,28 @@ export function LocalServicesGuard({ children }: { children: ReactNode }) {
 					</View>
 					<View className="gap-2">
 						<Text className="text-center text-xl font-extrabold text-foreground">
-							Local services are off
+							{usesRemoteDiscovery
+								? "Local services are unavailable"
+								: "Local services are off"}
 						</Text>
 						<Text className="text-center text-sm leading-5 text-muted-foreground">
-							Enable a network IP to use Telegram updates, Facebook import, and
-							local transcription.
+							{usesRemoteDiscovery
+								? "The preview gateway is not running right now. You can continue using the rest of the app."
+								: "Enable a network IP to use Telegram updates, Facebook import, and local transcription."}
 						</Text>
 					</View>
 					<Pressable
 						haptic
 						onPress={requestSetup}
-						accessibilityLabel="Enable local services"
+						accessibilityLabel={
+							usesRemoteDiscovery
+								? "Try local services again"
+								: "Enable local services"
+						}
 						className="min-h-12 items-center justify-center rounded-xl bg-primary px-6 active:opacity-80"
 					>
 						<Text className="text-sm font-bold text-primary-foreground">
-							Enable local services
+							{usesRemoteDiscovery ? "Try again" : "Enable local services"}
 						</Text>
 					</Pressable>
 				</View>

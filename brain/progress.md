@@ -1,5 +1,23 @@
 # Progress
 
+## 2026-07-30
+
+### Production-Backed ngrok Gateway Discovery
+- Status: Implemented; production secret and database schema are configured.
+  Deployment, publisher verification, and preview release remain.
+- Source mode: User-approved implementation plan.
+- Source changed: Expo/Vercel environment URLs, singleton discovery lease and
+  authenticated route, web-runner health-gated publisher and heartbeat,
+  preview-only remote resolution/retries, gateway-scoped local workflow state,
+  remote retry UI, ngrok warning bypass, and LAN development preservation.
+- Production database push completed and the Vercel discovery token was added
+  as a sensitive production variable; the same value is stored only in the
+  ignored local web environment.
+- Brain changed:
+  `brain/plans/2026-07-30-feature-production-backed-ngrok-gateway-discovery.md`,
+  mobile build variants, API endpoints/contracts/permissions, database schema,
+  completed tasks, and progress.
+
 ## 2026-07-24
 
 ### Channel Content Filter Configuration

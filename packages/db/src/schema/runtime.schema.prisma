@@ -1,0 +1,6 @@
+model LocalGatewayLease {
+    key       String   @id
+    url       String
+    expiresAt DateTime
+    updatedAt DateTime @updatedAt
+}

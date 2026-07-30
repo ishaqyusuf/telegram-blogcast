@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+	buildRemoteLocalServiceUrls,
 	buildLocalServiceUrls,
 	getPreferredLocalServiceIp,
 	normalizeLocalServiceIpInput,
@@ -16,9 +17,21 @@ describe("local service URLs", () => {
 		);
 	});
 
+	test("routes preview API traffic through ngrok and keeps worker URLs local to the gateway", () => {
+		expect(
+			buildRemoteLocalServiceUrls("https://demo.ngrok-free.app"),
+		).toEqual({
+			host: "demo.ngrok-free.app",
+			apiBaseUrl: "https://demo.ngrok-free.app",
+			apiTrpcUrl: "https://demo.ngrok-free.app/api/trpc",
+			transcriberBaseUrl: "http://127.0.0.1:8787",
+			facebookMediaBridgeBaseUrl: "http://127.0.0.1:8790",
+		});
+	});
+
 	test("builds service URLs from a shared IP and per-service ports", () => {
 		expect(buildLocalServiceUrls("192.168.1.44")).toEqual({
-			ip: "192.168.1.44",
+			host: "192.168.1.44",
 			apiBaseUrl: "http://192.168.1.44:3501",
 			apiTrpcUrl: "http://192.168.1.44:3501/api/trpc",
 			transcriberBaseUrl: "http://192.168.1.44:8787",

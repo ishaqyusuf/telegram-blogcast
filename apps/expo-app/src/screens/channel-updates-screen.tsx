@@ -141,9 +141,9 @@ function ChannelProgressRow({ channel }: { channel: ChannelUpdateItem }) {
 
 export default function ChannelUpdatesScreen() {
   const router = useRouter();
-  const { activeIp, localApiClient } = useLocalServicesSession();
+  const { activeGatewayUrl, localApiClient } = useLocalServicesSession();
   const { data, isFetching, refetch, error } = useQuery({
-    queryKey: ["local-api", activeIp, "channel-update-job"],
+    queryKey: ["local-api", activeGatewayUrl, "channel-update-job"],
     queryFn: () => {
       if (!localApiClient) throw new Error("Local API is not configured.");
       return localApiClient.channel.getRecentUpdateJob.query();

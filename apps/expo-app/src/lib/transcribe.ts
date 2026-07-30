@@ -104,7 +104,9 @@ export async function checkTranscriberHealth(
 	}
 
 	try {
-		const res = await fetch(`${baseUrl}/health`);
+		const res = await fetch(`${baseUrl}/health`, {
+			headers: { "ngrok-skip-browser-warning": "1" },
+		});
 		return res.ok;
 	} catch {
 		throw new TranscribeError(
@@ -129,7 +131,10 @@ export async function transcribeAudio(
 	try {
 		res = await fetch(`${baseUrl}/transcribe`, {
 			method: "POST",
-			headers: { "Content-Type": "application/json" },
+			headers: {
+				"Content-Type": "application/json",
+				"ngrok-skip-browser-warning": "1",
+			},
 			body: JSON.stringify(params),
 		});
 	} catch {

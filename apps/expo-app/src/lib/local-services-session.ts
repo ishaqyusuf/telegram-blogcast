@@ -3,7 +3,7 @@ export type LocalServicesSessionStatus =
 	| "enabled"
 	| "disabled";
 
-export type LocalServicesIpMode = "automatic" | "manual";
+export type LocalServicesIpMode = "automatic" | "manual" | "remote";
 export type LocalServicesConnectionStatus = "checking" | "online" | "offline";
 export type LocalServicesDiscoveryProgress = {
 	attempted: number;
@@ -22,9 +22,9 @@ export function getLocalServicesIpMode(
 	appVariant: string | null | undefined,
 ): LocalServicesIpMode {
 	const normalized = (appVariant ?? "production").toLowerCase();
-	return normalized === "development" || normalized === "dev"
-		? "automatic"
-		: "manual";
+	if (normalized === "development" || normalized === "dev") return "automatic";
+	if (normalized === "preview") return "remote";
+	return "manual";
 }
 
 export function normalizeIpv4Input(value: string) {

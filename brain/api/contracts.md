@@ -61,6 +61,13 @@ Tracks important request/response expectations and typed boundaries between clie
 
 ### Local API Contracts
 - `GET /health` returns a lightweight API reachability payload for local Expo/APK screens.
+- Production `GET /api/local-services/discovery` returns
+  `{ url: string, expiresAt: ISODate }` only for a current lease, otherwise
+  `{ url: null, expiresAt: null }`. Writes require the shared discovery bearer
+  token and accept only origin-only HTTPS `*.ngrok-free.app` URLs.
+- Preview uses the discovered gateway only for local tRPC workflows. Normal
+  application tRPC, authentication, content, and media requests remain on the
+  configured Vercel URLs.
 - Expo Settings owns a shared Local Services IP. When set, clients derive the local API URL from that IP and the API port, derive the transcriber URL from the same IP and transcriber port, and derive the Facebook bridge URL from the same IP and bridge port. Explicit service URL overrides still take precedence over IP-derived defaults.
 - `/blog-import` mobile flow talks to the local API over LAN using the tRPC channel procedures: `channel.getChannels`, `channel.syncChannels`, `channel.toggleFetchable`, `channel.startFetch`, `channel.stopFetch`, and `channel.getFetcherState`.
 - `/facebook-import` mobile flow talks to tRPC `facebookImport.getSummary`, `facebookImport.listMediaImports`, `facebookImport.checkBridge`, and `facebookImport.startMediaImport`.

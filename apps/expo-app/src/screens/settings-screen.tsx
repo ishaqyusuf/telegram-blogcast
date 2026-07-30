@@ -29,6 +29,7 @@ const LANGUAGES: AppLanguage[] = ["en", "ar"];
 export default function SettingsScreen() {
   const router = useRouter();
   const {
+    activeGatewayUrl,
     activeIp,
     connectionStatus,
     enableWithIp,
@@ -56,11 +57,15 @@ export default function SettingsScreen() {
   const canCheckTranscriber = isHttpTranscriberUrl(resolvedTranscriberUrl);
   const { data: transcriberHealth, isFetching: checkingTranscriber } = useQuery(
     {
-      queryKey: getLocalApiQueryKey(activeIp, "blog.checkLocalTranscriber", {
-        baseUrl: canCheckTranscriber
-          ? (resolvedTranscriberUrl ?? undefined)
-          : undefined,
-      }),
+      queryKey: getLocalApiQueryKey(
+        activeGatewayUrl,
+        "blog.checkLocalTranscriber",
+        {
+          baseUrl: canCheckTranscriber
+            ? (resolvedTranscriberUrl ?? undefined)
+            : undefined,
+        },
+      ),
       queryFn: () =>
         localApiClient!.blog.checkLocalTranscriber.query({
           baseUrl: canCheckTranscriber
@@ -83,7 +88,7 @@ export default function SettingsScreen() {
   }, [activeIp]);
 
   async function saveAndCheckLocalServicesIp() {
-    if (ipMode === "automatic") {
+    if (ipMode === "automatic" || ipMode === "remote") {
       await retryConnection();
       return;
     }
@@ -421,7 +426,9 @@ export default function SettingsScreen() {
                     writingDirection,
                   }}
                 >
-                  Local services IP
+                  {ipMode === "remote"
+                    ? "Preview local gateway"
+                    : "Local services IP"}
                 </Text>
                 <Text
                   className="text-muted-foreground"
@@ -432,12 +439,17 @@ export default function SettingsScreen() {
                     writingDirection,
                   }}
                 >
-                  Use one LAN IP for Telegram updates, transcription, and
-                  Facebook import.
+                  {ipMode === "remote"
+                    ? "Automatically discover the active secure tunnel for local-only operations."
+                    : "Use one LAN IP for Telegram updates, transcription, and Facebook import."}
                 </Text>
                 <Text className="mt-1 text-xs font-semibold text-muted-foreground">
                   {ipMode === "automatic"
                     ? "Automatic in development"
+                    : ipMode === "remote"
+                      ? localServicesEnabled
+                        ? "Discovered for this session"
+                        : "Unavailable — normal app features still work"
                     : localServicesEnabled
                       ? "Enabled for this session"
                       : "Disabled for this session"}
@@ -452,13 +464,21 @@ export default function SettingsScreen() {
                 className="text-muted-foreground"
               />
               <TextInput
-                value={localServicesIpInput}
+                value={
+                  ipMode === "remote"
+                    ? (activeGatewayUrl ?? "")
+                    : localServicesIpInput
+                }
                 onChangeText={setLocalServicesIpInput}
                 onSubmitEditing={() => void saveAndCheckLocalServicesIp()}
                 editable={ipMode === "manual"}
                 autoCapitalize="none"
                 autoCorrect={false}
-                placeholder="192.168.1.20"
+                placeholder={
+                  ipMode === "remote"
+                    ? "No preview gateway discovered"
+                    : "192.168.1.20"
+                }
                 placeholderTextColor={colors.mutedForeground}
                 style={{
                   flex: 1,
@@ -475,7 +495,7 @@ export default function SettingsScreen() {
                 className="size-8 items-center justify-center rounded-full bg-muted active:opacity-70"
               >
                 <Icon
-                  name={ipMode === "automatic" ? "RefreshCw" : "Check"}
+                  name={ipMode === "manual" ? "Check" : "RefreshCw"}
                   size={15}
                   className="text-foreground"
                 />

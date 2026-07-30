@@ -11,6 +11,11 @@ Tracks completed work that is still useful as project memory.
 ## Template
 
 ### Completed
+- **Production-backed ngrok gateway discovery** - added an authenticated,
+  expiring production lease, automatic web-runner publication/heartbeat, and
+  preview-only remote local-service resolution without persisting tunnel URLs
+  or exposing manual-IP fallback. Plan:
+  `brain/plans/2026-07-30-feature-production-backed-ngrok-gateway-discovery.md`.
 - **Channel content filter configuration** - added per-channel text/image/video/audio/PDF allow-lists, Settings switch and floating selector UI, Prisma-level enforcement across Home/channel/Search, canonical Telegram PDF/video typing, and legacy MIME fallback. Plan: `brain/plans/2026-07-24-feature-channel-content-filter-configuration.md`.
 - **Silent Local Services discovery and home status** - replaced the preview/production cold-launch prompt with selected-IP-first background discovery, bounded history fallback, verified health identity, foreground/network/backoff retries, an always-visible home connection indicator, and a connected/checking/offline floating sheet. Plan: `brain/plans/2026-07-24-feature-silent-local-services-discovery-status.md`.
 - **Oversized Facebook media external playback** - added pre-download media probing, 20/50 MiB Telegram thresholds, thumbnail-only external cards, terminal import status and explicit Recheck, Telegram/Facebook deep links for video and audio, and a dry-run legacy metadata backfill. Plan: `brain/plans/2026-07-22-feature-facebook-large-media-external-playback.md`.

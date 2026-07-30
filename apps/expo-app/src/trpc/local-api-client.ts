@@ -11,6 +11,9 @@ export function createLocalApiClient(baseUrl: string) {
 			httpBatchLink({
 				url: normalizeTrpcUrl(baseUrl),
 				fetch: trpcFetch,
+				headers: {
+					"ngrok-skip-browser-warning": "1",
+				},
 				transformer: superjson as any,
 			}),
 		],

@@ -47,10 +47,12 @@ export function LocalTranscribe({
 }: LocalTranscribeProps) {
   const colors = useColors();
   const {
+    connectionSource,
     isEnabled: localServicesEnabled,
     requestSetup: requestLocalServicesSetup,
     urls: localServiceUrls,
   } = useLocalServicesSession();
+  const usesRemoteGateway = connectionSource === "remote";
   const queryClient = useQueryClient();
   const durationMs = useAudioStore((s) => s.duration);
   const uri = useAudioStore((s) => s.uri);
@@ -348,8 +350,9 @@ export function LocalTranscribe({
             textAlign: "center",
           }}
         >
-          Transcribe this audio locally using MLX Whisper on your Mac.
-          Requires the transcriber service to be running on your LAN.
+          {usesRemoteGateway
+            ? "Queue this audio through the secure preview gateway for MLX Whisper on your Mac."
+            : "Transcribe this audio locally using MLX Whisper on your Mac. Requires the transcriber service to be running on your LAN."}
         </Text>
       </View>
 
@@ -561,36 +564,37 @@ export function LocalTranscribe({
         </Text>
       </Pressable>
 
-      {/* Transcribe button */}
-      <Pressable
-        onPress={handleTranscribe}
-        disabled={isBusy || rangeSec <= 0}
-        style={{
-          paddingHorizontal: 24,
-          paddingVertical: 12,
-          borderRadius: 999,
-          backgroundColor: colors.primary,
-          opacity: isBusy || rangeSec <= 0 ? 0.4 : 1,
-          width: "100%",
-          alignItems: "center",
-          flexDirection: "row",
-          justifyContent: "center",
-          gap: 8,
-        }}
-      >
-        {isTranscribing && (
-          <Icon name="Loader" size={16} color={colors.primaryForeground} />
-        )}
-        <Text
+      {!usesRemoteGateway ? (
+        <Pressable
+          onPress={handleTranscribe}
+          disabled={isBusy || rangeSec <= 0}
           style={{
-            fontSize: 14,
-            fontWeight: "700",
-            color: colors.primaryForeground,
+            paddingHorizontal: 24,
+            paddingVertical: 12,
+            borderRadius: 999,
+            backgroundColor: colors.primary,
+            opacity: isBusy || rangeSec <= 0 ? 0.4 : 1,
+            width: "100%",
+            alignItems: "center",
+            flexDirection: "row",
+            justifyContent: "center",
+            gap: 8,
           }}
         >
-          {isBusy ? "Transcribing…" : "Transcribe Locally"}
-        </Text>
-      </Pressable>
+          {isTranscribing && (
+            <Icon name="Loader" size={16} color={colors.primaryForeground} />
+          )}
+          <Text
+            style={{
+              fontSize: 14,
+              fontWeight: "700",
+              color: colors.primaryForeground,
+            }}
+          >
+            {isBusy ? "Transcribing…" : "Transcribe Locally"}
+          </Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }

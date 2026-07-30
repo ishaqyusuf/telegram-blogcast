@@ -9,44 +9,87 @@ const PREVIEW_OR_FORCED_BASE_URL =
   process.env.EXPO_PUBLIC_APP_VARIANT === "preview" ||
   process.env.EXPO_PUBLIC_FORCE_BASE_URL === "true";
 const IS_DEV = typeof __DEV__ !== "undefined" && __DEV__;
+const USE_EXPLICIT_ENV_URLS = PREVIEW_OR_FORCED_BASE_URL || !IS_DEV;
 const TRPC_PATH = "/api/trpc";
 
-export const getLocalNetworkHost = () => {
-  const debuggerHost = Constants.expoConfig?.hostUri;
-  const localhost = debuggerHost?.split(":")[0];
+function parseHostname(value?: string | null) {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  try {
+    return new URL(
+      trimmed.includes("://") ? trimmed : `http://${trimmed}`,
+    ).hostname;
+  } catch {
+    return trimmed.split(":")[0] || null;
+  }
+}
 
-  if (localhost) return localhost;
+function isLoopbackHost(hostname: string) {
+  return (
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "::1" ||
+    hostname === "[::1]"
+  );
+}
 
-  const explicitLocalHost =
-    process.env.EXPO_PUBLIC_LOCAL_NETWORK_HOST ??
-    process.env.EXPO_PUBLIC_MAC_LAN_IP ??
-    process.env.EXPO_PUBLIC_DEVICE_IP;
-  if (explicitLocalHost?.trim()) {
-    const trimmed = explicitLocalHost.trim();
+export function resolveLocalNetworkHost({
+  debuggerHost,
+  explicitLocalHost,
+  urlCandidates,
+}: {
+  debuggerHost?: string | null;
+  explicitLocalHost?: string | null;
+  urlCandidates: (string | undefined)[];
+}) {
+  const explicitHostname = parseHostname(explicitLocalHost);
+  if (explicitHostname) return explicitHostname;
+
+  const debuggerHostname = parseHostname(debuggerHost);
+  if (debuggerHostname && !isLoopbackHost(debuggerHostname)) {
+    return debuggerHostname;
+  }
+
+  const parsedCandidates = urlCandidates.flatMap((candidate) => {
+    if (!candidate) return [];
     try {
-      return new URL(trimmed).hostname;
+      return [new URL(candidate).hostname];
     } catch {
-      return trimmed;
+      return [];
     }
-  }
+  });
 
-  const urlCandidates = [
-    process.env.EXPO_PUBLIC_TRPC_URL,
-    process.env.EXPO_PUBLIC_BASE_URL,
-    process.env.EXPO_PUBLIC_WEB_URL,
-  ];
+  const networkCandidate = parsedCandidates.find(
+    (hostname) =>
+      isPrivateNetworkHost(hostname) && !isLoopbackHost(hostname),
+  );
+  if (networkCandidate) return networkCandidate;
 
-  for (const candidate of urlCandidates) {
-    if (!candidate) continue;
-    try {
-      const parsed = new URL(candidate);
-      if (isPrivateNetworkHost(parsed.hostname)) return parsed.hostname;
-    } catch {}
-  }
+  if (debuggerHostname) return debuggerHostname;
+
+  const loopbackCandidate = parsedCandidates.find(isLoopbackHost);
+  if (loopbackCandidate) return loopbackCandidate;
 
   throw new Error(
     "Failed to resolve the local network host. Set EXPO_PUBLIC_LOCAL_NETWORK_HOST or EXPO_PUBLIC_TRPC_URL to a reachable LAN URL.",
   );
+}
+
+export const getLocalNetworkHost = () => {
+  const explicitLocalHost =
+    process.env.EXPO_PUBLIC_LOCAL_NETWORK_HOST ??
+    process.env.EXPO_PUBLIC_MAC_LAN_IP ??
+    process.env.EXPO_PUBLIC_DEVICE_IP;
+
+  return resolveLocalNetworkHost({
+    debuggerHost: Constants.expoConfig?.hostUri,
+    explicitLocalHost,
+    urlCandidates: [
+      process.env.EXPO_PUBLIC_TRPC_URL,
+      process.env.EXPO_PUBLIC_BASE_URL,
+      process.env.EXPO_PUBLIC_WEB_URL,
+    ],
+  });
 };
 
 export function isPrivateNetworkHost(hostname: string) {
@@ -76,8 +119,12 @@ export const appendPath = (baseUrl: string, path: string) => {
 };
 
 export const normalizeTrpcUrl = (url: string) => {
-  const trimmedUrl = url.trim().replace(/\/+$/, "");
+  const trimmedUrl = url
+    .trim()
+    .replace(/\/+$/, "")
+    .replace(/(?:\/api){2,}\/trpc$/, TRPC_PATH);
   if (trimmedUrl.endsWith(TRPC_PATH)) return trimmedUrl;
+  if (trimmedUrl.endsWith("/api")) return `${trimmedUrl}/trpc`;
   return appendPath(trimmedUrl, TRPC_PATH);
 };
 
@@ -96,7 +143,7 @@ const logResolvedUrl = (label: string, value: string) => {
  */
 export const getBaseUrl = () => {
   const envBaseUrl = process.env.EXPO_PUBLIC_BASE_URL;
-  if (PREVIEW_OR_FORCED_BASE_URL && envBaseUrl) {
+  if (USE_EXPLICIT_ENV_URLS && envBaseUrl) {
     return logResolvedUrl("baseUrl", envBaseUrl);
   }
 
@@ -106,7 +153,7 @@ export const getBaseUrl = () => {
 export const getTrpcUrl = () => {
   const envTrpcUrl = process.env.EXPO_PUBLIC_TRPC_URL;
 
-  if (PREVIEW_OR_FORCED_BASE_URL) {
+  if (USE_EXPLICIT_ENV_URLS) {
     if (envTrpcUrl) return logResolvedUrl("trpcUrl", normalizeTrpcUrl(envTrpcUrl));
     return logResolvedUrl("trpcUrl", appendPath(getBaseUrl(), TRPC_PATH));
   }
@@ -128,7 +175,7 @@ export const getTrpcUrl = () => {
 export const getWebUrl = () => {
   const envWebUrl =
     process.env.EXPO_PUBLIC_WEB_URL ?? process.env.EXPO_PUBLIC_BASE_URL;
-  if (PREVIEW_OR_FORCED_BASE_URL && envWebUrl) {
+  if (USE_EXPLICIT_ENV_URLS && envWebUrl) {
     return logResolvedUrl("webUrl", envWebUrl);
   }
 

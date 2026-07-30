@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 
+import { startLocalGatewayPublisher } from "./local-gateway-publisher.mjs";
 import { isNgrokEnabled, parseNgrokLogLine } from "./ngrok-log.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -13,6 +14,9 @@ const WEB_PORT = 3501;
 const children = new Map();
 let shuttingDown = false;
 let pendingSignal = null;
+let gatewayPublisher = null;
+let gatewayPublisherGeneration = 0;
+const GATEWAY_PUBLISHER_ABORT_CONTROLLER = new AbortController();
 
 function start(
 	name,
@@ -46,7 +50,9 @@ function start(
 
 		const status = signal ? signal : `code ${code ?? 0}`;
 		if (!fatal) {
-			console.warn(`[dev:${name}] stopped with ${status}; local web remains available.`);
+			console.warn(
+				`[dev:${name}] stopped with ${status}; local web remains available.`,
+			);
 			return;
 		}
 
@@ -73,11 +79,13 @@ function start(
 	return child;
 }
 
-function shutdown(signal) {
+async function shutdown(signal) {
 	if (shuttingDown) return;
 
 	shuttingDown = true;
 	pendingSignal = signal === "SIGINT" || signal === "SIGTERM" ? signal : null;
+	GATEWAY_PUBLISHER_ABORT_CONTROLLER.abort();
+	await gatewayPublisher?.stop();
 
 	for (const child of children.values()) {
 		if (!child.killed) child.kill(signal);
@@ -86,8 +94,8 @@ function shutdown(signal) {
 	if (children.size === 0) process.exit(process.exitCode ?? 0);
 }
 
-process.on("SIGINT", () => shutdown("SIGINT"));
-process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT", () => void shutdown("SIGINT"));
+process.on("SIGTERM", () => void shutdown("SIGTERM"));
 
 start("transcriber", "bun", ["run", "transcriber:dev"], repoRoot);
 start("www", "bun", ["run", "dev:next:app"], wwwDir);
@@ -102,24 +110,34 @@ if (isNgrokEnabled(process.env.NGROK_ENABLED)) {
 		"json",
 	];
 
-	const ngrok = start(
-		"ngrok",
-		"ngrok",
-		ngrokArgs,
-		wwwDir,
-		{
-			fatal: false,
-			stdio: ["ignore", "pipe", "pipe"],
-		},
-	);
+	const ngrok = start("ngrok", "ngrok", ngrokArgs, wwwDir, {
+		fatal: false,
+		stdio: ["ignore", "pipe", "pipe"],
+	});
 
 	let announcedUrl;
 	const handleNgrokLine = (line) => {
 		const event = parseNgrokLogLine(line);
 		if (event.url && event.url !== announcedUrl) {
 			announcedUrl = event.url;
+			const publisherGeneration = ++gatewayPublisherGeneration;
 			console.log(`[dev:ngrok] public web URL: ${event.url}`);
 			console.log(`[dev:ngrok] forwarding to http://localhost:${WEB_PORT}`);
+			void gatewayPublisher?.stop();
+			gatewayPublisher = null;
+			void startLocalGatewayPublisher({
+				gatewayUrl: event.url,
+				signal: GATEWAY_PUBLISHER_ABORT_CONTROLLER.signal,
+			}).then((publisher) => {
+				if (
+					shuttingDown ||
+					publisherGeneration !== gatewayPublisherGeneration
+				) {
+					void publisher.stop();
+					return;
+				}
+				gatewayPublisher = publisher;
+			});
 		}
 
 		if (

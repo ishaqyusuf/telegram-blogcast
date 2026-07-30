@@ -49,7 +49,7 @@ export function useTranscriptionQueue(
   options: TranscriptionQueueOptions = {},
 ) {
   const {
-    activeIp,
+    activeGatewayUrl,
     connectionStatus,
     isEnabled: localServicesEnabled,
     localApiClient,
@@ -59,12 +59,12 @@ export function useTranscriptionQueue(
   const reloadOnEnqueue = options.reloadOnEnqueue ?? true;
   const [jobs, setJobs] = useState<TranscriptionJob[]>([]);
   const [isRunning, setIsRunning] = useState(false);
-  const activeIpRef = useRef(activeIp);
-  activeIpRef.current = activeIp;
+  const activeGatewayUrlRef = useRef(activeGatewayUrl);
+  activeGatewayUrlRef.current = activeGatewayUrl;
 
   useEffect(() => {
     setJobs([]);
-  }, [activeIp]);
+  }, [activeGatewayUrl]);
 
   const reload = useCallback(async () => {
     if (!localServicesEnabled) {
@@ -75,14 +75,20 @@ export function useTranscriptionQueue(
       setJobs([]);
       return;
     }
-    const requestIp = activeIp;
+    const requestGatewayUrl = activeGatewayUrl;
     const rows = await localApiClient.blog.getTranscriptionJobs.query({
       mediaId,
     });
-    if (!shouldApplyLocalApiResult(requestIp, activeIpRef.current)) return;
+    if (
+      !shouldApplyLocalApiResult(
+        requestGatewayUrl,
+        activeGatewayUrlRef.current,
+      )
+    )
+      return;
     setJobs(rows);
   }, [
-    activeIp,
+    activeGatewayUrl,
     connectionStatus,
     localApiClient,
     localServicesEnabled,
@@ -107,7 +113,7 @@ export function useTranscriptionQueue(
         );
       }
 
-      const requestIp = activeIp;
+      const requestGatewayUrl = activeGatewayUrl;
       const job = await localApiClient.blog.enqueueTranscriptionJob.mutate({
         mediaId: input.mediaId,
         telegramFileId: input.telegramFileId ?? null,
@@ -120,7 +126,12 @@ export function useTranscriptionQueue(
 
       if (reloadOnEnqueue) {
         await reload();
-      } else if (shouldApplyLocalApiResult(requestIp, activeIpRef.current)) {
+      } else if (
+        shouldApplyLocalApiResult(
+          requestGatewayUrl,
+          activeGatewayUrlRef.current,
+        )
+      ) {
         setJobs((current) => {
           const withoutMatchingFailed = current.filter(
             (currentJob) =>
@@ -146,7 +157,7 @@ export function useTranscriptionQueue(
     },
     [
       localServicesEnabled,
-      activeIp,
+      activeGatewayUrl,
       connectionStatus,
       localApiClient,
       reload,
@@ -163,13 +174,18 @@ export function useTranscriptionQueue(
     if (!localApiClient || connectionStatus !== "online") {
       throw new Error("The selected local API is offline.");
     }
-    const requestIp = activeIp;
+    const requestGatewayUrl = activeGatewayUrl;
     await localApiClient.blog.deleteTranscriptionJob.mutate({ id });
-    if (shouldApplyLocalApiResult(requestIp, activeIpRef.current)) {
+    if (
+      shouldApplyLocalApiResult(
+        requestGatewayUrl,
+        activeGatewayUrlRef.current,
+      )
+    ) {
       setJobs((current) => current.filter((job) => job.id !== id));
     }
   }, [
-    activeIp,
+    activeGatewayUrl,
     connectionStatus,
     localApiClient,
     localServicesEnabled,

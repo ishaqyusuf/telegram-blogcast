@@ -677,7 +677,7 @@ export default function FacebookImportScreen() {
 	const colors = useColors();
 	const qc = useQueryClient();
 	const {
-		activeIp,
+		activeGatewayUrl,
 		connectionStatus,
 		localApiClient,
 		urls: localServiceUrls,
@@ -717,22 +717,22 @@ export default function FacebookImportScreen() {
 		limit: 50,
 	} as const;
 	const summaryQueryKey = getLocalApiQueryKey(
-		activeIp,
+		activeGatewayUrl,
 		"facebookImport.getSummary",
 		summaryInput,
 	);
 	const itemsQueryKey = getLocalApiQueryKey(
-		activeIp,
+		activeGatewayUrl,
 		"facebookImport.listMediaImports",
 		itemsInput,
 	);
 	const bridgeQueryKey = getLocalApiQueryKey(
-		activeIp,
+		activeGatewayUrl,
 		"facebookImport.checkBridge",
 		facebookBridgeInput,
 	);
 	const channelsQueryKey = getLocalApiQueryKey(
-		activeIp,
+		activeGatewayUrl,
 		"facebookImport.getChannels",
 	);
 	const summaryQuery = useQuery({
@@ -815,7 +815,7 @@ export default function FacebookImportScreen() {
 				qc.invalidateQueries({ queryKey: itemsQueryKey }),
 				qc.invalidateQueries({
 					queryKey: getLocalApiQueryKey(
-						activeIp,
+						activeGatewayUrl,
 						"facebookImport.listMediaImports",
 						{
 							status: "not_started",

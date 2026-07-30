@@ -372,7 +372,7 @@ export function AudioTranscript({
 }: AudioTranscriptProps) {
 	const colors = useColors();
 	const {
-		activeIp,
+		activeGatewayUrl,
 		connectionStatus,
 		isEnabled: localServicesEnabled,
 		localApiClient,
@@ -405,9 +405,15 @@ export function AudioTranscript({
 		_trpc.blog.getTranscript.queryOptions({ mediaId }),
 	);
 	const { data: localTranscriberHealth } = useQuery({
-		queryKey: getLocalApiQueryKey(activeIp, "blog.checkLocalTranscriber", {
-			baseUrl: canCheckTranscriber ? (transcriberUrl ?? undefined) : undefined,
-		}),
+		queryKey: getLocalApiQueryKey(
+			activeGatewayUrl,
+			"blog.checkLocalTranscriber",
+			{
+				baseUrl: canCheckTranscriber
+					? (transcriberUrl ?? undefined)
+					: undefined,
+			},
+		),
 		queryFn: () =>
 			localApiClient!.blog.checkLocalTranscriber.query({
 				baseUrl: canCheckTranscriber

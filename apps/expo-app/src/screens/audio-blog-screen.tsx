@@ -2197,7 +2197,7 @@ export default function AudioBlogScreen() {
 		(state) => state.setTranscriptTashkeelEnabled,
 	);
 	const {
-		activeIp,
+		activeGatewayUrl,
 		connectionStatus,
 		isEnabled: localServicesEnabled,
 		localApiClient,
@@ -2524,9 +2524,15 @@ export default function AudioBlogScreen() {
 					? "Clear transcript or transcribe again"
 					: "Queue this audio for local Whisper";
 	const { data: localTranscriberHealth } = useQuery({
-		queryKey: getLocalApiQueryKey(activeIp, "blog.checkLocalTranscriber", {
-			baseUrl: canCheckTranscriber ? (transcriberUrl ?? undefined) : undefined,
-		}),
+		queryKey: getLocalApiQueryKey(
+			activeGatewayUrl,
+			"blog.checkLocalTranscriber",
+			{
+				baseUrl: canCheckTranscriber
+					? (transcriberUrl ?? undefined)
+					: undefined,
+			},
+		),
 		queryFn: () =>
 			localApiClient!.blog.checkLocalTranscriber.query({
 				baseUrl: canCheckTranscriber

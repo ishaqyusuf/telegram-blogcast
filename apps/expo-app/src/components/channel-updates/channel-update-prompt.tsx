@@ -177,7 +177,7 @@ export function ChannelUpdatePrompt() {
   const modal = useModal();
   const router = useRouter();
   const {
-    activeIp,
+    activeGatewayUrl,
     connectionStatus,
     isEnabled,
     localApiClient,
@@ -346,23 +346,23 @@ export function ChannelUpdatePrompt() {
 
   const runUpdateCheck = useCallback(
     async (mountedRef?: { current: boolean }) => {
-      if (!activeIp) return false;
+      if (!activeGatewayUrl) return false;
       const succeeded = await loadPrompt(mountedRef);
       channelUpdateCheckState = completeChannelUpdateCheck(
         channelUpdateCheckState,
-        activeIp,
+        activeGatewayUrl,
         succeeded,
       );
       return succeeded;
     },
-    [activeIp, loadPrompt],
+    [activeGatewayUrl, loadPrompt],
   );
 
   useEffect(() => {
-    if (!isEnabled || !localApiClient || !activeIp) return;
+    if (!isEnabled || !localApiClient || !activeGatewayUrl) return;
     if (connectionStatus === "offline") {
-      if (offlinePromptedIpsThisSession.has(activeIp)) return;
-      offlinePromptedIpsThisSession.add(activeIp);
+      if (offlinePromptedIpsThisSession.has(activeGatewayUrl)) return;
+      offlinePromptedIpsThisSession.add(activeGatewayUrl);
       setChannels([]);
       setSelectedIds(new Set());
       setAuthStep("unavailable");
@@ -374,7 +374,7 @@ export function ChannelUpdatePrompt() {
     }
     const started = startChannelUpdateCheck(
       channelUpdateCheckState,
-      activeIp,
+      activeGatewayUrl,
       connectionStatus,
     );
     channelUpdateCheckState = started.state;
@@ -387,7 +387,7 @@ export function ChannelUpdatePrompt() {
       mountedRef.current = false;
     };
   }, [
-    activeIp,
+    activeGatewayUrl,
     connectionStatus,
     isEnabled,
     localApiClient,

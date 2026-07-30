@@ -32,6 +32,14 @@ High-level map of the API surface and where endpoint logic lives.
 - `POST /api/internal/transcription-jobs/:id/complete`: worker saves returned transcript segments and marks the job completed.
 - `POST /api/internal/transcription-jobs/:id/fail`: worker records an error, marks the job failed, and increments retry count.
 
+### Local Gateway Discovery
+- `GET /api/local-services/discovery`: public, uncached lookup of the current
+  non-expired preview ngrok lease.
+- `PUT /api/local-services/discovery`: bearer-token-protected publication or
+  renewal of one validated `*.ngrok-free.app` HTTPS origin.
+- `DELETE /api/local-services/discovery`: bearer-token-protected removal during
+  graceful local-runner shutdown.
+
 ### Books Router Highlights
 - `book.syncBookFromShamela`: imports or re-imports a Shamela book URL, stores `BookImportHistory`, refreshes metadata, and syncs TOC chapter stubs.
 - `book.getBookImportHistory`: returns recent book import attempts for the fetch screen/history UI.

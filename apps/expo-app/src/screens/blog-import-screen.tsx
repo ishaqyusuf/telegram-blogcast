@@ -45,11 +45,15 @@ export default function BlogImportScreen() {
   const router = useRouter();
   const colors = useColors();
   const {
+    activeGatewayUrl,
     activeIp,
+    connectionSource,
     enableWithIp,
+    ipMode,
     localApiClient: trpcClient,
     urls,
   } = useLocalServicesSession();
+  const activeConnection = activeGatewayUrl;
   const setLocalApiBaseUrl = useAppSettingsStore((s) => s.setLocalApiBaseUrl);
   const [apiIpInput, setApiIpInput] = useState(activeIp ?? "");
   const [status, setStatus] = useState<
@@ -62,18 +66,26 @@ export default function BlogImportScreen() {
   const [attemptLabel, setAttemptLabel] = useState("");
   const [audioLinkInput, setAudioLinkInput] = useState("");
   const [directImportMessage, setDirectImportMessage] = useState("");
-  const loadedIpRef = useRef<string | null>(null);
+  const loadedConnectionRef = useRef<string | null>(null);
   const cleanBaseUrl = stripTrpcPath(urls?.apiBaseUrl ?? "");
 
   const loadApiState = useCallback(async () => {
-    if (!trpcClient || !activeIp || !cleanBaseUrl) {
+    if (!trpcClient || !activeConnection || !cleanBaseUrl) {
       setStatus("offline");
-      setMessage("Enter your local API IP, for example 192.168.1.20.");
+      setMessage(
+        ipMode === "remote"
+          ? "The preview gateway is unavailable. Try again shortly."
+          : "Enter your local API IP, for example 192.168.1.20.",
+      );
       return;
     }
 
     setStatus("checking");
-    setAttemptLabel(`Checking ${activeIp}`);
+    setAttemptLabel(
+      connectionSource === "remote"
+        ? "Checking preview gateway"
+        : `Checking ${activeIp}`,
+    );
     setMessage("");
     try {
       const ok = await checkLocalApiBaseUrl(cleanBaseUrl);
@@ -84,12 +96,14 @@ export default function BlogImportScreen() {
       ]);
       setChannels(nextChannels as ChannelRow[]);
       setFetcherState(nextFetcherState as FetcherState);
-      setApiIpInput(activeIp);
+      if (activeIp) setApiIpInput(activeIp);
       setStatus("online");
       setMessage(
-        `Local API connected at ${activeIp}. Import continues in the API process after you start it.`,
+        connectionSource === "remote"
+          ? "Preview gateway connected. Import continues on the local API after you start it."
+          : `Local API connected at ${activeIp}. Import continues in the API process after you start it.`,
       );
-      setLocalApiBaseUrl(cleanBaseUrl);
+      if (connectionSource === "lan") setLocalApiBaseUrl(cleanBaseUrl);
     } catch (error) {
       setStatus("offline");
       setMessage(
@@ -100,7 +114,15 @@ export default function BlogImportScreen() {
     } finally {
       setAttemptLabel("");
     }
-  }, [activeIp, cleanBaseUrl, setLocalApiBaseUrl, trpcClient]);
+  }, [
+    activeConnection,
+    activeIp,
+    cleanBaseUrl,
+    connectionSource,
+    ipMode,
+    setLocalApiBaseUrl,
+    trpcClient,
+  ]);
 
   const connectManualIp = useCallback(async () => {
     const ip = normalizeIpv4Input(apiIpInput);
@@ -115,7 +137,7 @@ export default function BlogImportScreen() {
     }
     setStatus("checking");
     setAttemptLabel(`Switching to ${ip}`);
-    loadedIpRef.current = null;
+    loadedConnectionRef.current = null;
     const connected = await enableWithIp(ip);
     if (!connected) {
       setStatus("offline");
@@ -125,13 +147,18 @@ export default function BlogImportScreen() {
   }, [activeIp, apiIpInput, enableWithIp, loadApiState]);
 
   useEffect(() => {
-    if (!activeIp || !trpcClient || loadedIpRef.current === activeIp) return;
-    loadedIpRef.current = activeIp;
-    setApiIpInput(activeIp);
+    if (
+      !activeConnection ||
+      !trpcClient ||
+      loadedConnectionRef.current === activeConnection
+    )
+      return;
+    loadedConnectionRef.current = activeConnection;
+    if (activeIp) setApiIpInput(activeIp);
     setChannels([]);
     setFetcherState(null);
     void loadApiState();
-  }, [activeIp, loadApiState, trpcClient]);
+  }, [activeConnection, activeIp, loadApiState, trpcClient]);
 
   useEffect(() => {
     if (
@@ -230,31 +257,53 @@ export default function BlogImportScreen() {
           <Text className="text-xs font-semibold uppercase text-muted-foreground">
             Local API
           </Text>
-          <View className="flex-row items-center gap-2 rounded-xl border border-border bg-card px-3">
-            <Icon name="Wifi" size={16} className="text-muted-foreground" />
-            <TextInput
-              value={apiIpInput}
-              onChangeText={(value) => setApiIpInput(normalizeIpv4Input(value))}
-              onSubmitEditing={connectManualIp}
-              autoCapitalize="none"
-              autoCorrect={false}
-              placeholder="192.168.1.20"
-              placeholderTextColor={colors.mutedForeground}
-              style={{
-                flex: 1,
-                color: colors.foreground,
-                fontSize: 13,
-                paddingVertical: 11,
-              }}
-            />
-            <Pressable
-              onPress={connectManualIp}
-              disabled={status === "checking"}
-              className="size-8 items-center justify-center rounded-full bg-muted active:opacity-70 disabled:opacity-50"
-            >
-              <Icon name="Check" size={15} className="text-foreground" />
-            </Pressable>
-          </View>
+          {ipMode === "remote" ? (
+            <View className="flex-row items-center gap-2 rounded-xl border border-border bg-card px-3 py-3">
+              <Icon name="Wifi" size={16} className="text-muted-foreground" />
+              <Text className="flex-1 text-xs text-muted-foreground">
+                {activeConnection
+                  ? "Secure preview gateway discovered"
+                  : "No preview gateway discovered"}
+              </Text>
+              <Pressable
+                onPress={() => {
+                  void loadApiState();
+                }}
+                disabled={status === "checking"}
+                className="size-8 items-center justify-center rounded-full bg-muted active:opacity-70 disabled:opacity-50"
+              >
+                <Icon name="RefreshCw" size={15} className="text-foreground" />
+              </Pressable>
+            </View>
+          ) : (
+            <View className="flex-row items-center gap-2 rounded-xl border border-border bg-card px-3">
+              <Icon name="Wifi" size={16} className="text-muted-foreground" />
+              <TextInput
+                value={apiIpInput}
+                onChangeText={(value) =>
+                  setApiIpInput(normalizeIpv4Input(value))
+                }
+                onSubmitEditing={connectManualIp}
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholder="192.168.1.20"
+                placeholderTextColor={colors.mutedForeground}
+                style={{
+                  flex: 1,
+                  color: colors.foreground,
+                  fontSize: 13,
+                  paddingVertical: 11,
+                }}
+              />
+              <Pressable
+                onPress={connectManualIp}
+                disabled={status === "checking"}
+                className="size-8 items-center justify-center rounded-full bg-muted active:opacity-70 disabled:opacity-50"
+              >
+                <Icon name="Check" size={15} className="text-foreground" />
+              </Pressable>
+            </View>
+          )}
 
           <View className="flex-row items-center gap-2">
             <View
@@ -285,7 +334,7 @@ export default function BlogImportScreen() {
           {message ? (
             <Text className="text-xs leading-5 text-muted-foreground">
               {message}
-              {status === "offline"
+              {status === "offline" && ipMode !== "remote"
                 ? `\nRun: bun --filter @acme/api dev\nExpected port: ${LOCAL_API_PORT}. Use your Mac LAN IP, not localhost, in compiled APK.`
                 : ""}
             </Text>
