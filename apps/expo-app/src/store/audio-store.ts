@@ -21,6 +21,11 @@ import { getAudioPlayability, isAudioPlayable } from "@/lib/audio-playability";
 import { getAudioDisplayTitle } from "@/lib/audio-title";
 import { getTelegramFileUrl } from "@/lib/get-telegram-file";
 import {
+	getMediaTargetUri,
+	getUsableCachedMediaUri,
+	sanitizeMediaFileName,
+} from "@/lib/media-cache";
+import {
 	REMOTE_PLAYBACK_SNAPSHOT_EVENT,
 	type RemotePlaybackSnapshot,
 } from "@/services/audio-player/playback-service-handlers";
@@ -40,9 +45,6 @@ const CONTEXT_REWIND_THRESHOLD_MS = CONTEXT_REWIND_MS;
 const END_REPLAY_RESET_THRESHOLD_MS = 750;
 const POSITION_POLL_MS = 250;
 const STALE_AUDIO_MS = 12 * 60 * 60 * 1000;
-const PRIVATE_AUDIO_FOLDER = "al-ghurobaa/media";
-const PUBLIC_AUDIO_ROOT = "Al-ghurobaa";
-const PUBLIC_AUDIO_FOLDER = "media";
 const DEFAULT_ARTWORK = Image.resolveAssetSource(
 	require("../../assets/icons/loading-icon.png"),
 ).uri;
@@ -103,159 +105,15 @@ function getPlaybackStateName(
 }
 
 function sanitizePublicFileName(fileName: string) {
-	const sanitized = fileName.replace(/[\\/:*?"<>|]/g, "-").trim();
-	return sanitized || "audio.mp3";
+	return sanitizeMediaFileName(fileName, "audio.mp3");
 }
 
-function joinFileUri(root: string, ...parts: string[]) {
-  return `${root.replace(/\/+$/g, "")}/${parts
-    .map((part) => part.replace(/^\/+|\/+$/g, ""))
-    .filter(Boolean)
-    .join("/")}`;
-}
-
-function getSafEntryName(uri: string) {
-	const decoded = decodeURIComponent(uri);
-	const name = decoded.split("/").pop();
-	return name?.split(":").pop() ?? "";
-}
-
-function getAudioMimeType(fileName: string) {
-	const extension = fileName.split(".").pop()?.toLowerCase();
-	if (extension === "m4a" || extension === "mp4") return "audio/mp4";
-	if (extension === "ogg" || extension === "oga") return "audio/ogg";
-	if (extension === "wav") return "audio/wav";
-	return "audio/mpeg";
-}
-
-async function canReadSafDirectory(uri: string) {
-	try {
-		await LegacyFileSystem.StorageAccessFramework.readDirectoryAsync(uri);
-		return true;
-	} catch {
-		return false;
-	}
-}
-
-async function findSafChildByName(parentUri: string, name: string) {
-	const entries =
-		await LegacyFileSystem.StorageAccessFramework.readDirectoryAsync(parentUri);
-	return entries.find((entry) => getSafEntryName(entry) === name) ?? null;
-}
-
-async function getUsableSafFile(parentUri: string, name: string) {
-	const fileUri = await findSafChildByName(parentUri, name);
-	if (!fileUri) return null;
-
-	const info = await LegacyFileSystem.getInfoAsync(fileUri).catch(() => null);
-	if (!info?.exists || (typeof info.size === "number" && info.size <= 0)) {
-		await LegacyFileSystem.StorageAccessFramework.deleteAsync(fileUri, {
-			idempotent: true,
-		}).catch(() => undefined);
-		return null;
-	}
-
-	return fileUri;
-}
-
-async function getUsableFileUri(uri: string) {
-  const info = await LegacyFileSystem.getInfoAsync(uri).catch(() => null);
-  if (!info?.exists || (typeof info.size === "number" && info.size <= 0)) {
-    if (info?.exists) {
-      await LegacyFileSystem.deleteAsync(uri, { idempotent: true }).catch(
-        () => undefined,
-      );
-    }
-    return null;
-  }
-
-  return uri;
-}
-
-async function ensurePrivateAudioFile(fileName: string) {
-  if (!LegacyFileSystem.documentDirectory) {
-    throw new Error("Audio storage is not available");
-  }
-
-  const directoryUri = joinFileUri(
-    LegacyFileSystem.documentDirectory,
-    PRIVATE_AUDIO_FOLDER,
-  );
-  await LegacyFileSystem.makeDirectoryAsync(directoryUri, {
-    intermediates: true,
-  }).catch(() => undefined);
-
-  return joinFileUri(directoryUri, sanitizePublicFileName(fileName));
-}
-
-async function ensurePublicAudioFolder(
-  storedUri?: string | null,
-  requestIfMissing = true,
-) {
-	if (Platform.OS !== "android") return null;
-
-	if (storedUri && (await canReadSafDirectory(storedUri))) {
-		return storedUri;
-	}
-
-  if (!requestIfMissing) return null;
-
-	const { StorageAccessFramework } = LegacyFileSystem;
-	const appRootUri =
-		StorageAccessFramework.getUriForDirectoryInRoot(PUBLIC_AUDIO_ROOT);
-	const permissions =
-		await StorageAccessFramework.requestDirectoryPermissionsAsync(appRootUri);
-
-	if (!permissions.granted) return null;
-
-	const existing =
-		(await findSafChildByName(permissions.directoryUri, PUBLIC_AUDIO_FOLDER)) ??
-		(await StorageAccessFramework.makeDirectoryAsync(
-			permissions.directoryUri,
-			PUBLIC_AUDIO_FOLDER,
-		));
-
-	return existing;
-}
-
-async function createPublicAudioFile(
-	publicFolderUri: string,
-	fileName: string,
-) {
-	const publicFileName = sanitizePublicFileName(fileName);
-	const existing = await getUsableSafFile(publicFolderUri, publicFileName);
-	if (existing) return existing;
-
-	return LegacyFileSystem.StorageAccessFramework.createFileAsync(
-		publicFolderUri,
-		publicFileName,
-		getAudioMimeType(publicFileName),
-	);
-}
-
-async function copySafFileToPrivateFile(fromUri: string, toUri: string) {
-  await LegacyFileSystem.copyAsync({ from: fromUri, to: toUri });
-  return getUsableFileUri(toUri);
-}
-
-async function copyPrivateFileToPublicFile(
-  fromUri: string,
-  publicFolderUri: string | null,
-  fileName: string,
-) {
-  if (!publicFolderUri) return null;
-
-  try {
-    const publicFileUri = await createPublicAudioFile(
-      publicFolderUri,
-      fileName,
-    );
-    await LegacyFileSystem.copyAsync({ from: fromUri, to: publicFileUri });
-    return publicFileUri;
-  } catch (err) {
-    console.warn("[audio] Public audio copy failed:", err);
-    return null;
-  }
+async function ensurePrivateAudioFile(fileName: string, cacheKey: string) {
+	return getMediaTargetUri({
+		cacheKey,
+		fileName: sanitizePublicFileName(fileName),
+		kind: "audio",
+	});
 }
 
 async function requestAndroidNotificationPermission() {
@@ -663,7 +521,7 @@ export const useAudioStore = create<AudioState>()(
 			albumQueue: null,
 			shuffleHistory: [],
 
-      loadAudio: async (blog, options) => {
+      loadAudio: async (blog, _options) => {
 				const directUrl = (blog?.audio as any)?.url as string | undefined;
 				const fileName = blog?.audio?.fileName;
 				const nextTrackId = String(blog?.id ?? fileName ?? directUrl ?? "");
@@ -728,29 +586,12 @@ export const useAudioStore = create<AudioState>()(
 					get().stopPositionTracking();
 
 					const publicFileName = sanitizePublicFileName(fileName);
-					let publicAudioFolderUri = get().publicAudioFolderUri;
-					try {
-            publicAudioFolderUri = await ensurePublicAudioFolder(
-              publicAudioFolderUri,
-              options?.requestPublicFolder ?? true,
-            );
-						if (publicAudioFolderUri !== get().publicAudioFolderUri) {
-							set({ publicAudioFolderUri });
-						}
-					} catch (err) {
-						console.warn("[audio] Downloads folder unavailable:", err);
-						publicAudioFolderUri = null;
-						set({ publicAudioFolderUri: null });
-					}
-
-					const publicAudioUri = publicAudioFolderUri
-						? await getUsableSafFile(
-								publicAudioFolderUri,
-								publicFileName,
-							).catch(() => null)
-						: null;
-          const privateAudioUri = await ensurePrivateAudioFile(publicFileName);
-          const privateCachedAudioUri = await getUsableFileUri(privateAudioUri);
+          const privateAudioUri = await ensurePrivateAudioFile(
+            publicFileName,
+            nextTrackId,
+          );
+          const privateCachedAudioUri =
+            await getUsableCachedMediaUri(privateAudioUri);
 						const telegramUrl = blog?.audio?.telegramFileId
 							? (await getTelegramFileUrl(blog.audio.telegramFileId))?.url
 							: null;
@@ -761,21 +602,7 @@ export const useAudioStore = create<AudioState>()(
           if (privateCachedAudioUri) {
             audioSource = privateCachedAudioUri;
             set({ localPath: privateCachedAudioUri });
-          } else {
-            const copiedPublicAudioUri = publicAudioUri
-              ? await copySafFileToPrivateFile(
-                  publicAudioUri,
-                  privateAudioUri,
-                ).catch((err) => {
-                  console.warn("[audio] Public audio import failed:", err);
-                  return null;
-                })
-              : null;
-
-            if (copiedPublicAudioUri) {
-              audioSource = copiedPublicAudioUri;
-              set({ localPath: copiedPublicAudioUri });
-            } else if (sourceUrls.length > 0) {
+          } else if (sourceUrls.length > 0) {
 						audioSource = sourceUrls[0];
               downloadTargetUri = privateAudioUri;
 						set({
@@ -786,7 +613,6 @@ export const useAudioStore = create<AudioState>()(
             } else {
               throw new Error("Audio URL is not available");
             }
-					}
 
 					const track = buildTrack(blog, audioSource);
 
@@ -836,11 +662,6 @@ export const useAudioStore = create<AudioState>()(
 							.downloadAsync()
 							.then((result) => {
 								if (result) {
-                  void copyPrivateFileToPublicFile(
-                    result.uri,
-                    publicAudioUri ? null : publicAudioFolderUri,
-                    publicFileName,
-                  );
 									set({
 										downloadProgress: 1,
 										isDownloading: false,

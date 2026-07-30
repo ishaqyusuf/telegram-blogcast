@@ -56,6 +56,7 @@ export function useInfiniteLoader<T extends InfiniteLoaderRoute<unknown>>({
 
 		isRefetching,
 		isPending,
+		isPlaceholderData,
 		error,
 	} = useInfiniteQuery(infiniteQueryOptions);
 	consoleLog("Infinite loader data:", {
@@ -88,6 +89,7 @@ export function useInfiniteLoader<T extends InfiniteLoaderRoute<unknown>>({
 		isFetching,
 		refetch,
 		isRefetching,
+		isPlaceholderData,
 		// from: data?.
 	};
 }

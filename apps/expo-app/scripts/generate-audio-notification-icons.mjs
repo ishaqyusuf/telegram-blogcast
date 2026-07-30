@@ -58,7 +58,7 @@ function jumpSvg(direction) {
 				font-size="28"
 				font-weight="700"
 				text-anchor="middle"
-			>15</text>
+			>5</text>
 		</svg>
 	`;
 }
@@ -68,8 +68,8 @@ const icons = {
 		<circle cx="48" cy="48" r="32"/>
 		<path d="M48 32v32M32 48h32"/>
 	`),
-	"notification_jump_backward_15.png": jumpSvg("backward"),
-	"notification_jump_forward_15.png": jumpSvg("forward"),
+	"notification_jump_backward_5.png": jumpSvg("backward"),
+	"notification_jump_forward_5.png": jumpSvg("forward"),
 	"notification_speed_1.png": speedSvg("1×"),
 	"notification_speed_1_25.png": speedSvg("1.25×"),
 	"notification_speed_1_5.png": speedSvg("1.5×"),

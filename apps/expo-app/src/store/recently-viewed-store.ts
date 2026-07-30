@@ -7,6 +7,7 @@ export interface RecentlyViewedItem {
   title: string;
   type: string;
   date: string | null;
+  thumbnailUrl?: string | null;
 }
 
 interface RecentlyViewedStore {

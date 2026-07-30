@@ -3,12 +3,29 @@ import { _trpc } from "@/components/static-trpc";
 import BlogViewAudio from "@/screens.example/blog-view-audio";
 import BlogViewText from "@/screens.example/blog-view-text";
 import VideoBlogScreen from "@/screens/video-blog-screen";
+import PdfBlogScreen from "@/screens/pdf-blog-screen";
 import { useColors } from "@/hooks/use-color";
 import { useQuery } from "@tanstack/react-query";
 import { useLocalSearchParams } from "expo-router";
 import { ActivityIndicator, Text, View } from "react-native";
 
 export default function BlogViewPage() {
+  const { contentType } = useLocalSearchParams<{
+    contentType?: string;
+  }>();
+
+  if (contentType === "video") {
+    return <VideoBlogScreen />;
+  }
+
+  if (contentType === "pdf") {
+    return <PdfBlogScreen />;
+  }
+
+  return <LegacyBlogViewPage />;
+}
+
+function LegacyBlogViewPage() {
   const colors = useColors();
   const { blogId } = useLocalSearchParams<{ blogId?: string }>();
   const id = Number(blogId);

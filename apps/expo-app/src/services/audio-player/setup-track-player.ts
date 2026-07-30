@@ -17,8 +17,8 @@ export { AUDIO_JUMP_SECONDS } from "./notification-controls";
 
 const notificationIcons = {
 	comments: "notification_comments",
-	jumpBackward: "notification_jump_backward_15",
-	jumpForward: "notification_jump_forward_15",
+	jumpBackward: "notification_jump_backward_5",
+	jumpForward: "notification_jump_forward_5",
 	"speed-1": "notification_speed_1",
 	"speed-1-25": "notification_speed_1_25",
 	"speed-1-5": "notification_speed_1_5",

@@ -1,12 +1,12 @@
 export const ANDROID_NOTIFICATION_ACTION_IDS = {
 	cyclePlaybackRate: "cycle-playback-rate",
-	jumpBackward: "jump-backward-15",
-	jumpForward: "jump-forward-15",
+	jumpBackward: "jump-backward-5",
+	jumpForward: "jump-forward-5",
 	openComments: "open-comments",
 	playPause: "play-pause",
 } as const;
 
-export const AUDIO_JUMP_SECONDS = 15;
+export const AUDIO_JUMP_SECONDS = 5;
 export const AUDIO_PLAYBACK_RATES = [1, 1.25, 1.5, 1.75, 2] as const;
 
 export type AudioPlaybackRate = (typeof AUDIO_PLAYBACK_RATES)[number];

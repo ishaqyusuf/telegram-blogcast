@@ -29,7 +29,12 @@ import { CardHeader } from "./card-header";
 import { CardMedia } from "./card-media";
 import { TranscriptPreview } from "./transcript-preview";
 import type { BlogItem } from "./types";
-import { getBlogHref, getInlinePreviewText, resolveVariant } from "./utils";
+import {
+	getBlogHref,
+	getInlinePreviewText,
+	getPrimaryImageUrl,
+	resolveVariant,
+} from "./utils";
 
 export type { BlogItem } from "./types";
 
@@ -71,6 +76,7 @@ export function BlogCard({
 			title: getAudioDisplayTitle(post, "Untitled"),
 			type: post.type ?? "text",
 			date: post.date ? post.date.toISOString() : null,
+			thumbnailUrl: getPrimaryImageUrl(post),
 		});
 		router.push(href as any);
 	};
@@ -216,7 +222,7 @@ export function BlogCard({
 						onOpenOptions={handleOpenOptions}
 						hideChannelName={hideChannelName}
 					/>
-					<CardMedia post={post} variant={variant} />
+					<CardMedia post={post} variant={variant} onOpen={handlePress} />
 					<TranscriptPreview post={post} />
 					<CardFooter post={post} onAddToAlbum={onAddToAlbum} />
 				</Pressable>

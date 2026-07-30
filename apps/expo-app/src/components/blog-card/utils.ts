@@ -3,6 +3,9 @@ import { formatDate } from "@acme/utils/dayjs";
 import { buildTelegramFileProxy, getMediaFileUrl } from "@/lib/media-source";
 
 import type { BlogCardVariant, BlogItem } from "./types";
+import { getPrimaryImageSource } from "./media-card-behavior";
+
+export { getBlogHref } from "./media-card-behavior";
 
 export function getInitials(value?: string | null) {
   if (!value) return "AG";
@@ -32,12 +35,6 @@ export function getPostDateLabel(post: BlogItem) {
   return formatDate(post.date, format);
 }
 
-export function getBlogHref(post: Pick<BlogItem, "id" | "type">) {
-  if (post.type === "text") return `/blog-view-text/${post.id}`;
-  if (post.type === "audio") return `/blog-view-2/${post.id}`;
-  return `/blog-view/${post.id}`;
-}
-
 export function getInlinePreviewText(value?: string | null) {
   return value
     ?.replace(/[\r\n]+/g, " ")
@@ -46,12 +43,12 @@ export function getInlinePreviewText(value?: string | null) {
 }
 
 export function getPrimaryImageUrl(post: BlogItem) {
-  if (post.coverImageUrl) return post.coverImageUrl;
-  const coverImageFile = (post as any).coverImageFile;
-  const coverImageFromFile = getMediaFileUrl(coverImageFile);
-  if (coverImageFromFile) return coverImageFromFile;
-  const firstImage = post.img?.[0] as any;
-  return firstImage?.url || getMediaFileUrl(firstImage?.file) || buildTelegramFileProxy(firstImage?.fileId);
+  const source = getPrimaryImageSource(post as any);
+  return (
+    source.url ||
+    getMediaFileUrl(source.file as any) ||
+    buildTelegramFileProxy(source.telegramFileId)
+  );
 }
 
 export function getPrimaryDocumentMedia(post: BlogItem) {

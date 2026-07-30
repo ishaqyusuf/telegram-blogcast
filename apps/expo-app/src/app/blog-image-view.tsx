@@ -1,7 +1,8 @@
 import { Pressable } from "@/components/ui/pressable";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Animated,
   Image,
@@ -13,12 +14,21 @@ import {
 import { Icon } from "@/components/ui/icon";
 import { Toast } from "@/components/ui/toast";
 import { copyImageToClipboard } from "@/lib/image-clipboard";
+import { cacheMedia } from "@/lib/media-cache";
+
+function getImageFileName(title: string, uri: string) {
+  const extension =
+    uri.match(/\.(jpe?g|png|gif|webp|heic|avif)(?:[?#]|$)/i)?.[1] ?? "jpg";
+  return `${title}.${extension}`;
+}
 
 export default function BlogImageViewScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ uri?: string; title?: string }>();
   const translateY = useRef(new Animated.Value(0)).current;
   const [isCopyingImage, setIsCopyingImage] = useState(false);
+  const [cachedImageUri, setCachedImageUri] = useState<string | null>(null);
+  const [imageCacheError, setImageCacheError] = useState<string | null>(null);
 
   const rawUri = typeof params.uri === "string" ? params.uri : "";
   const uri = (() => {
@@ -30,6 +40,8 @@ export default function BlogImageViewScreen() {
     }
   })();
   const title = typeof params.title === "string" ? params.title : "Image";
+  const isRemoteImage = /^https?:\/\//i.test(uri);
+  const displayUri = isRemoteImage ? cachedImageUri : uri;
   const backdropOpacity = translateY.interpolate({
     inputRange: [-280, 0, 280],
     outputRange: [0.6, 1, 0.6],
@@ -37,10 +49,10 @@ export default function BlogImageViewScreen() {
   });
 
   const copyOpenedImage = async () => {
-    if (!uri || isCopyingImage) return;
+    if (!displayUri || isCopyingImage) return;
     setIsCopyingImage(true);
     try {
-      await copyImageToClipboard(uri);
+      await copyImageToClipboard(displayUri);
       Toast.show("Image copied", {
         type: "success",
         position: "bottom",
@@ -48,7 +60,9 @@ export default function BlogImageViewScreen() {
     } catch (error) {
       Alert.alert(
         "Could not copy image",
-        error instanceof Error ? error.message : "The image could not be copied.",
+        error instanceof Error
+          ? error.message
+          : "The image could not be copied.",
       );
     } finally {
       setIsCopyingImage(false);
@@ -56,7 +70,7 @@ export default function BlogImageViewScreen() {
   };
 
   const showImageOptions = () => {
-    if (!uri) return;
+    if (!displayUri) return;
     Alert.alert("Image options", undefined, [
       {
         text: isCopyingImage ? "Copying..." : "Copy image",
@@ -65,6 +79,39 @@ export default function BlogImageViewScreen() {
       { text: "Cancel", style: "cancel" },
     ]);
   };
+
+  useEffect(() => {
+    if (!isRemoteImage || !uri) {
+      setCachedImageUri(uri || null);
+      setImageCacheError(null);
+      return;
+    }
+
+    let isActive = true;
+    setCachedImageUri(null);
+    setImageCacheError(null);
+    void cacheMedia({
+      cacheKey: encodeURIComponent(uri).slice(-48),
+      fileName: getImageFileName(title, uri),
+      kind: "image",
+      url: uri,
+    })
+      .then((cachedUri) => {
+        if (isActive) setCachedImageUri(cachedUri);
+      })
+      .catch((error) => {
+        if (!isActive) return;
+        setImageCacheError(
+          error instanceof Error
+            ? error.message
+            : "The image could not be downloaded.",
+        );
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [isRemoteImage, title, uri]);
 
   const panResponder = useMemo(
     () =>
@@ -98,9 +145,15 @@ export default function BlogImageViewScreen() {
   );
 
   return (
-    <Animated.View className="flex-1 bg-black" style={{ opacity: backdropOpacity }}>
+    <Animated.View
+      className="flex-1 bg-black"
+      style={{ opacity: backdropOpacity }}
+    >
       <View className="absolute left-0 right-0 top-0 z-20 flex-row items-center justify-between px-4 pb-3 pt-14">
-        <Text className="flex-1 pr-4 text-sm font-semibold text-white" numberOfLines={1}>
+        <Text
+          className="flex-1 pr-4 text-sm font-semibold text-white"
+          numberOfLines={1}
+        >
           {title}
         </Text>
         <Pressable
@@ -116,18 +169,27 @@ export default function BlogImageViewScreen() {
         style={{ transform: [{ translateY }] }}
         {...panResponder.panHandlers}
       >
-        {uri ? (
+        {displayUri ? (
           <Pressable
             className="h-full w-full"
             onLongPress={showImageOptions}
             delayLongPress={350}
           >
             <Image
-              source={{ uri }}
+              source={{ uri: displayUri }}
               className="h-full w-full"
               resizeMode="contain"
             />
           </Pressable>
+        ) : imageCacheError ? (
+          <Text className="px-8 text-center text-sm text-zinc-300">
+            {imageCacheError}
+          </Text>
+        ) : uri ? (
+          <View className="items-center gap-3">
+            <ActivityIndicator color="#ffffff" />
+            <Text className="text-sm text-zinc-300">Saving image…</Text>
+          </View>
         ) : (
           <Text className="text-sm text-zinc-300">Image not available.</Text>
         )}

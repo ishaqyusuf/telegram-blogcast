@@ -10,6 +10,10 @@ dist/
 web-build/
 **/web-build/
 
+.env
+.env.*
+!.env.example
+
 apps/expo-app/android/
 apps/expo-app/ios/
 apps/www/.next/

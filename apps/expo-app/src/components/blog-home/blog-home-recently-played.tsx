@@ -2,13 +2,15 @@ import { Pressable } from "@/components/ui/pressable";
 import { useQuery } from "@/lib/react-query";
 import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
-import { ScrollView, Text, View } from "react-native";
+import { Image, ScrollView, Text, View } from "react-native";
 
 import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";
 import { getAudioDisplayTitle } from "@/lib/audio-title";
+import { getMediaFileUrl } from "@/lib/media-source";
 import { minuteToString } from "@/lib/utils";
 import { useColors } from "@/hooks/use-color";
+import { getBlogHref } from "@/components/blog-card/utils";
 import {
   useRecentlyViewedStore,
   type RecentlyViewedItem,
@@ -50,10 +52,72 @@ function formatProgress(progressMs: number, durationSec?: number | null) {
   return `${pos} / ${dur}`;
 }
 
-function getViewedHref(item: RecentlyViewedItem) {
-  if (item.type === "audio") return `/blog-view-2/${item.id}`;
-  if (item.type === "text") return `/blog-view-text/${item.id}`;
-  return `/blog-view/${item.id}`;
+function ViewedActivityCard({ item }: { item: RecentlyViewedItem }) {
+  const router = useRouter();
+  const colors = useColors();
+  const { data: blog } = useQuery(
+    _trpc.blog.getBlog.queryOptions(
+      { id: item.id },
+      {
+        enabled: !item.thumbnailUrl && item.type === "video",
+      },
+    ),
+  );
+  const thumbnailUrl =
+    item.thumbnailUrl || getMediaFileUrl((blog as any)?.thumbnail?.file);
+
+  return (
+    <Pressable
+      onPress={() => router.push(getBlogHref(item) as any)}
+      className="w-[112px] active:opacity-80"
+      accessibilityRole="button"
+      accessibilityLabel={`Open ${VIEWED_TYPE_LABELS[item.type] ?? "blog"} ${item.title}`}
+    >
+      <View
+        className="h-24 w-full items-center justify-center rounded-xl border border-border bg-card mb-2 relative overflow-hidden"
+        style={{
+          backgroundColor: colors.card,
+          borderColor: colors.border,
+        }}
+      >
+        {thumbnailUrl ? (
+          <Image
+            source={{ uri: thumbnailUrl }}
+            className="absolute inset-0 h-full w-full"
+            resizeMode="cover"
+          />
+        ) : (
+          <Icon
+            name={
+              VIEWED_TYPE_ICONS[
+                item.type as keyof typeof VIEWED_TYPE_ICONS
+              ] ?? "FileText"
+            }
+            size={28}
+            className="text-muted-foreground"
+          />
+        )}
+        <View
+          className="absolute right-2 top-2 rounded-full px-2 py-0.5"
+          style={{ backgroundColor: colors.primary }}
+        >
+          <Text
+            className="text-[9px] font-bold"
+            style={{ color: colors.primaryForeground }}
+          >
+            {VIEWED_TYPE_LABELS[item.type] ?? "Blog"}
+          </Text>
+        </View>
+      </View>
+      <Text
+        className="text-xs font-bold text-foreground"
+        numberOfLines={2}
+        style={{ color: colors.foreground }}
+      >
+        {item.title}
+      </Text>
+    </Pressable>
+  );
 }
 
 export function BlogHomeRecentlyPlayed() {
@@ -256,47 +320,7 @@ export function BlogHomeRecentlyPlayed() {
 
         {selectedTab !== "played" &&
           selectedViewedItems.map((item) => (
-            <Pressable
-              key={item.id}
-              onPress={() => router.push(getViewedHref(item) as any)}
-              className="w-[112px] active:opacity-80"
-            >
-              <View
-                className="h-24 w-full items-center justify-center rounded-xl border border-border bg-card mb-2 relative"
-                style={{
-                  backgroundColor: colors.card,
-                  borderColor: colors.border,
-                }}
-              >
-                <View
-                  className="absolute right-2 top-2 rounded-full px-2 py-0.5"
-                  style={{ backgroundColor: colors.primary }}
-                >
-                  <Text
-                    className="text-[9px] font-bold"
-                    style={{ color: colors.primaryForeground }}
-                  >
-                    {VIEWED_TYPE_LABELS[item.type] ?? "Blog"}
-                  </Text>
-                </View>
-                <Icon
-                  name={
-                    VIEWED_TYPE_ICONS[
-                      item.type as keyof typeof VIEWED_TYPE_ICONS
-                    ] ?? "FileText"
-                  }
-                  size={28}
-                  className="text-muted-foreground"
-                />
-              </View>
-              <Text
-                className="text-xs font-bold text-foreground"
-                numberOfLines={2}
-                style={{ color: colors.foreground }}
-              >
-                {item.title}
-              </Text>
-            </Pressable>
+            <ViewedActivityCard key={item.id} item={item} />
           ))}
 
         {counts[selectedTab] === 0 && (

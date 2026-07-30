@@ -68,6 +68,40 @@ function animatePostListChange() {
   });
 }
 
+function BlogPostCardsSkeleton() {
+  const colors = useColors();
+
+  return (
+    <View
+      accessibilityLabel="Loading latest posts"
+      accessibilityRole="progressbar"
+    >
+      {[0, 1, 2].map((key) => (
+        <View
+          key={key}
+          className="border-b border-border bg-background p-4"
+          style={{
+            backgroundColor: colors.background,
+            borderBottomColor: colors.border,
+          }}
+        >
+          <View className="mb-3 flex-row items-center gap-3">
+            <Skeleton className="h-10 w-10 rounded-full" />
+            <View className="flex-1 gap-2">
+              <Skeleton className="h-4 w-2/5 rounded-md" />
+              <Skeleton className="h-3 w-1/4 rounded-md" />
+            </View>
+          </View>
+          <Skeleton className="h-5 w-3/4 rounded-md" />
+          <Skeleton className="mt-3 h-4 w-full rounded-md" />
+          <Skeleton className="mt-2 h-4 w-4/5 rounded-md" />
+          <Skeleton className="mt-4 h-48 w-full rounded-xl" />
+        </View>
+      ))}
+    </View>
+  );
+}
+
 export function BlogHomeSkeleton() {
   const colors = useColors();
 
@@ -84,28 +118,7 @@ export function BlogHomeSkeleton() {
           </View>
           <View className="h-4" />
           <View className="flex-1 border-t border-border">
-            {[0, 1, 2].map((key) => (
-              <View
-                key={key}
-                className="border-b border-border bg-background p-4"
-                style={{
-                  backgroundColor: colors.background,
-                  borderBottomColor: colors.border,
-                }}
-              >
-                <View className="mb-3 flex-row items-center gap-3">
-                  <Skeleton className="h-10 w-10 rounded-full" />
-                  <View className="flex-1 gap-2">
-                    <Skeleton className="h-4 w-2/5 rounded-md" />
-                    <Skeleton className="h-3 w-1/4 rounded-md" />
-                  </View>
-                </View>
-                <Skeleton className="h-5 w-3/4 rounded-md" />
-                <Skeleton className="mt-3 h-4 w-full rounded-md" />
-                <Skeleton className="mt-2 h-4 w-4/5 rounded-md" />
-                <Skeleton className="mt-4 h-48 w-full rounded-xl" />
-              </View>
-            ))}
+            <BlogPostCardsSkeleton />
           </View>
           <BlogHomeFab />
         </View>
@@ -191,6 +204,7 @@ export default function BlogHomeScreen() {
     hasNextPage,
     isFetching,
     isRefetching,
+    isPlaceholderData,
     fetchNextPage,
     refetch,
   } = useInfiniteLoader({
@@ -255,7 +269,12 @@ export default function BlogHomeScreen() {
 
     return output;
   }, [rawVisiblePosts]);
-  const isFetchingMore = isFetching && !isRefetching && !isPullRefreshing;
+  const isCategoryLoading = isFetching && isPlaceholderData;
+  const isFetchingMore =
+    isFetching &&
+    !isRefetching &&
+    !isPullRefreshing &&
+    !isCategoryLoading;
   const handleDeletePost = useCallback(
     async (post: BlogItem) => {
       setHiddenPostIds((prev) => new Set(prev).add(post.id));
@@ -560,7 +579,7 @@ export default function BlogHomeScreen() {
           <LegendList
             ref={feedScroll.ref}
             style={{ backgroundColor: colors.background }}
-            data={visiblePosts}
+            data={isCategoryLoading ? [] : visiblePosts}
             renderItem={({ item }) => (
               <View>
                 <BlogCard
@@ -613,6 +632,9 @@ export default function BlogHomeScreen() {
                   </Text>
                 ) : null}
               </View>
+            }
+            ListEmptyComponent={
+              isCategoryLoading ? <BlogPostCardsSkeleton /> : null
             }
             refreshing={isPullRefreshing || isRefetching}
             onRefresh={onRefresh}

@@ -16,15 +16,15 @@ describe("Android notification controls", () => {
 
 		expect(spec.expandedActionIds).toEqual([
 			"cycle-playback-rate",
-			"jump-backward-15",
+			"jump-backward-5",
 			"play-pause",
-			"jump-forward-15",
+			"jump-forward-5",
 			"open-comments",
 		]);
 		expect(spec.compactActionIds).toEqual([
-			"jump-backward-15",
+			"jump-backward-5",
 			"play-pause",
-			"jump-forward-15",
+			"jump-forward-5",
 		]);
 		expect(spec.customActions).toEqual([
 			{
@@ -90,8 +90,8 @@ describe("Android notification controls", () => {
 			},
 			icons: {
 				comments: "notification_comments",
-				jumpBackward: "notification_jump_backward_15",
-				jumpForward: "notification_jump_forward_15",
+				jumpBackward: "notification_jump_backward_5",
+				jumpForward: "notification_jump_forward_5",
 				"speed-1": "notification_speed_1",
 				"speed-1-25": "notification_speed_1_25",
 				"speed-1-5": "notification_speed_1_5",
@@ -104,8 +104,8 @@ describe("Android notification controls", () => {
 		expect(options.capabilities).toEqual([13, 12, 14, 10, 11]);
 		expect(options.notificationCapabilities).toEqual([10, 13, 11]);
 		expect(options.compactCapabilities).toEqual([10, 13, 11]);
-		expect(options.rewindIcon).toBe("notification_jump_backward_15");
-		expect(options.forwardIcon).toBe("notification_jump_forward_15");
+		expect(options.rewindIcon).toBe("notification_jump_backward_5");
+		expect(options.forwardIcon).toBe("notification_jump_forward_5");
 		expect(options.androidCustomActions).toEqual([
 			{
 				id: "cycle-playback-rate",

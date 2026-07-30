@@ -1,6 +1,6 @@
 import type { ExpoConfig } from "expo/config";
 
-export const UPDATE_VERSION = "2026.07.24.04";
+export const UPDATE_VERSION = "2026.07.30.02";
 
 const appVariant =
 	process.env.APP_VARIANT ??
@@ -75,7 +75,7 @@ const config: ExpoConfig = {
 	name: variantConfig.name,
 	slug: "alghurobaa",
 	// slug: "prodesk",
-	version: "1.0.110",
+	version: "1.0.111",
 	orientation: "portrait",
 	icon: variantConfig.icons.app,
 	scheme: variantConfig.scheme,
@@ -135,6 +135,7 @@ const config: ExpoConfig = {
 
 	plugins: [
 		"./plugins/with-image-clipboard",
+		"./plugins/with-android-media-storage",
 		"./plugins/with-onnxruntime-package",
 		"./plugins/with-audio-notification-icons",
 		"expo-router",

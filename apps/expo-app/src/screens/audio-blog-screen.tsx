@@ -45,7 +45,10 @@ import { CommentInput } from "@/components/comments-sheet/comment-input";
 import { CommentsAudioContext } from "@/components/comments-sheet/comments-audio-context";
 import { CommentsHeader } from "@/components/comments-sheet/comments-header";
 import { CommentsList } from "@/components/comments-sheet/comments-list";
-import { useLocalServicesSession } from "@/components/local-services";
+import {
+	LocalServicesConnectionButton,
+	useLocalServicesSession,
+} from "@/components/local-services";
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
 import { TranscriptionRequestModal } from "@/components/transcription-request-modal";
@@ -3485,33 +3488,8 @@ export default function AudioBlogScreen() {
 											</Text>
 										</Pressable>
 										<View className="flex-row items-center gap-1">
-											{!localServicesEnabled ? (
-												<View
-													accessibilityLabel="Enable local services"
-													style={{
-														maxWidth: 168,
-														minHeight: 32,
-														flexDirection: "row",
-														alignItems: "center",
-														gap: 6,
-														borderRadius: 999,
-														paddingHorizontal: 10,
-														backgroundColor: "rgba(255,255,255,0.12)",
-													}}
-												>
-													<Icon name="WifiOff" size={14} color="#ffffff" />
-													<Text
-														numberOfLines={1}
-														style={{
-															color: "#ffffff",
-															fontSize: 11,
-															fontWeight: "800",
-														}}
-													>
-														Enable local services
-													</Text>
-												</View>
-											) : transcriptBadge.show ? (
+											<LocalServicesConnectionButton />
+											{localServicesEnabled && transcriptBadge.show ? (
 												<View
 													accessibilityLabel={transcriptBadge.label}
 													style={{

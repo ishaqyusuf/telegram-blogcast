@@ -4,6 +4,10 @@ node_modules/
 dist/
 web-build/
 
+.env
+.env.*
+!.env.example
+
 android/
 ios/
 

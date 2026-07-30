@@ -21,8 +21,8 @@ test("installs every notification icon as a stable Android drawable", () => {
 
 		expect(ANDROID_NOTIFICATION_ICON_FILES).toEqual([
 			"notification_comments.png",
-			"notification_jump_backward_15.png",
-			"notification_jump_forward_15.png",
+			"notification_jump_backward_5.png",
+			"notification_jump_forward_5.png",
 			"notification_speed_1.png",
 			"notification_speed_1_25.png",
 			"notification_speed_1_5.png",

@@ -6,6 +6,7 @@ import {
   splitTextLinesWithLinks,
 } from "@acme/blog";
 import { useRouter } from "expo-router";
+import * as WebBrowser from "expo-web-browser";
 import { useEffect, useMemo, useState } from "react";
 import { Image, Linking, Platform, Text, View } from "react-native";
 import { WebView } from "react-native-webview";
@@ -153,7 +154,13 @@ function CardImage({ post }: { post: BlogItem }) {
   );
 }
 
-function CardVideo({ post }: { post: BlogItem }) {
+function CardVideo({
+  post,
+  onOpen,
+}: {
+  post: BlogItem;
+  onOpen: () => void;
+}) {
   const colors = useColors();
   const imageUrl = getPrimaryImageUrl(post);
   const video = (post as any).video;
@@ -170,12 +177,17 @@ function CardVideo({ post }: { post: BlogItem }) {
     <Pressable
       className="mb-1 overflow-hidden rounded-xl bg-black"
       onPress={(event) => {
-        if (!externalMedia?.externalUrl) return;
         event.stopPropagation();
-        void Linking.openURL(externalMedia.externalUrl);
+        if (externalMedia?.externalUrl) {
+          void WebBrowser.openBrowserAsync(externalMedia.externalUrl);
+          return;
+        }
+        onOpen();
       }}
-      accessibilityRole={externalMedia ? "link" : undefined}
-      accessibilityLabel={externalMedia ? `Open video in ${destinationLabel}` : "Video"}
+      accessibilityRole="button"
+      accessibilityLabel={
+        externalMedia ? `Open video in ${destinationLabel}` : "Open video"
+      }
     >
       {imageUrl ? (
         <Image
@@ -376,7 +388,13 @@ function PdfPreview({ uri, title }: { uri?: string | null; title: string }) {
   );
 }
 
-function CardPdf({ post }: { post: BlogItem }) {
+function CardPdf({
+  post,
+  onOpen,
+}: {
+  post: BlogItem;
+  onOpen: () => void;
+}) {
   const colors = useColors();
   const doc = getPrimaryDocumentMedia(post) as any;
   const file = doc?.file;
@@ -390,9 +408,15 @@ function CardPdf({ post }: { post: BlogItem }) {
   const sizeLabel = formatFileSize(doc?.size ?? file?.fileSize);
 
   return (
-    <View
+    <Pressable
       className="mb-3 overflow-hidden rounded-xl border border-border bg-card"
       style={{ backgroundColor: colors.card, borderColor: colors.border }}
+      onPress={(event) => {
+        event.stopPropagation();
+        onOpen();
+      }}
+      accessibilityRole="button"
+      accessibilityLabel={`Open ${fileName}`}
     >
       <PdfPreview uri={previewUrl} title={fileName} />
       <View className="gap-1 px-3 py-3">
@@ -411,16 +435,18 @@ function CardPdf({ post }: { post: BlogItem }) {
           {sizeLabel ? `PDF document · ${sizeLabel}` : "PDF document"}
         </Text>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
 export function CardMedia({
   post,
   variant,
+  onOpen,
 }: {
   post: BlogItem;
   variant: BlogCardVariant;
+  onOpen: () => void;
 }) {
   const { t } = useTranslation();
   const colors = useColors();
@@ -433,7 +459,7 @@ export function CardMedia({
     return (
       <>
         <CardText post={post} />
-        <CardVideo post={post} />
+        <CardVideo post={post} onOpen={onOpen} />
       </>
     );
   }
@@ -441,7 +467,7 @@ export function CardMedia({
   if (variant === "pdf") {
     return (
       <>
-        <CardPdf post={post} />
+        <CardPdf post={post} onOpen={onOpen} />
         <CardText post={post} />
       </>
     );

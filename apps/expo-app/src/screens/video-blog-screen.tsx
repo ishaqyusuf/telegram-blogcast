@@ -12,6 +12,7 @@ import { Pressable } from "@/components/ui/pressable";
 import { useColors } from "@/hooks/use-color";
 import { useTranscriptionQueue } from "@/hooks/use-transcription-queue";
 import { getTelegramFileUrl } from "@/lib/get-telegram-file";
+import { cacheMedia } from "@/lib/media-cache";
 import { getMediaFileUrl } from "@/lib/media-source";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { isHttpTranscriberUrl } from "@/lib/transcribe";
@@ -281,6 +282,10 @@ export default function VideoBlogScreen() {
 	const [isMuted, setIsMuted] = useState(false);
 	const [videoRate, setVideoRate] =
 		useState<(typeof VIDEO_RATE_OPTIONS)[number]>(1);
+	const [cachedVideoUri, setCachedVideoUri] = useState<string | null>(null);
+	const [videoCacheError, setVideoCacheError] = useState<string | null>(null);
+	const [videoCacheProgress, setVideoCacheProgress] = useState(0);
+	const [videoCacheAttempt, setVideoCacheAttempt] = useState(0);
 	const setGlobalAudioBarHidden = useGlobalAudioBarStore((s) => s.setHidden);
 	const transcriberUrl = localServiceUrls?.transcriberBaseUrl ?? null;
 	const canCheckTranscriber = isHttpTranscriberUrl(transcriberUrl);
@@ -312,6 +317,8 @@ export default function VideoBlogScreen() {
 		thumbnailFileId: (blog as any)?.thumbnail?.file?.fileId,
 	});
 	const videoUrl = externalMedia ? null : getMediaFileUrl(mediaFile);
+	const videoCacheKey = media?.id ?? mediaFile?.fileId ?? id;
+	const videoFileName = mediaFile?.fileName || `video-${id}.mp4`;
 	const externalThumbnailUrl = getMediaFileUrl((blog as any)?.thumbnail?.file);
 	const mediaId = media?.id ?? undefined;
 	const telegramFileId =
@@ -452,6 +459,44 @@ export default function VideoBlogScreen() {
 		setHasPlaybackEnded(false);
 		setControlsVisible(true);
 	}, [activeMediaKey]);
+
+	useEffect(() => {
+		let isActive = true;
+		setCachedVideoUri(null);
+		setVideoCacheError(null);
+		setVideoCacheProgress(0);
+
+		if (!videoUrl) {
+			return () => {
+				isActive = false;
+			};
+		}
+
+		void cacheMedia({
+			cacheKey: videoCacheKey,
+			fileName: videoFileName,
+			kind: "video",
+			url: videoUrl,
+			onProgress: (nextProgress) => {
+				if (isActive) setVideoCacheProgress(nextProgress);
+			},
+		})
+			.then((cachedUri) => {
+				if (isActive) setCachedVideoUri(cachedUri);
+			})
+			.catch((error) => {
+				if (!isActive) return;
+				setVideoCacheError(
+					error instanceof Error
+						? error.message
+						: "The video could not be downloaded.",
+				);
+			});
+
+		return () => {
+			isActive = false;
+		};
+	}, [videoCacheAttempt, videoCacheKey, videoFileName, videoUrl]);
 
 	const handlePlaybackStatusUpdate = useCallback(
 		(nextStatus: AVPlaybackStatus) => {
@@ -734,7 +779,30 @@ export default function VideoBlogScreen() {
 							Open in {externalMedia.destination === "telegram" ? "Telegram" : "Facebook"}
 						</Text>
 					</Pressable>
-				) : videoUrl ? (
+				) : videoUrl && !cachedVideoUri ? (
+					<View className="flex-1 items-center justify-center px-8">
+						{videoCacheError ? (
+							<>
+								<Text className="mb-4 text-center text-sm font-semibold text-white/80">
+									{videoCacheError}
+								</Text>
+								<Pressable
+									className="rounded-full bg-primary px-5 py-3"
+									onPress={() => setVideoCacheAttempt((attempt) => attempt + 1)}
+								>
+									<Text className="font-bold text-primary-foreground">Retry</Text>
+								</Pressable>
+							</>
+						) : (
+							<>
+								<ActivityIndicator color={colors.primary} />
+								<Text className="mt-3 text-sm font-semibold text-white/70">
+									Downloading video… {Math.round(videoCacheProgress * 100)}%
+								</Text>
+							</>
+						)}
+					</View>
+				) : cachedVideoUri ? (
 					<Pressable
 						className="flex-1"
 						onPress={handleVideoSurfacePress}
@@ -745,9 +813,9 @@ export default function VideoBlogScreen() {
 						testID="video-controls-surface"
 					>
 						<Video
-							key={activeMediaKey || videoUrl}
+							key={activeMediaKey || cachedVideoUri}
 							ref={videoRef}
-							source={{ uri: videoUrl }}
+							source={{ uri: cachedVideoUri }}
 							style={{ flex: 1 }}
 							resizeMode={ResizeMode.CONTAIN}
 							isMuted={isMuted}
@@ -800,7 +868,7 @@ export default function VideoBlogScreen() {
 				</View>
 			) : null}
 
-			{videoUrl && controlsVisible ? (
+			{cachedVideoUri && controlsVisible ? (
 				<View
 					style={{
 						position: "absolute",
