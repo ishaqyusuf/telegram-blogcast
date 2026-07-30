@@ -165,6 +165,11 @@ Audio files are fetched using Bot API `file_id` resolution (MTProto forward → 
 
 Development uses the Expo host automatically. Preview and production builds connect optional LAN workflows through the selected host at port `3501`; the Next app exposes `/health` and `/api/trpc`, then coordinates Telegram updates, transcription on `8787`, and the Facebook media bridge on `8790`.
 
+When `bun dev` starts the web runner, it also starts an ngrok tunnel to port
+`3501`. The public HTTPS URL is printed in the existing `@acme/www#dev` TUI
+pane. Install ngrok and authenticate it once before relying on the tunnel.
+Set `NGROK_ENABLED=0` to keep the web runner local-only.
+
 ---
 
 ## Scripts

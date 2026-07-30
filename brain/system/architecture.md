@@ -22,6 +22,7 @@ Documents the main architectural decisions, runtime boundaries, and integration 
 - Database schema is split into domain-focused Prisma files under `packages/db/src/schema`.
 - Expo media uploads use the Next.js web surface for Vercel Blob client-upload token exchange, then persist media ownership through the shared tRPC API.
 - Local Telegram/channel import runs in the Hono API process. Expo can start, stop, and monitor import through tRPC over the LAN, but the mobile process does not import channel data itself.
+- The `apps/www` development supervisor owns Next.js, the transcriber, and an optional ngrok tunnel. The assigned public URL is emitted in the existing web task pane, and every child process shares the task lifecycle.
 
 ### Architectural Constraints
 - Favor shared workspace packages over duplicated app-local business logic.
