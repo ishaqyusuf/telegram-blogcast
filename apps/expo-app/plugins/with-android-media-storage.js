@@ -20,9 +20,6 @@ class AndroidMediaStorageModule(private val reactContext: ReactApplicationContex
 
   override fun getName(): String = "AndroidMediaStorage"
 
-  private fun resolveMediaApplicationId(applicationId: String): String =
-    applicationId.removeSuffix(".dev").removeSuffix(".preview")
-
   @ReactMethod
   fun getMediaDirectory(mediaType: String, promise: Promise) {
     try {
@@ -33,17 +30,12 @@ class AndroidMediaStorageModule(private val reactContext: ReactApplicationContex
       }
 
       val appMediaRoot = reactContext.externalMediaDirs.firstOrNull()
-      val androidMediaRoot = appMediaRoot?.parentFile
-      if (androidMediaRoot == null) {
+      if (appMediaRoot == null) {
         promise.reject("E_MEDIA_STORAGE_UNAVAILABLE", "Android media storage is unavailable.")
         return
       }
 
-      val sharedMediaRoot = File(
-        androidMediaRoot,
-        resolveMediaApplicationId(reactContext.packageName),
-      )
-      val directory = File(sharedMediaRoot, mediaType)
+      val directory = File(appMediaRoot, mediaType)
       if (!directory.exists() && !directory.mkdirs()) {
         promise.reject("E_CREATE_MEDIA_DIRECTORY", "Could not create the Android media folder.")
         return
@@ -164,3 +156,4 @@ module.exports = function withAndroidMediaStorage(config) {
 };
 
 module.exports.addAndroidMediaStoragePackage = addAndroidMediaStoragePackage;
+module.exports.getAndroidModule = getAndroidModule;

@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
-const { addAndroidMediaStoragePackage } =
+const { addAndroidMediaStoragePackage, getAndroidModule } =
   require("./with-android-media-storage.js") as {
     addAndroidMediaStoragePackage: (
       source: string,
       packageName?: string,
     ) => string;
+    getAndroidModule: (packageName: string) => string;
   };
 
 describe("with-android-media-storage", () => {
@@ -48,6 +49,21 @@ PackageList(this).packages.apply {
     expect(result.match(/add\(AndroidMediaStoragePackage\(\)\)/g)).toHaveLength(
       1,
     );
+  });
+
+  test("stores media inside the active Android application's owned directory", () => {
+    const moduleSource = getAndroidModule(
+      "com.alghurobaa.podcast.preview.media",
+    );
+
+    expect(moduleSource).toContain(
+      "val appMediaRoot = reactContext.externalMediaDirs.firstOrNull()",
+    );
+    expect(moduleSource).toContain(
+      "val directory = File(appMediaRoot, mediaType)",
+    );
+    expect(moduleSource).not.toContain("resolveMediaApplicationId");
+    expect(moduleSource).not.toContain("appMediaRoot?.parentFile");
   });
 
   test("fails prebuild when Expo's package-list anchor changes", () => {
