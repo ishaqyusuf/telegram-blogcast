@@ -1360,6 +1360,32 @@ export default function FacebookImportScreen() {
 							{bridgeErrorMessage}
 						</Text>
 					) : null}
+					<Pressable
+						disabled={!localApiReady}
+						onPress={() => router.push("/facebook-saved-sync" as any)}
+						className={
+							localApiReady
+								? "min-h-11 flex-row items-center justify-center gap-2 rounded-lg bg-secondary px-4 py-3"
+								: "min-h-11 flex-row items-center justify-center gap-2 rounded-lg bg-muted px-4 py-3 opacity-60"
+						}
+					>
+						<Icon
+							name="RefreshCw"
+							size={18}
+							className={
+								localApiReady ? "text-foreground" : "text-muted-foreground"
+							}
+						/>
+						<Text
+							className={
+								localApiReady
+									? "text-sm font-extrabold text-foreground"
+									: "text-sm font-extrabold text-muted-foreground"
+							}
+						>
+							Sync newly saved posts
+						</Text>
+					</Pressable>
 					<View className="flex-row gap-2">
 						<StatBox
 							label="Facebook"
@@ -1572,7 +1598,9 @@ export default function FacebookImportScreen() {
 			filterCounts,
 			hasRunningJob,
 			job,
+			localApiReady,
 			pendingCount,
+			router,
 			selectedChannelIds,
 			channelFilterLabel,
 			canUseFacebookBridgeUrl,

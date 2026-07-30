@@ -2,6 +2,13 @@
 
 ## 2026-07-30
 
+### Incremental Facebook Saved-Post Sync
+- Status: Implemented.
+- Source mode: User-approved option 1 plan, extended with a direct mobile trigger.
+- Source changed: shared saved-post identity/collector contract, stable canonical export, reusable JSON/database sync service, local-only tRPC procedures, prompt-driven repository skill, and Expo Facebook Saved WebView flow.
+- Facebook media resolution and Telegram upload remain separate in the existing Facebook Import workflow.
+- Brain changed: `brain/plans/2026-07-30-feature-incremental-facebook-saved-sync.md`, Blog behavior, architecture, API contracts, completed tasks, and progress.
+
 ### Production-Backed ngrok Gateway Discovery
 - Status: Implemented and deployed. Preview OTA release is intentionally
   pending because unrelated uncommitted Expo changes cannot safely be included

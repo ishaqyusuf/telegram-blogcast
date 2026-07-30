@@ -26,6 +26,7 @@ Tracks important request/response expectations and typed boundaries between clie
 - Blog media is source-aware. `blog.createBlog` accepts optional `mediaUploads` from Vercel Blob and persists them as `File` + `Media` rows with `source = "vercel_blob"`; existing Telegram media keeps using Telegram `fileId` values and the web proxy.
 - Expo uploads user-selected blog media through the Next.js `/api/blob/upload` client-upload token endpoint, then sends the resulting Blob metadata to tRPC with the blog create/update payload.
 - `facebookImport` procedures expose Facebook media import status for DB rows with `Blog.source = "facebook"`. `startMediaImport` launches an API-owned background batch that calls the local Facebook media bridge and stores the normalized result under `Blog.meta.facebook.mediaDownload`. Results at or below 20 MiB persist as normal in-app Telegram media. Larger results use terminal `status/accessMode = "external"` plus `destination`, `reason`, `externalUrl`, media metadata, and an optional thumbnail; bulk retries skip them while explicit forced Recheck is allowed.
+- `facebookImport.getSavedSyncState` is local-gateway-only and returns the canonical saved-post count, stable known identities, export timestamp, and last sync summary. `facebookImport.syncSavedPosts` is local-gateway-only and accepts only a completed `known_boundary` or `natural_end` capture; it imports missing Blog rows and atomically updates `exports/facebook-saved.json`. It never starts Facebook media processing.
 
 ### Blog Contracts
 - `channel.getContentFilterChannels` returns only non-deleted channels with at least one non-deleted blog plus their global content-filter state. `channel.updateContentFilter` enables a non-empty allow-list of `text|image|video|audio|pdf` or disables filtering while retaining saved selections.
@@ -71,6 +72,7 @@ Tracks important request/response expectations and typed boundaries between clie
 - Expo Settings owns a shared Local Services IP. When set, clients derive the local API URL from that IP and the API port, derive the transcriber URL from the same IP and transcriber port, and derive the Facebook bridge URL from the same IP and bridge port. Explicit service URL overrides still take precedence over IP-derived defaults.
 - `/blog-import` mobile flow talks to the local API over LAN using the tRPC channel procedures: `channel.getChannels`, `channel.syncChannels`, `channel.toggleFetchable`, `channel.startFetch`, `channel.stopFetch`, and `channel.getFetcherState`.
 - `/facebook-import` mobile flow talks to tRPC `facebookImport.getSummary`, `facebookImport.listMediaImports`, `facebookImport.checkBridge`, and `facebookImport.startMediaImport`.
+- `/facebook-saved-sync` loads known identities through `facebookImport.getSavedSyncState`, captures Facebook Saved inside an authenticated WebView, and submits the completed delta through `facebookImport.syncSavedPosts`.
 
 ### TODO
 - Record contract notes per router as features are implemented or refactored.

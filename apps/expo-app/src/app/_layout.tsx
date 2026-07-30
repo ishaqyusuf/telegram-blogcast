@@ -208,6 +208,10 @@ const InitialLayout = () => {
 						<Stack.Screen name="settings" />
 						<Stack.Screen name="channel-configuration" />
 						<Stack.Screen name="facebook-import" />
+						<Stack.Screen
+							name="facebook-saved-sync"
+							options={{ presentation: "fullScreenModal" }}
+						/>
 						<Stack.Screen name="album-organizer/index" />
 						<Stack.Screen name="album-organizer/[channelId]/index" />
 						<Stack.Screen name="album-organizer/[channelId]/runs/[runId]/index" />

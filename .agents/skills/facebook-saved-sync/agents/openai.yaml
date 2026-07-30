@@ -1,0 +1,4 @@
+interface:
+  display_name: "Facebook Saved Sync"
+  short_description: "Incrementally sync new Facebook saved posts"
+  default_prompt: "Sync my newly saved Facebook posts into Al-Ghurobaa."

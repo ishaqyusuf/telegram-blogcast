@@ -16,6 +16,10 @@
   },
   "exports": {
     ".": "./src/index.ts",
+    "./facebook-saved": {
+      "types": "./src/facebook-saved.d.ts",
+      "default": "./src/facebook-saved.mjs"
+    },
     "./*": "./src/*.ts"
   }
 }

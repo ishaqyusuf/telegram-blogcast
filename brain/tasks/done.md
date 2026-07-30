@@ -11,6 +11,7 @@ Tracks completed work that is still useful as project memory.
 ## Template
 
 ### Completed
+- **Incremental Facebook saved-post sync** - added stable saved-post identity and overlap boundaries, a canonical JSON/database sync service, a prompt-driven in-app-browser skill, and a direct Expo Facebook WebView trigger while keeping media download separate. Plan: `brain/plans/2026-07-30-feature-incremental-facebook-saved-sync.md`.
 - **Production-backed ngrok gateway discovery** - added an authenticated,
   expiring production lease, automatic web-runner publication/heartbeat, and
   preview-only remote local-service resolution without persisting tunnel URLs

@@ -24,6 +24,7 @@
     "db:push-reset": "node ./node_modules/turbo/bin/turbo -F @acme/db push-reset",
     "db:compact-shamela-urls": "node ./node_modules/turbo/bin/turbo -F @acme/db compact-shamela-urls",
     "facebook-saved:import": "bun scripts/facebook-saved/import-to-db.ts",
+    "facebook-saved:sync": "bun scripts/facebook-saved/sync.ts",
     "facebook-media-bridge:install": "cd services/facebook-media-bridge && python3 -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt",
     "facebook-media-bridge:dev": "cd services/facebook-media-bridge && . .venv/bin/activate && uvicorn main:app --host 0.0.0.0 --port 8790",
     "dev": "node ./scripts/dev-with-services.mjs",
