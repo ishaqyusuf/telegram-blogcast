@@ -3,6 +3,8 @@ import * as Updates from "expo-updates";
 import { useEffect, useRef, useState } from "react";
 import { AppState, type AppStateStatus } from "react-native";
 
+import { useOtaRouteRestoration } from "@/components/ota-route-restoration-provider";
+
 export type LaunchAutoUpdatePhase =
   | "idle"
   | "checking"
@@ -39,6 +41,7 @@ function getErrorMessage(error: unknown) {
 
 export function useLaunchAutoUpdate() {
   const { downloadProgress } = Updates.useUpdates();
+  const { reloadIntoUpdate, restorationReady } = useOtaRouteRestoration();
   const [phase, setPhase] = useState<LaunchAutoUpdatePhase>("idle");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
@@ -57,6 +60,8 @@ export function useLaunchAutoUpdate() {
   );
 
   useEffect(() => {
+    if (!restorationReady) return;
+
     let cancelled = false;
     const setPhaseIfMounted = (nextPhase: LaunchAutoUpdatePhase) => {
       if (!cancelled) setPhase(nextPhase);
@@ -107,7 +112,7 @@ export function useLaunchAutoUpdate() {
         await delay(STEP_DELAY_MS);
         setPhaseIfMounted("restarting");
         await delay(STEP_DELAY_MS);
-        await Updates.reloadAsync();
+        await reloadIntoUpdate("automatic");
       } catch (error) {
         console.warn("[updates] launch update failed", error);
         if (!cancelled) {
@@ -135,14 +140,19 @@ export function useLaunchAutoUpdate() {
         return;
       }
 
-    void runUpdateCheck();
+      void runUpdateCheck();
     });
 
     return () => {
       cancelled = true;
       subscription.remove();
     };
-  }, [autoUpdateOnForeground, foregroundCheckCooldownMs]);
+  }, [
+    autoUpdateOnForeground,
+    foregroundCheckCooldownMs,
+    reloadIntoUpdate,
+    restorationReady,
+  ]);
 
   return {
     dismissFailure: () => {

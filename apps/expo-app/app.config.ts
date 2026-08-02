@@ -16,6 +16,8 @@ const autoUpdateOnForeground =
 const autoUpdateForegroundCooldownMs = Number(
   process.env.EXPO_PUBLIC_AUTO_UPDATE_FOREGROUND_COOLDOWN_MS ?? 5 * 60 * 1000,
 );
+const restoreRouteAfterOtaUpdate =
+  process.env.EXPO_PUBLIC_RESTORE_ROUTE_AFTER_OTA_UPDATE !== "false";
 
 const variantConfig = isDevelopmentBuild
 	? {
@@ -171,6 +173,7 @@ const config: ExpoConfig = {
 	extra: {
 		appVariant: normalizedAppVariant,
     autoUpdateOnForeground,
+    restoreRouteAfterOtaUpdate,
     autoUpdateForegroundCooldownMs: Number.isFinite(
       autoUpdateForegroundCooldownMs,
     )

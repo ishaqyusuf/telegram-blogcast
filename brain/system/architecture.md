@@ -24,6 +24,11 @@ Documents the main architectural decisions, runtime boundaries, and integration 
 - Local Telegram/channel import runs in the Hono API process. Expo can start, stop, and monitor import through tRPC over the LAN, but the mobile process does not import channel data itself.
 - Facebook saved-post discovery has two authenticated capture surfaces: a repository Codex skill using the desktop in-app browser and an Expo WebView using the device session. Both produce the same validated incremental capture contract; the local API exclusively owns JSON merge and database import.
 - The `apps/www` development supervisor owns Next.js, the transcriber, and an optional ngrok tunnel. The assigned public URL is emitted in the existing web task pane, and every child process shares the task lifecycle.
+- The Expo root owns OTA route continuity through a navigation restoration
+  provider. Before any app-owned `expo-updates` reload, it stores a bounded,
+  versioned stable-route descriptor in AsyncStorage; the updated bundle
+  validates update identity, expiry, route policy, and launch-link precedence
+  before consuming and restoring that descriptor once.
 
 ### Architectural Constraints
 - Favor shared workspace packages over duplicated app-local business logic.

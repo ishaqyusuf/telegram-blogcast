@@ -1,4 +1,5 @@
 import { Icon } from "@/components/ui/icon";
+import { useOtaRouteRestoration } from "@/components/ota-route-restoration-provider";
 import { Pressable } from "@/components/ui/pressable";
 import { SafeArea } from "@/components/safe-area";
 import { useColors } from "@/hooks/use-color";
@@ -83,6 +84,7 @@ function UpdateStep({
 export default function UpdatesScreen() {
   const router = useRouter();
   const colors = useColors();
+  const { reloadIntoUpdate } = useOtaRouteRestoration();
   const {
     currentlyRunning,
     isChecking,
@@ -177,13 +179,13 @@ export default function UpdatesScreen() {
     setMessage("Restarting into the downloaded update.");
 
     try {
-      await Updates.reloadAsync();
+      await reloadIntoUpdate("manual");
     } catch (error) {
       setAction(null);
       setErrorMessage(getErrorMessage(error));
       setMessage("The app could not restart into the update.");
     }
-  }, []);
+  }, [reloadIntoUpdate]);
 
   return (
     <View

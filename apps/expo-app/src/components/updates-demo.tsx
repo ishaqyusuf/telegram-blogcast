@@ -3,16 +3,21 @@ import * as Updates from "expo-updates";
 import { useEffect } from "react";
 import { Button, Text, View } from "react-native";
 
+import { useOtaRouteRestoration } from "@/components/ota-route-restoration-provider";
+
 export default function UpdatesDemo() {
   const { currentlyRunning, isUpdateAvailable, isUpdatePending } =
     Updates.useUpdates();
+  const { reloadIntoUpdate } = useOtaRouteRestoration();
 
   useEffect(() => {
     if (isUpdatePending) {
       // Update has successfully downloaded; apply it now
-      Updates.reloadAsync();
+      void reloadIntoUpdate("manual").catch((error) => {
+        console.warn("[updates] demo reload failed", error);
+      });
     }
-  }, [isUpdatePending]);
+  }, [isUpdatePending, reloadIntoUpdate]);
 
   // If true, we show the button to download and run the update
   const showDownloadButton = isUpdateAvailable;

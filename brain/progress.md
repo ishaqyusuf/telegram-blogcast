@@ -1,5 +1,20 @@
 # Progress
 
+## 2026-08-02
+
+### OTA Route Continuity
+- Status: Implemented in source; installed preview OTA validation remains.
+- Source mode: User-approved implementation plan.
+- Source changed: versioned stable-route selection and validation, one-time
+  AsyncStorage marker, update-identity/TTL/deep-link guards, shared automatic
+  and manual reload transaction, startup restoration gate, Sentry breadcrumbs,
+  configuration flag, and focused unit coverage.
+- Behavioral boundary: screen routes and serializable URL parameters restore;
+  scroll position, open overlays, selections, and unsaved form state do not.
+- Rollout note: the first OTA containing the feature installs capture support;
+  route restoration can be observed beginning with the following OTA.
+- Brain changed: mobile build variants, system architecture, and progress.
+
 ## 2026-07-30
 
 ### Incremental Facebook Saved-Post Sync

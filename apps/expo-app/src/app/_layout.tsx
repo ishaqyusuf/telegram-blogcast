@@ -19,6 +19,7 @@ import {
 	LocalServicesSessionProvider,
 	useLocalServicesSession,
 } from "@/components/local-services";
+import { OtaRouteRestorationProvider } from "@/components/ota-route-restoration-provider";
 import { StaticRouter } from "@/components/static-router";
 import { StaticTrpc } from "@/components/static-trpc";
 import { ToastProviderWithViewport } from "@/components/ui/toast";
@@ -167,7 +168,8 @@ const InitialLayout = () => {
 	return (
 		<>
 			<LocalServicesSessionProvider>
-				<FloatingFooterProvider>
+				<OtaRouteRestorationProvider>
+					<FloatingFooterProvider>
 					<StaticTrpc />
 					<StaticRouter />
 					<AudioBootstrap />
@@ -280,7 +282,8 @@ const InitialLayout = () => {
 					<GlobalAudioBar />
 					<Toast />
 					<PortalHost />
-				</FloatingFooterProvider>
+					</FloatingFooterProvider>
+				</OtaRouteRestorationProvider>
 			</LocalServicesSessionProvider>
 		</>
 	);

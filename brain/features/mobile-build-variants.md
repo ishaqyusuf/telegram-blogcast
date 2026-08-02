@@ -29,3 +29,16 @@ Tracks Expo/EAS build-variant behavior for the Al-Ghurobaa mobile app.
 ## Notes
 - Keep native package and bundle identifiers unique for side-by-side installs.
 - Expo/EAS update checks are independent from the local-services session choice.
+- Automatic and manual OTA reloads persist the focused stable Expo Router
+  destination, consume it once after the running update identity changes, and
+  restore it after navigation is ready. Unsaved forms, imports, overlays, and
+  WebView workflows fall back to the nearest stable screen; a new external
+  deep link takes precedence.
+- OTA route restoration is enabled by default and can be disabled with
+  `EXPO_PUBLIC_RESTORE_ROUTE_AFTER_OTA_UPDATE=false`.
+
+## OTA Route Restoration Files
+- `apps/expo-app/src/lib/ota-route-restoration.ts`
+- `apps/expo-app/src/components/ota-route-restoration-provider.tsx`
+- `apps/expo-app/src/hooks/use-launch-auto-update.ts`
+- `apps/expo-app/src/screens/updates-screen.tsx`
