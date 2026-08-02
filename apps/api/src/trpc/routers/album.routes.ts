@@ -190,6 +190,35 @@ function mediaMatchesKeywordClauses(
 	return clauses.some((terms) => terms.every((term) => text.includes(term)));
 }
 
+function compareSuggestedMediaBySourceDate(
+	a: {
+		id: number;
+		blog?: {
+			blogDate?: Date | null;
+			telegramMessageId?: number | null;
+		} | null;
+	},
+	b: {
+		id: number;
+		blog?: {
+			blogDate?: Date | null;
+			telegramMessageId?: number | null;
+		} | null;
+	},
+) {
+	const aTime = a.blog?.blogDate?.getTime() ?? Number.POSITIVE_INFINITY;
+	const bTime = b.blog?.blogDate?.getTime() ?? Number.POSITIVE_INFINITY;
+	if (aTime !== bTime) return aTime - bTime;
+
+	const aMessageId =
+		a.blog?.telegramMessageId ?? Number.POSITIVE_INFINITY;
+	const bMessageId =
+		b.blog?.telegramMessageId ?? Number.POSITIVE_INFINITY;
+	if (aMessageId !== bMessageId) return aMessageId - bMessageId;
+
+	return a.id - b.id;
+}
+
 function getAlbumSearchText(album: {
 	name?: string | null;
 	description?: string | null;
@@ -729,6 +758,7 @@ export const albumRoutes = createTRPCRouter({
 							content: true,
 							type: true,
 							blogDate: true,
+							telegramMessageId: true,
 							channelId: true,
 						},
 					},
@@ -898,6 +928,7 @@ export const albumRoutes = createTRPCRouter({
 									content: media.blog.content,
 									type: media.blog.type,
 									blogDate: media.blog.blogDate,
+									telegramMessageId: media.blog.telegramMessageId,
 									channelId: media.blog.channelId,
 									channel: media.blog.channel,
 								}
@@ -911,12 +942,7 @@ export const albumRoutes = createTRPCRouter({
 					(media) =>
 						media.matchScore > 0 && (!hasKeyword || media.matchesKeyword),
 				)
-				.sort((a, b) => {
-					if (b.matchScore !== a.matchScore) return b.matchScore - a.matchScore;
-					const aTime = a.blog?.blogDate?.getTime() ?? 0;
-					const bTime = b.blog?.blogDate?.getTime() ?? 0;
-					return bTime - aTime;
-				})
+				.sort(compareSuggestedMediaBySourceDate)
 				.map(({ matchesKeyword, ...media }) => media)
 				.slice(0, input.limit);
 		}),
@@ -1012,6 +1038,7 @@ export const albumRoutes = createTRPCRouter({
 									content: true,
 									type: true,
 									blogDate: true,
+									telegramMessageId: true,
 									channelId: true,
 									channel: {
 										select: { id: true, title: true, username: true },
@@ -1044,14 +1071,7 @@ export const albumRoutes = createTRPCRouter({
 							};
 						})
 						.filter((media) => media.matchScore > 0 && media.matchesKeyword)
-						.sort((a, b) => {
-							if (b.matchScore !== a.matchScore) {
-								return b.matchScore - a.matchScore;
-							}
-							const aTime = a.blog?.blogDate?.getTime() ?? 0;
-							const bTime = b.blog?.blogDate?.getTime() ?? 0;
-							return bTime - aTime;
-						})
+						.sort(compareSuggestedMediaBySourceDate)
 						.map(({ matchesKeyword, ...media }) => media)
 						.slice(0, input.mediaLimit);
 

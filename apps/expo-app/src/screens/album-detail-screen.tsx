@@ -13,6 +13,7 @@ import {
 import { FloatingBottomSheet } from "@/components/ui/floating-bottom-sheet";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { formatDate } from "@acme/utils/dayjs";
+import { BottomSheetTextInput } from "@gorhom/bottom-sheet";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import { Image } from "expo-image";
@@ -90,7 +91,7 @@ const SUGGESTION_POOL_LIMIT = 500;
 const ALBUM_DETAIL_KEYBOARD_OFFSET = 140;
 const ALBUM_ART_OUTPUT_SIZE = 1024;
 const ALBUM_ART_CROP_QUALITY = 0.92;
-type AlbumDetailTab = "tracks" | "add";
+type AlbumDetailTab = "tracks" | "books" | "add";
 type AlbumArtCropSource = {
   uri: string;
   name: string;
@@ -431,6 +432,9 @@ function EditAlbumModal({
       onClose={onClose}
       accessibilityLabel="Edit album"
       title="Edit album"
+      keyboardBehavior="interactive"
+      keyboardBlurBehavior="restore"
+      androidKeyboardInputMode="adjustResize"
     >
       <View
         style={{
@@ -452,7 +456,7 @@ function EditAlbumModal({
             >
               Album name
             </Text>
-            <TextInput
+            <BottomSheetTextInput
               value={name}
               onChangeText={setName}
               placeholder="Enter a name..."
@@ -482,7 +486,7 @@ function EditAlbumModal({
             >
               Description
             </Text>
-            <TextInput
+            <BottomSheetTextInput
               value={description}
               onChangeText={setDescription}
               placeholder="Add an album description..."
@@ -4878,166 +4882,6 @@ export default function AlbumDetailScreen() {
                 </Pressable>
               </View>
 
-              <View style={{ width: "100%", gap: 10, marginTop: 8 }}>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                  }}
-                >
-                  <Text
-                    style={{
-                      fontSize: 14,
-                      fontWeight: "700",
-                      color: colors.foreground,
-                    }}
-                  >
-                      Books
-                    </Text>
-                  <Text style={{ fontSize: 12, color: colors.mutedForeground }}>
-                    {attachedBookReferences.length} attached
-                  </Text>
-                </View>
-
-                {attachedBookReferences.length > 0 ? (
-                  <View style={{ gap: 6 }}>
-                    {attachedBookReferences.slice(0, 3).map((reference) => (
-                      <View
-                        key={reference.id}
-                        style={{
-                          flexDirection: "row-reverse",
-                          alignItems: "center",
-                          gap: 8,
-                          borderRadius: 10,
-                          backgroundColor: colors.card,
-                          paddingHorizontal: 12,
-                          paddingVertical: 9,
-                        }}
-                      >
-                        <Pressable
-                          onPress={() =>
-                            router.push(`/books/${reference.bookId}` as any)
-                          }
-                          style={{
-                            flex: 1,
-                            flexDirection: "row-reverse",
-                            alignItems: "center",
-                            gap: 8,
-                          }}
-                        >
-                          <Icon
-                            name="BookOpen"
-                            size={16}
-                            className="text-primary"
-                          />
-                          <Text
-                            style={{
-                              flex: 1,
-                              fontSize: 13,
-                              fontWeight: "600",
-                              color: colors.foreground,
-                              textAlign: "right",
-                              writingDirection: "rtl",
-                            }}
-                            numberOfLines={1}
-                          >
-                            {reference.book?.nameAr ??
-                              reference.book?.nameEn ??
-                              "Book"}
-                          </Text>
-                        </Pressable>
-                        <Pressable
-                          disabled={isDetachingBook}
-                          onPress={() =>
-                            Alert.alert("Remove book?", undefined, [
-                              { text: "Cancel", style: "cancel" },
-                              {
-                                text: "Remove",
-                                style: "destructive",
-                                onPress: () => detachBook({ id: reference.id }),
-                              },
-                            ])
-                          }
-                          style={{
-                            width: 28,
-                            height: 28,
-                            borderRadius: 14,
-                            alignItems: "center",
-                            justifyContent: "center",
-                            opacity: isDetachingBook ? 0.45 : 1,
-                          }}
-                        >
-                          <Icon
-                            name="Trash2"
-                            size={14}
-                            className="text-muted-foreground"
-                          />
-                        </Pressable>
-                      </View>
-                    ))}
-                    {attachedBookReferences.length > 3 ? (
-                      <Text
-                        style={{
-                          fontSize: 12,
-                          color: colors.mutedForeground,
-                          textAlign: "right",
-                        }}
-                      >
-                        +{attachedBookReferences.length - 3} more
-                      </Text>
-                    ) : null}
-                  </View>
-                ) : (
-                  <View
-                    style={{
-                      minHeight: 58,
-                      borderRadius: 12,
-                      backgroundColor: colors.card,
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 12,
-                        color: colors.mutedForeground,
-                        fontWeight: "700",
-                      }}
-                    >
-                      No books attached
-                    </Text>
-                  </View>
-                )}
-
-                <Pressable
-                  onPress={() => setBookManagerVisible(true)}
-                  style={{
-                    minHeight: 42,
-                    borderRadius: 12,
-                    flexDirection: "row-reverse",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: 8,
-                    backgroundColor: colors.primary,
-                  }}
-                >
-                  <Icon
-                    name="BookOpen"
-                    size={16}
-                    color={colors.primaryForeground}
-                  />
-                  <Text
-                    style={{
-                      fontSize: 13,
-                      fontWeight: "900",
-                      color: colors.primaryForeground,
-                    }}
-                  >
-                    Manage books
-                  </Text>
-                </Pressable>
-              </View>
             </View>
 
             <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>
@@ -5049,7 +4893,7 @@ export default function AlbumDetailScreen() {
                   padding: 4,
                 }}
               >
-                {(["tracks", "add"] as AlbumDetailTab[]).map((tab) => {
+                {(["tracks", "books", "add"] as AlbumDetailTab[]).map((tab) => {
                   const active = activeAlbumTab === tab;
                   return (
                     <Pressable
@@ -5059,6 +4903,7 @@ export default function AlbumDetailScreen() {
                         if (tab !== "tracks") {
                           setReorderMode(false);
                           setSelectedTrackIds(new Set());
+                          closeTrackSearch();
                         }
                       }}
                       style={{
@@ -5079,7 +4924,11 @@ export default function AlbumDetailScreen() {
                             : colors.mutedForeground,
                         }}
                       >
-                        {tab === "tracks" ? "Tracks" : "+ Add"}
+                        {tab === "tracks"
+                          ? `Tracks (${totalTrackCount})`
+                          : tab === "books"
+                            ? `Books (${attachedBookReferences.length})`
+                            : "+ Add"}
                       </Text>
                     </Pressable>
                   );
@@ -5362,6 +5211,171 @@ export default function AlbumDetailScreen() {
                     </>
                   )}
                 </>
+              )}
+
+              {/* Books section */}
+              {activeAlbumTab === "books" && (
+                <View style={{ gap: 10, paddingTop: 6 }}>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      paddingBottom: 8,
+                      borderBottomWidth: 1,
+                      borderBottomColor: colors.border,
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 14,
+                        fontWeight: "700",
+                        color: colors.foreground,
+                      }}
+                    >
+                      Books
+                    </Text>
+                    <Text
+                      style={{ fontSize: 12, color: colors.mutedForeground }}
+                    >
+                      {attachedBookReferences.length} attached
+                    </Text>
+                  </View>
+
+                  {attachedBookReferences.length > 0 ? (
+                    <View style={{ gap: 6 }}>
+                      {attachedBookReferences.map((reference) => (
+                        <View
+                          key={reference.id}
+                          style={{
+                            flexDirection: "row-reverse",
+                            alignItems: "center",
+                            gap: 8,
+                            borderRadius: 10,
+                            backgroundColor: colors.card,
+                            paddingHorizontal: 12,
+                            paddingVertical: 9,
+                          }}
+                        >
+                          <Pressable
+                            onPress={() =>
+                              router.push(`/books/${reference.bookId}` as any)
+                            }
+                            style={{
+                              flex: 1,
+                              flexDirection: "row-reverse",
+                              alignItems: "center",
+                              gap: 8,
+                            }}
+                          >
+                            <Icon
+                              name="BookOpen"
+                              size={16}
+                              className="text-primary"
+                            />
+                            <Text
+                              style={{
+                                flex: 1,
+                                fontSize: 13,
+                                fontWeight: "600",
+                                color: colors.foreground,
+                                textAlign: "right",
+                                writingDirection: "rtl",
+                              }}
+                              numberOfLines={1}
+                            >
+                              {reference.book?.nameAr ??
+                                reference.book?.nameEn ??
+                                "Book"}
+                            </Text>
+                          </Pressable>
+                          <Pressable
+                            disabled={isDetachingBook}
+                            onPress={() =>
+                              Alert.alert("Remove book?", undefined, [
+                                { text: "Cancel", style: "cancel" },
+                                {
+                                  text: "Remove",
+                                  style: "destructive",
+                                  onPress: () =>
+                                    detachBook({ id: reference.id }),
+                                },
+                              ])
+                            }
+                            style={{
+                              width: 28,
+                              height: 28,
+                              borderRadius: 14,
+                              alignItems: "center",
+                              justifyContent: "center",
+                              opacity: isDetachingBook ? 0.45 : 1,
+                            }}
+                          >
+                            <Icon
+                              name="Trash2"
+                              size={14}
+                              className="text-muted-foreground"
+                            />
+                          </Pressable>
+                        </View>
+                      ))}
+                    </View>
+                  ) : (
+                    <View
+                      style={{
+                        minHeight: 120,
+                        borderRadius: 12,
+                        backgroundColor: colors.card,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 8,
+                      }}
+                    >
+                      <Icon
+                        name="BookOpen"
+                        size={32}
+                        className="text-muted-foreground"
+                      />
+                      <Text
+                        style={{
+                          fontSize: 13,
+                          color: colors.mutedForeground,
+                          fontWeight: "700",
+                        }}
+                      >
+                        No books attached
+                      </Text>
+                    </View>
+                  )}
+
+                  <Pressable
+                    onPress={() => setBookManagerVisible(true)}
+                    style={{
+                      minHeight: 42,
+                      borderRadius: 12,
+                      flexDirection: "row-reverse",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 8,
+                      backgroundColor: colors.primary,
+                    }}
+                  >
+                    <Icon
+                      name="BookOpen"
+                      size={16}
+                      color={colors.primaryForeground}
+                    />
+                    <Text
+                      style={{
+                        fontSize: 13,
+                        fontWeight: "900",
+                        color: colors.primaryForeground,
+                      }}
+                    >
+                      Manage books
+                    </Text>
+                  </Pressable>
+                </View>
               )}
 
               {/* Suggested media section */}
