@@ -1104,12 +1104,13 @@ export const albumRoutes = createTRPCRouter({
 			});
 
 			const channelId = media?.blog?.channelId;
-			if (!media || media.blog?.deletedAt || !channelId) return null;
+			if (!media || media.albumId || media.blog?.deletedAt || !channelId) {
+				return null;
+			}
 
 			const albums = await ctx.db.album.findMany({
 				where: {
 					deletedAt: null,
-					...(media.albumId ? { id: { not: media.albumId } } : {}),
 					OR: [
 						{ channelId },
 						{

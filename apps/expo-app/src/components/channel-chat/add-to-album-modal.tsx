@@ -74,10 +74,20 @@ export function AddToAlbumModal({
   const { height: windowHeight } = useWindowDimensions();
   const [newAlbumName, setNewAlbumName] = useState("");
   const selectedAlbumRef = useRef<{ id: number; name: string } | null>(null);
+  const singleMediaId = mediaIds.length === 1 ? (mediaIds[0] ?? null) : null;
 
   const { data: albums = [], isLoading } = useQuery(
     _trpc.album.getAlbums.queryOptions(),
   );
+  const {
+    data: recommendedAlbum,
+    isLoading: isRecommendationLoading,
+  } = useQuery({
+    ..._trpc.album.getRelatedAlbumForMedia.queryOptions({
+      mediaId: singleMediaId ?? 0,
+    }),
+    enabled: singleMediaId !== null,
+  });
   const sortedAlbums = useMemo(
     () =>
       [...albums].sort((a, b) => {
@@ -97,8 +107,11 @@ export function AddToAlbumModal({
     [newAlbumName],
   );
   const filteredAlbums = useMemo(() => {
-    if (albumFilterTerms.length === 0) return sortedAlbums;
-    return sortedAlbums.filter((album) => {
+    const otherAlbums = recommendedAlbum
+      ? sortedAlbums.filter((album) => album.id !== recommendedAlbum.id)
+      : sortedAlbums;
+    if (albumFilterTerms.length === 0) return otherAlbums;
+    return otherAlbums.filter((album) => {
       const searchText = normalizeAlbumFilterText(
         [
           album.name,
@@ -110,12 +123,20 @@ export function AddToAlbumModal({
       );
       return albumFilterTerms.every((term) => searchText.includes(term));
     });
-  }, [albumFilterTerms, sortedAlbums]);
+  }, [albumFilterTerms, recommendedAlbum, sortedAlbums]);
 
   const addMedia = useMutation(
     _trpc.album.addMediaToAlbum.mutationOptions({
       onSuccess: () => {
         queryClient.invalidateQueries(_trpc.album.getAlbums.queryOptions());
+        if (singleMediaId !== null) {
+          queryClient.setQueryData(
+            _trpc.album.getRelatedAlbumForMedia.queryKey({
+              mediaId: singleMediaId,
+            }),
+            null,
+          );
+        }
         if (selectedAlbumRef.current) {
           onAdded?.(selectedAlbumRef.current);
           Toast.show(`Added to ${selectedAlbumRef.current.name}`, {
@@ -188,6 +209,109 @@ export function AddToAlbumModal({
           Add to album
         </Text>
 
+        {singleMediaId !== null &&
+        (isRecommendationLoading || recommendedAlbum) ? (
+          <View className="mb-5">
+            <View className="mb-3 flex-row items-center gap-2">
+              <Icon name="Sparkles" size={15} className="text-primary" />
+              <Text
+                className="text-xs font-semibold uppercase tracking-wider text-primary"
+              >
+                Recommended album
+              </Text>
+            </View>
+
+            {isRecommendationLoading ? (
+              <View
+                className="h-20 flex-row items-center justify-center gap-3 rounded-2xl border border-border bg-muted"
+              >
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text
+                  className="text-sm font-medium text-muted-foreground"
+                >
+                  Finding the best match…
+                </Text>
+              </View>
+            ) : recommendedAlbum ? (
+              <View
+                className="rounded-2xl border border-primary/30 bg-muted p-3"
+              >
+                <View className="flex-row items-center gap-3">
+                  <View
+                    style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: 10,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexShrink: 0,
+                      backgroundColor:
+                        ALBUM_COLORS[recommendedAlbum.id % ALBUM_COLORS.length],
+                    }}
+                  >
+                    <Text className="text-sm font-bold text-white">
+                      {getInitials(recommendedAlbum.name)}
+                    </Text>
+                  </View>
+                  <View className="min-w-0 flex-1">
+                    <Text
+                      numberOfLines={1}
+                      className="text-sm font-bold text-foreground"
+                    >
+                      {recommendedAlbum.name}
+                    </Text>
+                    <Text
+                      numberOfLines={1}
+                      className="mt-1 text-xs text-muted-foreground"
+                    >
+                      {recommendedAlbum._count.medias} tracks
+                      {recommendedAlbum.channel?.title
+                        ? ` · ${recommendedAlbum.channel.title}`
+                        : ""}
+                    </Text>
+                  </View>
+                </View>
+
+                <View className="mt-3 flex-row gap-2">
+                  <Pressable
+                    accessibilityLabel="Cancel adding to recommended album"
+                    onPress={onClose}
+                    disabled={isBusy}
+                    className="h-10 flex-1 items-center justify-center rounded-xl bg-background active:opacity-70"
+                  >
+                    <Text className="text-xs font-semibold text-foreground">
+                      Cancel
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityLabel={`Add to recommended album ${recommendedAlbum.name}`}
+                    onPress={() => handleSelectAlbum(recommendedAlbum)}
+                    disabled={isBusy}
+                    className={`h-10 flex-[2] flex-row items-center justify-center gap-2 rounded-xl bg-primary active:opacity-80 ${isBusy ? "opacity-50" : "opacity-100"}`}
+                  >
+                    {addMedia.isPending &&
+                    selectedAlbumRef.current?.id === recommendedAlbum.id ? (
+                      <ActivityIndicator
+                        size="small"
+                        color={colors.primaryForeground}
+                      />
+                    ) : (
+                      <Icon
+                        name="Plus"
+                        size={16}
+                        className="text-primary-foreground"
+                      />
+                    )}
+                    <Text className="text-xs font-bold text-primary-foreground">
+                      Yes, add here
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+
         {/* Create new album */}
         <View className="flex-row gap-2 mb-5">
           <View
@@ -232,7 +356,7 @@ export function AddToAlbumModal({
           className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3"
           style={{ color: colors.mutedForeground }}
         >
-          Existing Albums
+          {recommendedAlbum ? "Choose another album" : "Existing Albums"}
         </Text>
           </>
         }
