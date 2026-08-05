@@ -80,7 +80,7 @@ import { getNextPlaybackRate } from "@/services/audio-player/notification-contro
 import { useAppSettingsStore } from "@/store/app-settings-store";
 import { useAudioStore } from "@/store/audio-store";
 import { useRecentlyViewedStore } from "@/store/recently-viewed-store";
-import { getFacebookExternalMedia } from "@acme/blog/facebook-media";
+import { getLargeMediaExternalMedia } from "@acme/blog/facebook-media";
 import type { RouterInputs } from "@api/trpc/routers/_app";
 import * as DocumentPicker from "expo-document-picker";
 import { Image } from "expo-image";
@@ -2313,7 +2313,7 @@ export default function AudioBlogScreen() {
 	const mediaId = media?.id;
 	const audioChannelId = blog?.channelId ?? blog?.channel?.id;
 	const audioArtUrl = getMediaFileUrl((blog as any)?.thumbnail?.file);
-	const externalMedia = getFacebookExternalMedia({
+	const externalMedia = getLargeMediaExternalMedia({
 		source: (blog as any)?.source,
 		sourceUrl: (blog as any)?.sourceUrl,
 		meta: (blog as any)?.meta,
@@ -2323,6 +2323,8 @@ export default function AudioBlogScreen() {
 		fileName: media?.file?.fileName,
 		duration: media?.file?.duration,
 		thumbnailFileId: (blog as any)?.thumbnail?.file?.fileId,
+		channelUsername: blog?.channel?.username,
+		telegramMessageId: (blog as any)?.telegramMessageId,
 	});
 	const localMediaRequired = Boolean(
 		mediaId &&
@@ -3825,6 +3827,27 @@ export default function AudioBlogScreen() {
 														{effectiveExternalMedia.destination === "telegram"
 															? "Telegram"
 															: "Facebook"}
+													</Text>
+												</Pressable>
+											) : null}
+											{localMediaRequired &&
+											localMediaPlayback.state === "error" ? (
+												<Pressable
+													onPress={localMediaPlayback.retry}
+													className="mt-3 items-center rounded-full bg-primary px-4 py-3"
+												>
+													<Text className="text-sm font-extrabold text-primary-foreground">
+														Retry local preparation
+													</Text>
+												</Pressable>
+											) : localMediaRequired &&
+												localMediaPlayback.state === "offline" ? (
+												<Pressable
+													onPress={requestLocalServicesSetup}
+													className="mt-3 items-center rounded-full bg-primary px-4 py-3"
+												>
+													<Text className="text-sm font-extrabold text-primary-foreground">
+														Enable local services
 													</Text>
 												</Pressable>
 											) : null}

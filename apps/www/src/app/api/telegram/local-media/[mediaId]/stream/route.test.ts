@@ -20,6 +20,7 @@ mock.module("@/lib/local-media/runtime", () => ({
 	isLocalMediaGatewayEnabled: () => true,
 	localMediaCache: {
 		getReadyFile: async () => readyFile,
+		markAccessed: async () => undefined,
 	},
 }));
 
@@ -79,5 +80,31 @@ describe("local media stream route", () => {
 		expect(response.headers.get("content-range")).toBe("bytes 2-5/10");
 		expect(response.headers.get("accept-ranges")).toBe("bytes");
 		expect(await response.text()).toBe("2345");
+	});
+
+	test("serves Unicode filenames with an ASCII fallback", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "local-media-route-test-"));
+		temporaryDirectories.push(directory);
+		const path = join(directory, "media.data");
+		await writeFile(path, "audio");
+		readyFile = {
+			path,
+			size: 5,
+			fileName: "درس عربي.mp3",
+			mimeType: "audio/mpeg",
+		};
+
+		const response = await GET(
+			new Request(
+				`https://gateway.example/api/telegram/local-media/42/stream?ticket=${ticket()}`,
+			),
+			{ params: Promise.resolve({ mediaId: "42" }) },
+		);
+
+		expect(response.status).toBe(200);
+		expect(response.headers.get("content-disposition")).toContain(
+			"filename*=UTF-8''%D8%AF%D8%B1%D8%B3",
+		);
+		expect(await response.text()).toBe("audio");
 	});
 });

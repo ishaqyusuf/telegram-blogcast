@@ -23,7 +23,7 @@ async function resolveSource(mediaId: number) {
 async function downloadTelegramMedia(input: {
 	source: NonNullable<Awaited<ReturnType<typeof resolveSource>>>;
 	destination: string;
-	onProgress: (progress: number) => void;
+	onProgress: (progress: number, downloadedBytes?: number) => void;
 }) {
 	const client = await getClient();
 	if (!(await client.checkAuthorization())) {
@@ -45,7 +45,9 @@ async function downloadTelegramMedia(input: {
 		progressCallback: (downloaded, total) => {
 			const receivedBytes = Number(downloaded.toString());
 			const totalBytes = Number(total.toString());
-			if (totalBytes > 0) input.onProgress(receivedBytes / totalBytes);
+			if (totalBytes > 0) {
+				input.onProgress(receivedBytes / totalBytes, receivedBytes);
+			}
 		},
 	});
 }

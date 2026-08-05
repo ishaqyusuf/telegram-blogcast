@@ -1,4 +1,5 @@
 import { getWebUrl } from "@/lib/base-url";
+import { getLocalMediaClientId } from "@/lib/local-media-installation";
 import { prepareLocalMediaPlayback } from "@/lib/local-media-playback";
 import { useCallback, useEffect, useState } from "react";
 
@@ -26,12 +27,15 @@ export function useLocalMediaPlayback(input: {
 	const [playback, setPlayback] =
 		useState<LocalMediaPlaybackState>(INITIAL_STATE);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: retryKey intentionally restarts preparation after a user retry.
 	useEffect(() => {
-		if (!input.required || !input.mediaId) {
+		const mediaId = input.mediaId;
+		const gatewayBaseUrl = input.gatewayBaseUrl;
+		if (!input.required || !mediaId) {
 			setPlayback(INITIAL_STATE);
 			return;
 		}
-		if (!input.localServicesEnabled || !input.gatewayBaseUrl) {
+		if (!input.localServicesEnabled || !gatewayBaseUrl) {
 			setPlayback({
 				state: "offline",
 				url: null,
@@ -48,19 +52,23 @@ export function useLocalMediaPlayback(input: {
 			progress: 0,
 			error: null,
 		});
-		void prepareLocalMediaPlayback({
-			mediaId: input.mediaId,
-			productionBaseUrl: getWebUrl(),
-			gatewayBaseUrl: input.gatewayBaseUrl,
-			signal: controller.signal,
-			onProgress: (progress) => {
-				setPlayback((current) => ({
-					...current,
-					state: "preparing",
-					progress,
-				}));
-			},
-		})
+		void getLocalMediaClientId()
+			.then((clientId) =>
+				prepareLocalMediaPlayback({
+					mediaId,
+					clientId,
+					productionBaseUrl: getWebUrl(),
+					gatewayBaseUrl,
+					signal: controller.signal,
+					onProgress: (progress) => {
+						setPlayback((current) => ({
+							...current,
+							state: "preparing",
+							progress,
+						}));
+					},
+				}),
+			)
 			.then((result) => {
 				if (controller.signal.aborted) return;
 				setPlayback({

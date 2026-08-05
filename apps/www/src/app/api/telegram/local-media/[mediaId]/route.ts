@@ -1,4 +1,8 @@
 import {
+	getRequestClientAddress,
+	takeLocalMediaRateLimit,
+} from "@/lib/local-media/rate-limit";
+import {
 	authorizeLocalMediaRequest,
 	parseLocalMediaId,
 } from "@/lib/local-media/request";
@@ -56,6 +60,15 @@ export async function POST(
 ) {
 	const validated = await validate(request, context);
 	if (validated.response) return validated.response;
+	if (
+		!takeLocalMediaRateLimit({
+			key: `prepare:${getRequestClientAddress(request)}`,
+			limit: 10,
+			windowMs: 60_000,
+		})
+	) {
+		return unavailable(429, "Too many local media preparations.");
+	}
 	void localMediaCache.prepare(validated.mediaId);
 	return Response.json(await localMediaCache.getStatus(validated.mediaId), {
 		status: 202,

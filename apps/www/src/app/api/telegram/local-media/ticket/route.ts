@@ -1,6 +1,10 @@
 import { db } from "@acme/db";
 
 import {
+	getRequestClientAddress,
+	takeLocalMediaRateLimit,
+} from "@/lib/local-media/rate-limit";
+import {
 	createLocalMediaTicket,
 	getLocalMediaSigningSecret,
 } from "@/lib/local-media/ticket";
@@ -11,6 +15,31 @@ export const runtime = "nodejs";
 const NO_STORE_HEADERS = { "Cache-Control": "no-store, max-age=0" };
 
 export async function POST(request: Request) {
+	const clientId = request.headers.get("x-local-media-client-id")?.trim();
+	if (!clientId || !/^[a-zA-Z0-9._-]{16,128}$/.test(clientId)) {
+		return Response.json(
+			{ error: "A valid local media client id is required." },
+			{ status: 400, headers: NO_STORE_HEADERS },
+		);
+	}
+	const clientAddress = getRequestClientAddress(request);
+	if (
+		!takeLocalMediaRateLimit({
+			key: `ticket-address:${clientAddress}`,
+			limit: 60,
+			windowMs: 60_000,
+		}) ||
+		!takeLocalMediaRateLimit({
+			key: `ticket:${clientAddress}:${clientId}`,
+			limit: 20,
+			windowMs: 60_000,
+		})
+	) {
+		return Response.json(
+			{ error: "Too many local media ticket requests." },
+			{ status: 429, headers: NO_STORE_HEADERS },
+		);
+	}
 	const secret = getLocalMediaSigningSecret();
 	if (!secret) {
 		return Response.json(

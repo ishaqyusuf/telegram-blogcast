@@ -21,6 +21,19 @@ function textResponse(message: string, status: number, headers?: HeadersInit) {
 	});
 }
 
+function contentDisposition(fileName: string) {
+	const fallback =
+		fileName
+			.normalize("NFKD")
+			.replace(/[^\x20-\x7E]/g, "-")
+			.replace(/["\\\r\n]/g, "-") || "media";
+	const encoded = encodeURIComponent(fileName).replace(
+		/[!'()*]/g,
+		(character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+	);
+	return `inline; filename="${fallback}"; filename*=UTF-8''${encoded}`;
+}
+
 export async function GET(
 	request: Request,
 	context: { params: Promise<{ mediaId: string }> },
@@ -42,6 +55,7 @@ export async function GET(
 
 	const file = await localMediaCache.getReadyFile(mediaId);
 	if (!file) return textResponse("Media is not prepared yet.", 409);
+	await localMediaCache.markAccessed(mediaId);
 
 	const rangeHeader = request.headers.get("range");
 	const range = rangeHeader
@@ -59,7 +73,7 @@ export async function GET(
 	const headers = new Headers({
 		"Accept-Ranges": "bytes",
 		"Cache-Control": "private, max-age=300",
-		"Content-Disposition": `inline; filename="${file.fileName.replace(/["\\\r\n]/g, "-")}"`,
+		"Content-Disposition": contentDisposition(file.fileName),
 		"Content-Length": String(contentLength),
 		"Content-Type": file.mimeType,
 		ETag: `"local-media-${mediaId}-${file.size}"`,

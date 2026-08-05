@@ -1,8 +1,4 @@
-type GatewayStatus = {
-	state: "unavailable" | "fetchable" | "preparing" | "ready" | "error";
-	progress?: number;
-	error?: string;
-};
+import { parseLocalMediaStatus, parseLocalMediaTicket } from "@acme/blog";
 
 export type LocalMediaPlaybackResult =
 	| { state: "ready"; url: string }
@@ -31,11 +27,14 @@ async function readJson<T>(response: Response): Promise<T> {
 	const body = (await response.json().catch(() => null)) as {
 		error?: string;
 	} | null;
-	throw new Error(body?.error || `Local media request failed (${response.status}).`);
+	throw new Error(
+		body?.error || `Local media request failed (${response.status}).`,
+	);
 }
 
 export async function prepareLocalMediaPlayback(input: {
 	mediaId: number;
+	clientId: string;
 	productionBaseUrl: string;
 	gatewayBaseUrl: string;
 	fetchImpl?: typeof fetch;
@@ -49,34 +48,41 @@ export async function prepareLocalMediaPlayback(input: {
 		((milliseconds: number) =>
 			new Promise<void>((resolve) => setTimeout(resolve, milliseconds)));
 	const ticketResponse = await fetchImpl(
-		appendPath(
-			input.productionBaseUrl,
-			"/api/telegram/local-media/ticket",
-		),
+		appendPath(input.productionBaseUrl, "/api/telegram/local-media/ticket"),
 		{
 			method: "POST",
-			headers: { "Content-Type": "application/json" },
+			headers: {
+				"Content-Type": "application/json",
+				"x-local-media-client-id": input.clientId,
+			},
 			body: JSON.stringify({ mediaId: input.mediaId }),
 			signal: input.signal,
 		},
 	);
-	const { ticket } = await readJson<{ ticket: string }>(ticketResponse);
-	if (!ticket) throw new Error("The media gateway did not issue a playback ticket.");
+	const issuedTicket = parseLocalMediaTicket(
+		await readJson<unknown>(ticketResponse),
+	);
+	if (issuedTicket.mediaId !== input.mediaId) {
+		throw new Error("The media gateway issued a ticket for a different item.");
+	}
+	const { ticket } = issuedTicket;
 
 	const statusUrl = appendPath(
 		input.gatewayBaseUrl,
 		`/api/telegram/local-media/${input.mediaId}?ticket=${encodeURIComponent(ticket)}`,
 	);
 	const requestStatus = async (method = "GET") =>
-		readJson<GatewayStatus>(
-			await fetchImpl(statusUrl, {
-				method,
-				headers: {
-					Accept: "application/json",
-					"ngrok-skip-browser-warning": "1",
-				},
-				signal: input.signal,
-			}),
+		parseLocalMediaStatus(
+			await readJson<unknown>(
+				await fetchImpl(statusUrl, {
+					method,
+					headers: {
+						Accept: "application/json",
+						"ngrok-skip-browser-warning": "1",
+					},
+					signal: input.signal,
+				}),
+			),
 		);
 
 	let status = await requestStatus();
@@ -105,7 +111,8 @@ export async function prepareLocalMediaPlayback(input: {
 		if (status.state === "error") {
 			throw new Error(status.error || "Local media preparation failed.");
 		}
-		if (input.signal?.aborted) throw new Error("Local media request was cancelled.");
+		if (input.signal?.aborted)
+			throw new Error("Local media request was cancelled.");
 		await sleep(DEFAULT_POLL_INTERVAL_MS);
 		status = await requestStatus();
 	}

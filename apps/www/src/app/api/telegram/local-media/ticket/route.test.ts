@@ -20,11 +20,25 @@ afterAll(() => {
 });
 
 describe("local media ticket route", () => {
+	test("requires a stable client id before issuing a ticket", async () => {
+		const response = await POST(
+			new Request("https://example.com/api/telegram/local-media/ticket", {
+				method: "POST",
+				body: JSON.stringify({ mediaId: 42 }),
+			}),
+		);
+
+		expect(response.status).toBe(400);
+	});
+
 	test("issues a ticket for an existing, non-deleted media item", async () => {
 		const response = await POST(
 			new Request("https://example.com/api/telegram/local-media/ticket", {
 				method: "POST",
-				headers: { "Content-Type": "application/json" },
+				headers: {
+					"Content-Type": "application/json",
+					"x-local-media-client-id": "0123456789abcdef",
+				},
 				body: JSON.stringify({ mediaId: 42 }),
 			}),
 		);
@@ -41,7 +55,10 @@ describe("local media ticket route", () => {
 		const response = await POST(
 			new Request("https://example.com/api/telegram/local-media/ticket", {
 				method: "POST",
-				headers: { "Content-Type": "application/json" },
+				headers: {
+					"Content-Type": "application/json",
+					"x-local-media-client-id": "fedcba9876543210",
+				},
 				body: JSON.stringify({ mediaId: 99 }),
 			}),
 		);

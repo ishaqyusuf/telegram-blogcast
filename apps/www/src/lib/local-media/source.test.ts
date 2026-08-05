@@ -7,7 +7,11 @@ describe("local media Telegram source resolution", () => {
 		expect(
 			resolveLocalMediaSource({
 				id: 7,
-				file: { fileName: "lesson.mp3", mimeType: "audio/mpeg" },
+				file: {
+					fileName: "lesson.mp3",
+					mimeType: "audio/mpeg",
+					fileSize: 25_000_000,
+				},
 				blog: {
 					telegramMessageId: 321,
 					meta: null,
@@ -20,6 +24,7 @@ describe("local media Telegram source resolution", () => {
 			messageId: 321,
 			fileName: "lesson.mp3",
 			mimeType: "audio/mpeg",
+			size: 25_000_000,
 		});
 	});
 
@@ -44,6 +49,7 @@ describe("local media Telegram source resolution", () => {
 			messageId: 77,
 			fileName: "saved-video.mp4",
 			mimeType: "video/mp4",
+			size: null,
 		});
 	});
 

@@ -4,6 +4,7 @@ export type LocalMediaSource = {
 	messageId: number;
 	fileName: string;
 	mimeType: string;
+	size: number | null;
 };
 
 export type LocalMediaSourceRecord = {
@@ -11,6 +12,7 @@ export type LocalMediaSourceRecord = {
 	file?: {
 		fileName?: string | null;
 		mimeType?: string | null;
+		fileSize?: number | null;
 	} | null;
 	blog?: {
 		telegramMessageId?: number | null;
@@ -78,5 +80,9 @@ export function resolveLocalMediaSource(
 		...telegramSource,
 		fileName: record.file?.fileName?.trim() || `media-${record.id}`,
 		mimeType: record.file?.mimeType?.trim() || "application/octet-stream",
+		size:
+			typeof record.file?.fileSize === "number" && record.file.fileSize > 0
+				? record.file.fileSize
+				: null,
 	};
 }

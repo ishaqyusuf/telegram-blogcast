@@ -115,3 +115,40 @@ export function getFacebookExternalMedia(input: {
 			stringValue(meta.thumbnailFileId) ?? input.thumbnailFileId ?? null,
 	};
 }
+
+export function getLargeMediaExternalMedia(
+	input: Parameters<typeof getFacebookExternalMedia>[0] & {
+		channelUsername?: string | null;
+		telegramMessageId?: number | null;
+	},
+): FacebookExternalMedia | null {
+	const facebook = getFacebookExternalMedia(input);
+	if (facebook) return facebook;
+
+	const fileSize = numberValue(input.fileSize);
+	if (fileSize == null || fileSize <= TELEGRAM_BOT_DOWNLOAD_LIMIT_BYTES) {
+		return null;
+	}
+	const sourceUrl = stringValue(input.sourceUrl);
+	const username = stringValue(input.channelUsername)?.replace(/^@/, "");
+	const telegramUrl =
+		sourceUrl?.startsWith("https://t.me/") === true
+			? sourceUrl
+			: username && input.telegramMessageId
+				? buildTelegramMessageUrl(`@${username}`, input.telegramMessageId)
+				: null;
+	if (!telegramUrl) return null;
+
+	return {
+		accessMode: "external",
+		destination: "telegram",
+		reason: "telegram_download_limit",
+		externalUrl: telegramUrl,
+		mediaType: input.mediaType ?? null,
+		mimeType: input.mimeType ?? null,
+		fileName: input.fileName ?? null,
+		fileSize,
+		duration: input.duration ?? null,
+		thumbnailFileId: input.thumbnailFileId ?? null,
+	};
+}

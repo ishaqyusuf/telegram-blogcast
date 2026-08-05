@@ -5,24 +5,13 @@ import {
 	rename,
 	stat,
 	unlink,
+	utimes,
 	writeFile,
 } from "node:fs/promises";
 import { join } from "node:path";
+import type { LocalMediaStatus } from "@acme/blog";
 
 import type { LocalMediaSource } from "./source";
-
-export type LocalMediaStatus =
-	| { state: "unavailable"; progress: 0 }
-	| { state: "fetchable"; progress: 0 }
-	| { state: "preparing"; progress: number }
-	| { state: "error"; progress: 0; error: string }
-	| {
-			state: "ready";
-			progress: 1;
-			size: number;
-			fileName: string;
-			mimeType: string;
-	  };
 
 export type ReadyLocalMediaFile = {
 	path: string;
@@ -36,7 +25,7 @@ type CacheMetadata = Omit<ReadyLocalMediaFile, "path">;
 type DownloadInput = {
 	source: LocalMediaSource;
 	destination: string;
-	onProgress: (progress: number) => void;
+	onProgress: (progress: number, downloadedBytes?: number) => void;
 };
 
 type InFlightPreparation = {
@@ -56,6 +45,9 @@ export function createLocalMediaCache(input: {
 }) {
 	const inFlight = new Map<number, InFlightPreparation>();
 	const lastErrors = new Map<number, string>();
+	const maxBytes = input.maxBytes && input.maxBytes > 0 ? input.maxBytes : null;
+	let initialization: Promise<void> | null = null;
+	let downloadQueue: Promise<void> = Promise.resolve();
 
 	const paths = (mediaId: number) => ({
 		data: join(input.cacheDir, `media-${mediaId}.data`),
@@ -64,9 +56,34 @@ export function createLocalMediaCache(input: {
 		temporaryMetadata: join(input.cacheDir, `media-${mediaId}.json.part`),
 	});
 
+	function initialize() {
+		initialization ??= (async () => {
+			await mkdir(input.cacheDir, { recursive: true });
+			const entries = await readdir(input.cacheDir, { withFileTypes: true });
+			await Promise.all(
+				entries
+					.filter((entry) => entry.isFile() && entry.name.endsWith(".part"))
+					.map((entry) =>
+						unlink(join(input.cacheDir, entry.name)).catch(() => undefined),
+					),
+			);
+		})();
+		return initialization;
+	}
+
+	function enqueueDownload<T>(operation: () => Promise<T>) {
+		const result = downloadQueue.then(operation, operation);
+		downloadQueue = result.then(
+			() => undefined,
+			() => undefined,
+		);
+		return result;
+	}
+
 	async function getReadyFile(
 		mediaId: number,
 	): Promise<ReadyLocalMediaFile | null> {
+		await initialize();
 		const target = paths(mediaId);
 		try {
 			const [fileStats, rawMetadata] = await Promise.all([
@@ -92,6 +109,16 @@ export function createLocalMediaCache(input: {
 		}
 	}
 
+	async function markAccessed(mediaId: number) {
+		await initialize();
+		const target = paths(mediaId);
+		const now = new Date();
+		await Promise.all([
+			utimes(target.data, now, now),
+			utimes(target.metadata, now, now),
+		]);
+	}
+
 	function readyStatus(file: ReadyLocalMediaFile): LocalMediaStatus {
 		return {
 			state: "ready",
@@ -102,11 +129,9 @@ export function createLocalMediaCache(input: {
 		};
 	}
 
-	async function enforceQuota(currentDataPath: string) {
-		if (!input.maxBytes || input.maxBytes <= 0) return;
-
+	async function listCachedFiles() {
 		const entries = await readdir(input.cacheDir, { withFileTypes: true });
-		const cachedFiles = await Promise.all(
+		return Promise.all(
 			entries
 				.filter((entry) => entry.isFile() && entry.name.endsWith(".data"))
 				.map(async (entry) => {
@@ -120,18 +145,53 @@ export function createLocalMediaCache(input: {
 					};
 				}),
 		);
+	}
+
+	async function removeCachedFile(file: { path: string; name: string }) {
+		await Promise.all([
+			unlink(file.path).catch(() => undefined),
+			unlink(join(input.cacheDir, file.name.replace(/\.data$/, ".json"))).catch(
+				() => undefined,
+			),
+		]);
+	}
+
+	async function reserveSpace(requiredBytes: number) {
+		if (!maxBytes) return;
+		if (requiredBytes > maxBytes) {
+			throw new Error("Media exceeds the configured local cache quota.");
+		}
+		const cachedFiles = await listCachedFiles();
+		let totalBytes = cachedFiles.reduce((total, file) => total + file.size, 0);
+		for (const file of cachedFiles.sort(
+			(left, right) => left.mtimeMs - right.mtimeMs,
+		)) {
+			if (totalBytes + requiredBytes <= maxBytes) break;
+			await removeCachedFile(file);
+			totalBytes -= file.size;
+		}
+	}
+
+	async function enforceQuota(currentDataPath: string) {
+		if (!maxBytes) return;
+
+		const cachedFiles = await listCachedFiles();
 		let totalBytes = cachedFiles.reduce((total, file) => total + file.size, 0);
 		for (const file of cachedFiles
 			.filter((candidate) => candidate.path !== currentDataPath)
 			.sort((left, right) => left.mtimeMs - right.mtimeMs)) {
-			if (totalBytes <= input.maxBytes) break;
-			await Promise.all([
-				unlink(file.path).catch(() => undefined),
-				unlink(
-					join(input.cacheDir, file.name.replace(/\.data$/, ".json")),
-				).catch(() => undefined),
-			]);
+			if (totalBytes <= maxBytes) break;
+			await removeCachedFile(file);
 			totalBytes -= file.size;
+		}
+		if (totalBytes > maxBytes) {
+			const current = cachedFiles.find(
+				(candidate) => candidate.path === currentDataPath,
+			);
+			if (current) {
+				await removeCachedFile(current);
+			}
+			throw new Error("Media exceeds the configured local cache quota.");
 		}
 	}
 
@@ -161,6 +221,7 @@ export function createLocalMediaCache(input: {
 			promise: Promise.resolve({ state: "preparing", progress: 0 }),
 		};
 		const task = Promise.resolve().then(async () => {
+			await initialize();
 			const existing = await getReadyFile(mediaId);
 			if (existing) return readyStatus(existing);
 
@@ -169,39 +230,63 @@ export function createLocalMediaCache(input: {
 			if (!source) {
 				return { state: "unavailable", progress: 0 } as const;
 			}
-
-			await mkdir(input.cacheDir, { recursive: true });
-			const target = paths(mediaId);
-			await Promise.all([
-				unlink(target.temporaryData).catch(() => undefined),
-				unlink(target.temporaryMetadata).catch(() => undefined),
-			]);
-			await input.download({
-				source,
-				destination: target.temporaryData,
-				onProgress: (progress) => {
-					state.progress = clampProgress(progress);
-				},
-			});
-
-			const downloaded = await stat(target.temporaryData);
-			if (!downloaded.isFile() || downloaded.size <= 0) {
-				throw new Error("Telegram did not return a readable media file.");
+			if (maxBytes && source.size && source.size > maxBytes) {
+				throw new Error("Media exceeds the configured local cache quota.");
 			}
-			const metadata: CacheMetadata = {
-				size: downloaded.size,
-				fileName: source.fileName,
-				mimeType: source.mimeType,
-			};
-			await writeFile(target.temporaryMetadata, JSON.stringify(metadata));
-			await rename(target.temporaryData, target.data);
-			await rename(target.temporaryMetadata, target.metadata);
-			await enforceQuota(target.data);
-			return readyStatus({ ...metadata, path: target.data });
+
+			const target = paths(mediaId);
+			return enqueueDownload(async () => {
+				const queuedExisting = await getReadyFile(mediaId);
+				if (queuedExisting) return readyStatus(queuedExisting);
+				await reserveSpace(source.size ?? maxBytes ?? 0);
+				await Promise.all([
+					unlink(target.temporaryData).catch(() => undefined),
+					unlink(target.temporaryMetadata).catch(() => undefined),
+				]);
+				await input.download({
+					source,
+					destination: target.temporaryData,
+					onProgress: (progress, downloadedBytes) => {
+						if (maxBytes && downloadedBytes && downloadedBytes > maxBytes) {
+							throw new Error(
+								"Media exceeds the configured local cache quota.",
+							);
+						}
+						state.progress = clampProgress(progress);
+					},
+				});
+
+				const downloaded = await stat(target.temporaryData);
+				if (!downloaded.isFile() || downloaded.size <= 0) {
+					throw new Error("Telegram did not return a readable media file.");
+				}
+				if (maxBytes && downloaded.size > maxBytes) {
+					throw new Error("Media exceeds the configured local cache quota.");
+				}
+				const metadata: CacheMetadata = {
+					size: downloaded.size,
+					fileName: source.fileName,
+					mimeType: source.mimeType,
+				};
+				await writeFile(target.temporaryMetadata, JSON.stringify(metadata));
+				await rename(target.temporaryData, target.data);
+				await rename(target.temporaryMetadata, target.metadata);
+				await enforceQuota(target.data);
+				const committed = await getReadyFile(mediaId);
+				if (!committed) {
+					throw new Error("Prepared media was evicted before it became ready.");
+				}
+				return readyStatus(committed);
+			});
 		});
 
 		state.promise = task
-			.catch((error) => {
+			.catch(async (error) => {
+				const target = paths(mediaId);
+				await Promise.all([
+					unlink(target.temporaryData).catch(() => undefined),
+					unlink(target.temporaryMetadata).catch(() => undefined),
+				]);
 				const message =
 					error instanceof Error
 						? error.message
@@ -216,7 +301,7 @@ export function createLocalMediaCache(input: {
 		return state.promise;
 	}
 
-	return { getReadyFile, getStatus, prepare };
+	return { getReadyFile, getStatus, markAccessed, prepare };
 }
 
 export type LocalMediaCache = ReturnType<typeof createLocalMediaCache>;

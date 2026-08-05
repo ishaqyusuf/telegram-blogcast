@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -24,13 +24,14 @@ async function makeCache(
 	return createLocalMediaCache({
 		cacheDir,
 		resolveSource: async (mediaId) =>
-			mediaId === 42 || mediaId === 43
+			mediaId === 42 || mediaId === 43 || mediaId === 44
 				? {
 						mediaId,
 						peer: "t.me/example_channel",
 						messageId: 123,
 						fileName: "lesson.mp3",
 						mimeType: "audio/mpeg",
+						size: 8,
 					}
 				: null,
 		download,
@@ -90,5 +91,67 @@ describe("local media cache", () => {
 
 		await expect(cache.getReadyFile(42)).resolves.toBeNull();
 		await expect(cache.getReadyFile(43)).resolves.toMatchObject({ size: 8 });
+	});
+
+	test("uses stream access when choosing the least-recent file", async () => {
+		const cache = await makeCache(
+			async ({ source, destination }) => {
+				await writeFile(destination, String(source.mediaId).repeat(4));
+			},
+			{ maxBytes: 18 },
+		);
+
+		await cache.prepare(42);
+		await new Promise((resolve) => setTimeout(resolve, 5));
+		await cache.prepare(43);
+		await new Promise((resolve) => setTimeout(resolve, 5));
+		await cache.markAccessed(42);
+		await cache.prepare(44);
+
+		await expect(cache.getReadyFile(42)).resolves.toBeTruthy();
+		await expect(cache.getReadyFile(43)).resolves.toBeNull();
+		await expect(cache.getReadyFile(44)).resolves.toBeTruthy();
+	});
+
+	test("cleans partial downloads after a failure", async () => {
+		let partialPath = "";
+		const cache = await makeCache(async ({ destination }) => {
+			partialPath = destination;
+			await writeFile(destination, "partial");
+			throw new Error("download interrupted");
+		});
+
+		await expect(cache.prepare(42)).resolves.toMatchObject({ state: "error" });
+		await expect(access(partialPath)).rejects.toThrow();
+	});
+
+	test("rejects a source larger than the configured cache quota", async () => {
+		let downloads = 0;
+		const cache = await makeCache(
+			async () => {
+				downloads += 1;
+			},
+			{ maxBytes: 4 },
+		);
+
+		await expect(cache.prepare(42)).resolves.toMatchObject({ state: "error" });
+		expect(downloads).toBe(0);
+	});
+
+	test("serializes concurrent commits so one prepared file remains", async () => {
+		const cache = await makeCache(
+			async ({ source, destination }) => {
+				await new Promise((resolve) => setTimeout(resolve, 5));
+				await writeFile(destination, String(source.mediaId).repeat(4));
+			},
+			{ maxBytes: 10 },
+		);
+
+		await Promise.all([cache.prepare(42), cache.prepare(43)]);
+		const ready = await Promise.all([
+			cache.getReadyFile(42),
+			cache.getReadyFile(43),
+		]);
+		expect(ready.filter(Boolean)).toHaveLength(1);
 	});
 });

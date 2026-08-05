@@ -13,12 +13,19 @@ describe("local large-media playback client", () => {
 			Response.json({ state: "fetchable", progress: 0 }),
 			Response.json({ state: "preparing", progress: 0 }, { status: 202 }),
 			Response.json({ state: "preparing", progress: 0.5 }),
-			Response.json({ state: "ready", progress: 1, size: 100 }),
+			Response.json({
+				state: "ready",
+				progress: 1,
+				size: 100,
+				fileName: "lesson.mp3",
+				mimeType: "audio/mpeg",
+			}),
 		];
 		const progress: number[] = [];
 
 		const result = await prepareLocalMediaPlayback({
 			mediaId: 42,
+			clientId: "0123456789abcdef",
 			productionBaseUrl: "https://app.example",
 			gatewayBaseUrl: "https://gateway.example",
 			fetchImpl: async (input, init) => {
@@ -26,7 +33,9 @@ describe("local large-media playback client", () => {
 					method: init?.method ?? "GET",
 					url: String(input),
 				});
-				return responses.shift()!;
+				const response = responses.shift();
+				if (!response) throw new Error("Missing mocked response");
+				return response;
 			},
 			sleep: async () => undefined,
 			onProgress: (value) => progress.push(value),
@@ -54,9 +63,14 @@ describe("local large-media playback client", () => {
 		await expect(
 			prepareLocalMediaPlayback({
 				mediaId: 42,
+				clientId: "0123456789abcdef",
 				productionBaseUrl: "https://app.example",
 				gatewayBaseUrl: "https://gateway.example",
-				fetchImpl: async () => responses.shift()!,
+				fetchImpl: async () => {
+					const response = responses.shift();
+					if (!response) throw new Error("Missing mocked response");
+					return response;
+				},
 			}),
 		).resolves.toEqual({ state: "unavailable", url: null });
 	});

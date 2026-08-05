@@ -4,12 +4,13 @@ import { GET } from "./route";
 
 describe("local API health route", () => {
 	test("reports the local Next gateway as ready", async () => {
-		const originalSecret = process.env.LOCAL_MEDIA_SIGNING_SECRET;
-		const originalVercel = process.env.VERCEL;
-		const originalVercelEnv = process.env.VERCEL_ENV;
-		process.env.LOCAL_MEDIA_SIGNING_SECRET = "configured-for-test";
-		process.env.VERCEL = "";
-		process.env.VERCEL_ENV = "";
+		const environment = process.env as Record<string, string | undefined>;
+		const originalSecret = environment.LOCAL_MEDIA_SIGNING_SECRET;
+		const originalVercel = environment.VERCEL;
+		const originalVercelEnv = environment.VERCEL_ENV;
+		environment.LOCAL_MEDIA_SIGNING_SECRET = "configured-for-test";
+		environment.VERCEL = "";
+		environment.VERCEL_ENV = "";
 		const response = GET();
 		expect(response.status).toBe(200);
 		expect(await response.json()).toEqual({
@@ -17,21 +18,22 @@ describe("local API health route", () => {
 			service: "al-ghurobaa-local-api",
 			capabilities: { largeMedia: true },
 		});
-		process.env.LOCAL_MEDIA_SIGNING_SECRET = originalSecret ?? "";
-		process.env.VERCEL = originalVercel ?? "";
-		process.env.VERCEL_ENV = originalVercelEnv ?? "";
+		environment.LOCAL_MEDIA_SIGNING_SECRET = originalSecret ?? "";
+		environment.VERCEL = originalVercel ?? "";
+		environment.VERCEL_ENV = originalVercelEnv ?? "";
 	});
 
 	test("does not advertise the local media gateway from Vercel", async () => {
-		const originalSecret = process.env.LOCAL_MEDIA_SIGNING_SECRET;
-		const originalVercel = process.env.VERCEL;
-		process.env.LOCAL_MEDIA_SIGNING_SECRET = "configured-for-test";
-		process.env.VERCEL = "1";
+		const environment = process.env as Record<string, string | undefined>;
+		const originalSecret = environment.LOCAL_MEDIA_SIGNING_SECRET;
+		const originalVercel = environment.VERCEL;
+		environment.LOCAL_MEDIA_SIGNING_SECRET = "configured-for-test";
+		environment.VERCEL = "1";
 
 		const response = GET();
 		expect((await response.json()).capabilities.largeMedia).toBe(false);
 
-		process.env.LOCAL_MEDIA_SIGNING_SECRET = originalSecret ?? "";
-		process.env.VERCEL = originalVercel ?? "";
+		environment.LOCAL_MEDIA_SIGNING_SECRET = originalSecret ?? "";
+		environment.VERCEL = originalVercel ?? "";
 	});
 });

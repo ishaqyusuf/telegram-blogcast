@@ -20,7 +20,7 @@ import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { isHttpTranscriberUrl } from "@/lib/transcribe";
 import { getTranscriptionBadgeState } from "@/lib/transcription-status";
 import { useGlobalAudioBarStore } from "@/store/global-audio-bar-store";
-import { getFacebookExternalMedia } from "@acme/blog/facebook-media";
+import { getLargeMediaExternalMedia } from "@acme/blog/facebook-media";
 import { type AVPlaybackStatus, ResizeMode, Video } from "expo-av";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -308,7 +308,7 @@ export default function VideoBlogScreen() {
 	const media = defaultMedia;
 
 	const mediaFile = media?.file;
-	const externalMedia = getFacebookExternalMedia({
+	const externalMedia = getLargeMediaExternalMedia({
 		source: (blog as any)?.source,
 		sourceUrl: (blog as any)?.sourceUrl,
 		meta: (blog as any)?.meta,
@@ -318,6 +318,8 @@ export default function VideoBlogScreen() {
 		fileName: mediaFile?.fileName,
 		duration: mediaFile?.duration,
 		thumbnailFileId: (blog as any)?.thumbnail?.file?.fileId,
+		channelUsername: blog?.channel?.username,
+		telegramMessageId: (blog as any)?.telegramMessageId,
 	});
 	const mediaId = media?.id ?? undefined;
 	const localMediaRequired = Boolean(

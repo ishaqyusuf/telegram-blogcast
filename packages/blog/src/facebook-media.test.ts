@@ -4,6 +4,7 @@ import {
 	TELEGRAM_BOT_DOWNLOAD_LIMIT_BYTES,
 	TELEGRAM_BOT_UPLOAD_LIMIT_BYTES,
 	getFacebookExternalMedia,
+	getLargeMediaExternalMedia,
 } from "./facebook-media";
 
 describe("Facebook external media", () => {
@@ -50,6 +51,21 @@ describe("Facebook external media", () => {
 			destination: "facebook",
 			externalUrl: "https://facebook.example/post",
 			reason: "telegram_upload_limit",
+		});
+	});
+
+	test("keeps a Telegram message fallback for oversized channel media", () => {
+		expect(
+			getLargeMediaExternalMedia({
+				source: "telegram",
+				fileSize: TELEGRAM_BOT_DOWNLOAD_LIMIT_BYTES + 1,
+				channelUsername: "example_channel",
+				telegramMessageId: 88,
+				mediaType: "audio",
+			}),
+		).toMatchObject({
+			destination: "telegram",
+			externalUrl: "https://t.me/example_channel/88",
 		});
 	});
 });
