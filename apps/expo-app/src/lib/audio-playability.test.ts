@@ -47,6 +47,17 @@ describe("audio playability", () => {
 		).toBe(true);
 	});
 
+	test("allows oversized Telegram audio prepared by the local gateway", () => {
+		expect(
+			getAudioPlayability({
+				source: "telegram",
+				telegramFileId: "file-id",
+				size: TELEGRAM_BOT_DOWNLOAD_LIMIT_BYTES + 1,
+				gatewayPlayable: true,
+			}).canPlay,
+		).toBe(true);
+	});
+
 	test("allows unknown sizes to try playback", () => {
 		expect(
 			getAudioPlayability({

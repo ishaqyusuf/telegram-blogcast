@@ -97,5 +97,6 @@ __pycache__/
 *.py[cod]
 
 .telegram-session
+.local-media-cache/
 
 .gstack/

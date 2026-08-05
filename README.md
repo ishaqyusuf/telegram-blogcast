@@ -96,6 +96,9 @@ Key variables:
 TELEGRAM_API_ID=
 TELEGRAM_API_HASH=
 TELEGRAM_STRING_SESSION=     # generate once, see below
+LOCAL_MEDIA_SIGNING_SECRET=  # shared by local www and deployed www; use 32+ random bytes
+LOCAL_MEDIA_CACHE_DIR=       # optional; defaults to apps/www/.local-media-cache
+LOCAL_MEDIA_CACHE_MAX_BYTES= # optional; defaults to 20 GiB
 
 # Database
 DATABASE_URL=
@@ -182,6 +185,17 @@ LOCAL_SERVICES_DISCOVERY_TOKEN=<shared-random-secret>
 
 Publication failures are visible but do not stop local development. Set
 `NGROK_ENABLED=0` to keep the web runner local-only.
+
+The same local gateway makes Telegram audio and video above the hosted Bot API's
+20 MB download limit playable in Expo. The deployed app issues a short-lived,
+media-bound ticket; the local web service uses the authorized MTProto session to
+prepare the original message into a bounded disk cache, then serves it with HTTP
+byte-range support. Configure the same `LOCAL_MEDIA_SIGNING_SECRET` in Vercel and
+the local `apps/www` environment. `LOCAL_MEDIA_GATEWAY_ENABLED` defaults to on
+locally and off on Vercel; set it explicitly to `false` to disable preparation.
+When the service is offline or the source message cannot be resolved, the detail
+screen retains its Telegram/Facebook fallback instead of exposing a broken play
+button.
 
 ---
 

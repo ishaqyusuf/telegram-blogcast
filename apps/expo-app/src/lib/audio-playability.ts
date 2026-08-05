@@ -12,6 +12,7 @@ type AudioLike = {
 	telegramFileId?: string | null;
 	url?: string | null;
 	size?: number | null;
+	gatewayPlayable?: boolean | null;
 };
 
 function hasDirectPlayableBlobUrl(audio?: AudioLike | null) {
@@ -36,6 +37,7 @@ export function getAudioPlayability(audio?: AudioLike | null): {
 		Number.isFinite(size) &&
 		size > TELEGRAM_BOT_DOWNLOAD_LIMIT_BYTES &&
 		isTelegramBackedAudio(audio) &&
+		!audio.gatewayPlayable &&
 		!hasDirectPlayableBlobUrl(audio)
 	) {
 		return {

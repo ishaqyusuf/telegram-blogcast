@@ -58,11 +58,15 @@ import { Icon, type IconKeys } from "@/components/ui/icon";
 import { ScrollToTopButton } from "@/components/ui/scroll-to-top-button";
 import { Toast } from "@/components/ui/toast";
 import { useColors } from "@/hooks/use-color";
+import { useLocalMediaPlayback } from "@/hooks/use-local-media-playback";
 import { usePlayHistorySync } from "@/hooks/use-play-history-sync";
 import { useScrollChrome } from "@/hooks/use-scroll-chrome";
 import { useTashkeelTranscript } from "@/hooks/use-tashkeel-transcript";
 import { useTranscriptionQueue } from "@/hooks/use-transcription-queue";
-import { getAudioPlayability } from "@/lib/audio-playability";
+import {
+	TELEGRAM_BOT_DOWNLOAD_LIMIT_BYTES,
+	getAudioPlayability,
+} from "@/lib/audio-playability";
 import { getAudioDisplayTitle } from "@/lib/audio-title";
 import { type BlobMediaUpload, uploadBlogMediaAsset } from "@/lib/blob-upload";
 import { getTelegramFileUrl } from "@/lib/get-telegram-file";
@@ -2320,11 +2324,30 @@ export default function AudioBlogScreen() {
 		duration: media?.file?.duration,
 		thumbnailFileId: (blog as any)?.thumbnail?.file?.fileId,
 	});
+	const localMediaRequired = Boolean(
+		mediaId &&
+			media?.file?.source !== "vercel_blob" &&
+			typeof media?.file?.fileSize === "number" &&
+			media.file.fileSize > TELEGRAM_BOT_DOWNLOAD_LIMIT_BYTES,
+	);
+	const localMediaPlayback = useLocalMediaPlayback({
+		mediaId,
+		required: localMediaRequired,
+		localServicesEnabled,
+		gatewayBaseUrl: activeGatewayUrl,
+	});
+	const localMediaReady =
+		localMediaPlayback.state === "ready" && Boolean(localMediaPlayback.url);
+	const effectiveExternalMedia = localMediaReady ? null : externalMedia;
 	const telegramFileId =
-		externalMedia || media?.file?.source === "vercel_blob"
+		effectiveExternalMedia || media?.file?.source === "vercel_blob"
 			? undefined
 			: media?.file?.fileId;
-	const mediaUrl = externalMedia ? null : getMediaFileUrl(media?.file as any);
+	const mediaUrl = localMediaReady
+		? localMediaPlayback.url
+		: externalMedia
+			? null
+			: getMediaFileUrl(media?.file as any);
 	const duration = media?.file?.duration;
 	const viewedDurationMs =
 		typeof duration === "number" ? Math.max(0, duration * 1000) : 0;
@@ -2350,12 +2373,18 @@ export default function AudioBlogScreen() {
 		? activeDurationMs || viewedDurationMs
 		: viewedDurationMs;
 	const playerIsPlaying = isViewedAudioActive && activeIsPlaying;
+	const isPreparingLocalMedia = localMediaPlayback.state === "preparing";
 	const playerIsLoading =
-		viewedPlaybackPending || (isViewedAudioActive && activeIsLoading);
-	const playerIsDownloading = isViewedAudioActive && activeIsDownloading;
-	const playerDownloadProgress = isViewedAudioActive
-		? activeDownloadProgress
-		: 0;
+		isPreparingLocalMedia ||
+		viewedPlaybackPending ||
+		(isViewedAudioActive && activeIsLoading);
+	const playerIsDownloading =
+		isPreparingLocalMedia || (isViewedAudioActive && activeIsDownloading);
+	const playerDownloadProgress = isPreparingLocalMedia
+		? localMediaPlayback.progress
+		: isViewedAudioActive
+			? activeDownloadProgress
+			: 0;
 	const viewedAudioItem = useMemo(() => {
 		if (!blog || blog.type !== "audio") return null;
 		const media = blog.medias?.[0];
@@ -2373,6 +2402,7 @@ export default function AudioBlogScreen() {
 				source: file.source ?? "telegram",
 				telegramFileId,
 				url: mediaUrl,
+				gatewayPlayable: localMediaReady,
 				fileName: file.fileName,
 				title: media.title,
 				size: file.fileSize,
@@ -2381,12 +2411,22 @@ export default function AudioBlogScreen() {
 				imageUrl: audioArtUrl ?? undefined,
 			},
 		} as any;
-	}, [audioArtUrl, blog, mediaUrl, telegramFileId]);
-	const playDisabledReason = externalMedia
+	}, [audioArtUrl, blog, localMediaReady, mediaUrl, telegramFileId]);
+	const localMediaDisabledReason = localMediaRequired
+		? localMediaPlayback.state === "offline"
+			? "Large media is available when local services are online."
+			: localMediaPlayback.state === "error"
+				? localMediaPlayback.error
+				: localMediaPlayback.state === "unavailable"
+					? "This media does not have a recoverable Telegram message."
+					: null
+		: null;
+	const playDisabledReason = effectiveExternalMedia
 		? null
-		: viewedAudioItem
-			? getAudioPlayability((viewedAudioItem as any).audio).reason
-			: null;
+		: localMediaDisabledReason ??
+			(viewedAudioItem
+				? getAudioPlayability((viewedAudioItem as any).audio).reason
+				: null);
 	const visibleAudioError =
 		playDisabledReason ??
 		(isViewedAudioActive ? audioError : viewedPlaybackError);
@@ -2464,7 +2504,7 @@ export default function AudioBlogScreen() {
 		jobs: transcriptionJobs,
 		reload: reloadTranscriptionJobs,
 	} = useTranscriptionQueue(mediaId, {
-		autoLoad: localServicesEnabled && !!mediaId && !externalMedia,
+		autoLoad: localServicesEnabled && !!mediaId && !effectiveExternalMedia,
 		reloadOnEnqueue: false,
 	});
 	const mediaTranscriptionJobs = useMemo(
@@ -2902,8 +2942,8 @@ export default function AudioBlogScreen() {
 	]);
 
 	const handleViewedPlayPause = useCallback(async () => {
-		if (externalMedia) {
-			await Linking.openURL(externalMedia.externalUrl);
+		if (effectiveExternalMedia) {
+			await Linking.openURL(effectiveExternalMedia.externalUrl);
 			return;
 		}
 		if (!viewedAudioItem) return;
@@ -2936,7 +2976,7 @@ export default function AudioBlogScreen() {
 			setViewedPlaybackPending(false);
 		}
 	}, [
-		externalMedia,
+		effectiveExternalMedia,
 		isViewedAudioActive,
 		loadAudio,
 		playDisabledReason,
@@ -3142,10 +3182,10 @@ export default function AudioBlogScreen() {
 	}
 
 	async function queueCurrentTranscription() {
-		if (externalMedia) {
+		if (effectiveExternalMedia) {
 			Alert.alert(
 				"External audio",
-				`Open this audio in ${externalMedia.destination === "telegram" ? "Telegram" : "Facebook"}; it is too large for in-app download.`,
+				`Open this audio in ${effectiveExternalMedia.destination === "telegram" ? "Telegram" : "Facebook"}; it is too large for in-app download.`,
 			);
 			return false;
 		}
@@ -3772,17 +3812,17 @@ export default function AudioBlogScreen() {
 												}
 												onReadPress={openTranscriptModal}
 											/>
-											{externalMedia ? (
+											{effectiveExternalMedia ? (
 												<Pressable
 													onPress={() =>
-														void Linking.openURL(externalMedia.externalUrl)
+														void Linking.openURL(effectiveExternalMedia.externalUrl)
 													}
 													className="mt-4 flex-row items-center justify-center gap-2 rounded-full bg-white/15 px-4 py-3"
 												>
 													<Icon name="Share" size={17} color="#fff" />
 													<Text className="text-sm font-extrabold text-white">
 														Open in{" "}
-														{externalMedia.destination === "telegram"
+														{effectiveExternalMedia.destination === "telegram"
 															? "Telegram"
 															: "Facebook"}
 													</Text>

@@ -10,7 +10,9 @@ import { TranscriptionRequestModal } from "@/components/transcription-request-mo
 import { Icon } from "@/components/ui/icon";
 import { Pressable } from "@/components/ui/pressable";
 import { useColors } from "@/hooks/use-color";
+import { useLocalMediaPlayback } from "@/hooks/use-local-media-playback";
 import { useTranscriptionQueue } from "@/hooks/use-transcription-queue";
+import { TELEGRAM_BOT_DOWNLOAD_LIMIT_BYTES } from "@/lib/audio-playability";
 import { getTelegramFileUrl } from "@/lib/get-telegram-file";
 import { cacheMedia } from "@/lib/media-cache";
 import { getMediaFileUrl } from "@/lib/media-source";
@@ -263,6 +265,7 @@ function ActionButton({
 
 export default function VideoBlogScreen() {
 	const {
+		activeGatewayUrl,
 		isEnabled: localServicesEnabled,
 		requestSetup: requestLocalServicesSetup,
 		urls: localServiceUrls,
@@ -316,13 +319,33 @@ export default function VideoBlogScreen() {
 		duration: mediaFile?.duration,
 		thumbnailFileId: (blog as any)?.thumbnail?.file?.fileId,
 	});
-	const videoUrl = externalMedia ? null : getMediaFileUrl(mediaFile);
+	const mediaId = media?.id ?? undefined;
+	const localMediaRequired = Boolean(
+		mediaId &&
+			mediaFile?.source !== "vercel_blob" &&
+			typeof mediaFile?.fileSize === "number" &&
+			mediaFile.fileSize > TELEGRAM_BOT_DOWNLOAD_LIMIT_BYTES,
+	);
+	const localMediaPlayback = useLocalMediaPlayback({
+		mediaId,
+		required: localMediaRequired,
+		localServicesEnabled,
+		gatewayBaseUrl: activeGatewayUrl,
+	});
+	const localMediaReady =
+		localMediaPlayback.state === "ready" && Boolean(localMediaPlayback.url);
+	const effectiveExternalMedia = localMediaReady ? null : externalMedia;
+	const hostedVideoUrl = externalMedia ? null : getMediaFileUrl(mediaFile);
+	const videoUrl = localMediaReady
+		? localMediaPlayback.url
+		: localMediaRequired
+			? null
+			: hostedVideoUrl;
 	const videoCacheKey = media?.id ?? mediaFile?.fileId ?? id;
 	const videoFileName = mediaFile?.fileName || `video-${id}.mp4`;
 	const externalThumbnailUrl = getMediaFileUrl((blog as any)?.thumbnail?.file);
-	const mediaId = media?.id ?? undefined;
 	const telegramFileId =
-		externalMedia || mediaFile?.source === "vercel_blob"
+		effectiveExternalMedia || mediaFile?.source === "vercel_blob"
 			? null
 			: mediaFile?.fileId
 				? String(mediaFile.fileId)
@@ -368,7 +391,7 @@ export default function VideoBlogScreen() {
 		jobs: transcriptionJobs,
 		reload: reloadTranscriptionJobs,
 	} = useTranscriptionQueue(mediaId, {
-		autoLoad: Boolean(mediaId && !externalMedia),
+		autoLoad: Boolean(mediaId && !effectiveExternalMedia),
 		reloadOnEnqueue: false,
 	});
 	const { data: transcriptData } = useQuery({
@@ -705,13 +728,16 @@ export default function VideoBlogScreen() {
 	}
 
 	function handleMorePress() {
-		if (externalMedia) {
+		if (effectiveExternalMedia) {
 			const destination =
-				externalMedia.destination === "telegram" ? "Telegram" : "Facebook";
+				effectiveExternalMedia.destination === "telegram"
+					? "Telegram"
+					: "Facebook";
 			Alert.alert("Video options", undefined, [
 				{
 					text: `Open in ${destination}`,
-					onPress: () => void Linking.openURL(externalMedia.externalUrl),
+					onPress: () =>
+						void Linking.openURL(effectiveExternalMedia.externalUrl),
 				},
 				{ text: "Cancel", style: "cancel" },
 			]);
@@ -759,10 +785,19 @@ export default function VideoBlogScreen() {
 	return (
 		<View className="flex-1 bg-black">
 			<View className="absolute inset-0 bg-black">
-				{externalMedia ? (
+				{localMediaRequired && localMediaPlayback.state === "preparing" ? (
+					<View className="flex-1 items-center justify-center px-8">
+						<ActivityIndicator color={colors.primary} />
+						<Text className="mt-3 text-center text-sm font-semibold text-white/80">
+							Preparing larger video… {Math.round(localMediaPlayback.progress * 100)}%
+						</Text>
+					</View>
+				) : effectiveExternalMedia ? (
 					<Pressable
 						className="flex-1 items-center justify-center overflow-hidden px-8"
-						onPress={() => void Linking.openURL(externalMedia.externalUrl)}
+						onPress={() =>
+							void Linking.openURL(effectiveExternalMedia.externalUrl)
+						}
 						accessibilityRole="link"
 					>
 						{externalThumbnailUrl ? (
@@ -776,9 +811,42 @@ export default function VideoBlogScreen() {
 							<Icon name="Share" size={30} className="text-primary-foreground" />
 						</View>
 						<Text className="text-center text-base font-extrabold text-white">
-							Open in {externalMedia.destination === "telegram" ? "Telegram" : "Facebook"}
+							Open in {effectiveExternalMedia.destination === "telegram" ? "Telegram" : "Facebook"}
 						</Text>
 					</Pressable>
+				) : localMediaRequired && localMediaPlayback.state === "error" ? (
+					<View className="flex-1 items-center justify-center px-8">
+						<Text className="mb-4 text-center text-sm font-semibold text-white/80">
+							{localMediaPlayback.error || "The larger video could not be prepared."}
+						</Text>
+						<Pressable
+							className="rounded-full bg-primary px-5 py-3"
+							onPress={localMediaPlayback.retry}
+						>
+							<Text className="font-bold text-primary-foreground">Retry</Text>
+						</Pressable>
+					</View>
+				) : localMediaRequired && !localMediaReady ? (
+					<View className="flex-1 items-center justify-center px-8">
+						<View className="mb-4 size-16 items-center justify-center rounded-full bg-white/10">
+							<Icon name="WifiOff" size={30} className="text-white" />
+						</View>
+						<Text className="text-center text-base font-extrabold text-white">
+							{localMediaPlayback.state === "unavailable"
+								? "This video is not recoverable from Telegram."
+								: "Start local services to prepare this larger video."}
+						</Text>
+						{localMediaPlayback.state === "offline" ? (
+							<Pressable
+								className="mt-4 rounded-full bg-primary px-5 py-3"
+								onPress={requestLocalServicesSetup}
+							>
+								<Text className="font-bold text-primary-foreground">
+									Enable local services
+								</Text>
+							</Pressable>
+						) : null}
+					</View>
 				) : videoUrl && !cachedVideoUri ? (
 					<View className="flex-1 items-center justify-center px-8">
 						{videoCacheError ? (
