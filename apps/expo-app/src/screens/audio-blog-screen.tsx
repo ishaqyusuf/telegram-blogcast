@@ -55,6 +55,14 @@ import { FloatingBottomSheet } from "@/components/ui/floating-bottom-sheet";
 import { Icon, type IconKeys } from "@/components/ui/icon";
 import { ScrollToTopButton } from "@/components/ui/scroll-to-top-button";
 import { Toast } from "@/components/ui/toast";
+import {
+	getTranscriptCache,
+	recoverTranscriptCache,
+} from "@/db/transcript-cache-db";
+import type {
+	CachedTranscriptWindow,
+	ServerTranscriptWindow,
+} from "@/db/transcript-cache-repository";
 import { useColors } from "@/hooks/use-color";
 import { useLocalMediaPlayback } from "@/hooks/use-local-media-playback";
 import { usePlayHistorySync } from "@/hooks/use-play-history-sync";
@@ -73,6 +81,7 @@ import { getMediaFileUrl } from "@/lib/media-source";
 import { getBlogShareUrl } from "@/lib/share-links";
 import { withAlpha } from "@/lib/theme";
 import { isHttpTranscriberUrl } from "@/lib/transcribe";
+import { createTranscriptCacheController } from "@/lib/transcript-cache-controller";
 import { getTranscriptionBadgeState } from "@/lib/transcription-status";
 import { getNextPlaybackRate } from "@/services/audio-player/notification-controls";
 import { useAppSettingsStore } from "@/store/app-settings-store";
@@ -135,6 +144,7 @@ const NEXT_CONTENT_PEEK_HEIGHT = 68;
 type SavedTranscriptWindow = {
 	mediaId: number;
 	transcriptId: number | null;
+	transcriptUpdatedAt: Date | null;
 	status: string | null;
 	windowDurationSec: number;
 	windowStartSec: number;
@@ -167,6 +177,62 @@ function getSavedTranscriptWindowStart(sec: number) {
 		Math.floor(Math.max(0, sec) / SAVED_TRANSCRIPT_WINDOW_SEC) *
 		SAVED_TRANSCRIPT_WINDOW_SEC
 	);
+}
+
+function transcriptRevisionKey(value: Date | null | undefined) {
+	return value?.getTime() ?? null;
+}
+
+function mergeSavedTranscriptWindow(
+	current: Record<number, SavedTranscriptWindow>,
+	incoming: SavedTranscriptWindow,
+) {
+	const incomingRevision = transcriptRevisionKey(incoming.transcriptUpdatedAt);
+	const hasDifferentRevision = Object.values(current).some(
+		(window) => transcriptRevisionKey(window.transcriptUpdatedAt) !== incomingRevision,
+	);
+
+	return hasDifferentRevision
+		? { [incoming.windowStartSec]: incoming }
+		: { ...current, [incoming.windowStartSec]: incoming };
+}
+
+function toSavedTranscriptWindow(
+	window: CachedTranscriptWindow | ServerTranscriptWindow,
+): SavedTranscriptWindow {
+	const segments = window.segments.map((segment) => ({
+		id: segment.id == null ? undefined : segment.id,
+		startSec: segment.startSec,
+		endSec: segment.endSec,
+		text: segment.text,
+		words: segment.words,
+	}));
+	const maxEndSec =
+		window.maxEndSec ??
+		segments.reduce((max, segment) => Math.max(max, segment.endSec), 0);
+	const windowDurationSec =
+		"windowDurationSec" in window &&
+		typeof window.windowDurationSec === "number"
+			? window.windowDurationSec
+			: window.windowEndSec - window.windowStartSec;
+
+	return {
+		mediaId: window.mediaId,
+		transcriptId: window.transcriptId ?? null,
+		transcriptUpdatedAt: window.transcriptUpdatedAt ?? null,
+		status: window.status ?? null,
+		windowDurationSec,
+		windowStartSec: window.windowStartSec,
+		windowEndSec: window.windowEndSec,
+		previousWindowStartSec: window.previousWindowStartSec ?? null,
+		nextWindowStartSec: window.nextWindowStartSec ?? null,
+		hasPrevious: window.hasPrevious ?? window.windowStartSec > 0,
+		hasNext: window.hasNext ?? window.nextWindowStartSec != null,
+		durationSec: window.durationSec ?? null,
+		segmentCount: window.segmentCount ?? segments.length,
+		maxEndSec,
+		segments,
+	};
 }
 
 function RelatedAlbumSuggestionSheet({
@@ -2288,17 +2354,25 @@ export default function AudioBlogScreen() {
 	>([]);
 	const [transcriptWindowChecked, setTranscriptWindowChecked] = useState(false);
 	const [transcriptError, setTranscriptError] = useState<string | null>(null);
+	const [transcriptCacheController] = useState(() =>
+		createTranscriptCacheController({
+			getCache: getTranscriptCache,
+			recoverCache: recoverTranscriptCache,
+		}),
+	);
 	const pendingTranscriptChunksRef = useRef<number[]>([]);
 	const pendingTranscriptWindowsRef = useRef<number[]>([]);
 	const transcriptWindowsRef = useRef<Record<number, SavedTranscriptWindow>>(
 		{},
 	);
+	const refreshedTranscriptWindowsRef = useRef<Set<number>>(new Set());
 	const failedTranscriptChunksRef = useRef<Set<number>>(new Set());
 	const failedTranscriptWindowsRef = useRef<Set<number>>(new Set());
 	const lastTranscriptTapRef = useRef(0);
 	const transcriberUrl = localServiceUrls?.transcriberBaseUrl ?? null;
 	const canCheckTranscriber = isHttpTranscriberUrl(transcriberUrl);
 	const lastCompletedTranscriptJobRef = useRef<number | null>(null);
+	const startedTranscriptJobIdsRef = useRef<Set<number>>(new Set());
 
 	const loadAudio = useAudioStore((s) => s.loadAudio);
 	const seekAudio = useAudioStore((s) => s.seek);
@@ -2659,7 +2733,10 @@ export default function AudioBlogScreen() {
 		async (windowStartSec: number, options?: { force?: boolean }) => {
 			if (!mediaId) return;
 			const normalizedStart = getSavedTranscriptWindowStart(windowStartSec);
-			if (!options?.force && transcriptWindowsRef.current[normalizedStart]) {
+			if (
+				!options?.force &&
+				refreshedTranscriptWindowsRef.current.has(normalizedStart)
+			) {
 				setTranscriptWindowChecked(true);
 				return;
 			}
@@ -2678,31 +2755,62 @@ export default function AudioBlogScreen() {
 			];
 			setPendingTranscriptWindows(pendingTranscriptWindowsRef.current);
 			try {
-				const windowData = await qc.fetchQuery(
-					_trpc.blog.getTranscriptWindow.queryOptions({
-						mediaId,
-						windowStartSec: normalizedStart,
-						windowDurationSec: SAVED_TRANSCRIPT_WINDOW_SEC,
-					}),
-				);
-				const typedWindow = windowData as SavedTranscriptWindow;
-				failedTranscriptWindowsRef.current.delete(normalizedStart);
-				setTranscriptWindows((current) => {
-					const next = {
-						...current,
-						[typedWindow.windowStartSec]: typedWindow,
-					};
-					transcriptWindowsRef.current = next;
-					return next;
+				await transcriptCacheController.requestWindow({
+					mediaId,
+					startSec: normalizedStart,
+					endSec: normalizedStart + SAVED_TRANSCRIPT_WINDOW_SEC,
+					fetchServer: async () =>
+						(await qc.fetchQuery(
+							_trpc.blog.getTranscriptWindow.queryOptions({
+								mediaId,
+								windowStartSec: normalizedStart,
+								windowDurationSec: SAVED_TRANSCRIPT_WINDOW_SEC,
+							}),
+						)) as unknown as ServerTranscriptWindow,
+					onCachedWindows: (cachedWindows) => {
+						if (cachedWindows.length === 0) return;
+						setTranscriptWindows((current) => {
+							const next = cachedWindows.reduce(
+								(record, cachedWindow) =>
+									mergeSavedTranscriptWindow(
+										record,
+										toSavedTranscriptWindow(cachedWindow),
+									),
+								current,
+							);
+							transcriptWindowsRef.current = next;
+							return next;
+						});
+					},
+					onServerWindow: (serverWindow) => {
+						const typedWindow = toSavedTranscriptWindow(serverWindow);
+						failedTranscriptWindowsRef.current.delete(normalizedStart);
+						refreshedTranscriptWindowsRef.current.add(normalizedStart);
+						setTranscriptWindows((current) => {
+							const next = mergeSavedTranscriptWindow(current, typedWindow);
+							transcriptWindowsRef.current = next;
+							return next;
+						});
+						setTranscriptError(null);
+					},
+					onServerError: (error) => {
+						failedTranscriptWindowsRef.current.add(normalizedStart);
+						setTranscriptError(
+							error instanceof Error
+								? error.message
+								: "Could not load transcript window.",
+						);
+					},
 				});
-				setTranscriptError(null);
 			} catch (error) {
-				failedTranscriptWindowsRef.current.add(normalizedStart);
-				setTranscriptError(
-					error instanceof Error
-						? error.message
-						: "Could not load transcript window.",
-				);
+				if (!failedTranscriptWindowsRef.current.has(normalizedStart)) {
+					failedTranscriptWindowsRef.current.add(normalizedStart);
+					setTranscriptError(
+						error instanceof Error
+							? error.message
+							: "Could not load transcript window.",
+					);
+				}
 			} finally {
 				setTranscriptWindowChecked(true);
 				pendingTranscriptWindowsRef.current =
@@ -2712,7 +2820,7 @@ export default function AudioBlogScreen() {
 				setPendingTranscriptWindows(pendingTranscriptWindowsRef.current);
 			}
 		},
-		[mediaId, qc],
+		[mediaId, qc, transcriptCacheController],
 	);
 
 	useEffect(() => {
@@ -2729,8 +2837,11 @@ export default function AudioBlogScreen() {
 		pendingTranscriptChunksRef.current = [];
 		pendingTranscriptWindowsRef.current = [];
 		transcriptWindowsRef.current = {};
+		refreshedTranscriptWindowsRef.current = new Set<number>();
 		failedTranscriptChunksRef.current = new Set<number>();
 		failedTranscriptWindowsRef.current = new Set<number>();
+		lastCompletedTranscriptJobRef.current = null;
+		startedTranscriptJobIdsRef.current = new Set<number>();
 	}, [mediaId]);
 
 	const requestTranscriptChunk = useCallback(
@@ -2807,15 +2918,37 @@ export default function AudioBlogScreen() {
 			(job) => job.status === "completed",
 		);
 		if (!completedJob) return;
+		if (!startedTranscriptJobIdsRef.current.has(completedJob.id)) {
+			lastCompletedTranscriptJobRef.current = completedJob.id;
+			return;
+		}
 		if (lastCompletedTranscriptJobRef.current === completedJob.id) return;
+		startedTranscriptJobIdsRef.current.delete(completedJob.id);
 		lastCompletedTranscriptJobRef.current = completedJob.id;
 		setTranscriptWindows({});
+		setPendingTranscriptWindows([]);
 		transcriptWindowsRef.current = {};
+		refreshedTranscriptWindowsRef.current = new Set<number>();
+		pendingTranscriptWindowsRef.current = [];
+		failedTranscriptWindowsRef.current = new Set<number>();
 		setTranscriptWindowChecked(false);
+		void transcriptCacheController
+			.invalidateMediaTranscript(mediaId)
+			.then(() =>
+				requestTranscriptWindow(activeTranscriptWindowStart, { force: true }),
+			);
 		void Promise.all([
 			qc.invalidateQueries({ queryKey: _trpc.blog.getBlog.queryKey({ id }) }),
 		]);
-	}, [id, mediaId, mediaTranscriptionJobs, qc]);
+	}, [
+		id,
+		mediaId,
+		mediaTranscriptionJobs,
+		qc,
+		activeTranscriptWindowStart,
+		requestTranscriptWindow,
+		transcriptCacheController,
+	]);
 
 	const sourceTranscriptSegments = useMemo(() => {
 		const segmentsByKey = new Map<
@@ -3051,6 +3184,7 @@ export default function AudioBlogScreen() {
 	} = useMutation(
 		_trpc.blog.resetTranscript.mutationOptions({
 			onSuccess: async () => {
+				if (!mediaId) return;
 				setTranscriptChunks({});
 				setTranscriptWindows({});
 				setPendingTranscriptChunks([]);
@@ -3061,9 +3195,11 @@ export default function AudioBlogScreen() {
 				pendingTranscriptChunksRef.current = [];
 				pendingTranscriptWindowsRef.current = [];
 				transcriptWindowsRef.current = {};
+				refreshedTranscriptWindowsRef.current = new Set<number>();
 				failedTranscriptChunksRef.current = new Set<number>();
 				failedTranscriptWindowsRef.current = new Set<number>();
 				await Promise.all([
+					transcriptCacheController.invalidateMediaTranscript(mediaId),
 					qc.invalidateQueries({
 						queryKey: _trpc.blog.getTranscriptWindow.queryKey(),
 					}),
@@ -3244,13 +3380,16 @@ export default function AudioBlogScreen() {
 				);
 			}
 
-			await enqueueTranscription({
+			const queuedJob = await enqueueTranscription({
 				mediaId,
 				telegramFileId: telegramFileId ?? null,
 				audioUrl: reachableAudioUrl,
 				language: "ar",
 				transcriberUrl,
 			});
+			if (queuedJob?.id) {
+				startedTranscriptJobIdsRef.current.add(queuedJob.id);
+			}
 			await reloadTranscriptionJobs();
 			Alert.alert("Queued", "Added to transcription queue.");
 			return true;
