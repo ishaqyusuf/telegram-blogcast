@@ -63,6 +63,7 @@ describe("transcript cache controller", () => {
 			upsertServerWindow: async (window) => {
 				persistedWindow = window;
 				events.push("persist");
+				return true;
 			},
 		});
 		const controller = createTranscriptCacheController({
@@ -70,7 +71,7 @@ describe("transcript cache controller", () => {
 			recoverCache: async () => cache,
 		});
 
-		await controller.requestWindow({
+		const outcome = await controller.requestWindow({
 			mediaId: 42,
 			startSec: 0,
 			endSec: 60,
@@ -91,6 +92,7 @@ describe("transcript cache controller", () => {
 			"render-server",
 		]);
 		expect(persistedWindow).toBe(serverWindow);
+		expect(outcome).toEqual({ status: "applied" });
 	});
 
 	test("persists and renders only the newest out-of-order response", async () => {
@@ -144,12 +146,14 @@ describe("transcript cache controller", () => {
 		const olderRequest = request(olderWindow, olderResponse);
 		const newerRequest = request(newerWindow, newerResponse);
 		resolveNewer(newerWindow);
-		await newerRequest;
+		const newerOutcome = await newerRequest;
 		resolveOlder(olderWindow);
-		await olderRequest;
+		const olderOutcome = await olderRequest;
 
 		expect(rendered).toEqual(["60"]);
 		expect(persisted).toEqual([newerWindow]);
+		expect(newerOutcome).toEqual({ status: "applied" });
+		expect(olderOutcome).toEqual({ status: "stale-rejected" });
 	});
 
 	test("does not render an older response that loses during persistence", async () => {
@@ -210,12 +214,14 @@ describe("transcript cache controller", () => {
 			onServerWindow: () => rendered.push("new"),
 			onServerError: () => undefined,
 		});
-		await newerRequest;
+		const newerOutcome = await newerRequest;
 		resolveOldPersist();
-		await oldRequest;
+		const oldOutcome = await oldRequest;
 
 		expect(rendered).toEqual(["new"]);
 		expect(persisted).toEqual([60, 0]);
+		expect(newerOutcome).toEqual({ status: "applied" });
+		expect(oldOutcome).toEqual({ status: "stale-rejected" });
 	});
 
 	test("does not let an unversioned response erase a timestamped cache", async () => {
@@ -232,7 +238,7 @@ describe("transcript cache controller", () => {
 			recoverCache: async () => cache,
 		});
 
-		await controller.requestWindow({
+		const outcome = await controller.requestWindow({
 			mediaId: 42,
 			startSec: 0,
 			endSec: 60,
@@ -250,6 +256,7 @@ describe("transcript cache controller", () => {
 
 		expect(persisted).toBe(0);
 		expect(renderedServer).toBe(0);
+		expect(outcome).toEqual({ status: "stale-rejected" });
 	});
 
 	test("deduplicates concurrent refreshes for the same window", async () => {
@@ -304,6 +311,7 @@ describe("transcript cache controller", () => {
 				createFakeCache({
 					upsertServerWindow: async () => {
 						persisted += 1;
+						return true;
 					},
 					invalidateMediaTranscript: async () => {
 						invalidated += 1;
@@ -327,11 +335,12 @@ describe("transcript cache controller", () => {
 		await serverStarted;
 		await controller.invalidateMediaTranscript(42);
 		resolveServer(serverWindow);
-		await request;
+		const outcome = await request;
 
 		expect(events).toEqual(["cache"]);
 		expect(persisted).toBe(0);
 		expect(invalidated).toBe(1);
+		expect(outcome).toEqual({ status: "cancelled" });
 	});
 
 	test("cancels callbacks for a navigated-away media without invalidating its cache", async () => {
@@ -377,7 +386,7 @@ describe("transcript cache controller", () => {
 
 		await mediaAStartedPromise;
 		controller.cancelMediaRequests(1);
-		await controller.requestWindow({
+		const mediaBOutcome = await controller.requestWindow({
 			mediaId: 2,
 			startSec: 0,
 			endSec: 60,
@@ -387,11 +396,13 @@ describe("transcript cache controller", () => {
 			onServerError: () => events.push("B-error"),
 		});
 		resolveMediaA(mediaAWindow);
-		await mediaARequest;
+		const mediaAOutcome = await mediaARequest;
 
 		expect(events).toEqual(["A-cache", "B-cache", "B-server"]);
 		expect(persistedMediaIds).toEqual([2]);
 		expect(invalidated).toBe(0);
+		expect(mediaBOutcome).toEqual({ status: "applied" });
+		expect(mediaAOutcome).toEqual({ status: "cancelled" });
 	});
 
 	test("keeps cached content usable when the server refresh fails", async () => {
@@ -401,7 +412,7 @@ describe("transcript cache controller", () => {
 			recoverCache: async () => createFakeCache(),
 		});
 
-		await controller.requestWindow({
+		const outcome = await controller.requestWindow({
 			mediaId: 42,
 			startSec: 0,
 			endSec: 60,
@@ -417,6 +428,7 @@ describe("transcript cache controller", () => {
 		});
 
 		expect(events).toEqual(["cached:cached transcript", "offline"]);
+		expect(outcome).toEqual({ status: "error", error: expect.any(Error) });
 	});
 
 	test("recovers a corrupt cache once before continuing with the server", async () => {

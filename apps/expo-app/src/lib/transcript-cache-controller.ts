@@ -16,6 +16,12 @@ export type TranscriptCacheWindowRequest<
 	onServerError: (error: unknown) => void;
 };
 
+export type TranscriptCacheWindowOutcome =
+	| { status: "applied" }
+	| { status: "stale-rejected" }
+	| { status: "error"; error: unknown }
+	| { status: "cancelled" };
+
 export type TranscriptCacheControllerOptions = {
 	getCache: () => Promise<TranscriptCacheRepository>;
 	recoverCache: () => Promise<TranscriptCacheRepository>;
@@ -24,7 +30,7 @@ export type TranscriptCacheControllerOptions = {
 export type TranscriptCacheController = {
 	requestWindow<TWindow extends ServerTranscriptWindow>(
 		request: TranscriptCacheWindowRequest<TWindow>,
-	): Promise<void>;
+	): Promise<TranscriptCacheWindowOutcome>;
 	cancelMediaRequests(mediaId: number): void;
 	invalidateMediaTranscript(mediaId: number): Promise<void>;
 };
@@ -46,7 +52,10 @@ export function createTranscriptCacheController(
 	let cachePromise: Promise<TranscriptCacheRepository | null> | null = null;
 	let cacheRecoveryAttempted = false;
 	let cacheDisabled = false;
-	const pendingRequests = new Map<string, Promise<void>>();
+	const pendingRequests = new Map<
+		string,
+		Promise<TranscriptCacheWindowOutcome>
+	>();
 	const mediaGenerations = new Map<number, number>();
 	const mediaRevisions = new Map<number, Date | null>();
 
@@ -164,7 +173,7 @@ export function createTranscriptCacheController(
 	async function loadWindow<TWindow extends ServerTranscriptWindow>(
 		request: TranscriptCacheWindowRequest<TWindow>,
 		generation: number,
-	) {
+	): Promise<TranscriptCacheWindowOutcome> {
 		const cachedWindows = await runCacheOperation((cache) =>
 			cache.readOverlappingWindows({
 				mediaId: request.mediaId,
@@ -172,7 +181,7 @@ export function createTranscriptCacheController(
 				endSec: request.endSec,
 			}),
 		);
-		if (!isCurrent(request.mediaId, generation)) return;
+		if (!isCurrent(request.mediaId, generation)) return { status: "cancelled" };
 		if (cachedWindows) {
 			for (const cachedWindow of cachedWindows) {
 				observeRevision(
@@ -189,25 +198,32 @@ export function createTranscriptCacheController(
 		} catch (error) {
 			if (isCurrent(request.mediaId, generation)) {
 				request.onServerError(error);
+				return { status: "error", error };
 			}
-			return;
+			return { status: "cancelled" };
 		}
 
-		if (!isCurrent(request.mediaId, generation)) return;
+		if (!isCurrent(request.mediaId, generation)) return { status: "cancelled" };
 		const incomingRevision = serverWindow.transcriptUpdatedAt ?? null;
-		if (!canAcceptRevision(request.mediaId, incomingRevision)) return;
+		if (!canAcceptRevision(request.mediaId, incomingRevision)) {
+			return { status: "stale-rejected" };
+		}
 		observeRevision(request.mediaId, incomingRevision);
 
 		const persisted = await runCacheOperation((cache) =>
 			cache.upsertServerWindow(serverWindow),
 		);
+		if (!isCurrent(request.mediaId, generation)) {
+			return { status: "cancelled" };
+		}
 		if (
-			!isCurrent(request.mediaId, generation) ||
 			persisted === false ||
 			!isObservedRevision(request.mediaId, incomingRevision)
-		)
-			return;
+		) {
+			return { status: "stale-rejected" };
+		}
 		request.onServerWindow(serverWindow);
+		return { status: "applied" };
 	}
 
 	return {

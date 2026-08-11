@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocalServicesSession } from "@/components/local-services";
 import { shouldApplyLocalApiResult } from "@/lib/local-api-query";
+import {
+	getTranscriptionQueueLoadKey,
+	isTranscriptionQueueInitialLoadComplete,
+	shouldPollTranscriptionQueue,
+} from "@/lib/transcription-queue-state";
 import type { RouterOutputs } from "@api/trpc/routers/_app";
 
 type QueueInput = {
@@ -14,8 +19,9 @@ type QueueInput = {
 };
 
 type TranscriptionQueueOptions = {
-  autoLoad?: boolean;
-  reloadOnEnqueue?: boolean;
+	autoLoad?: boolean;
+	reloadOnEnqueue?: boolean;
+	pollWhenIdle?: boolean;
 };
 
 export type TranscriptionJob =
@@ -55,27 +61,44 @@ export function useTranscriptionQueue(
     localApiClient,
     requestSetup: requestLocalServicesSetup,
   } = useLocalServicesSession();
-  const autoLoad = options.autoLoad ?? true;
-  const reloadOnEnqueue = options.reloadOnEnqueue ?? true;
-  const [jobs, setJobs] = useState<TranscriptionJob[]>([]);
-  const [isRunning, setIsRunning] = useState(false);
-  const activeGatewayUrlRef = useRef(activeGatewayUrl);
-  activeGatewayUrlRef.current = activeGatewayUrl;
+	const autoLoad = options.autoLoad ?? true;
+	const reloadOnEnqueue = options.reloadOnEnqueue ?? true;
+	const pollWhenIdle = options.pollWhenIdle ?? false;
+	const [jobs, setJobs] = useState<TranscriptionJob[]>([]);
+	const [isRunning, setIsRunning] = useState(false);
+	const queueLoadKey = getTranscriptionQueueLoadKey({
+		activeGatewayUrl,
+		mediaId,
+		localServicesEnabled,
+		connectionStatus,
+		autoLoad,
+	});
+	const [loadedQueueKey, setLoadedQueueKey] = useState<string | null>(null);
+	const activeGatewayUrlRef = useRef(activeGatewayUrl);
+	const queueLoadKeyRef = useRef(queueLoadKey);
+	activeGatewayUrlRef.current = activeGatewayUrl;
+	queueLoadKeyRef.current = queueLoadKey;
+	const isInitialLoadComplete = isTranscriptionQueueInitialLoadComplete(
+		loadedQueueKey,
+		queueLoadKey,
+	);
 
-  useEffect(() => {
-    setJobs([]);
-  }, [activeGatewayUrl]);
+	useEffect(() => {
+		setJobs([]);
+		setLoadedQueueKey(null);
+	}, [queueLoadKey]);
 
-  const reload = useCallback(async () => {
+	const reload = useCallback(async () => {
     if (!localServicesEnabled) {
       setJobs([]);
       return;
     }
-    if (!localApiClient || connectionStatus !== "online") {
-      setJobs([]);
-      return;
-    }
-    const requestGatewayUrl = activeGatewayUrl;
+		if (!localApiClient || connectionStatus !== "online") {
+			setJobs([]);
+			return;
+		}
+		const requestQueueLoadKey = queueLoadKey;
+		const requestGatewayUrl = activeGatewayUrl;
     const rows = await localApiClient.blog.getTranscriptionJobs.query({
       mediaId,
     });
@@ -83,17 +106,20 @@ export function useTranscriptionQueue(
       !shouldApplyLocalApiResult(
         requestGatewayUrl,
         activeGatewayUrlRef.current,
-      )
-    )
-      return;
-    setJobs(rows);
-  }, [
+			)
+		)
+			return;
+		if (queueLoadKeyRef.current !== requestQueueLoadKey) return;
+		setJobs(rows);
+		setLoadedQueueKey(requestQueueLoadKey);
+	}, [
     activeGatewayUrl,
     connectionStatus,
-    localApiClient,
-    localServicesEnabled,
-    mediaId,
-  ]);
+		localApiClient,
+		localServicesEnabled,
+		mediaId,
+		queueLoadKey,
+	]);
 
   const enqueue = useCallback(
     async (input: QueueInput) => {
@@ -205,35 +231,53 @@ export function useTranscriptionQueue(
     }
   }, [localServicesEnabled, reload, requestLocalServicesSetup]);
 
-  useEffect(() => {
-    if (!autoLoad || !localServicesEnabled) return;
-    reload().catch((error) =>
+	useEffect(() => {
+		if (!autoLoad || !localServicesEnabled) return;
+		reload().catch((error) =>
       console.warn("[TranscriptionQueue] load failed", error),
     );
   }, [autoLoad, localServicesEnabled, reload]);
 
-  useEffect(() => {
-    if (!autoLoad || !localServicesEnabled) return;
-    const hasActiveJobs = jobs.some(
-      (job) => job.status === "queued" || job.status === "running",
-    );
-    if (!hasActiveJobs) return;
+	useEffect(() => {
+		const hasActiveJobs = jobs.some(
+			(job) => job.status === "queued" || job.status === "running",
+		);
+		if (
+			!shouldPollTranscriptionQueue({
+				autoLoad,
+				localServicesEnabled,
+				connectionStatus,
+				initialLoadComplete: isInitialLoadComplete,
+				hasActiveJobs,
+				pollWhenIdle,
+			})
+		)
+			return;
 
-    const timer = setInterval(() => {
+		const timer = setInterval(() => {
       reload().catch((error) =>
         console.warn("[TranscriptionQueue] poll failed", error),
       );
-    }, 3000);
-    return () => clearInterval(timer);
-  }, [autoLoad, jobs, localServicesEnabled, reload]);
+		}, 3000);
+		return () => clearInterval(timer);
+	}, [
+		autoLoad,
+		connectionStatus,
+		isInitialLoadComplete,
+		jobs,
+		localServicesEnabled,
+		pollWhenIdle,
+		reload,
+	]);
 
   return {
     jobs,
     queuedCount: jobs.filter(
       (job) => job.status === "queued" || job.status === "failed",
     ).length,
-    isRunning,
-    enqueue,
+		isRunning,
+		isInitialLoadComplete,
+		enqueue,
     deleteJob,
     runQueued,
     reload,

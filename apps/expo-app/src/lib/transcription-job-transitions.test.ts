@@ -44,4 +44,39 @@ describe("transcription job completion transitions", () => {
 
 		expect(result.completedJobIds).toEqual([2]);
 	});
+
+	test("handles an empty initial load before an external job completes", () => {
+		const initial = getCompletedTranscriptJobTransitions(new Map(), [], false);
+		const queued = getCompletedTranscriptJobTransitions(
+			initial.nextStatuses,
+			[{ id: 4, status: "queued" }],
+			true,
+		);
+		const running = getCompletedTranscriptJobTransitions(
+			queued.nextStatuses,
+			[{ id: 4, status: "running" }],
+			true,
+		);
+		const completed = getCompletedTranscriptJobTransitions(
+			running.nextStatuses,
+			[{ id: 4, status: "completed" }],
+			true,
+		);
+
+		expect(initial.completedJobIds).toEqual([]);
+		expect(queued.completedJobIds).toEqual([]);
+		expect(running.completedJobIds).toEqual([]);
+		expect(completed.completedJobIds).toEqual([4]);
+	});
+
+	test("treats a new completed job after an empty initial load as new", () => {
+		const initial = getCompletedTranscriptJobTransitions(new Map(), [], false);
+		const discovered = getCompletedTranscriptJobTransitions(
+			initial.nextStatuses,
+			[{ id: 5, status: "completed" }],
+			true,
+		);
+
+		expect(discovered.completedJobIds).toEqual([5]);
+	});
 });
