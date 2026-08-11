@@ -1183,6 +1183,62 @@ async function transcribeWithLocalWhisper(input: {
   };
 }
 
+export type TranscriptSegmentWrite = {
+  startSec: number;
+  endSec: number;
+  text: string;
+  chunkStartSec?: number;
+  chunkEndSec?: number;
+  status?: string;
+  words?: TranscriptWord[];
+  model?: string;
+  error?: string;
+};
+
+export async function replaceTranscriptSegments(input: {
+  ctx: TRPCContext;
+  mediaId: number;
+  status: string;
+  segments: TranscriptSegmentWrite[];
+  range?: {
+    fromSec: number;
+    toSec: number;
+  };
+}) {
+  const db = input.ctx.db;
+
+  return db.$transaction(async (tx) => {
+    const transcript = await tx.transcript.upsert({
+      where: { mediaId: input.mediaId },
+      create: { mediaId: input.mediaId, status: input.status },
+      update: { status: input.status, updatedAt: new Date() },
+    });
+
+    await tx.transcriptSegment.deleteMany({
+      where: {
+        transcriptId: transcript.id,
+        ...(input.range
+          ? {
+              startSec: { gte: input.range.fromSec },
+              endSec: { lte: input.range.toSec },
+            }
+          : {}),
+      },
+    });
+
+    if (input.segments.length > 0) {
+      await tx.transcriptSegment.createMany({
+        data: input.segments.map((segment) => ({
+          transcriptId: transcript.id,
+          ...segment,
+        })),
+      });
+    }
+
+    return transcript;
+  });
+}
+
 export async function persistTranscribedSegments(input: {
   ctx: TRPCContext;
   mediaId: number;
@@ -1193,40 +1249,24 @@ export async function persistTranscribedSegments(input: {
   chunkStartSec?: number;
   chunkEndSec?: number;
 }) {
-  const db = input.ctx.db as any;
-
-  return db.$transaction(async (tx) => {
-    const transcript = await tx.transcript.upsert({
-      where: { mediaId: input.mediaId },
-      create: { mediaId: input.mediaId, status: "done" },
-      update: { status: "done", updatedAt: new Date() },
-    });
-
-    await tx.transcriptSegment.deleteMany({
-      where: {
-        transcriptId: transcript.id,
-        startSec: { gte: input.fromSec },
-        endSec: { lte: input.toSec },
-      },
-    });
-
-    if (input.segments.length > 0) {
-      await tx.transcriptSegment.createMany({
-        data: input.segments.map((segment) => ({
-          transcriptId: transcript.id,
-          startSec: segment.from,
-          endSec: segment.to,
-          text: segment.text,
-          chunkStartSec: input.chunkStartSec ?? input.fromSec,
-          chunkEndSec: input.chunkEndSec ?? input.toSec,
-          status: "done",
-          words: segment.words ?? distributeWords(segment),
-          model: input.model,
-        })),
-      });
-    }
-
-    return transcript;
+  return replaceTranscriptSegments({
+    ctx: input.ctx,
+    mediaId: input.mediaId,
+    status: "done",
+    range: {
+      fromSec: input.fromSec,
+      toSec: input.toSec,
+    },
+    segments: input.segments.map((segment) => ({
+      startSec: segment.from,
+      endSec: segment.to,
+      text: segment.text,
+      chunkStartSec: input.chunkStartSec ?? input.fromSec,
+      chunkEndSec: input.chunkEndSec ?? input.toSec,
+      status: "done",
+      words: segment.words ?? distributeWords(segment),
+      model: input.model,
+    })),
   });
 }
 
@@ -1419,29 +1459,26 @@ export async function getOrTranscribeTranscriptChunk(
     };
   } catch (err) {
     const message = err instanceof Error ? err.message : "Transcription failed";
-    await db.transcript.update({
-      where: { mediaId: input.mediaId },
-      data: { status: "failed", updatedAt: new Date() },
-    });
-    await db.transcriptSegment.deleteMany({
-      where: {
-        transcriptId: transcript.id,
-        startSec: { gte: chunkStartSec },
-        endSec: { lte: chunkEndSec },
+    await replaceTranscriptSegments({
+      ctx,
+      mediaId: input.mediaId,
+      status: "failed",
+      range: {
+        fromSec: chunkStartSec,
+        toSec: chunkEndSec,
       },
-    });
-    await db.transcriptSegment.create({
-      data: {
-        transcriptId: transcript.id,
-        startSec: chunkStartSec,
-        endSec: chunkEndSec,
-        text: "",
-        chunkStartSec,
-        chunkEndSec,
-        status: "failed",
-        model,
-        error: message,
-      },
+      segments: [
+        {
+          startSec: chunkStartSec,
+          endSec: chunkEndSec,
+          text: "",
+          chunkStartSec,
+          chunkEndSec,
+          status: "failed",
+          model,
+          error: message,
+        },
+      ],
     });
     throw err;
   }

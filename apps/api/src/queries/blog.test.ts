@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  getOrTranscribeTranscriptChunk,
   getTranscriptWindow,
   persistTranscribedSegments,
+  replaceTranscriptSegments,
   resolveTranscriptWindowRange,
 } from "./blog";
 
@@ -218,6 +220,212 @@ describe("transcript window helpers", () => {
       "transcript.upsert",
       "transcriptSegment.deleteMany",
       "transcriptSegment.createMany",
+    ]);
+  });
+
+  test("saveTranscript-style full replacement keeps all writes in one transaction", async () => {
+    const operations: string[] = [];
+    let upsertArgs: unknown;
+    let deleteArgs: unknown;
+    let createManyArgs: unknown;
+    const transactionClient = {
+      transcript: {
+        upsert: async (args: unknown) => {
+          operations.push("transcript.upsert");
+          upsertArgs = args;
+          return { id: 654, status: "done", updatedAt: new Date() };
+        },
+      },
+      transcriptSegment: {
+        deleteMany: async (args: unknown) => {
+          operations.push("transcriptSegment.deleteMany");
+          deleteArgs = args;
+        },
+        createMany: async (args: unknown) => {
+          operations.push("transcriptSegment.createMany");
+          createManyArgs = args;
+        },
+      },
+    };
+    const harness = createTransactionHarness(transactionClient, {
+      transcript: {
+        upsert: async () => {
+          throw new Error("transcript write escaped transaction");
+        },
+      },
+      transcriptSegment: {
+        deleteMany: async () => {
+          throw new Error("segment delete escaped transaction");
+        },
+        createMany: async () => {
+          throw new Error("segment insert escaped transaction");
+        },
+      },
+    });
+
+    await replaceTranscriptSegments({
+      ctx: { db: harness.db } as unknown as Parameters<
+        typeof replaceTranscriptSegments
+      >[0]["ctx"],
+      mediaId: 654,
+      status: "done",
+      segments: [{ startSec: 0, endSec: 5, text: "saved" }],
+    });
+
+    expect(harness.calls()).toBe(1);
+    expect(upsertArgs).toMatchObject({
+      where: { mediaId: 654 },
+      update: {
+        status: "done",
+        updatedAt: expect.any(Date),
+      },
+    });
+    expect(deleteArgs).toEqual({ where: { transcriptId: 654 } });
+    expect(createManyArgs).toEqual({
+      data: [
+        {
+          transcriptId: 654,
+          startSec: 0,
+          endSec: 5,
+          text: "saved",
+        },
+      ],
+    });
+    expect(operations).toEqual([
+      "transcript.upsert",
+      "transcriptSegment.deleteMany",
+      "transcriptSegment.createMany",
+    ]);
+  });
+
+  test("failed chunk replacement keeps the failed revision and segment atomic", async () => {
+    const operations: string[] = [];
+    let upsertArgs: unknown;
+    let deleteArgs: unknown;
+    let createManyArgs: unknown;
+    const transactionClient = {
+      transcript: {
+        upsert: async (
+          args: unknown,
+        ): Promise<{ id: number; status: string; updatedAt: Date }> => {
+          operations.push("transaction.transcript.upsert");
+          upsertArgs = args;
+          return { id: 321, status: "failed", updatedAt: new Date() };
+        },
+        update: async (_args: unknown): Promise<unknown> => undefined,
+      },
+      transcriptSegment: {
+        findMany: async (_args: unknown): Promise<unknown[]> => [],
+        deleteMany: async (args: unknown): Promise<unknown> => {
+          operations.push("transaction.transcriptSegment.deleteMany");
+          deleteArgs = args;
+          return undefined;
+        },
+        createMany: async (args: unknown): Promise<unknown> => {
+          operations.push("transaction.transcriptSegment.createMany");
+          createManyArgs = args;
+          return undefined;
+        },
+        create: async (_args: unknown): Promise<unknown> => {
+          throw new Error("single segment create escaped transaction");
+        },
+      },
+    };
+    const harness = createTransactionHarness(transactionClient, {
+      transcript: {
+        upsert: async (_args: unknown) => {
+          operations.push("root.transcript.upsert");
+          return { id: 321, status: "pending", updatedAt: new Date() };
+        },
+        update: async (_args: unknown): Promise<unknown> => {
+          operations.push("root.transcript.update");
+          return undefined;
+        },
+      },
+      transcriptSegment: {
+        findMany: async (_args: unknown): Promise<unknown[]> => {
+          operations.push("root.transcriptSegment.findMany");
+          return [];
+        },
+        deleteMany: async (_args: unknown): Promise<unknown> => {
+          throw new Error("failed segment delete escaped transaction");
+        },
+        createMany: async (_args: unknown): Promise<unknown> => {
+          throw new Error("failed segment insert escaped transaction");
+        },
+        create: async (_args: unknown): Promise<unknown> => {
+          throw new Error("failed segment create escaped transaction");
+        },
+      },
+    });
+
+    const previousToken = process.env.TELEGRAM_BOT_TOKEN;
+    process.env.TELEGRAM_BOT_TOKEN = "";
+    let error: unknown;
+    try {
+      await getOrTranscribeTranscriptChunk(
+        { db: harness.db } as unknown as Parameters<
+          typeof getOrTranscribeTranscriptChunk
+        >[0],
+        {
+          mediaId: 321,
+          fileId: "file-321",
+          chunkStartSec: 30,
+          chunkDurationSec: 30,
+          model: "whisper-local",
+        },
+      );
+    } catch (caught) {
+      error = caught;
+    } finally {
+      if (previousToken === undefined) {
+        process.env.TELEGRAM_BOT_TOKEN = "";
+      } else {
+        process.env.TELEGRAM_BOT_TOKEN = previousToken;
+      }
+    }
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toBe(
+      "TELEGRAM_BOT_TOKEN is not configured",
+    );
+    expect(harness.calls()).toBe(1);
+    expect(upsertArgs).toMatchObject({
+      where: { mediaId: 321 },
+      update: {
+        status: "failed",
+        updatedAt: expect.any(Date),
+      },
+    });
+    expect(deleteArgs).toEqual({
+      where: {
+        transcriptId: 321,
+        startSec: { gte: 30 },
+        endSec: { lte: 60 },
+      },
+    });
+    expect(createManyArgs).toEqual({
+      data: [
+        {
+          transcriptId: 321,
+          startSec: 30,
+          endSec: 60,
+          text: "",
+          chunkStartSec: 30,
+          chunkEndSec: 60,
+          status: "failed",
+          model: "whisper-local",
+          error: "TELEGRAM_BOT_TOKEN is not configured",
+        },
+      ],
+    });
+    expect(operations).toEqual([
+      "root.transcript.upsert",
+      "root.transcriptSegment.findMany",
+      "root.transcript.update",
+      "transaction.transcript.upsert",
+      "transaction.transcriptSegment.deleteMany",
+      "transaction.transcriptSegment.createMany",
     ]);
   });
 });

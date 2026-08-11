@@ -6,6 +6,7 @@ import {
 	checkLocalTranscriber,
 	getTranscriptWindow,
 	getOrTranscribeTranscriptChunk,
+	replaceTranscriptSegments,
 	transcriptWindowSchema,
 	transcribeRange,
 	transcribeRangeSchema,
@@ -946,26 +947,12 @@ export const blogRoutes = createTRPCRouter({
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
-			const { db } = ctx;
-			// Upsert transcript record
-			const transcript = await db.transcript.upsert({
-				where: { mediaId: input.mediaId },
-				create: { mediaId: input.mediaId, status: "done" },
-				update: { status: "done", updatedAt: new Date() },
+			return replaceTranscriptSegments({
+				ctx,
+				mediaId: input.mediaId,
+				status: "done",
+				segments: input.segments,
 			});
-			// Replace all segments
-			await db.transcriptSegment.deleteMany({
-				where: { transcriptId: transcript.id },
-			});
-			await db.transcriptSegment.createMany({
-				data: input.segments.map((s) => ({
-					transcriptId: transcript.id,
-					startSec: s.startSec,
-					endSec: s.endSec,
-					text: s.text,
-				})),
-			});
-			return transcript;
 		}),
 
 	resetTranscript: publicProcedure
