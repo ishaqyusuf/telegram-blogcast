@@ -1183,7 +1183,7 @@ async function transcribeWithLocalWhisper(input: {
   };
 }
 
-async function persistTranscribedSegments(input: {
+export async function persistTranscribedSegments(input: {
   ctx: TRPCContext;
   mediaId: number;
   fromSec: number;
@@ -1194,37 +1194,40 @@ async function persistTranscribedSegments(input: {
   chunkEndSec?: number;
 }) {
   const db = input.ctx.db as any;
-  const transcript = await db.transcript.upsert({
-    where: { mediaId: input.mediaId },
-    create: { mediaId: input.mediaId, status: "done" },
-    update: { status: "done", updatedAt: new Date() },
-  });
 
-  await db.transcriptSegment.deleteMany({
-    where: {
-      transcriptId: transcript.id,
-      startSec: { gte: input.fromSec },
-      endSec: { lte: input.toSec },
-    },
-  });
-
-  if (input.segments.length > 0) {
-    await db.transcriptSegment.createMany({
-      data: input.segments.map((segment) => ({
-        transcriptId: transcript.id,
-        startSec: segment.from,
-        endSec: segment.to,
-        text: segment.text,
-        chunkStartSec: input.chunkStartSec ?? input.fromSec,
-        chunkEndSec: input.chunkEndSec ?? input.toSec,
-        status: "done",
-        words: segment.words ?? distributeWords(segment),
-        model: input.model,
-      })),
+  return db.$transaction(async (tx) => {
+    const transcript = await tx.transcript.upsert({
+      where: { mediaId: input.mediaId },
+      create: { mediaId: input.mediaId, status: "done" },
+      update: { status: "done", updatedAt: new Date() },
     });
-  }
 
-  return transcript;
+    await tx.transcriptSegment.deleteMany({
+      where: {
+        transcriptId: transcript.id,
+        startSec: { gte: input.fromSec },
+        endSec: { lte: input.toSec },
+      },
+    });
+
+    if (input.segments.length > 0) {
+      await tx.transcriptSegment.createMany({
+        data: input.segments.map((segment) => ({
+          transcriptId: transcript.id,
+          startSec: segment.from,
+          endSec: segment.to,
+          text: segment.text,
+          chunkStartSec: input.chunkStartSec ?? input.fromSec,
+          chunkEndSec: input.chunkEndSec ?? input.toSec,
+          status: "done",
+          words: segment.words ?? distributeWords(segment),
+          model: input.model,
+        })),
+      });
+    }
+
+    return transcript;
+  });
 }
 
 export async function transcribeRange(
@@ -1452,27 +1455,54 @@ export async function getTranscriptWindow(
   const { windowDurationSec, windowStartSec, windowEndSec } =
     resolveTranscriptWindowRange(input);
 
-  const transcript = await db.transcript.findUnique({
-    where: { mediaId: input.mediaId },
-    select: {
-      id: true,
-      status: true,
-      updatedAt: true,
-      media: {
+  const snapshot = await db.$transaction(
+    async (tx) => {
+      const transcript = await tx.transcript.findUnique({
+        where: { mediaId: input.mediaId },
         select: {
-          file: { select: { duration: true } },
+          id: true,
+          status: true,
+          updatedAt: true,
+          media: {
+            select: {
+              file: { select: { duration: true } },
+            },
+          },
+          segments: {
+            where: {
+              startSec: { lt: windowEndSec },
+              endSec: { gt: windowStartSec },
+              status: "done",
+            },
+            orderBy: { startSec: "asc" },
+          },
         },
-      },
-      segments: {
-        where: {
-          startSec: { lt: windowEndSec },
-          endSec: { gt: windowStartSec },
-          status: "done",
-        },
-        orderBy: { startSec: "asc" },
-      },
+      });
+
+      if (!transcript) {
+        return {
+          transcript: null,
+          segmentCount: 0,
+          lastSegment: null,
+        };
+      }
+
+      const [segmentCount, lastSegment] = await Promise.all([
+        tx.transcriptSegment.count({
+          where: { transcriptId: transcript.id, status: "done" },
+        }),
+        tx.transcriptSegment.findFirst({
+          where: { transcriptId: transcript.id, status: "done" },
+          orderBy: { endSec: "desc" },
+          select: { endSec: true },
+        }),
+      ]);
+
+      return { transcript, segmentCount, lastSegment };
     },
-  });
+    { isolationLevel: "RepeatableRead" },
+  );
+  const { transcript, segmentCount, lastSegment } = snapshot;
 
   if (!transcript) {
     return {
@@ -1494,16 +1524,6 @@ export async function getTranscriptWindow(
     };
   }
 
-  const [segmentCount, lastSegment] = await Promise.all([
-    db.transcriptSegment.count({
-      where: { transcriptId: transcript.id, status: "done" },
-    }),
-    db.transcriptSegment.findFirst({
-      where: { transcriptId: transcript.id, status: "done" },
-      orderBy: { endSec: "desc" },
-      select: { endSec: true },
-    }),
-  ]);
   const durationSec =
     typeof transcript.media?.file?.duration === "number"
       ? transcript.media.file.duration
