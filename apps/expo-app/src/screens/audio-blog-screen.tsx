@@ -27,6 +27,7 @@ import {
 	useWindowDimensions,
 } from "react-native";
 
+import { AudioOptionsSheet } from "@/components/audio-blog-view/audio-options-sheet";
 import { AudioPlayerHeader } from "@/components/audio-blog-view/audio-player-header";
 import { KaraokeTranscript } from "@/components/audio-blog-view/karaoke-transcript";
 import { TashkeelToggle } from "@/components/audio-blog-view/tashkeel-toggle";
@@ -79,7 +80,6 @@ import { getTelegramFileUrl } from "@/lib/get-telegram-file";
 import { getLocalApiQueryKey } from "@/lib/local-api-query";
 import { getMediaFileUrl } from "@/lib/media-source";
 import { getBlogShareUrl } from "@/lib/share-links";
-import { withAlpha } from "@/lib/theme";
 import { isHttpTranscriberUrl } from "@/lib/transcribe";
 import { createTranscriptCacheController } from "@/lib/transcript-cache-controller";
 import { getTranscriptionBadgeState } from "@/lib/transcription-status";
@@ -1819,235 +1819,6 @@ function ChannelPicturePickerSheet({
 	);
 }
 
-// ── More menu sheet ───────────────────────────────────────────────────────────
-
-function MoreMenu({
-	visible,
-	hasAlbum,
-	albumId,
-	onClose,
-	onComment,
-	onShare,
-	onOpenLocalServices,
-	onTranscribe,
-	transcriptionActionLabel,
-	transcriptionActionDescription,
-	onResetTranscription,
-	onAddArt,
-	onAddToAlbum,
-	onAddToPlaylist,
-	onViewAlbum,
-	onSleepTimer,
-	onToggleTashkeel,
-	tashkeelEnabled,
-}: {
-	visible: boolean;
-	hasAlbum: boolean;
-	albumId?: number | null;
-	onClose: () => void;
-	onComment: () => void;
-	onShare: () => void;
-	onOpenLocalServices: () => void;
-	onTranscribe: () => void;
-	transcriptionActionLabel: string;
-	transcriptionActionDescription: string;
-	onResetTranscription: () => void;
-	onAddArt: () => void;
-	onAddToAlbum: () => void;
-	onAddToPlaylist: () => void;
-	onViewAlbum: () => void;
-	onSleepTimer: () => void;
-	onToggleTashkeel: () => void;
-	tashkeelEnabled: boolean;
-}) {
-	const colors = useColors();
-	const onComingSoon = () => {
-		Alert.alert("Coming soon", "This action is not connected yet.");
-	};
-	const menuAction = ({
-		icon,
-		label,
-		description,
-		onPress,
-	}: {
-		icon: IconKeys;
-		label: string;
-		description: string;
-		onPress: () => void;
-	}) => (
-		<Pressable
-			haptic
-			onPress={() => {
-				onClose();
-				setTimeout(onPress, 250);
-			}}
-			className="min-h-14 flex-row items-center gap-3 rounded-2xl px-3 py-2 active:bg-muted"
-		>
-			<View
-				className="size-11 items-center justify-center rounded-full"
-				style={{ backgroundColor: colors.muted }}
-			>
-				<Icon name={icon} className="text-foreground" />
-			</View>
-			<View className="min-w-0 flex-1">
-				<Text
-					className="text-sm font-medium text-foreground"
-					style={{
-						color: colors.foreground,
-					}}
-				>
-					{label}
-				</Text>
-				<Text
-					className="mt-0.5 text-xs text-muted-foreground"
-					style={{
-						color: colors.mutedForeground,
-					}}
-					numberOfLines={1}
-				>
-					{description}
-				</Text>
-			</View>
-			<Icon name="ChevronRight" className="text-muted-foreground" />
-		</Pressable>
-	);
-	return (
-		<FloatingBottomSheet
-			visible={visible}
-			onClose={onClose}
-			accessibilityLabel="Audio options"
-		>
-			<View className="px-4 pb-8">
-				<View className="pb-4">
-					<View className="mb-3 flex-row items-center gap-2">
-						<View
-							className="rounded-full px-2.5 py-1"
-							style={{ backgroundColor: withAlpha(colors.primary, 0.1) }}
-						>
-							<Text
-								className="text-xs font-semibold text-primary"
-								style={{ color: colors.primary }}
-							>
-								Audio
-							</Text>
-						</View>
-						{hasAlbum && albumId ? (
-							<Text
-								className="text-xs text-muted-foreground"
-								style={{ color: colors.mutedForeground }}
-							>
-								Album #{albumId}
-							</Text>
-						) : null}
-					</View>
-					<Text
-						className="text-xl font-semibold text-foreground"
-						style={{ color: colors.foreground }}
-					>
-						Audio options
-					</Text>
-					<Text
-						className="mt-1 text-sm leading-5 text-muted-foreground"
-						numberOfLines={2}
-						style={{ color: colors.mutedForeground }}
-					>
-						Choose an action for this audio.
-					</Text>
-				</View>
-
-				<View className="gap-1">
-					{menuAction({
-						icon: "Wifi",
-						label: "Local services",
-						description: "Manage the transcription service connection",
-						onPress: onOpenLocalServices,
-					})}
-					{menuAction({
-						icon: "Sparkles",
-						label: tashkeelEnabled
-							? "Hide Arabic vowel marks"
-							: "Show Arabic vowel marks",
-						description: "Adjust Arabic transcript readability",
-						onPress: onToggleTashkeel,
-					})}
-					{menuAction({
-						icon: "Share",
-						label: "Share",
-						description: "Send a web link to this audio",
-						onPress: onShare,
-					})}
-					{menuAction({
-						icon: "MessageSquare",
-						label: "Comment",
-						description: "Open the discussion for this post",
-						onPress: onComment,
-					})}
-					{menuAction({
-						icon: "Captions",
-						label: transcriptionActionLabel,
-						description: transcriptionActionDescription,
-						onPress: onTranscribe,
-					})}
-					{menuAction({
-						icon: "RotateCcw",
-						label: "Reset transcribe",
-						description: "Clear transcript and queue jobs",
-						onPress: onResetTranscription,
-					})}
-					{menuAction({
-						icon: "Image",
-						label: "Add/Edit art",
-						description: "Set a picture for this audio",
-						onPress: onAddArt,
-					})}
-					{menuAction({
-						icon: "Bookmark",
-						label: "Save",
-						description: "Keep this post in saved items",
-						onPress: onComingSoon,
-					})}
-					{menuAction({
-						icon: "Heart",
-						label: "Like",
-						description: "Add this post to liked items",
-						onPress: onComingSoon,
-					})}
-					{menuAction({
-						icon: "ListMusic",
-						label: hasAlbum ? "Change album" : "Add to album",
-						description: hasAlbum
-							? "Move this audio to another album"
-							: "Add this audio to an album",
-						onPress: onAddToAlbum,
-					})}
-					{menuAction({
-						icon: "ListMusic",
-						label: "Add to playlist",
-						description: "Save this audio in a playlist",
-						onPress: onAddToPlaylist,
-					})}
-
-					{/* View album (only if already in one) */}
-					{hasAlbum
-						? menuAction({
-								icon: "Disc3",
-								label: "View album",
-								description: "Open this album",
-								onPress: onViewAlbum,
-							})
-						: null}
-					{menuAction({
-						icon: "Timer",
-						label: "Sleep timer",
-						description: "Stop playback automatically",
-						onPress: onSleepTimer,
-					})}
-				</View>
-			</View>
-		</FloatingBottomSheet>
-	);
-}
-
 // ── Add-to-album picker ───────────────────────────────────────────────────────
 
 function AddToAlbumPicker({
@@ -2634,14 +2405,6 @@ export default function AudioBlogScreen() {
 		duration: duration ?? (media as any)?.duration ?? null,
 	});
 	const isCurrentAudioAlreadyTranscribed = transcriptBadge.isFullyTranscribed;
-	const transcriptBadgeColor =
-		transcriptBadge.tone === "success"
-			? colors.success
-			: transcriptBadge.tone === "warn"
-				? colors.warn
-				: transcriptBadge.tone === "muted"
-					? colors.warn
-					: colors.primary;
 	const transcriptionActionLabel = !localServicesEnabled
 		? "Enable local services"
 		: queuedTranscriptionJob
@@ -2651,15 +2414,10 @@ export default function AudioBlogScreen() {
 				: isCurrentAudioAlreadyTranscribed
 					? "Transcript"
 					: "Transcribe";
-	const transcriptionActionDescription = !localServicesEnabled
-		? "Choose a network IP before transcribing"
-		: queuedTranscriptionJob
-			? "Tap to remove this audio from the queue"
-			: runningTranscriptionJob
-				? "Transcription is currently running"
-				: isCurrentAudioAlreadyTranscribed
-					? "Clear transcript or transcribe again"
-					: "Queue this audio for local Whisper";
+	const canResetTranscription =
+		hasSavedTranscript ||
+		transcriptBadge.show ||
+		mediaTranscriptionJobs.length > 0;
 	const { data: localTranscriberHealth } = useQuery({
 		queryKey: getLocalApiQueryKey(
 			activeGatewayUrl,
@@ -4061,11 +3819,10 @@ export default function AudioBlogScreen() {
 				/>
 			) : null}
 
-			{/* More menu */}
-			<MoreMenu
+			<AudioOptionsSheet
 				visible={moreMenuVisible}
 				hasAlbum={!!media?.album}
-				albumId={media?.albumId}
+				canResetTranscription={canResetTranscription}
 				onClose={() => setMoreMenuVisible(false)}
 				onComment={() => setShowComments(true)}
 				onShare={() => {
@@ -4074,7 +3831,6 @@ export default function AudioBlogScreen() {
 				onOpenLocalServices={requestLocalServicesSetup}
 				onTranscribe={handleQueueCurrentTranscriptionPress}
 				transcriptionActionLabel={transcriptionActionLabel}
-				transcriptionActionDescription={transcriptionActionDescription}
 				onResetTranscription={resetCurrentTranscription}
 				onAddArt={() => setAudioArtSheetVisible(true)}
 				onAddToAlbum={() => setAlbumPickerVisible(true)}
