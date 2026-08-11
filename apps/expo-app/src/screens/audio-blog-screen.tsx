@@ -27,6 +27,7 @@ import {
 	useWindowDimensions,
 } from "react-native";
 
+import { AudioPlayerHeader } from "@/components/audio-blog-view/audio-player-header";
 import { KaraokeTranscript } from "@/components/audio-blog-view/karaoke-transcript";
 import { TashkeelToggle } from "@/components/audio-blog-view/tashkeel-toggle";
 import { TranscriptReadMode } from "@/components/audio-blog-view/transcript-read-mode";
@@ -45,10 +46,7 @@ import { CommentInput } from "@/components/comments-sheet/comment-input";
 import { CommentsAudioContext } from "@/components/comments-sheet/comments-audio-context";
 import { CommentsHeader } from "@/components/comments-sheet/comments-header";
 import { CommentsList } from "@/components/comments-sheet/comments-list";
-import {
-	LocalServicesConnectionButton,
-	useLocalServicesSession,
-} from "@/components/local-services";
+import { useLocalServicesSession } from "@/components/local-services";
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
 import { TranscriptionRequestModal } from "@/components/transcription-request-modal";
@@ -1764,6 +1762,7 @@ function MoreMenu({
 	onClose,
 	onComment,
 	onShare,
+	onOpenLocalServices,
 	onTranscribe,
 	transcriptionActionLabel,
 	transcriptionActionDescription,
@@ -1773,6 +1772,8 @@ function MoreMenu({
 	onAddToPlaylist,
 	onViewAlbum,
 	onSleepTimer,
+	onToggleTashkeel,
+	tashkeelEnabled,
 }: {
 	visible: boolean;
 	hasAlbum: boolean;
@@ -1780,6 +1781,7 @@ function MoreMenu({
 	onClose: () => void;
 	onComment: () => void;
 	onShare: () => void;
+	onOpenLocalServices: () => void;
 	onTranscribe: () => void;
 	transcriptionActionLabel: string;
 	transcriptionActionDescription: string;
@@ -1789,6 +1791,8 @@ function MoreMenu({
 	onAddToPlaylist: () => void;
 	onViewAlbum: () => void;
 	onSleepTimer: () => void;
+	onToggleTashkeel: () => void;
+	tashkeelEnabled: boolean;
 }) {
 	const colors = useColors();
 	const onComingSoon = () => {
@@ -1886,6 +1890,20 @@ function MoreMenu({
 				</View>
 
 				<View className="gap-1">
+					{menuAction({
+						icon: "Wifi",
+						label: "Local services",
+						description: "Manage the transcription service connection",
+						onPress: onOpenLocalServices,
+					})}
+					{menuAction({
+						icon: "Sparkles",
+						label: tashkeelEnabled
+							? "Hide Arabic vowel marks"
+							: "Show Arabic vowel marks",
+						description: "Adjust Arabic transcript readability",
+						onPress: onToggleTashkeel,
+					})}
 					{menuAction({
 						icon: "Share",
 						label: "Share",
@@ -3493,111 +3511,22 @@ export default function AudioBlogScreen() {
 										),
 									}}
 								>
-									{/* Header */}
-									<View className="flex-row items-center justify-between px-4 py-3">
-										<Pressable
-											onPress={() => router.back()}
-											className="size-10 items-center justify-center rounded-full active:bg-black/20"
-										>
-											<Icon name="ChevronDown" size={28} color="#ffffff" />
-										</Pressable>
-										<Pressable
-											disabled={!media?.albumId}
-											onPress={() =>
-												router.push(`/albums/${media?.albumId}` as any)
-											}
-											style={{ alignItems: "center", flex: 1 }}
-										>
-											<Text
-												style={{
-													fontSize: 11,
-													fontWeight: "700",
-													color: "rgba(255,255,255,0.7)",
-													textTransform: "uppercase",
-													letterSpacing: 1,
-												}}
-											>
-												Playing from {media?.album ? "Album" : "Channel"}
-											</Text>
-											<Text
-												style={{
-													fontSize: 13,
-													fontWeight: "700",
-													color: "#ffffff",
-												}}
-											>
-												{media?.album?.name || channelName}
-											</Text>
-										</Pressable>
-										<View className="flex-row items-center gap-1">
-											<LocalServicesConnectionButton />
-											{localServicesEnabled && transcriptBadge.show ? (
-												<View
-													accessibilityLabel={transcriptBadge.label}
-													style={{
-														maxWidth: 168,
-														minHeight: 32,
-														flexDirection: "row",
-														alignItems: "center",
-														gap: 6,
-														borderRadius: 999,
-														paddingHorizontal: 10,
-														backgroundColor: withAlpha(
-															transcriptBadgeColor,
-															0.18,
-														),
-													}}
-												>
-													<Icon
-														name="FileText"
-														size={14}
-														color={transcriptBadgeColor}
-													/>
-													<Text
-														numberOfLines={1}
-														style={{
-															color: transcriptBadgeColor,
-															fontSize: 11,
-															fontWeight: "800",
-														}}
-													>
-														{transcriptBadge.label}
-													</Text>
-												</View>
-											) : null}
-											<Pressable
-												onPress={handleQueueCurrentTranscriptionPress}
-												className={
-													localServicesEnabled
-														? "size-10 items-center justify-center rounded-full active:bg-black/20"
-														: "size-10 items-center justify-center rounded-full opacity-50 active:bg-black/20"
-												}
-												accessibilityLabel={
-													localServicesEnabled
-														? "Transcription"
-														: "Enable local services"
-												}
-											>
-												<Icon
-													name="Captions"
-													size={22}
-													color={transcriptBadgeColor}
-												/>
-											</Pressable>
-											<TashkeelToggle
-												enabled={transcriptTashkeelEnabled}
-												isLoading={isTashkeelLoading}
-												onPress={toggleTranscriptTashkeel}
-												size="compact"
-											/>
-											<Pressable
-												onPress={() => setMoreMenuVisible(true)}
-												className="size-10 items-center justify-center rounded-full active:bg-black/20"
-											>
-												<Icon name="MoreHorizontal" color="#ffffff" />
-											</Pressable>
-										</View>
-									</View>
+									<AudioPlayerHeader
+										canOpenContext={Boolean(media?.albumId)}
+										contextName={media?.album?.name || channelName}
+										contextType={media?.album ? "Album" : "Channel"}
+										localServicesEnabled={localServicesEnabled}
+										onClose={() => router.back()}
+										onOpenContext={() =>
+											router.push(`/albums/${media?.albumId}` as any)
+										}
+										onOpenMore={() => setMoreMenuVisible(true)}
+										onOpenTranscript={openTranscriptModal}
+										onOpenTranscription={handleQueueCurrentTranscriptionPress}
+										transcriptStatusLabel={
+											transcriptBadge.show ? transcriptBadge.label : null
+										}
+									/>
 
 									{/* Transcript area */}
 									<Pressable
@@ -4003,6 +3932,7 @@ export default function AudioBlogScreen() {
 				onShare={() => {
 					void shareAudioPost();
 				}}
+				onOpenLocalServices={requestLocalServicesSetup}
 				onTranscribe={handleQueueCurrentTranscriptionPress}
 				transcriptionActionLabel={transcriptionActionLabel}
 				transcriptionActionDescription={transcriptionActionDescription}
@@ -4014,6 +3944,8 @@ export default function AudioBlogScreen() {
 				}}
 				onViewAlbum={() => router.push(`/albums/${media?.albumId}` as any)}
 				onSleepTimer={() => setSleepTimerVisible(true)}
+				onToggleTashkeel={toggleTranscriptTashkeel}
+				tashkeelEnabled={transcriptTashkeelEnabled}
 			/>
 
 			<TranscriptionRequestModal

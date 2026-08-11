@@ -6,9 +6,43 @@ import { useColors } from "@/hooks/use-color";
 
 import { useLocalServicesSession } from "./local-services-session-provider";
 
-export function LocalServicesConnectionButton() {
+type LocalServicesConnectionButtonProps = {
+  appearance?: "default" | "plain";
+};
+
+const CONNECTION_BUTTON_APPEARANCE_CLASSES = {
+  default: {
+    onlineContainer:
+      "size-11 items-center justify-center rounded-full border border-success bg-card active:opacity-70",
+    offlineContainer:
+      "size-11 items-center justify-center rounded-full border border-border bg-card active:opacity-70",
+    onlineIcon: "text-success",
+    offlineIcon: "text-muted-foreground",
+    onlineDot:
+      "absolute bottom-1.5 right-1.5 size-2.5 rounded-full border-2 border-card bg-success",
+    offlineDot:
+      "absolute bottom-1.5 right-1.5 size-2.5 rounded-full border-2 border-card bg-destructive",
+  },
+  plain: {
+    onlineContainer:
+      "size-11 items-center justify-center rounded-full active:bg-black/20",
+    offlineContainer:
+      "size-11 items-center justify-center rounded-full active:bg-black/20",
+    onlineIcon: "size-base text-media-foreground",
+    offlineIcon: "size-base text-media-foreground",
+    onlineDot:
+      "absolute bottom-1.5 right-1.5 size-2.5 rounded-full border-2 border-transparent bg-success",
+    offlineDot:
+      "absolute bottom-1.5 right-1.5 size-2.5 rounded-full border-2 border-transparent bg-destructive",
+  },
+} as const;
+
+export function LocalServicesConnectionButton({
+  appearance = "default",
+}: LocalServicesConnectionButtonProps) {
   const colors = useColors();
   const { connectionStatus, requestSetup } = useLocalServicesSession();
+  const appearanceClasses = CONNECTION_BUTTON_APPEARANCE_CLASSES[appearance];
   const connectionLabel =
     connectionStatus === "online"
       ? "Local services connected"
@@ -21,8 +55,8 @@ export function LocalServicesConnectionButton() {
       onPress={requestSetup}
       className={
         connectionStatus === "online"
-          ? "size-11 items-center justify-center rounded-full border border-success bg-card active:opacity-70"
-          : "size-11 items-center justify-center rounded-full border border-border bg-card active:opacity-70"
+          ? appearanceClasses.onlineContainer
+          : appearanceClasses.offlineContainer
       }
       accessibilityRole="button"
       accessibilityLabel={connectionLabel}
@@ -36,15 +70,15 @@ export function LocalServicesConnectionButton() {
             name={connectionStatus === "online" ? "Wifi" : "WifiOff"}
             className={
               connectionStatus === "online"
-                ? "text-success"
-                : "text-muted-foreground"
+                ? appearanceClasses.onlineIcon
+                : appearanceClasses.offlineIcon
             }
           />
           <View
             className={
               connectionStatus === "online"
-                ? "absolute bottom-1.5 right-1.5 size-2.5 rounded-full border-2 border-card bg-success"
-                : "absolute bottom-1.5 right-1.5 size-2.5 rounded-full border-2 border-card bg-destructive"
+                ? appearanceClasses.onlineDot
+                : appearanceClasses.offlineDot
             }
           />
         </>
