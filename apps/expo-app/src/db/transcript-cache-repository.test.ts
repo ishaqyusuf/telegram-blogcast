@@ -252,6 +252,46 @@ describe("transcript cache repository", () => {
 		});
 	});
 
+	test("does not let a null revision erase timestamped cached data", async () => {
+		const { repository } = await createRepository();
+		await repository.upsertServerWindow(firstWindow);
+
+		const accepted = await repository.upsertServerWindow({
+			...firstWindow,
+			transcriptUpdatedAt: null,
+			segments: [
+				{
+					id: 301,
+					startSec: 30,
+					endSec: 40,
+					text: "unversioned response",
+				},
+			],
+		});
+
+		expect(accepted).toBe(false);
+		expect(
+			await repository.readOverlappingWindows({
+				mediaId: 42,
+				startSec: 0,
+				endSec: 60,
+			}),
+		).toMatchObject([
+			{
+				transcriptUpdatedAt: new Date("2026-08-11T08:00:00.000Z"),
+				segments: [expect.objectContaining({ text: "first saved segment" })],
+			},
+		]);
+
+		await repository.invalidateMediaTranscript(42);
+		expect(
+			await repository.upsertServerWindow({
+				...firstWindow,
+				transcriptUpdatedAt: null,
+			}),
+		).toBe(true);
+	});
+
 	test("invalidates one media transcript without touching another media item", async () => {
 		const { repository } = await createRepository();
 		await repository.upsertServerWindow(firstWindow);

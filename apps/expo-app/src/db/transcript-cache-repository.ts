@@ -78,8 +78,8 @@ export interface TranscriptCacheRepository {
 		range: TranscriptCacheReadRange,
 	): Promise<CachedTranscriptWindow[]>;
 
-	/** Replace one server window and its owned segments in one transaction. */
-	upsertServerWindow(window: ServerTranscriptWindow): Promise<void>;
+	/** Replace one server window atomically; false means freshness rejected it. */
+	upsertServerWindow(window: ServerTranscriptWindow): Promise<boolean>;
 
 	/** Remove all cached metadata, windows, and segments for one media item. */
 	invalidateMediaTranscript(mediaId: number): Promise<void>;
@@ -387,7 +387,7 @@ export class SqliteTranscriptCacheRepository
 	async upsertServerWindow(window: ServerTranscriptWindow) {
 		const normalized = normalizeServerWindow(window);
 
-		await this.database.transaction(async (transaction) => {
+		return this.database.transaction(async (transaction) => {
 			const existingMetadata = await transaction.first<{
 				transcript_updated_at: number | null;
 			}>(
@@ -403,10 +403,9 @@ export class SqliteTranscriptCacheRepository
 			const incomingUpdatedAt = normalized.transcriptUpdatedAtMs;
 			const isOlderResponse =
 				existingUpdatedAt != null &&
-				incomingUpdatedAt != null &&
-				incomingUpdatedAt < existingUpdatedAt;
+				(incomingUpdatedAt == null || incomingUpdatedAt < existingUpdatedAt);
 
-			if (isOlderResponse) return;
+			if (isOlderResponse) return false;
 
 			const isDifferentTranscriptRevision =
 				existingMetadata != null && existingUpdatedAt !== incomingUpdatedAt;
@@ -547,6 +546,8 @@ export class SqliteTranscriptCacheRepository
 					],
 				);
 			}
+
+			return true;
 		});
 	}
 

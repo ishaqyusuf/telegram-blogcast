@@ -25,6 +25,7 @@ export type TranscriptCacheController = {
 	requestWindow<TWindow extends ServerTranscriptWindow>(
 		request: TranscriptCacheWindowRequest<TWindow>,
 	): Promise<void>;
+	cancelMediaRequests(mediaId: number): void;
 	invalidateMediaTranscript(mediaId: number): Promise<void>;
 };
 
@@ -47,6 +48,7 @@ export function createTranscriptCacheController(
 	let cacheDisabled = false;
 	const pendingRequests = new Map<string, Promise<void>>();
 	const mediaGenerations = new Map<number, number>();
+	const mediaRevisions = new Map<number, Date | null>();
 
 	async function loadCache() {
 		if (cacheDisabled) return null;
@@ -117,6 +119,48 @@ export function createTranscriptCacheController(
 		}
 	}
 
+	function cancelMediaRequests(mediaId: number) {
+		mediaGenerations.set(mediaId, generationFor(mediaId) + 1);
+		discardPendingMediaRequests(mediaId);
+	}
+
+	function canAcceptRevision(
+		mediaId: number,
+		incomingRevision: Date | null,
+	) {
+		if (!mediaRevisions.has(mediaId)) return true;
+
+		const currentRevision = mediaRevisions.get(mediaId) ?? null;
+		if (currentRevision == null) return true;
+		if (incomingRevision == null) return false;
+		return incomingRevision.getTime() >= currentRevision.getTime();
+	}
+
+	function observeRevision(mediaId: number, incomingRevision: Date | null) {
+		if (!mediaRevisions.has(mediaId)) {
+			mediaRevisions.set(mediaId, incomingRevision);
+			return;
+		}
+
+		const currentRevision = mediaRevisions.get(mediaId) ?? null;
+		if (
+			currentRevision == null ||
+			(incomingRevision != null &&
+				incomingRevision.getTime() > currentRevision.getTime())
+		) {
+			mediaRevisions.set(mediaId, incomingRevision);
+		}
+	}
+
+	function isObservedRevision(mediaId: number, revision: Date | null) {
+		if (!mediaRevisions.has(mediaId)) return false;
+		const observedRevision = mediaRevisions.get(mediaId) ?? null;
+		if (observedRevision == null || revision == null) {
+			return observedRevision == null && revision == null;
+		}
+		return observedRevision.getTime() === revision.getTime();
+	}
+
 	async function loadWindow<TWindow extends ServerTranscriptWindow>(
 		request: TranscriptCacheWindowRequest<TWindow>,
 		generation: number,
@@ -129,7 +173,15 @@ export function createTranscriptCacheController(
 			}),
 		);
 		if (!isCurrent(request.mediaId, generation)) return;
-		if (cachedWindows) request.onCachedWindows(cachedWindows);
+		if (cachedWindows) {
+			for (const cachedWindow of cachedWindows) {
+				observeRevision(
+					request.mediaId,
+					cachedWindow.transcriptUpdatedAt ?? null,
+				);
+			}
+			request.onCachedWindows(cachedWindows);
+		}
 
 		let serverWindow: TWindow;
 		try {
@@ -142,9 +194,20 @@ export function createTranscriptCacheController(
 		}
 
 		if (!isCurrent(request.mediaId, generation)) return;
+		const incomingRevision = serverWindow.transcriptUpdatedAt ?? null;
+		if (!canAcceptRevision(request.mediaId, incomingRevision)) return;
+		observeRevision(request.mediaId, incomingRevision);
+
+		const persisted = await runCacheOperation((cache) =>
+			cache.upsertServerWindow(serverWindow),
+		);
+		if (
+			!isCurrent(request.mediaId, generation) ||
+			persisted === false ||
+			!isObservedRevision(request.mediaId, incomingRevision)
+		)
+			return;
 		request.onServerWindow(serverWindow);
-		if (!isCurrent(request.mediaId, generation)) return;
-		await runCacheOperation((cache) => cache.upsertServerWindow(serverWindow));
 	}
 
 	return {
@@ -165,9 +228,11 @@ export function createTranscriptCacheController(
 			return promise;
 		},
 
+		cancelMediaRequests,
+
 		async invalidateMediaTranscript(mediaId: number) {
-			mediaGenerations.set(mediaId, generationFor(mediaId) + 1);
-			discardPendingMediaRequests(mediaId);
+			cancelMediaRequests(mediaId);
+			mediaRevisions.delete(mediaId);
 			await runCacheOperation((cache) =>
 				cache.invalidateMediaTranscript(mediaId),
 			);

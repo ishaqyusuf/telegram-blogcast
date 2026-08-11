@@ -45,7 +45,7 @@ const serverWindow: ServerTranscriptWindow = {
 function createFakeCache(overrides: Partial<TranscriptCacheRepository> = {}) {
 	return {
 		readOverlappingWindows: async () => [cachedWindow],
-		upsertServerWindow: async () => undefined,
+		upsertServerWindow: async () => true,
 		invalidateMediaTranscript: async () => undefined,
 		...overrides,
 	} satisfies TranscriptCacheRepository;
@@ -87,10 +87,169 @@ describe("transcript cache controller", () => {
 			"cache",
 			"render-cache",
 			"server",
-			"render-server",
 			"persist",
+			"render-server",
 		]);
 		expect(persistedWindow).toBe(serverWindow);
+	});
+
+	test("persists and renders only the newest out-of-order response", async () => {
+		const persisted: ServerTranscriptWindow[] = [];
+		const rendered: string[] = [];
+		let resolveOlder!: (window: ServerTranscriptWindow) => void;
+		let resolveNewer!: (window: ServerTranscriptWindow) => void;
+		const olderResponse = new Promise<ServerTranscriptWindow>((resolve) => {
+			resolveOlder = resolve;
+		});
+		const newerResponse = new Promise<ServerTranscriptWindow>((resolve) => {
+			resolveNewer = resolve;
+		});
+		const olderWindow = {
+			...serverWindow,
+			windowStartSec: 0,
+			windowEndSec: 60,
+			transcriptUpdatedAt: new Date("2026-08-11T08:00:00.000Z"),
+		};
+		const newerWindow = {
+			...serverWindow,
+			windowStartSec: 60,
+			windowEndSec: 120,
+			transcriptUpdatedAt: new Date("2026-08-11T09:00:00.000Z"),
+		};
+		const cache = createFakeCache({
+			readOverlappingWindows: async () => [],
+			upsertServerWindow: async (window) => {
+				persisted.push(window);
+				return true;
+			},
+		});
+		const controller = createTranscriptCacheController({
+			getCache: async () => cache,
+			recoverCache: async () => cache,
+		});
+		const request = (
+			window: ServerTranscriptWindow,
+			response: Promise<ServerTranscriptWindow>,
+		) =>
+			controller.requestWindow({
+				mediaId: 42,
+				startSec: window.windowStartSec,
+				endSec: window.windowEndSec,
+				fetchServer: async () => response,
+				onCachedWindows: () => undefined,
+				onServerWindow: () => rendered.push(window.windowStartSec.toString()),
+				onServerError: () => undefined,
+			});
+
+		const olderRequest = request(olderWindow, olderResponse);
+		const newerRequest = request(newerWindow, newerResponse);
+		resolveNewer(newerWindow);
+		await newerRequest;
+		resolveOlder(olderWindow);
+		await olderRequest;
+
+		expect(rendered).toEqual(["60"]);
+		expect(persisted).toEqual([newerWindow]);
+	});
+
+	test("does not render an older response that loses during persistence", async () => {
+		let resolveOldPersist!: () => void;
+		let signalOldPersistStarted!: () => void;
+		const oldPersistStarted = new Promise<void>((resolve) => {
+			signalOldPersistStarted = resolve;
+		});
+		const oldPersist = new Promise<void>((resolve) => {
+			resolveOldPersist = resolve;
+		});
+		const oldWindow = {
+			...serverWindow,
+			windowStartSec: 0,
+			windowEndSec: 60,
+			transcriptUpdatedAt: new Date("2026-08-11T08:00:00.000Z"),
+		};
+		const newerWindow = {
+			...serverWindow,
+			windowStartSec: 60,
+			windowEndSec: 120,
+			transcriptUpdatedAt: new Date("2026-08-11T09:00:00.000Z"),
+		};
+		const rendered: string[] = [];
+		const persisted: number[] = [];
+		const cache = createFakeCache({
+			readOverlappingWindows: async () => [],
+			upsertServerWindow: async (window) => {
+				if (window.windowStartSec === oldWindow.windowStartSec) {
+					signalOldPersistStarted();
+					await oldPersist;
+				}
+				persisted.push(window.windowStartSec);
+				return true;
+			},
+		});
+		const controller = createTranscriptCacheController({
+			getCache: async () => cache,
+			recoverCache: async () => cache,
+		});
+		const oldRequest = controller.requestWindow({
+			mediaId: 42,
+			startSec: 0,
+			endSec: 60,
+			fetchServer: async () => oldWindow,
+			onCachedWindows: () => undefined,
+			onServerWindow: () => rendered.push("old"),
+			onServerError: () => undefined,
+		});
+
+		await oldPersistStarted;
+		const newerRequest = controller.requestWindow({
+			mediaId: 42,
+			startSec: 60,
+			endSec: 120,
+			fetchServer: async () => newerWindow,
+			onCachedWindows: () => undefined,
+			onServerWindow: () => rendered.push("new"),
+			onServerError: () => undefined,
+		});
+		await newerRequest;
+		resolveOldPersist();
+		await oldRequest;
+
+		expect(rendered).toEqual(["new"]);
+		expect(persisted).toEqual([60, 0]);
+	});
+
+	test("does not let an unversioned response erase a timestamped cache", async () => {
+		let persisted = 0;
+		let renderedServer = 0;
+		const cache = createFakeCache({
+			upsertServerWindow: async () => {
+				persisted += 1;
+				return true;
+			},
+		});
+		const controller = createTranscriptCacheController({
+			getCache: async () => cache,
+			recoverCache: async () => cache,
+		});
+
+		await controller.requestWindow({
+			mediaId: 42,
+			startSec: 0,
+			endSec: 60,
+			fetchServer: async () => ({
+				...serverWindow,
+				transcriptUpdatedAt: null,
+				segments: [{ ...serverWindow.segments[0], text: "unversioned" }],
+			}),
+			onCachedWindows: () => undefined,
+			onServerWindow: () => {
+				renderedServer += 1;
+			},
+			onServerError: () => undefined,
+		});
+
+		expect(persisted).toBe(0);
+		expect(renderedServer).toBe(0);
 	});
 
 	test("deduplicates concurrent refreshes for the same window", async () => {
@@ -173,6 +332,66 @@ describe("transcript cache controller", () => {
 		expect(events).toEqual(["cache"]);
 		expect(persisted).toBe(0);
 		expect(invalidated).toBe(1);
+	});
+
+	test("cancels callbacks for a navigated-away media without invalidating its cache", async () => {
+		let resolveMediaA!: (window: ServerTranscriptWindow) => void;
+		let mediaAStarted!: () => void;
+		const mediaAStartedPromise = new Promise<void>((resolve) => {
+			mediaAStarted = resolve;
+		});
+		const mediaAResponse = new Promise<ServerTranscriptWindow>((resolve) => {
+			resolveMediaA = resolve;
+		});
+		const mediaAWindow = { ...serverWindow, mediaId: 1 };
+		const mediaBWindow = { ...serverWindow, mediaId: 2 };
+		const events: string[] = [];
+		const persistedMediaIds: number[] = [];
+		let invalidated = 0;
+		const cache = createFakeCache({
+			readOverlappingWindows: async () => [],
+			upsertServerWindow: async (window) => {
+				persistedMediaIds.push(window.mediaId);
+				return true;
+			},
+			invalidateMediaTranscript: async () => {
+				invalidated += 1;
+			},
+		});
+		const controller = createTranscriptCacheController({
+			getCache: async () => cache,
+			recoverCache: async () => cache,
+		});
+		const mediaARequest = controller.requestWindow({
+			mediaId: 1,
+			startSec: 0,
+			endSec: 60,
+			fetchServer: async () => {
+				mediaAStarted();
+				return mediaAResponse;
+			},
+			onCachedWindows: () => events.push("A-cache"),
+			onServerWindow: () => events.push("A-server"),
+			onServerError: () => events.push("A-error"),
+		});
+
+		await mediaAStartedPromise;
+		controller.cancelMediaRequests(1);
+		await controller.requestWindow({
+			mediaId: 2,
+			startSec: 0,
+			endSec: 60,
+			fetchServer: async () => mediaBWindow,
+			onCachedWindows: () => events.push("B-cache"),
+			onServerWindow: () => events.push("B-server"),
+			onServerError: () => events.push("B-error"),
+		});
+		resolveMediaA(mediaAWindow);
+		await mediaARequest;
+
+		expect(events).toEqual(["A-cache", "B-cache", "B-server"]);
+		expect(persistedMediaIds).toEqual([2]);
+		expect(invalidated).toBe(0);
 	});
 
 	test("keeps cached content usable when the server refresh fails", async () => {
