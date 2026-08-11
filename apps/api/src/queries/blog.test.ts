@@ -50,7 +50,7 @@ describe("transcript window helpers", () => {
             findUnique: async () => null,
           },
         },
-      } as any,
+      } as unknown as Parameters<typeof getTranscriptWindow>[0],
       {
         mediaId: 123,
         windowStartSec: 0,
@@ -62,6 +62,39 @@ describe("transcript window helpers", () => {
     expect(result.nextWindowStartSec).toBeNull();
     expect(result.hasPrevious).toBe(false);
     expect(result.previousWindowStartSec).toBeNull();
+    expect(result.transcriptUpdatedAt).toBeNull();
     expect(result.segments).toEqual([]);
+  });
+
+  test("returns the saved transcript updatedAt as a window freshness token", async () => {
+    const updatedAt = new Date("2026-08-11T12:34:56.000Z");
+    const result = await getTranscriptWindow(
+      {
+        db: {
+          transcript: {
+            findUnique: async () => ({
+              id: 456,
+              status: "done",
+              updatedAt,
+              media: { file: { duration: 240 } },
+              segments: [],
+            }),
+          },
+          transcriptSegment: {
+            count: async () => 4,
+            findFirst: async () => ({ endSec: 180 }),
+          },
+        },
+      } as unknown as Parameters<typeof getTranscriptWindow>[0],
+      {
+        mediaId: 456,
+        windowStartSec: 60,
+        windowDurationSec: 60,
+      },
+    );
+
+    expect(result.transcriptUpdatedAt).toBe(updatedAt);
+    expect(result.transcriptId).toBe(456);
+    expect(result.segmentCount).toBe(4);
   });
 });

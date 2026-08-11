@@ -133,6 +133,23 @@ export const transcriptWindowSchema = z.object({
   windowDurationSec: z.number().min(15).max(300).default(60),
 });
 export type TranscriptWindowSchema = z.infer<typeof transcriptWindowSchema>;
+export type TranscriptWindowResult = {
+  mediaId: number;
+  transcriptId: number | null;
+  status: string | null;
+  transcriptUpdatedAt: Date | null;
+  windowDurationSec: number;
+  windowStartSec: number;
+  windowEndSec: number;
+  previousWindowStartSec: number | null;
+  nextWindowStartSec: number | null;
+  hasPrevious: boolean;
+  hasNext: boolean;
+  durationSec: number | null;
+  segmentCount: number;
+  maxEndSec: number;
+  segments: ReturnType<typeof normalizeDbSegment>[];
+};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1430,7 +1447,7 @@ export async function getOrTranscribeTranscriptChunk(
 export async function getTranscriptWindow(
   ctx: TRPCContext,
   input: TranscriptWindowSchema,
-) {
+): Promise<TranscriptWindowResult> {
   const db = ctx.db as any;
   const { windowDurationSec, windowStartSec, windowEndSec } =
     resolveTranscriptWindowRange(input);
@@ -1440,6 +1457,7 @@ export async function getTranscriptWindow(
     select: {
       id: true,
       status: true,
+      updatedAt: true,
       media: {
         select: {
           file: { select: { duration: true } },
@@ -1461,6 +1479,7 @@ export async function getTranscriptWindow(
       mediaId: input.mediaId,
       transcriptId: null,
       status: null,
+      transcriptUpdatedAt: null,
       windowDurationSec,
       windowStartSec,
       windowEndSec,
@@ -1500,6 +1519,7 @@ export async function getTranscriptWindow(
     mediaId: input.mediaId,
     transcriptId: transcript.id,
     status: transcript.status,
+    transcriptUpdatedAt: transcript.updatedAt ?? null,
     windowDurationSec,
     windowStartSec,
     windowEndSec,
