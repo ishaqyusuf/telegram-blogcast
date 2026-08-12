@@ -1,6 +1,6 @@
 import type { ExpoConfig } from "expo/config";
 
-export const UPDATE_VERSION = "2026.08.11";
+export const UPDATE_VERSION = "2026.08.12";
 
 const appVariant =
 	process.env.APP_VARIANT ??
