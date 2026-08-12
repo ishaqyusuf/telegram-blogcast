@@ -82,7 +82,10 @@ function LinkifiedText({
                 <Text
                   key={`seg-${lineIdx}-${segmentIdx}`}
                   accessibilityRole="link"
-                  onPress={() => Linking.openURL(href)}
+                  onPress={(event) => {
+                    event.stopPropagation();
+                    void Linking.openURL(href);
+                  }}
                   style={{
                     color: linkColor,
                     fontWeight: "700",
@@ -105,6 +108,66 @@ function LinkifiedText({
   );
 }
 
+function shouldOfferTextDisclosure(content: string, collapsedLines: number) {
+  return (
+    content.split("\n").length > collapsedLines ||
+    content.length > collapsedLines * 45
+  );
+}
+
+function ExpandableLinkifiedText({
+  content,
+  className,
+  color,
+  linkColor,
+  collapsedLines,
+}: {
+  content: string;
+  className: string;
+  color?: string;
+  linkColor: string;
+  collapsedLines: number;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const canExpand = shouldOfferTextDisclosure(content, collapsedLines);
+
+  return (
+    <View>
+      <LinkifiedText
+        content={content}
+        className={className}
+        color={color}
+        linkColor={linkColor}
+        numberOfLines={expanded ? 0 : collapsedLines}
+      />
+      {canExpand ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={expanded ? "Show less text" : "Read full text"}
+          accessibilityState={{ expanded }}
+          className="min-h-11 self-start flex-row items-center gap-1 active:opacity-70"
+          onPress={(event) => {
+            event.stopPropagation();
+            setExpanded((value) => !value);
+          }}
+        >
+          <Text
+            className="text-sm font-extrabold text-primary"
+            style={{ color: linkColor }}
+          >
+            {expanded ? "Show less" : "Read more"}
+          </Text>
+          <Icon
+            name={expanded ? "ChevronUp" : "ChevronDown"}
+            size={16}
+            color={linkColor}
+          />
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
 function CardText({ post }: { post: BlogItem }) {
   const colors = useColors();
   const content =
@@ -115,12 +178,12 @@ function CardText({ post }: { post: BlogItem }) {
 
   return (
     <View className="mb-3">
-      <LinkifiedText
+      <ExpandableLinkifiedText
         content={content}
         className="text-[15px] leading-6 text-foreground"
         color={colors.foreground}
         linkColor={colors.primary}
-        numberOfLines={3}
+        collapsedLines={3}
       />
     </View>
   );
@@ -476,8 +539,8 @@ export function CardMedia({
   if (variant === "text+image") {
     return (
       <>
-        <CardImage post={post} />
         <CardText post={post} />
+        <CardImage post={post} />
       </>
     );
   }
@@ -494,7 +557,7 @@ export function CardMedia({
           borderTopColor: colors.border,
         }}
       >
-        <LinkifiedText
+        <ExpandableLinkifiedText
           content={
             getInlinePreviewText(post.content) ||
             getInlinePreviewText(post.caption) ||
@@ -503,6 +566,7 @@ export function CardMedia({
           className="text-lg leading-8 text-foreground"
           color={colors.foreground}
           linkColor={colors.primary}
+          collapsedLines={MAX_LINE}
         />
       </View>
     );

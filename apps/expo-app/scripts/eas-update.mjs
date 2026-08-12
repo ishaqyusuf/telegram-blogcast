@@ -17,6 +17,7 @@ function parseArgs(argv) {
     date: null,
     dryRun: false,
     skipPublish: false,
+    target: null,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -25,6 +26,11 @@ function parseArgs(argv) {
       args.dryRun = true;
     } else if (arg === "--skip-publish") {
       args.skipPublish = true;
+    } else if (arg === "--preview" || arg === "--prod") {
+      if (args.target) {
+        throw new Error("Choose exactly one of --preview or --prod.");
+      }
+      args.target = arg.slice(2);
     } else if (arg === "--current") {
       args.current = argv[index + 1];
       if (!args.current) throw new Error("Missing value for --current.");
@@ -34,6 +40,10 @@ function parseArgs(argv) {
       if (!args.date) throw new Error("Missing value for --date.");
       index += 1;
     }
+  }
+
+  if (!args.target) {
+    throw new Error("Choose exactly one of --preview or --prod.");
   }
 
   return args;
@@ -95,15 +105,17 @@ function run(command, args) {
   }
 }
 
-function publishUpdate(nextVersion) {
+function publishUpdate(nextVersion, target) {
+  const environment = target === "prod" ? "production" : "preview";
+
   run("eas", [
     "update",
     "-p",
     "android",
     "--channel",
-    "preview",
+    environment,
     "--environment",
-    "preview",
+    environment,
     "--message",
     `OTA update ${nextVersion}`,
   ]);
@@ -130,7 +142,7 @@ function main() {
   console.log(`UPDATE_VERSION ${currentVersion} -> ${nextVersion}`);
 
   if (!args.skipPublish) {
-    publishUpdate(nextVersion);
+    publishUpdate(nextVersion, args.target);
   }
 }
 

@@ -434,10 +434,14 @@ function EditAlbumModal({
       title="Edit album"
       keyboardBehavior="interactive"
       keyboardBlurBehavior="restore"
-      androidKeyboardInputMode="adjustResize"
+      androidKeyboardInputMode="adjustPan"
     >
-      <View
-        style={{
+      <KeyboardAwareScrollView
+        bottomOffset={ALBUM_DETAIL_KEYBOARD_OFFSET}
+        disableScrollOnKeyboardHide
+        keyboardDismissMode="interactive"
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{
           backgroundColor: colors.card,
           paddingHorizontal: 24,
           paddingBottom: 28,
@@ -546,7 +550,7 @@ function EditAlbumModal({
               </Text>
             </Pressable>
           </View>
-      </View>
+      </KeyboardAwareScrollView>
     </FloatingBottomSheet>
   );
 }

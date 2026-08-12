@@ -2,7 +2,14 @@ import { access, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-type Action = "eas-build:dev" | "eas-build:preview" | "update:preview";
+type Operation = "build" | "update";
+type Target = "dev" | "preview" | "prod";
+type Action =
+  | "build:dev"
+  | "build:preview"
+  | "build:prod"
+  | "update:preview"
+  | "update:prod";
 type CurrentIdentity = {
   email: string | null;
   username: string | null;
@@ -17,26 +24,22 @@ type EasAccount = {
 const REPO_DIR = path.join(import.meta.dir, "..");
 const APP_DIR = path.join(REPO_DIR, "apps", "expo-app");
 
-const ACTION_COMMANDS: Record<Action, string[]> = {
-  "eas-build:dev": [
-    "eas",
-    "build",
-    "--profile",
-    "development",
-    "--platform",
-    "android",
-  ],
-  "eas-build:preview": ["eas", "build", "-p", "android", "--profile", "preview"],
-  "update:preview": ["node", "./scripts/update-preview.mjs"],
+const TARGET_PROFILES: Record<Target, string> = {
+  dev: "development",
+  preview: "preview",
+  prod: "production",
 };
 
-const action = process.argv[2] as Action | undefined;
+const operation = process.argv[2] as Operation | undefined;
+const actionArgs = process.argv.slice(3);
 
-if (!action || !(action in ACTION_COMMANDS)) {
+if (!operation || !["build", "update"].includes(operation)) {
   console.error(getUsage());
   process.exit(1);
 }
 
+const target = resolveTarget(operation, actionArgs);
+const action = `${operation}:${target}` as Action;
 const env = await loadEnvFiles({ ...Bun.env }, [
   path.join(REPO_DIR, ".env"),
   path.join(REPO_DIR, ".env.local"),
@@ -45,7 +48,8 @@ const env = await loadEnvFiles({ ...Bun.env }, [
 ]);
 delete env.EXPO_TOKEN;
 
-const account = resolveAccount(action, env, process.argv.slice(3));
+const account = resolveAccount(action, env, actionArgs);
+const forwardedArgs = getForwardedArgs(actionArgs);
 
 const desiredIdentifiers = new Set(
   [account.login.toLowerCase(), account.username?.toLowerCase()].filter(Boolean),
@@ -76,7 +80,7 @@ if (
   console.log(`Authenticated EAS session as ${session.username}.`);
 }
 
-await runOrExit(ACTION_COMMANDS[action], {
+await runOrExit([...getActionCommand(operation, target), ...forwardedArgs], {
   cwd: APP_DIR,
   env,
   stdio: "inherit",
@@ -89,10 +93,20 @@ function resolveAccount(
 ): EasAccount {
   const selectedAccount = getAccountSelector(args, sourceEnv);
   const actionPrefix = toEnvKey(actionValue);
+  const target = actionValue.split(":")[1] as Target;
+  const targetPrefix = toEnvKey(target);
+  const profilePrefix = toEnvKey(TARGET_PROFILES[target]);
   const selectedPrefix = selectedAccount ? toEnvKey(selectedAccount) : null;
   const prefixes = selectedPrefix
     ? [`EAS_${selectedPrefix}`]
-    : [`EAS_${actionPrefix}`, "EAS_PREVIEW", "EAS"];
+    : [
+        ...new Set([
+          `EAS_${actionPrefix}`,
+          `EAS_${targetPrefix}`,
+          `EAS_${profilePrefix}`,
+          "EAS",
+        ]),
+      ];
 
   const login =
     getFirstEnv(
@@ -114,7 +128,7 @@ function resolveAccount(
         "",
         "Set EAS_EMAIL/EAS_PASSWORD, or choose a named account with:",
         "  EAS_ACCOUNT=work EAS_WORK_EMAIL=... EAS_WORK_PASSWORD=...",
-        "  bun run eas-build:preview -- --account work",
+        `  bun run eas:${actionValue.split(":")[0]} --${target} --account work`,
       ].join("\n"),
     );
     process.exit(1);
@@ -126,6 +140,43 @@ function resolveAccount(
     password,
     username,
   };
+}
+
+function resolveTarget(operation: Operation, args: string[]): Target {
+  const selectedFlags = args.filter((arg) =>
+    ["--dev", "--preview", "--prod"].includes(arg),
+  );
+
+  if (selectedFlags.length !== 1) {
+    console.error("Choose exactly one EAS environment flag.\n");
+    console.error(getUsage());
+    process.exit(1);
+  }
+
+  const target = selectedFlags[0].slice(2) as Target;
+
+  if (operation === "update" && target === "dev") {
+    console.error("eas:update supports only --preview or --prod.\n");
+    console.error(getUsage());
+    process.exit(1);
+  }
+
+  return target;
+}
+
+function getActionCommand(operation: Operation, target: Target): string[] {
+  if (operation === "build") {
+    return [
+      "eas",
+      "build",
+      "--platform",
+      "android",
+      "--profile",
+      TARGET_PROFILES[target],
+    ];
+  }
+
+  return ["node", "./scripts/eas-update.mjs", `--${target}`];
 }
 
 function getAccountSelector(
@@ -146,6 +197,31 @@ function getAccountSelector(
   }
 
   return sourceEnv.EAS_ACCOUNT?.trim() || null;
+}
+
+function getForwardedArgs(args: string[]): string[] {
+  const forwardedArgs: string[] = [];
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+
+    if (arg === "--account" || arg === "-a") {
+      index += 1;
+      continue;
+    }
+
+    if (arg.startsWith("--account=")) {
+      continue;
+    }
+
+    if (["--dev", "--preview", "--prod"].includes(arg)) {
+      continue;
+    }
+
+    forwardedArgs.push(arg);
+  }
+
+  return forwardedArgs;
 }
 
 function getFirstEnv(
@@ -170,7 +246,9 @@ function toEnvKey(value: string): string {
 
 function getUsage(): string {
   return [
-    "Usage: bun ./scripts/eas-account-runner.ts <eas-build:dev|eas-build:preview|update:preview> [--account <name>]",
+    "Usage:",
+    "  bun run eas:build <--dev|--preview|--prod> [--account <name>]",
+    "  bun run eas:update <--preview|--prod> [--account <name>]",
     "",
     "Default credentials:",
     "  EAS_EMAIL or EAS_LOGIN",

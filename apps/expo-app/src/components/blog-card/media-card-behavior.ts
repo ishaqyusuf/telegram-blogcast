@@ -1,6 +1,16 @@
+import { isExplicitFacebookVideoUrl } from "@acme/blog/facebook-media";
+
 type BlogCardTarget = {
   id: number;
   type?: string | null;
+  sourceUrl?: string | null;
+  content?: string | null;
+  caption?: string | null;
+  externalMedia?: { externalUrl?: string | null } | null;
+  video?: {
+    telegramFileId?: string | number | null;
+    url?: string | null;
+  } | null;
 };
 
 type BlogCardImageSource = {
@@ -21,15 +31,36 @@ type BlogCardImageSource = {
 };
 
 export function getBlogHref(post: BlogCardTarget) {
-  if (post.type === "text") return `/blog-view-text/${post.id}`;
-  if (post.type === "audio") return `/blog-view-2/${post.id}`;
-  if (post.type === "video") {
+  const presentationType = getBlogPresentationType(post);
+  if (presentationType === "text") return `/blog-view-text/${post.id}`;
+  if (presentationType === "audio") return `/blog-view-2/${post.id}`;
+  if (presentationType === "video") {
     return `/blog-view/${post.id}?contentType=video`;
   }
-  if (post.type === "pdf") {
+  if (presentationType === "pdf") {
     return `/blog-view/${post.id}?contentType=pdf`;
   }
   return `/blog-view/${post.id}`;
+}
+
+export function getBlogPresentationType(post: BlogCardTarget) {
+  if (post.type !== "video") return post.type;
+
+  const isExternalPreview = Boolean(post.externalMedia?.externalUrl);
+  const hasPlayableVideo = Boolean(
+    post.video?.telegramFileId || post.video?.url,
+  );
+  const hasReadableText = Boolean(post.content?.trim() || post.caption?.trim());
+  if (
+    isExternalPreview &&
+    !hasPlayableVideo &&
+    hasReadableText &&
+    !isExplicitFacebookVideoUrl(post.sourceUrl)
+  ) {
+    return "text";
+  }
+
+  return post.type;
 }
 
 export function getPrimaryImageSource(post: BlogCardImageSource) {

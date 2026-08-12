@@ -91,6 +91,7 @@ import { getTranscriptionBadgeState } from "@/lib/transcription-status";
 import { getNextPlaybackRate } from "@/services/audio-player/notification-controls";
 import { useAppSettingsStore } from "@/store/app-settings-store";
 import { useAudioStore } from "@/store/audio-store";
+import { useGlobalAudioBarStore } from "@/store/global-audio-bar-store";
 import { useRecentlyViewedStore } from "@/store/recently-viewed-store";
 import { getLargeMediaExternalMedia } from "@acme/blog/facebook-media";
 import type { RouterInputs } from "@api/trpc/routers/_app";
@@ -2207,6 +2208,16 @@ export default function AudioBlogScreen() {
 		null,
 	);
 	const [viewedPlaybackPending, setViewedPlaybackPending] = useState(false);
+	const setAudioDetailPlayerVisible = useGlobalAudioBarStore(
+		(state) => state.setAudioDetailPlayerVisible,
+	);
+
+	useFocusEffect(
+		useCallback(() => {
+			setAudioDetailPlayerVisible(showFloatingControls && !showComments);
+			return () => setAudioDetailPlayerVisible(false);
+		}, [setAudioDetailPlayerVisible, showComments, showFloatingControls]),
+	);
 
 	const { data: blog } = useQuery(_trpc.blog.getBlog.queryOptions({ id }));
 
@@ -3922,7 +3933,7 @@ export default function AudioBlogScreen() {
 				/>
 			)}
 
-			{!showComments && (
+			{!showComments && !sound && (
 				<FloatingPlayerWidget
 					visible={showFloatingControls}
 					isActiveAudio={isViewedAudioActive}

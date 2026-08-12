@@ -20,6 +20,7 @@ import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { isHttpTranscriberUrl } from "@/lib/transcribe";
 import { getTranscriptionBadgeState } from "@/lib/transcription-status";
 import { useGlobalAudioBarStore } from "@/store/global-audio-bar-store";
+import { isArabicLine } from "@acme/blog";
 import { getLargeMediaExternalMedia } from "@acme/blog/facebook-media";
 import { type AVPlaybackStatus, ResizeMode, Video } from "expo-av";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -32,6 +33,7 @@ import {
 	Linking,
 	Modal,
 	Platform,
+	ScrollView,
 	Share,
 	Text,
 	TouchableWithoutFeedback,
@@ -263,6 +265,85 @@ function ActionButton({
 	);
 }
 
+function VideoCaptionReader({
+	visible,
+	title,
+	caption,
+	onClose,
+}: {
+	visible: boolean;
+	title: string;
+	caption: string;
+	onClose: () => void;
+}) {
+	const colors = useColors();
+	const insets = useSafeAreaInsets();
+	const directionStyle = isArabicLine(caption)
+		? ({ textAlign: "right", writingDirection: "rtl" } as const)
+		: ({ textAlign: "left", writingDirection: "ltr" } as const);
+
+	return (
+		<Modal
+			animationType="slide"
+			onRequestClose={onClose}
+			presentationStyle={Platform.OS === "ios" ? "formSheet" : "fullScreen"}
+			visible={visible}
+		>
+			<View
+				className="flex-1 bg-background"
+				style={{
+					backgroundColor: colors.background,
+					paddingTop: Math.max(insets.top, 12),
+					paddingBottom: insets.bottom,
+				}}
+			>
+				<View
+					className="flex-row items-center gap-3 border-b border-border px-5 pb-3"
+					style={{ borderBottomColor: colors.border }}
+				>
+					<View className="min-w-0 flex-1">
+						<Text
+							className="text-lg font-extrabold text-foreground"
+							style={{ color: colors.foreground }}
+						>
+							Caption
+						</Text>
+						<Text
+							className="mt-0.5 text-xs font-semibold text-muted-foreground"
+							numberOfLines={1}
+							style={{ color: colors.mutedForeground }}
+						>
+							{title}
+						</Text>
+					</View>
+					<Pressable
+						accessibilityLabel="Close caption reader"
+						className="size-11 items-center justify-center rounded-full bg-card"
+						onPress={onClose}
+						style={{ backgroundColor: colors.card }}
+					>
+						<Icon name="X" size={19} color={colors.foreground} />
+					</Pressable>
+				</View>
+
+				<ScrollView
+					className="flex-1"
+					contentInsetAdjustmentBehavior="automatic"
+					contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
+				>
+					<Text
+						selectable
+						className="text-[18px] font-medium leading-8 text-foreground"
+						style={{ color: colors.foreground, ...directionStyle }}
+					>
+						{caption}
+					</Text>
+				</ScrollView>
+			</View>
+		</Modal>
+	);
+}
+
 export default function VideoBlogScreen() {
 	const {
 		activeGatewayUrl,
@@ -278,6 +359,7 @@ export default function VideoBlogScreen() {
 	const videoRef = useRef<Video>(null);
 	const [status, setStatus] = useState<AVPlaybackStatus | null>(null);
 	const [commentsOpen, setCommentsOpen] = useState(false);
+	const [captionReaderOpen, setCaptionReaderOpen] = useState(false);
 	const [transcriptionModalOpen, setTranscriptionModalOpen] = useState(false);
 	const [isQueueingTranscription, setIsQueueingTranscription] = useState(false);
 	const [controlsVisible, setControlsVisible] = useState(true);
@@ -938,7 +1020,7 @@ export default function VideoBlogScreen() {
 				</View>
 			) : null}
 
-			{cachedVideoUri && controlsVisible ? (
+			{controlsVisible ? (
 				<View
 					style={{
 						position: "absolute",
@@ -998,12 +1080,25 @@ export default function VideoBlogScreen() {
 							{title}
 						</Text>
 						{caption ? (
-							<Text
-								className="mt-1 text-[13px] font-medium leading-5 text-white/75"
-								numberOfLines={1}
+							<Pressable
+								accessibilityLabel="Read full caption"
+								accessibilityRole="button"
+								className="mt-1 min-h-11 justify-center rounded-xl px-1 active:bg-white/10"
+								onPress={() => setCaptionReaderOpen(true)}
 							>
-								{caption}
-							</Text>
+								<Text
+									className="text-[13px] font-medium leading-5 text-white/75"
+									numberOfLines={2}
+								>
+									{caption}
+								</Text>
+								<View className="mt-1 flex-row items-center gap-1 self-start">
+									<Icon name="FileText" size={14} color={colors.primary} />
+									<Text className="text-xs font-extrabold text-primary">
+										Read caption
+									</Text>
+								</View>
+							</Pressable>
 						) : null}
 					</View>
 				</View>
@@ -1126,6 +1221,14 @@ export default function VideoBlogScreen() {
 				onClose={() => setCommentsOpen(false)}
 				fallbackCount={commentCount}
 			/>
+			{caption ? (
+				<VideoCaptionReader
+					visible={captionReaderOpen}
+					title={title}
+					caption={caption}
+					onClose={() => setCaptionReaderOpen(false)}
+				/>
+			) : null}
 			<TranscriptionRequestModal
 				visible={transcriptionModalOpen}
 				mediaKind="video"

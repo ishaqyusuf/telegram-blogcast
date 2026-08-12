@@ -169,6 +169,9 @@ export function GlobalAudioBar() {
   const unloadAudio = useAudioStore((s) => s.unloadAudio);
   const hidden = useGlobalAudioBarStore((s) => s.hidden);
   const scrollHidden = useGlobalAudioBarStore((s) => s.scrollHidden);
+  const audioDetailPlayerVisible = useGlobalAudioBarStore(
+    (s) => s.audioDetailPlayerVisible,
+  );
 
   // ── Sleep timer countdown + enforcement ────────────────────────────────────
   const [sleepRemaining, setSleepRemaining] = useState<number | null>(null);
@@ -233,14 +236,16 @@ export function GlobalAudioBar() {
     outputRange: ["0deg", "360deg"],
   });
 
-  const visible = !(
-    hidden ||
-    scrollHidden ||
-    !sound ||
-    pathname.includes("blog-view-2")
-  );
+  const audioDetailMatch = pathname.match(/^\/blog-view-2\/([^/]+)/);
+  const viewedAudioId = audioDetailMatch?.[1] ?? null;
+  const isAudioDetailScreen = viewedAudioId !== null;
+  const visible =
+    !hidden &&
+    Boolean(sound) &&
+    (isAudioDetailScreen ? audioDetailPlayerVisible : !scrollHidden);
   const title = getAudioDisplayTitle(blog, "Now Playing");
   const blogId = blog?.id;
+  const showTitle = !viewedAudioId || String(blogId) !== viewedAudioId;
   const progress = duration > 0 ? position / duration : 0;
   const albumName = (blog?.audio as any)?.albumName as string | undefined;
   const albumTrackIndex = (blog?.audio as any)?.albumTrackIndex as
@@ -340,21 +345,23 @@ export function GlobalAudioBar() {
               onPress={() => router.push(`/blog-view-2/${blogId}` as any)}
               style={{ flex: 1, minWidth: 86 }}
             >
-              <MarqueeText
-                text={title}
-                style={{
-                  fontSize: 13,
-                  fontWeight: "700",
-                  color: playerText,
-                }}
-              />
+              {showTitle ? (
+                <MarqueeText
+                  text={title}
+                  style={{
+                    fontSize: 13,
+                    fontWeight: "700",
+                    color: playerText,
+                  }}
+                />
+              ) : null}
               <Text
                 numberOfLines={1}
                 ellipsizeMode="clip"
                 style={{
                   fontSize: 11,
                   color: sleepRemaining != null ? "#fbbf24" : playerMuted,
-                  marginTop: 2,
+                  marginTop: showTitle ? 2 : 0,
                   fontVariant: ["tabular-nums"],
                 }}
               >

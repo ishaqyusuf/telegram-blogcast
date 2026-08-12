@@ -468,13 +468,22 @@ export function facebookSavedPageSnapshot() {
 				const url = getUrl(anchor.href);
 				return Boolean(
 					url &&
-						(/^\/reel\/[^/]+\/?/.test(url.pathname) ||
-							url.pathname.includes("/posts/") ||
-							url.pathname.includes("/videos/") ||
+						(url.pathname.includes("/posts/") ||
 							url.searchParams.get("story_fbid") ||
 							url.searchParams.get("post_id")),
 				);
-			}) || primary;
+			}) ||
+			itemAnchors.find((anchor) => {
+				const url = getUrl(anchor.href);
+				return Boolean(
+					url &&
+						(/^\/reel\/[^/]+\/?/.test(url.pathname) ||
+							url.pathname.includes("/videos/") ||
+							(url.pathname === "/watch/" &&
+								Boolean(url.searchParams.get("v")))),
+				);
+			}) ||
+			primary;
 		const collectionAnchor = anchors.find((anchor) => {
 			const url = getUrl(anchor.href);
 			const text = normalize(anchor.innerText || anchor.textContent);

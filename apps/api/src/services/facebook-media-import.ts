@@ -2,6 +2,7 @@ import {
 	TELEGRAM_BOT_DOWNLOAD_LIMIT_BYTES,
 	buildTelegramMessageUrl,
 	getFacebookExternalMedia,
+	isExplicitFacebookVideoUrl,
 } from "@acme/blog/facebook-media";
 import type { Database, Prisma } from "@acme/db";
 import { randomUUID } from "node:crypto";
@@ -530,11 +531,25 @@ function mergeFacebookMediaDownloadMeta(
 	};
 }
 
-function inferBlogTypeFromBridge(result: BridgeProcessResponse) {
+function inferBlogTypeFromBridge(
+	result: BridgeProcessResponse,
+	sourceUrl?: string | null,
+) {
 	const mimeType = result.telegram?.file?.mimeType ?? result.mimeType ?? "";
 	const fileType = result.telegram?.file?.fileType || result.mediaType || "";
 	if (mimeType.startsWith("image/") || fileType === "image") return "image";
-	if (mimeType.startsWith("video/") || fileType === "video") return "video";
+	if (mimeType.startsWith("video/") || fileType === "video") {
+		const isPreviewOnlyExternalResult =
+			!result.telegram?.file &&
+			(result.accessMode === "external" || result.status === "external");
+		if (
+			isPreviewOnlyExternalResult &&
+			!isExplicitFacebookVideoUrl(sourceUrl)
+		) {
+			return "text";
+		}
+		return "video";
+	}
 	if (mimeType.startsWith("audio/") || fileType === "audio") return "audio";
 	return "text";
 }
@@ -775,7 +790,7 @@ async function persistBridgeResult(
 	result: BridgeProcessResponse,
 	baseUrl: string,
 ) {
-	const blogType = inferBlogTypeFromBridge(result);
+	const blogType = inferBlogTypeFromBridge(result, blog.sourceUrl);
 	const resultFile = result.telegram?.file ?? null;
 	const thumbnailFileData = result.telegram?.thumbnail ?? null;
 	const fileType =

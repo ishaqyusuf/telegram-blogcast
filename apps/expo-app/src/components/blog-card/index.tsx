@@ -31,6 +31,7 @@ import { TranscriptPreview } from "./transcript-preview";
 import type { BlogItem } from "./types";
 import {
 	getBlogHref,
+	getBlogPresentationType,
 	getInlinePreviewText,
 	getPrimaryImageUrl,
 	resolveVariant,
@@ -60,6 +61,7 @@ export function BlogCard({
 	const rowHeight = useSharedValue(0);
 	const deleteProgress = useSharedValue(0);
 	const variant = resolveVariant(post);
+	const presentationType = getBlogPresentationType(post as any);
 	const href = getBlogHref(post);
 	const fullSwipeThreshold = useMemo(
 		() => getSwipeDeleteThreshold(width),
@@ -74,7 +76,7 @@ export function BlogCard({
 		markViewed({
 			id: post.id,
 			title: getAudioDisplayTitle(post, "Untitled"),
-			type: post.type ?? "text",
+			type: presentationType ?? "text",
 			date: post.date ? post.date.toISOString() : null,
 			thumbnailUrl: getPrimaryImageUrl(post),
 		});
@@ -92,7 +94,7 @@ export function BlogCard({
 			pathname: "/blog-options/[blogId]",
 			params: {
 				blogId: String(post.id),
-				type: post.type ?? variant,
+				type: presentationType ?? variant,
 				title:
 					optionsTitle.length > 120
 						? `${optionsTitle.slice(0, 117)}...`
@@ -105,7 +107,7 @@ export function BlogCard({
 				audioTranscriptionJobStatus: audio?.transcriptionJobStatus ?? "",
 			},
 		} as any);
-	}, [post, router, variant]);
+	}, [post, presentationType, router, variant]);
 
 	const finishDelete = useCallback(async () => {
 		try {

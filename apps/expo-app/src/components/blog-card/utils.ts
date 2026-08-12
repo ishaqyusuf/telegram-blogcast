@@ -3,7 +3,10 @@ import { formatDate } from "@acme/utils/dayjs";
 import { buildTelegramFileProxy, getMediaFileUrl } from "@/lib/media-source";
 
 import type { BlogCardVariant, BlogItem } from "./types";
-import { getPrimaryImageSource } from "./media-card-behavior";
+import {
+  getBlogPresentationType,
+  getPrimaryImageSource,
+} from "./media-card-behavior";
 
 export { getBlogHref } from "./media-card-behavior";
 
@@ -92,15 +95,16 @@ export function getPrimaryDocumentUrl(post: BlogItem) {
 }
 
 export function resolveVariant(post: BlogItem): BlogCardVariant {
+  const presentationType = getBlogPresentationType(post as any);
   const externalMedia = (post as any).externalMedia;
   const hasAudio = !!(post.audio?.telegramFileId || (post.audio as any)?.url);
   const hasImage = !!getPrimaryImageUrl(post);
   const hasDocument = !!getPrimaryDocumentMedia(post);
   const hasText = !!(post.content?.trim() || post.caption?.trim());
 
-  if (post.type === "video") return "video";
-  if (post.type === "audio" && externalMedia?.externalUrl) return "audio";
-  if (post.type === "pdf" || hasDocument) return "pdf";
+  if (presentationType === "video") return "video";
+  if (presentationType === "audio" && externalMedia?.externalUrl) return "audio";
+  if (presentationType === "pdf" || hasDocument) return "pdf";
   if (hasAudio) return "audio";
   if (hasImage && hasText) return "text+image";
   if (hasImage) return "image";

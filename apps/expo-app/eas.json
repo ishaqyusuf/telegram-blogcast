@@ -29,7 +29,8 @@
         "EXPO_PUBLIC_TRPC_URL": "https://alghurobaa.vercel.app",
         "EXPO_PUBLIC_WEB_URL": "https://alghurobaa.vercel.app"
       },
-      "autoIncrement": true
+      "autoIncrement": true,
+      "channel": "production"
     }
   },
   "submit": {

@@ -32,6 +32,21 @@ function numberValue(value: unknown) {
 	return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+export function isExplicitFacebookVideoUrl(value?: string | null) {
+	if (!value) return false;
+
+	try {
+		const url = new URL(value);
+		return (
+			/^\/reel\//i.test(url.pathname) ||
+			/\/videos\//i.test(url.pathname) ||
+			(url.pathname === "/watch/" && Boolean(url.searchParams.get("v")))
+		);
+	} catch {
+		return false;
+	}
+}
+
 export function getFacebookMediaDownloadMeta(meta: unknown) {
 	return asRecord(asRecord(asRecord(meta).facebook).mediaDownload);
 }

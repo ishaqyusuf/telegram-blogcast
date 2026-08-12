@@ -19,7 +19,10 @@ import { ScrollToTopButton } from "@/components/ui/scroll-to-top-button";
 import { useScrollChrome } from "@/hooks/use-scroll-chrome";
 import { useColors } from "@/hooks/use-color";
 import { useTranslation } from "@/lib/i18n";
-import { getFacebookExternalMedia } from "@acme/blog/facebook-media";
+import {
+  getFacebookExternalMedia,
+  isExplicitFacebookVideoUrl,
+} from "@acme/blog/facebook-media";
 
 type SearchChannel = {
   id: number;
@@ -160,11 +163,46 @@ function mediaMatchesType(media: SearchMedia, type: "audio" | "image") {
   return mimeType.startsWith(`${type}/`);
 }
 
+function resolveSearchBlogType(
+  item: SearchResultItem,
+  hasExternalMedia: boolean,
+): BlogItem["type"] {
+  const type = (item.type || "text") as BlogItem["type"];
+  if (
+    type !== "video" ||
+    item.source !== "facebook" ||
+    !hasExternalMedia ||
+    !item.content?.trim()
+  ) {
+    return type;
+  }
+
+  const hasPlayableVideo = item.medias?.some((media) => {
+    const mimeType = (media.mimeType || media.file?.mimeType || "").toLowerCase();
+    const hasFile = Boolean(
+      media.file?.fileId ||
+        media.file?.blobDownloadUrl ||
+        media.file?.blobUrl ||
+        media.url,
+    );
+    return mimeType.startsWith("video/") && hasFile;
+  });
+
+  if (hasPlayableVideo || isExplicitFacebookVideoUrl(item.sourceUrl)) {
+    return type;
+  }
+
+  // Generic Facebook post URLs can be misidentified as videos by preview
+  // metadata. Without a playable video payload, preserve the saved post as
+  // readable text with its preview image.
+  return "text";
+}
+
 function toBlogCardPost(
   item: SearchResultItem,
   localAlbumMembership?: Map<number, { id: number; name: string }>,
 ): BlogItem {
-  const type = (item.type || "text") as BlogItem["type"];
+  const sourceType = (item.type || "text") as BlogItem["type"];
   const medias = item.medias ?? [];
   const audioMedia =
     medias.find((media) => mediaMatchesType(media, "audio")) ?? medias[0];
@@ -189,12 +227,13 @@ function toBlogCardPost(
     sourceUrl: item.sourceUrl,
     meta: item.meta,
     fileSize: audioFile?.fileSize,
-    mediaType: audioFile?.mimeType?.split("/")[0] ?? type,
+    mediaType: audioFile?.mimeType?.split("/")[0] ?? sourceType,
     mimeType: audioFile?.mimeType ?? audioMedia?.mimeType,
     fileName: audioFile?.fileName,
     duration: durationSec,
     thumbnailFileId: item.thumbnail?.file?.fileId,
   });
+  const type = resolveSearchBlogType(item, Boolean(externalMedia));
   const isFullyTranscribed =
     audioMedia?.transcript?.status === "done" &&
     Boolean(durationSec) &&

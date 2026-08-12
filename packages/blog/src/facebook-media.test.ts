@@ -5,9 +5,34 @@ import {
 	TELEGRAM_BOT_UPLOAD_LIMIT_BYTES,
 	getFacebookExternalMedia,
 	getLargeMediaExternalMedia,
+	isExplicitFacebookVideoUrl,
 } from "./facebook-media";
 
 describe("Facebook external media", () => {
+	test("recognizes explicit Facebook video routes", () => {
+		expect(
+			isExplicitFacebookVideoUrl("https://www.facebook.com/reel/123/"),
+		).toBe(true);
+		expect(
+			isExplicitFacebookVideoUrl(
+				"https://www.facebook.com/watch/?v=123&ref=saved",
+			),
+		).toBe(true);
+		expect(
+			isExplicitFacebookVideoUrl(
+				"https://www.facebook.com/example/videos/123/",
+			),
+		).toBe(true);
+	});
+
+	test("does not treat a generic Facebook post as an explicit video", () => {
+		expect(
+			isExplicitFacebookVideoUrl(
+				"https://www.facebook.com/permalink.php?story_fbid=123&id=456",
+			),
+		).toBe(false);
+	});
+
 	test("keeps media at the Bot API download limit in app", () => {
 		expect(
 			getFacebookExternalMedia({
