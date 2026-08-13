@@ -3,6 +3,7 @@ import { Icon } from "@/components/ui/icon";
 import { Pressable } from "@/components/ui/pressable";
 import { useColors } from "@/hooks/use-color";
 import { getMediaFileUrl } from "@/lib/media-source";
+import { loadOptionalPdfComponent } from "@/lib/optional-pdf-component";
 import { storePdf } from "@/lib/pdf-storage";
 import { useQuery } from "@/lib/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -15,7 +16,6 @@ import {
   Text,
   View,
 } from "react-native";
-import Pdf from "react-native-pdf";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 function isPdfMedia(media: any) {
@@ -48,6 +48,8 @@ export default function PdfBlogScreen() {
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageCount, setPageCount] = useState(0);
+  const pdfRenderer = useMemo(loadOptionalPdfComponent, []);
+  const Pdf = pdfRenderer.Component;
 
   const { data: blog, isLoading } = useQuery(
     _trpc.blog.getBlog.queryOptions(
@@ -75,7 +77,7 @@ export default function PdfBlogScreen() {
     documentMedia?.file?.fileName || `${documentTitle}.pdf`;
 
   useEffect(() => {
-    if (!documentUrl || !canQuery) return;
+    if (!Pdf || !documentUrl || !canQuery) return;
 
     let isActive = true;
     setPdfError(null);
@@ -109,7 +111,13 @@ export default function PdfBlogScreen() {
     return () => {
       isActive = false;
     };
-  }, [attempt, canQuery, documentFileName, documentUrl, id]);
+  }, [Pdf, attempt, canQuery, documentFileName, documentUrl, id]);
+
+  useEffect(() => {
+    if (!pdfRenderer.error) return;
+
+    console.warn("[pdf] native renderer unavailable", pdfRenderer.error);
+  }, [pdfRenderer.error]);
 
   return (
     <SafeAreaView
@@ -137,7 +145,7 @@ export default function PdfBlogScreen() {
         ) : null}
       </View>
 
-      {isLoading || (documentUrl && !localPdfUri && !pdfError) ? (
+      {isLoading || (Pdf && documentUrl && !localPdfUri && !pdfError) ? (
         <View className="flex-1 items-center justify-center px-8">
           <ActivityIndicator color={colors.primary} />
           <Text className="mt-3 text-sm text-muted-foreground">
@@ -146,7 +154,7 @@ export default function PdfBlogScreen() {
               : "Preparing PDF…"}
           </Text>
         </View>
-      ) : localPdfUri && !pdfError ? (
+      ) : Pdf && localPdfUri && !pdfError ? (
         <View style={styles.viewer}>
           <Pdf
             source={{ uri: localPdfUri, cache: false }}
@@ -203,24 +211,29 @@ export default function PdfBlogScreen() {
               <Text className="mt-4 text-center text-base font-bold text-foreground">
                 PDF could not be opened.
               </Text>
-              {pdfError ? (
+              {pdfError || !Pdf ? (
                 <Text className="mt-2 text-center text-sm leading-5 text-muted-foreground">
-                  {pdfError}
+                  {pdfError ??
+                    "This installed app version does not include PDF support. Install a newer app build and try again."}
                 </Text>
               ) : null}
-              <Pressable
-                className="mt-6 flex-row items-center gap-2 rounded-full bg-primary px-6 py-3 active:opacity-80"
-                onPress={() => setAttempt((value) => value + 1)}
-                accessibilityRole="button"
-                accessibilityLabel="Retry PDF download"
-              >
-                <Icon
-                  name="RotateCw"
-                  size={18}
-                  className="text-primary-foreground"
-                />
-                <Text className="font-bold text-primary-foreground">Retry</Text>
-              </Pressable>
+              {Pdf ? (
+                <Pressable
+                  className="mt-6 flex-row items-center gap-2 rounded-full bg-primary px-6 py-3 active:opacity-80"
+                  onPress={() => setAttempt((value) => value + 1)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Retry PDF download"
+                >
+                  <Icon
+                    name="RotateCw"
+                    size={18}
+                    className="text-primary-foreground"
+                  />
+                  <Text className="font-bold text-primary-foreground">
+                    Retry
+                  </Text>
+                </Pressable>
+              ) : null}
             </>
           ) : (
             <>
