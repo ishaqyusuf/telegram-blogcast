@@ -25,15 +25,33 @@ export const SELECTABLE_TRANSCRIPT_HTML = `<!doctype html>
 <script>
 (() => {
   const root = document.getElementById('root');
-  const state = { activeSegmentIndex: -1, activeWordIndex: -1, userScrolling: false, hydrating: false };
-  let lastMessage = ''; let lastMessageAt = 0; let edgeTimer = 0; let selectionTimer = 0;
+  const state = {
+    activeSegmentIndex: -1, activeWordIndex: -1, userScrolling: false,
+    hydrating: false, fontScale: 1, presentation: 'read', selectionEnabled: true,
+    longPressTriggered: false
+  };
+  let lastMessage = ''; let lastMessageAt = 0; let edgeTimer = 0;
+  let selectionTimer = 0; let longPressTimer = 0;
   const post = (message) => window.ReactNativeWebView &&
     window.ReactNativeWebView.postMessage(JSON.stringify(message));
   const segmentSelector = (index) => '[data-segment-index="' + index + '"]';
 
   function setFontScale(value) {
     const scale = Number.isFinite(value) ? Math.max(.8, value) : 1;
-    root.style.fontSize = (26 * scale) + 'px'; root.style.lineHeight = (40 * scale) + 'px';
+    state.fontScale = scale;
+    const fontSize = state.presentation === 'karaoke' ? 28 : 26;
+    root.style.fontSize = (fontSize * scale) + 'px'; root.style.lineHeight = (40 * scale) + 'px';
+  }
+
+  function applyPresentation(message) {
+    state.presentation = message.presentation === 'karaoke' ? 'karaoke' : 'read';
+    state.selectionEnabled = message.selectionEnabled !== false;
+    const padding = Number.isFinite(message.contentPaddingVertical)
+      ? Math.max(0, message.contentPaddingVertical) : 120;
+    root.style.padding = padding + 'px 24px';
+    root.style.userSelect = state.selectionEnabled ? 'text' : 'none';
+    root.style.webkitUserSelect = state.selectionEnabled ? 'text' : 'none';
+    setFontScale(message.fontScale);
   }
 
   function applyActive(segmentIndex, wordIndex) {
@@ -85,10 +103,12 @@ export const SELECTABLE_TRANSCRIPT_HTML = `<!doctype html>
 
   function render(message) {
     state.hydrating = true;
-    setFontScale(message.fontScale);
+    applyPresentation(message);
+    const previousActiveSegmentIndex = state.activeSegmentIndex;
     const previousKey = closestCenterKey(); const fragment = document.createDocumentFragment();
-    message.segments.forEach((segment, index) => {
-      if (index > 0) fragment.appendChild(document.createTextNode('\\n\\n'));
+    message.segments.forEach((segment) => {
+      if (segment.separatorBefore)
+        fragment.appendChild(document.createTextNode(segment.separatorBefore));
       const container = document.createElement('span'); container.className = 'segment';
       container.dataset.segmentIndex = String(segment.index); container.dataset.segmentKey = segment.key;
       container.dataset.startOffset = String(segment.startOffset); container.dataset.endOffset = String(segment.endOffset);
@@ -102,7 +122,8 @@ export const SELECTABLE_TRANSCRIPT_HTML = `<!doctype html>
     });
     root.replaceChildren(fragment); applyActive(message.activeSegmentIndex, message.activeWordIndex);
     requestAnimationFrame(() => {
-      const target = message.initial
+      const shouldFollowActive = message.follow && previousActiveSegmentIndex !== message.activeSegmentIndex;
+      const target = message.initial || shouldFollowActive
         ? root.querySelector(segmentSelector(message.activeSegmentIndex))
         : previousKey ? root.querySelector('[data-segment-key="' + CSS.escape(previousKey) + '"]') : null;
       target?.scrollIntoView({ block: 'center', behavior: 'auto' }); restoreSelection(message.selection);
@@ -134,7 +155,7 @@ export const SELECTABLE_TRANSCRIPT_HTML = `<!doctype html>
 
   function reportSelection() {
     clearTimeout(selectionTimer); selectionTimer = setTimeout(() => {
-      if (state.hydrating) return;
+      if (state.hydrating || !state.selectionEnabled) return;
       const selected = window.getSelection();
       if (!selected || selected.isCollapsed || selected.rangeCount === 0) return post({ type: 'selection-cleared' });
       const range = selected.getRangeAt(0); const startOffset = absoluteOffset(range.startContainer, range.startOffset);
@@ -146,15 +167,28 @@ export const SELECTABLE_TRANSCRIPT_HTML = `<!doctype html>
   }
   document.addEventListener('selectionchange', reportSelection);
   document.addEventListener('mouseup', reportSelection); document.addEventListener('touchend', reportSelection);
-  document.addEventListener('pointerdown', () => { state.userScrolling = true; });
+  function clearLongPress() { clearTimeout(longPressTimer); longPressTimer = 0; }
+  document.addEventListener('pointerdown', (event) => {
+    state.userScrolling = true; state.longPressTriggered = false; clearLongPress();
+    if (state.presentation !== 'karaoke') return;
+    const segment = event.target.closest?.('[data-segment-index]'); if (!segment) return;
+    longPressTimer = setTimeout(() => {
+      state.longPressTriggered = true;
+      post({ type: 'long-press-segment', index: Number(segment.dataset.segmentIndex) });
+    }, 500);
+  });
+  document.addEventListener('pointerup', clearLongPress);
+  document.addEventListener('pointercancel', clearLongPress);
   document.addEventListener('touchstart', () => { state.userScrolling = true; }, { passive: true });
   document.addEventListener('wheel', () => { state.userScrolling = true; }, { passive: true });
   document.addEventListener('click', (event) => {
+    if (state.longPressTriggered) { state.longPressTriggered = false; return; }
     if (!window.getSelection()?.isCollapsed) return;
     const segment = event.target.closest?.('[data-segment-index]'); if (!segment) return;
     post({ type: 'press-segment', index: Number(segment.dataset.segmentIndex), shouldPlay: event.detail > 1 });
   });
   window.addEventListener('scroll', () => {
+    clearLongPress();
     if (state.userScrolling) { post({ type: 'manual-scroll' }); state.userScrolling = false; }
     clearTimeout(edgeTimer); edgeTimer = setTimeout(() => {
       if (window.scrollY < 160) post({ type: 'edge', edge: 'start' });

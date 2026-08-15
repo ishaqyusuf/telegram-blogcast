@@ -1,5 +1,13 @@
 # Progress
 
+## 2026-08-15
+
+### Continuous Karaoke And Accurate Transcript Sync
+- Status: Implemented in source; device interaction profiling remains part of final validation.
+- Source mode: User-approved implementation plan.
+- Source changed: canonical flowing Arabic transcript separators, shared karaoke/read surface, exact measured timing with estimated segment fallback, projected playback clock, Live-only catch-up, inset-safe read header, and real audio Play/Pause.
+- Brain changed: Audio feature behavior and progress.
+
 ## 2026-08-02
 
 ### OTA Route Continuity

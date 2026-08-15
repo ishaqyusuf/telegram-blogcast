@@ -24,7 +24,6 @@ type TranscriptReadModeProps = {
 		index: number,
 		shouldPlay: boolean,
 	) => void;
-	followRequestKey?: number;
 };
 
 export function TranscriptReadMode({
@@ -36,21 +35,13 @@ export function TranscriptReadMode({
 	onStartReached,
 	onEndReached,
 	onPressSegment,
-	followRequestKey = 0,
 }: TranscriptReadModeProps) {
 	const [followPaused, setFollowPaused] = useState(false);
 	const previousDocumentRef = useRef(document);
-	const previousFollowRequestKeyRef = useRef(followRequestKey);
 	const { activeSegmentIndex, activeWordIndex } = useSyncedTranscript({
 		segments: document.segments,
 		positionSecOverride,
 	});
-
-	useEffect(() => {
-		if (previousFollowRequestKeyRef.current === followRequestKey) return;
-		previousFollowRequestKeyRef.current = followRequestKey;
-		setFollowPaused(false);
-	}, [followRequestKey]);
 
 	const previousDocument = previousDocumentRef.current;
 	const surfaceSelection =
@@ -120,6 +111,9 @@ export function TranscriptReadMode({
 		<View style={{ flex: 1, backgroundColor: "#080807" }}>
 			<SelectableTranscriptSurface
 				document={document}
+				presentation="read"
+				selectionEnabled
+				contentPaddingVertical={120}
 				activeSegmentIndex={activeSegmentIndex}
 				activeWordIndex={activeWordIndex}
 				follow={follow}
@@ -134,7 +128,10 @@ export function TranscriptReadMode({
 			/>
 			{autoScroll && followPaused ? (
 				<Pressable
-					onPress={() => setFollowPaused(false)}
+					onPress={() => {
+						onSelectionChange(null);
+						setFollowPaused(false);
+					}}
 					accessibilityRole="button"
 					accessibilityLabel="Return to live transcript position"
 					style={{

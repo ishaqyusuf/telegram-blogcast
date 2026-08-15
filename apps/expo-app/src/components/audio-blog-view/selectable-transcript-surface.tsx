@@ -6,8 +6,15 @@ import {
 	parseTranscriptSurfaceMessage,
 } from "@/components/audio-blog-view/selectable-transcript-protocol";
 import type { SelectableTranscriptSurfaceProps } from "@/components/audio-blog-view/selectable-transcript-surface.types";
-import React, { useCallback, useEffect, useMemo, useRef } from "react";
-import { View, useWindowDimensions } from "react-native";
+import { resolveTranscriptScrollBehavior } from "@/components/audio-blog-view/transcript-follow-state";
+import React, {
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
+import { ActivityIndicator, View, useWindowDimensions } from "react-native";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 
 export function SelectableTranscriptSurface(
@@ -15,14 +22,21 @@ export function SelectableTranscriptSurface(
 ) {
 	const webViewRef = useRef<WebView>(null);
 	const loadedRef = useRef(false);
+	const hydratingRef = useRef(false);
 	const positionedRef = useRef(false);
 	const hydratedKeyRef = useRef("");
+	const hydratedSnapshotRef = useRef<{
+		activeSegmentIndex: number;
+		activeWordIndex: number;
+		follow: boolean;
+	} | null>(null);
 	const previousActiveRef = useRef(props.activeSegmentIndex);
 	const previousFollowRef = useRef(props.follow);
 	const previousSelectionRef = useRef(props.selection);
 	const latestPropsRef = useRef(props);
 	const { fontScale } = useWindowDimensions();
 	const fontScaleRef = useRef(fontScale);
+	const [surfaceReady, setSurfaceReady] = useState(false);
 	fontScaleRef.current = fontScale;
 	latestPropsRef.current = props;
 	const documentKey = useMemo(
@@ -42,9 +56,18 @@ export function SelectableTranscriptSurface(
 			follow: latest.follow,
 			initial: !positionedRef.current,
 			fontScale: fontScaleRef.current,
+			presentation: latest.presentation,
+			selectionEnabled: latest.selectionEnabled,
+			contentPaddingVertical: latest.contentPaddingVertical,
 			selection: latest.selection,
 		});
 		if (message.documentKey !== documentKey) return;
+		hydratingRef.current = true;
+		hydratedSnapshotRef.current = {
+			activeSegmentIndex: message.activeSegmentIndex,
+			activeWordIndex: message.activeWordIndex,
+			follow: message.follow,
+		};
 		hydratedKeyRef.current = message.documentKey;
 		post(message);
 	}, [documentKey, post]);
@@ -60,16 +83,24 @@ export function SelectableTranscriptSurface(
 		previousFollowRef.current = props.follow;
 		previousActiveRef.current = props.activeSegmentIndex;
 		if (!loadedRef.current || hydratedKeyRef.current !== documentKey) return;
+		if (hydratingRef.current) return;
 		const resumed = !wasFollowing && props.follow;
 		const changed = previousActive !== props.activeSegmentIndex;
 		if (!resumed && !changed && props.activeWordIndex < 0) return;
+		const scrollBehavior = resolveTranscriptScrollBehavior({
+			hasPositioned: positionedRef.current,
+			wasFollowing,
+			follow: props.follow,
+			activeSegmentIndex: props.activeSegmentIndex,
+			previousActiveSegmentIndex: previousActive,
+		});
 		post({
 			type: "sync",
 			activeSegmentIndex: props.activeSegmentIndex,
 			activeWordIndex: props.activeWordIndex,
 			follow: props.follow,
-			behavior: resumed ? "instant" : "smooth",
-			scrollToActive: resumed || changed,
+			behavior: scrollBehavior ?? "smooth",
+			scrollToActive: scrollBehavior != null,
 		});
 	}, [
 		documentKey,
@@ -96,11 +127,38 @@ export function SelectableTranscriptSurface(
 			if (!message) return;
 			if (message.type === "ready") {
 				positionedRef.current = true;
+				hydratingRef.current = false;
+				setSurfaceReady(true);
+				const hydrated = hydratedSnapshotRef.current;
+				const latest = latestPropsRef.current;
+				if (
+					hydrated &&
+					(hydrated.activeSegmentIndex !== latest.activeSegmentIndex ||
+						hydrated.activeWordIndex !== latest.activeWordIndex ||
+						hydrated.follow !== latest.follow)
+				) {
+					const scrollBehavior = resolveTranscriptScrollBehavior({
+						hasPositioned: true,
+						wasFollowing: hydrated.follow,
+						follow: latest.follow,
+						activeSegmentIndex: latest.activeSegmentIndex,
+						previousActiveSegmentIndex: hydrated.activeSegmentIndex,
+					});
+					post({
+						type: "sync",
+						activeSegmentIndex: latest.activeSegmentIndex,
+						activeWordIndex: latest.activeWordIndex,
+						follow: latest.follow,
+						behavior: scrollBehavior ?? "smooth",
+						scrollToActive: scrollBehavior != null,
+					});
+				}
 				return;
 			}
-			if (message.type === "selection") return props.onSelectionChange(message);
+			if (message.type === "selection")
+				return props.onSelectionChange?.(message);
 			if (message.type === "selection-cleared")
-				return props.onSelectionChange(null);
+				return props.onSelectionChange?.(null);
 			if (message.type === "manual-scroll") return props.onManualScroll();
 			if (message.type === "edge") {
 				return message.edge === "start"
@@ -108,10 +166,14 @@ export function SelectableTranscriptSurface(
 					: props.onEndReached?.();
 			}
 			const segment = props.document.segments[message.index];
-			if (segment)
-				props.onPressSegment?.(segment, message.index, message.shouldPlay);
+			if (!segment) return;
+			if (message.type === "long-press-segment") {
+				props.onLongPressSegment?.(segment, message.index);
+				return;
+			}
+			props.onPressSegment?.(segment, message.index, message.shouldPlay);
 		},
-		[props],
+		[post, props],
 	);
 
 	return (
@@ -119,7 +181,12 @@ export function SelectableTranscriptSurface(
 			<WebView
 				ref={webViewRef}
 				source={{ html: SELECTABLE_TRANSCRIPT_HTML, baseUrl: "about:blank" }}
-				style={{ flex: 1, backgroundColor: "#080807" }}
+				style={{
+					flex: 1,
+					backgroundColor: "#080807",
+					opacity: surfaceReady ? 1 : 0,
+				}}
+				nestedScrollEnabled
 				onLoadEnd={() => {
 					loadedRef.current = true;
 					hydrate();
@@ -134,6 +201,20 @@ export function SelectableTranscriptSurface(
 					request.url === "about:blank"
 				}
 			/>
+			{!surfaceReady ? (
+				<View
+					pointerEvents="none"
+					style={{
+						position: "absolute",
+						inset: 0,
+						alignItems: "center",
+						justifyContent: "center",
+						backgroundColor: "#080807",
+					}}
+				>
+					<ActivityIndicator color="rgba(255,255,255,0.72)" />
+				</View>
+			) : null}
 		</View>
 	);
 }

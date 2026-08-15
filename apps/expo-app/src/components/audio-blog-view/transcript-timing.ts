@@ -1,7 +1,13 @@
+import {
+	type TranscriptTimingSource,
+	normalizeTranscriptTimingSource,
+} from "@acme/blog";
+
 export interface TranscriptWordData {
 	word: string;
 	startSec: number;
 	endSec: number;
+	timingSource?: TranscriptTimingSource;
 }
 
 export interface TranscriptSegmentData {
@@ -31,6 +37,8 @@ type RawTranscriptWord = {
 	to?: number;
 	startSec?: number;
 	endSec?: number;
+	timingSource?: TranscriptTimingSource;
+	estimated?: boolean;
 };
 
 export type TranscriptSegmentRange = {
@@ -66,7 +74,7 @@ export type TranscriptTextSelection = {
 	timestampSec: number;
 };
 
-const SEGMENT_SEPARATOR = "\n\n";
+const CLOSING_PUNCTUATION = /^[,.;:!?،؛؟)\]}>»”’]/u;
 
 function toFiniteNumber(value: unknown) {
 	const number = Number(value);
@@ -88,7 +96,11 @@ function normalizeTranscriptWords(words: unknown) {
 				return null;
 			}
 
-			return { word: text, startSec, endSec };
+			const timingSource = normalizeTranscriptTimingSource(word.timingSource, {
+				estimated: word.estimated,
+			});
+
+			return { word: text, startSec, endSec, timingSource };
 		})
 		.filter((word): word is TranscriptWordData => Boolean(word));
 }
@@ -105,8 +117,38 @@ function distributeWords(segment: {
 	return tokens.map((word, index) => {
 		const startSec = segment.startSec + (duration * index) / tokens.length;
 		const endSec = segment.startSec + (duration * (index + 1)) / tokens.length;
-		return { word, startSec, endSec };
+		return { word, startSec, endSec, timingSource: "estimated" as const };
 	});
+}
+
+function hasUniformlyDistributedTiming(
+	segment: { startSec: number; endSec: number },
+	words: TranscriptWordData[],
+) {
+	if (!words.length || segment.endSec <= segment.startSec) return false;
+	const toleranceSec = 0.025;
+	const duration = segment.endSec - segment.startSec;
+	return words.every((word, index) => {
+		const expectedStart = segment.startSec + (duration * index) / words.length;
+		const expectedEnd =
+			segment.startSec + (duration * (index + 1)) / words.length;
+		return (
+			Math.abs(word.startSec - expectedStart) <= toleranceSec &&
+			Math.abs(word.endSec - expectedEnd) <= toleranceSec
+		);
+	});
+}
+
+export function getTranscriptSegmentSeparator(
+	previousText: string,
+	nextText: string,
+) {
+	if (!previousText || !nextText) return "";
+	const previousLast = previousText.at(-1) ?? "";
+	const nextFirst = nextText.at(0) ?? "";
+	if (/\s/u.test(previousLast) || /\s/u.test(nextFirst)) return "";
+	if (CLOSING_PUNCTUATION.test(nextFirst)) return "";
+	return " ";
 }
 
 export function normalizeTranscriptSegment(
@@ -124,11 +166,22 @@ export function normalizeTranscriptSegment(
 		endSec,
 		text: segment.text,
 	};
-	const words = normalizeTranscriptWords(segment.words);
+	const rawWords = normalizeTranscriptWords(segment.words);
+	const hasExplicitTimingSource = rawWords.some((word) => word.timingSource);
+	const legacyEstimated =
+		!hasExplicitTimingSource &&
+		hasUniformlyDistributedTiming(normalized, rawWords);
+	const words = rawWords.length
+		? rawWords.map((word) => ({
+				...word,
+				timingSource:
+					word.timingSource ?? (legacyEstimated ? "estimated" : "measured"),
+			}))
+		: distributeWords(normalized);
 
 	return {
 		...normalized,
-		words: words.length > 0 ? words : distributeWords(normalized),
+		words,
 	};
 }
 
@@ -166,6 +219,7 @@ export function findActiveWordIndex(
 	positionSec: number,
 ) {
 	if (!words?.length) return -1;
+	if (words.every((word) => word.timingSource === "estimated")) return -1;
 
 	let low = 0;
 	let high = words.length - 1;
@@ -180,12 +234,11 @@ export function findActiveWordIndex(
 		} else if (positionSec >= word.endSec) {
 			low = mid + 1;
 		} else {
-			return mid;
+			return word.timingSource === "estimated" ? -1 : mid;
 		}
 	}
 
-	if (positionSec < words[0]!.startSec) return 0;
-	return Math.min(words.length - 1, Math.max(0, low - 1));
+	return -1;
 }
 
 function findWordOffset(text: string, word: string, fromOffset: number) {
@@ -243,7 +296,13 @@ export function buildTranscriptDocument(
 	const wordRangesBySegment: TranscriptWordRange[][] = [];
 
 	segments.forEach((segment, index) => {
-		if (index > 0) fullText += SEGMENT_SEPARATOR;
+		const previousSegment = index > 0 ? segments[index - 1] : undefined;
+		if (previousSegment) {
+			fullText += getTranscriptSegmentSeparator(
+				previousSegment.text,
+				segment.text,
+			);
+		}
 
 		const startOffset = fullText.length;
 		fullText += segment.text;
@@ -375,13 +434,7 @@ export function selectTranscriptSegment(
 	document: TranscriptDocument,
 	segment: TranscriptSegmentData,
 ): TranscriptTextSelection | null {
-	const range = document.segmentRanges.find(
-		(candidate) =>
-			candidate.segment.id === segment.id ||
-			(candidate.segment.startSec === segment.startSec &&
-				candidate.segment.endSec === segment.endSec &&
-				candidate.segment.text === segment.text),
-	);
+	const range = findMatchingSegmentRange(document, segment);
 
 	if (!range) return null;
 

@@ -97,6 +97,7 @@ import { getLargeMediaExternalMedia } from "@acme/blog/facebook-media";
 import type { RouterInputs } from "@api/trpc/routers/_app";
 import * as DocumentPicker from "expo-document-picker";
 import { Image } from "expo-image";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -2143,12 +2144,6 @@ export default function AudioBlogScreen() {
 	>(new Set());
 	const [isUploadingAudioArt, setIsUploadingAudioArt] = useState(false);
 	const [isSelectingAudioArt, setIsSelectingAudioArt] = useState(false);
-	const [transcriptHighlightPaused, setTranscriptHighlightPaused] =
-		useState(false);
-	const [transcriptFollowRequestKey, setTranscriptFollowRequestKey] =
-		useState(0);
-	const [frozenTranscriptPositionSec, setFrozenTranscriptPositionSec] =
-		useState(0);
 	const [markedTranscriptSelection, setMarkedTranscriptSelection] =
 		useState<TranscriptTextSelection | null>(null);
 	const [transcriptChunks, setTranscriptChunks] = useState<
@@ -2673,7 +2668,6 @@ export default function AudioBlogScreen() {
 		setMarkedTranscriptSelection(null);
 		setViewedPlaybackError(null);
 		setTranscriptModalVisible(false);
-		setTranscriptHighlightPaused(false);
 		pendingTranscriptChunksRef.current = [];
 		pendingTranscriptWindowsRef.current = [];
 		transcriptWindowsRef.current = {};
@@ -3405,11 +3399,8 @@ export default function AudioBlogScreen() {
 		);
 	}
 
-	function openTranscriptModal() {
-		setFrozenTranscriptPositionSec(transcriptAnchorSec);
-		setTranscriptHighlightPaused(false);
-		setMarkedTranscriptSelection(null);
-		setTranscriptFollowRequestKey((value) => value + 1);
+	function openTranscriptModal(options?: { preserveSelection?: boolean }) {
+		if (!options?.preserveSelection) setMarkedTranscriptSelection(null);
 		setTranscriptModalVisible(true);
 		syncPlaybackSnapshot().catch(() => undefined);
 		Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -3421,23 +3412,6 @@ export default function AudioBlogScreen() {
 			openTranscriptModal();
 		}
 		lastTranscriptTapRef.current = now;
-	}
-
-	function toggleTranscriptHighlightPause() {
-		if (!transcriptHighlightPaused) {
-			setFrozenTranscriptPositionSec(transcriptAnchorSec);
-		} else {
-			setTranscriptFollowRequestKey((value) => value + 1);
-		}
-		setTranscriptHighlightPaused((value) => !value);
-	}
-
-	function gotoCurrentTranscriptPosition() {
-		setFrozenTranscriptPositionSec(transcriptAnchorSec);
-		setTranscriptHighlightPaused(false);
-		setMarkedTranscriptSelection(null);
-		setTranscriptFollowRequestKey((value) => value + 1);
-		syncPlaybackSnapshot().catch(() => undefined);
 	}
 
 	function handleReadModeSegmentPress(
@@ -3615,7 +3589,7 @@ export default function AudioBlogScreen() {
 												contentPaddingVertical={34}
 												onSegmentLongPress={(segment) => {
 													markTranscriptSegment(segment);
-													openTranscriptModal();
+													openTranscriptModal({ preserveSelection: true });
 												}}
 											/>
 										) : (
@@ -3807,11 +3781,11 @@ export default function AudioBlogScreen() {
 												}
 												onReadPress={openTranscriptModal}
 											/>
-											{effectiveExternalMedia ? (
-												<Pressable
-													onPress={() =>
-														void Linking.openURL(effectiveExternalMedia.externalUrl)
-													}
+										{effectiveExternalMedia ? (
+											<Pressable
+												onPress={() =>
+													void Linking.openURL(effectiveExternalMedia.externalUrl)
+												}
 													className="mt-4 flex-row items-center justify-center gap-2 rounded-full bg-white/15 px-4 py-3"
 												>
 													<Icon name="Share" size={17} color="#fff" />
@@ -4032,11 +4006,17 @@ export default function AudioBlogScreen() {
 			<Modal
 				visible={transcriptModalVisible}
 				animationType="slide"
+				statusBarTranslucent
+				navigationBarTranslucent
 				onRequestClose={() => setTranscriptModalVisible(false)}
 			>
 				<View style={{ flex: 1, backgroundColor: "#080807" }}>
-					<SafeArea style={{ flex: 1, backgroundColor: "#080807" }}>
-						<View className="flex-row items-center justify-between px-4 py-3">
+					<StatusBar style="light" backgroundColor="#080807" translucent />
+					<SafeAreaView
+						edges={["top", "bottom"]}
+						style={{ flex: 1, backgroundColor: "#080807" }}
+					>
+						<View className="flex-row items-center justify-between px-4 py-2">
 							<Pressable
 								onPress={() => setTranscriptModalVisible(false)}
 								className="size-11 items-center justify-center rounded-full active:bg-white/10"
@@ -4057,47 +4037,41 @@ export default function AudioBlogScreen() {
 									onPress={toggleTranscriptTashkeel}
 								/>
 								<Pressable
-									onPress={toggleTranscriptHighlightPause}
-									className="size-11 items-center justify-center rounded-full active:bg-white/10"
+									onPress={() => void handleViewedPlayPause()}
+									disabled={playerIsLoading && !playerIsPlaying}
+									className={
+										playerIsLoading && !playerIsPlaying
+											? "size-11 items-center justify-center rounded-full opacity-50"
+											: "size-11 items-center justify-center rounded-full active:bg-white/10"
+									}
+									accessibilityRole="button"
 									accessibilityLabel={
-										transcriptHighlightPaused
-											? "Continue read highlight"
-											: "Pause read highlight"
+										playerIsPlaying ? "Pause audio" : "Play audio"
 									}
 								>
-									<Icon
-										name={transcriptHighlightPaused ? "Play" : "Pause"}
-										size={20}
-										color="#ffffff"
-									/>
-								</Pressable>
-								<Pressable
-									onPress={gotoCurrentTranscriptPosition}
-									className="size-11 items-center justify-center rounded-full active:bg-white/10"
-									accessibilityLabel="Go to current position"
-								>
-									<Icon name="Compass" size={20} color="#ffffff" />
+									{playerIsLoading && !playerIsPlaying ? (
+										<ActivityIndicator size="small" color="#ffffff" />
+									) : (
+										<Icon
+											name={playerIsPlaying ? "Pause" : "Play"}
+											size={20}
+											color="#ffffff"
+										/>
+									)}
 								</Pressable>
 							</View>
 						</View>
 						<View style={{ flex: 1 }}>
 							<TranscriptReadMode
 								document={transcriptDocument}
-								autoScroll={
-									!transcriptHighlightPaused && !markedTranscriptSelection
-								}
+								autoScroll
 								selection={markedTranscriptSelection}
-								followRequestKey={transcriptFollowRequestKey}
 								onSelectionChange={setMarkedTranscriptSelection}
 								onStartReached={requestPreviousTranscriptWindow}
 								onEndReached={requestNextTranscriptWindow}
 								onPressSegment={handleReadModeSegmentPress}
 								positionSecOverride={
-									!isViewedAudioActive
-										? transcriptAnchorSec
-										: transcriptHighlightPaused
-											? frozenTranscriptPositionSec
-											: undefined
+									isViewedAudioActive ? undefined : transcriptAnchorSec
 								}
 							/>
 						</View>
@@ -4194,7 +4168,7 @@ export default function AudioBlogScreen() {
 								</Text>
 							)}
 						</View>
-					</SafeArea>
+					</SafeAreaView>
 				</View>
 			</Modal>
 

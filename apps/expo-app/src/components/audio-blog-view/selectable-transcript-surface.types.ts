@@ -1,4 +1,7 @@
-import type { TranscriptSurfaceSelection } from "@/components/audio-blog-view/selectable-transcript-protocol";
+import type {
+	TranscriptSurfacePresentation,
+	TranscriptSurfaceSelection,
+} from "@/components/audio-blog-view/selectable-transcript-protocol";
 import type {
 	TranscriptDocument,
 	TranscriptSegmentData,
@@ -7,11 +10,14 @@ import type {
 
 export type SelectableTranscriptSurfaceProps = {
 	document: TranscriptDocument;
+	presentation: TranscriptSurfacePresentation;
+	selectionEnabled: boolean;
+	contentPaddingVertical: number;
 	activeSegmentIndex: number;
 	activeWordIndex: number;
 	follow: boolean;
 	selection: TranscriptTextSelection | null;
-	onSelectionChange: (selection: TranscriptSurfaceSelection | null) => void;
+	onSelectionChange?: (selection: TranscriptSurfaceSelection | null) => void;
 	onManualScroll: () => void;
 	onStartReached?: () => void;
 	onEndReached?: () => void;
@@ -20,4 +26,5 @@ export type SelectableTranscriptSurfaceProps = {
 		index: number,
 		shouldPlay: boolean,
 	) => void;
+	onLongPressSegment?: (segment: TranscriptSegmentData, index: number) => void;
 };

@@ -1,5 +1,9 @@
 // apps/api/src/db/queries/blog.ts
-import { inferBlogMediaContentType } from "@acme/blog";
+import {
+  TRANSCRIPT_TIMING_SOURCES,
+  inferBlogMediaContentType,
+  type TranscriptTimingSource,
+} from "@acme/blog";
 import { consoleLog } from "@acme/utils";
 import type { TRPCContext } from "@api/trpc/init";
 import type { BlogMeta } from "@api/type";
@@ -77,6 +81,7 @@ type TranscriptWord = {
   word: string;
   startSec: number;
   endSec: number;
+  timingSource?: TranscriptTimingSource;
 };
 type TranscribedSegment = {
   id: string;
@@ -634,7 +639,7 @@ function distributeWords(segment: {
   return tokens.map((word, index) => {
     const startSec = segment.from + (duration * index) / tokens.length;
     const endSec = segment.from + (duration * (index + 1)) / tokens.length;
-    return { word, startSec, endSec };
+    return { word, startSec, endSec, timingSource: "estimated" as const };
   });
 }
 
@@ -705,6 +710,7 @@ function normalizeDbWords(value: unknown): TranscriptWord[] {
         word: z.string(),
         startSec: z.number(),
         endSec: z.number(),
+        timingSource: z.enum(TRANSCRIPT_TIMING_SOURCES).optional(),
       }),
     )
     .safeParse(value);
@@ -776,6 +782,7 @@ async function transcribeWithOpenAi(input: {
       word: (word.word ?? "").trim(),
       startSec: word.start ?? 0,
       endSec: word.end ?? word.start ?? 0,
+      timingSource: "measured" as const,
     }))
     .filter(
       (word) =>
@@ -992,6 +999,7 @@ async function transcribeWithGrokWhisper(input: {
       word: (word.text ?? "").trim(),
       startSec: word.start ?? 0,
       endSec: word.end ?? word.start ?? 0,
+      timingSource: "measured" as const,
     }))
     .filter(
       (word) =>
@@ -1159,6 +1167,7 @@ async function transcribeWithLocalWhisper(input: {
           word: word.word.trim(),
           startSec: Math.max(input.fromSec, word.start),
           endSec: Math.min(input.toSec, word.end),
+          timingSource: "measured" as const,
         }))
         .filter(
           (word) =>

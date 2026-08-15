@@ -6,6 +6,7 @@ import {
 	buildTranscriptTextSelection,
 	findActiveSegmentIndex,
 	findActiveWordIndex,
+	normalizeTranscriptSegment,
 	rebaseTranscriptTextSelection,
 	selectTranscriptSegment,
 } from "./transcript-timing";
@@ -47,11 +48,11 @@ describe("transcript timing helpers", () => {
 	test("builds one continuous document across transcript chunks", () => {
 		const document = buildTranscriptDocument(segments);
 
-		expect(document.fullText).toBe("alpha beta\n\ngamma delta\n\nepsilon zeta");
+		expect(document.fullText).toBe("alpha beta gamma delta epsilon zeta");
 		expect(document.segmentRanges).toEqual([
 			expect.objectContaining({ index: 0, startOffset: 0, endOffset: 10 }),
-			expect.objectContaining({ index: 1, startOffset: 12, endOffset: 23 }),
-			expect.objectContaining({ index: 2, startOffset: 25, endOffset: 37 }),
+			expect.objectContaining({ index: 1, startOffset: 11, endOffset: 22 }),
+			expect.objectContaining({ index: 2, startOffset: 23, endOffset: 35 }),
 		]);
 		expect(document.wordRangesBySegment.map((ranges) => ranges.length)).toEqual(
 			[2, 2, 2],
@@ -73,7 +74,7 @@ describe("transcript timing helpers", () => {
 
 		expect(selection).toEqual(
 			expect.objectContaining({
-				text: "beta\n\ngamma delta\n\nepsilon zeta",
+				text: "beta gamma delta epsilon zeta",
 				startOffset,
 				endOffset,
 				dragStartOffset,
@@ -98,7 +99,7 @@ describe("transcript timing helpers", () => {
 
 		expect(selection).toEqual(
 			expect.objectContaining({
-				text: "beta\n\ngamma delta\n\nepsilon zeta",
+				text: "beta gamma delta epsilon zeta",
 				dragStartOffset: zetaEnd,
 				timestampSec: 25,
 			}),
@@ -107,8 +108,8 @@ describe("transcript timing helpers", () => {
 
 	test("ignores separator-only selections", () => {
 		const document = buildTranscriptDocument(segments);
-		const separatorStart = document.segmentRanges[0]!.endOffset;
-		const separatorEnd = document.segmentRanges[1]!.startOffset;
+		const separatorStart = document.segmentRanges[0]?.endOffset ?? -1;
+		const separatorEnd = document.segmentRanges[1]?.startOffset ?? -1;
 
 		expect(
 			buildTranscriptTextSelection(
@@ -123,8 +124,10 @@ describe("transcript timing helpers", () => {
 	test("selects a full segment using stable transcript identity", () => {
 		const document = buildTranscriptDocument(segments);
 
+		const targetSegment = segments[1];
+		if (!targetSegment) throw new Error("Expected the second segment");
 		const selection = selectTranscriptSegment(document, {
-			...segments[1]!,
+			...targetSegment,
 			text: "gamma delta",
 		});
 
@@ -138,13 +141,117 @@ describe("transcript timing helpers", () => {
 		);
 	});
 
+	test("selects the correct id-less or repeated-id segment by timing identity", () => {
+		const repeatedIdDocument = buildTranscriptDocument([
+			{ id: "whisper-0", startSec: 0, endSec: 2, text: "first" },
+			{ id: "whisper-0", startSec: 30, endSec: 32, text: "second" },
+		]);
+		const idLessDocument = buildTranscriptDocument([
+			{ startSec: 0, endSec: 2, text: "first" },
+			{ startSec: 30, endSec: 32, text: "second" },
+		]);
+
+		expect(
+			selectTranscriptSegment(repeatedIdDocument, {
+				id: "whisper-0",
+				startSec: 30,
+				endSec: 32,
+				text: "second",
+			})?.text,
+		).toBe("second");
+		expect(
+			selectTranscriptSegment(idLessDocument, {
+				startSec: 30,
+				endSec: 32,
+				text: "second",
+			})?.text,
+		).toBe("second");
+	});
+
 	test("finds active segment and word at boundaries", () => {
 		expect(findActiveSegmentIndex(segments, 0)).toBe(0);
 		expect(findActiveSegmentIndex(segments, 10)).toBe(1);
 		expect(findActiveSegmentIndex(segments, 30)).toBe(2);
-		expect(findActiveWordIndex(segments[1]!.words, 10)).toBe(0);
-		expect(findActiveWordIndex(segments[1]!.words, 15)).toBe(1);
-		expect(findActiveWordIndex(segments[1]!.words, 20)).toBe(1);
+		expect(findActiveWordIndex(segments[1]?.words, 10)).toBe(0);
+		expect(findActiveWordIndex(segments[1]?.words, 15)).toBe(1);
+		expect(findActiveWordIndex(segments[1]?.words, 20)).toBe(-1);
+	});
+
+	test("uses exact measured word intervals and skips timing gaps", () => {
+		const words = [
+			{
+				word: "one",
+				startSec: 1,
+				endSec: 1.4,
+				timingSource: "measured" as const,
+			},
+			{
+				word: "two",
+				startSec: 1.8,
+				endSec: 2.2,
+				timingSource: "measured" as const,
+			},
+		];
+
+		expect(findActiveWordIndex(words, 0.9)).toBe(-1);
+		expect(findActiveWordIndex(words, 1.2)).toBe(0);
+		expect(findActiveWordIndex(words, 1.6)).toBe(-1);
+		expect(findActiveWordIndex(words, 2)).toBe(1);
+		expect(findActiveWordIndex(words, 2.2)).toBe(-1);
+	});
+
+	test("marks evenly distributed fallback words as estimated", () => {
+		const normalized = normalizeTranscriptSegment(
+			{ from: 0, to: 4, text: "one two" },
+			0,
+		);
+
+		expect(normalized.words).toEqual([
+			expect.objectContaining({ word: "one", timingSource: "estimated" }),
+			expect.objectContaining({ word: "two", timingSource: "estimated" }),
+		]);
+		expect(findActiveWordIndex(normalized.words, 1)).toBe(-1);
+	});
+
+	test("never presents estimated intervals as precise in mixed timing data", () => {
+		const words = [
+			{
+				word: "measured",
+				startSec: 0,
+				endSec: 1,
+				timingSource: "measured" as const,
+			},
+			{
+				word: "estimated",
+				startSec: 1,
+				endSec: 2,
+				timingSource: "estimated" as const,
+			},
+		];
+
+		expect(findActiveWordIndex(words, 0.5)).toBe(0);
+		expect(findActiveWordIndex(words, 1.5)).toBe(-1);
+	});
+
+	test("flows segments without inventing spaces around source whitespace or closing punctuation", () => {
+		const document = buildTranscriptDocument([
+			{ startSec: 0, endSec: 1, text: "قال" },
+			{ startSec: 1, endSec: 2, text: "، ثم" },
+			{ startSec: 2, endSec: 3, text: " انتهى " },
+			{ startSec: 3, endSec: 4, text: "هذا\nسطر" },
+		]);
+
+		expect(document.fullText).toBe("قال، ثم انتهى هذا\nسطر");
+		expect(
+			document.segmentRanges.map((range, index) =>
+				index === 0
+					? ""
+					: document.fullText.slice(
+							document.segmentRanges[index - 1]?.endOffset ?? 0,
+							range.startOffset,
+						),
+			),
+		).toEqual(["", "", "", ""]);
 	});
 
 	test("rebases a selection when an earlier transcript window is prepended", () => {
@@ -161,7 +268,7 @@ describe("transcript timing helpers", () => {
 			rebaseTranscriptTextSelection(previousDocument, nextDocument, selection),
 		).toEqual(
 			expect.objectContaining({
-				text: "delta\n\nepsilon zeta",
+				text: "delta epsilon zeta",
 				startSegmentIndex: 1,
 				endSegmentIndex: 2,
 				timestampSec: 20,
@@ -205,7 +312,7 @@ describe("transcript timing helpers", () => {
 		const previousDocument = buildTranscriptDocument(segments.slice(1));
 		const firstRange = previousDocument.segmentRanges[0];
 		if (!firstRange) throw new Error("Expected transcript fixture");
-		const separatorOffset = firstRange.endOffset + 1;
+		const separatorOffset = firstRange.endOffset;
 		const selection = buildTranscriptTextSelection(
 			previousDocument,
 			separatorOffset,
@@ -221,8 +328,8 @@ describe("transcript timing helpers", () => {
 			rebaseTranscriptTextSelection(previousDocument, nextDocument, selection),
 		).toEqual(
 			expect.objectContaining({
-				text: "\nepsilon zeta",
-				startOffset: nextFirstRange.endOffset + 1,
+				text: " epsilon zeta",
+				startOffset: nextFirstRange.endOffset,
 			}),
 		);
 	});

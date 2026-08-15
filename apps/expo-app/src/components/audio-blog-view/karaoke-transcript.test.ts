@@ -11,18 +11,32 @@ const audioScreenSource = readFileSync(
 );
 
 describe("karaoke transcript scrolling", () => {
-	test("does not mount a React Native VirtualizedList inside the player list", () => {
-		expect(source).toContain('from "@legendapp/list"');
-		expect(source).not.toMatch(
-			/import\s*\{[^}]*\bFlatList\b[^}]*\}\s*from\s*"react-native"/s,
-		);
+	test("uses the shared inline transcript surface in karaoke mode", () => {
+		expect(source).toContain("<SelectableTranscriptSurface");
+		expect(source).toContain('presentation="karaoke"');
+		expect(source).toContain("selectionEnabled={false}");
+		expect(source).not.toContain("LegendList");
 	});
 
-	test("keeps nested native scrolling enabled for the bounded transcript viewport", () => {
-		expect(source).toContain("nestedScrollEnabled");
-		expect(source).toContain("scrollToIndex");
+	test("keeps the bounded player viewport and a live catch-up control", () => {
+		expect(source).toContain("Return to live transcript position");
+		expect(source).toContain("setFollowPaused(false)");
 		expect(audioScreenSource).toMatch(
 			/<FlatList\s+ref=\{mainScroll\.ref\}[\s\S]*?nestedScrollEnabled/,
 		);
+	});
+
+	test("uses real audio controls and inset-safe read-mode chrome", () => {
+		expect(audioScreenSource).toContain('edges={["top", "bottom"]}');
+		expect(audioScreenSource).toContain("statusBarTranslucent");
+		expect(audioScreenSource).toContain(
+			"onPress={() => void handleViewedPlayPause()}",
+		);
+		expect(audioScreenSource).toContain(
+			"disabled={playerIsLoading && !playerIsPlaying}",
+		);
+		expect(audioScreenSource).toContain('"Pause audio" : "Play audio"');
+		expect(audioScreenSource).not.toContain("Pause read highlight");
+		expect(audioScreenSource).not.toContain("gotoCurrentTranscriptPosition");
 	});
 });

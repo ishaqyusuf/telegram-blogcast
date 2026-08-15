@@ -1,3 +1,5 @@
+import { normalizeTranscriptTimingSource } from "@acme/blog";
+
 export const transcriptionWorkerJobInclude = {
   media: {
     select: {
@@ -204,6 +206,9 @@ function normalizeTranscriptWords(words: unknown) {
       word: String(word?.word ?? "").trim(),
       startSec: Number(word?.startSec ?? word?.start),
       endSec: Number(word?.endSec ?? word?.end),
+      timingSource: normalizeTranscriptTimingSource(word?.timingSource, {
+        fallback: "measured",
+      }),
     }))
     .filter(
       (word) =>

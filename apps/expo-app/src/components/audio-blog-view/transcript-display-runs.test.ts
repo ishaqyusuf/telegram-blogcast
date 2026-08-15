@@ -52,6 +52,10 @@ describe("transcript display runs", () => {
 		expect(segments[1]?.runs.map((run) => run.text).join("")).toBe(
 			"لَك أن تَقْرَأَ من كلِّ القرآن",
 		);
+		expect(segments.map((segment) => segment.separatorBefore)).toEqual([
+			"",
+			" ",
+		]);
 	});
 
 	test("preserves punctuation, repeated words, and segments without word timings", () => {

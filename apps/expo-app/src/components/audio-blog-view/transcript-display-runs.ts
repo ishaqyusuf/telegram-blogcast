@@ -18,6 +18,7 @@ export type TranscriptDisplaySegment = {
 	key: string;
 	index: number;
 	segment: TranscriptSegmentData;
+	separatorBefore: string;
 	startOffset: number;
 	endOffset: number;
 	runs: TranscriptDisplayRun[];
@@ -79,6 +80,14 @@ export function buildTranscriptDisplayRuns(
 			),
 			index: segmentRange.index,
 			segment: segmentRange.segment,
+			separatorBefore:
+				segmentRange.index === 0
+					? ""
+					: document.fullText.slice(
+							document.segmentRanges[segmentRange.index - 1]?.endOffset ??
+								segmentRange.startOffset,
+							segmentRange.startOffset,
+						),
 			startOffset: segmentRange.startOffset,
 			endOffset: segmentRange.endOffset,
 			runs,

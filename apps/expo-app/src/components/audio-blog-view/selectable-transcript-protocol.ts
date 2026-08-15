@@ -5,6 +5,7 @@ import type {
 } from "@/components/audio-blog-view/transcript-timing";
 
 export type TranscriptSelectionAction = "copy" | "comment" | "share";
+export type TranscriptSurfacePresentation = "karaoke" | "read";
 
 export type TranscriptSurfaceSelection = Pick<
 	TranscriptTextSelection,
@@ -20,6 +21,9 @@ export type TranscriptHydrateMessage = {
 	follow: boolean;
 	initial: boolean;
 	fontScale: number;
+	presentation: TranscriptSurfacePresentation;
+	selectionEnabled: boolean;
+	contentPaddingVertical: number;
 	selection: TranscriptSurfaceSelection | null;
 };
 
@@ -49,7 +53,8 @@ export type TranscriptFromSurfaceMessage =
 	| { type: "selection-cleared" }
 	| { type: "manual-scroll" }
 	| { type: "edge"; edge: "start" | "end" }
-	| { type: "press-segment"; index: number; shouldPlay: boolean };
+	| { type: "press-segment"; index: number; shouldPlay: boolean }
+	| { type: "long-press-segment"; index: number };
 
 function hashTranscriptText(text: string) {
 	let hash = 2166136261;
@@ -73,6 +78,9 @@ export function createTranscriptHydrateMessage({
 	follow,
 	initial,
 	fontScale = 1,
+	presentation,
+	selectionEnabled,
+	contentPaddingVertical,
 	selection,
 }: {
 	document: TranscriptDocument;
@@ -81,6 +89,9 @@ export function createTranscriptHydrateMessage({
 	follow: boolean;
 	initial: boolean;
 	fontScale?: number;
+	presentation: TranscriptSurfacePresentation;
+	selectionEnabled: boolean;
+	contentPaddingVertical: number;
 	selection: TranscriptTextSelection | null;
 }): TranscriptHydrateMessage {
 	return {
@@ -92,6 +103,9 @@ export function createTranscriptHydrateMessage({
 		follow,
 		initial,
 		fontScale,
+		presentation,
+		selectionEnabled,
+		contentPaddingVertical,
 		selection: selection
 			? {
 					startOffset: selection.startOffset,
@@ -149,6 +163,10 @@ export function parseTranscriptSurfaceMessage(
 						index: message.index,
 						shouldPlay: message.shouldPlay,
 					}
+				: null;
+		case "long-press-segment":
+			return isOffset(message.index)
+				? { type: "long-press-segment", index: message.index }
 				: null;
 		default:
 			return null;

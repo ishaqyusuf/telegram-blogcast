@@ -1,5 +1,6 @@
 import type { SelectableTranscriptSurfaceProps } from "@/components/audio-blog-view/selectable-transcript-surface.types";
 import { buildTranscriptDisplayRuns } from "@/components/audio-blog-view/transcript-display-runs";
+import { resolveTranscriptScrollBehavior } from "@/components/audio-blog-view/transcript-follow-state";
 import React, { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import { useWindowDimensions } from "react-native";
 
@@ -29,6 +30,12 @@ function pointAtOffset(root: HTMLElement, targetOffset: number) {
 export function SelectableTranscriptSurface(
 	props: SelectableTranscriptSurfaceProps,
 ) {
+	const {
+		contentPaddingVertical,
+		onLongPressSegment,
+		presentation,
+		selectionEnabled,
+	} = props;
 	const scrollerRef = useRef<HTMLDivElement>(null);
 	const rootRef = useRef<HTMLDivElement>(null);
 	const positionedRef = useRef(false);
@@ -39,6 +46,8 @@ export function SelectableTranscriptSurface(
 	const userScrollingRef = useRef(false);
 	const segmentElementsRef = useRef<HTMLElement[]>([]);
 	const viewportFrameRef = useRef<number | null>(null);
+	const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const longPressTriggeredRef = useRef(false);
 	const pressSegmentRef = useRef(props.onPressSegment);
 	const { fontScale } = useWindowDimensions();
 	const displaySegments = useMemo(
@@ -49,8 +58,8 @@ export function SelectableTranscriptSurface(
 	pressSegmentRef.current = props.onPressSegment;
 	const documentContent = useMemo(
 		() =>
-			displaySegments.flatMap((segment, index) => [
-				index > 0 ? "\n\n" : "",
+			displaySegments.flatMap((segment) => [
+				segment.separatorBefore,
 				React.createElement(
 					"span",
 					{
@@ -58,12 +67,37 @@ export function SelectableTranscriptSurface(
 						"data-segment-key": segment.key,
 						"data-segment-index": segment.index,
 						onClick: (event: React.MouseEvent) => {
-							if (!window.getSelection()?.isCollapsed) return;
+							if (longPressTriggeredRef.current) {
+								longPressTriggeredRef.current = false;
+								return;
+							}
+							if (selectionEnabled && !window.getSelection()?.isCollapsed)
+								return;
 							pressSegmentRef.current?.(
 								segment.segment,
 								segment.index,
 								event.detail > 1,
 							);
+						},
+						onPointerDown: () => {
+							if (presentation !== "karaoke") return;
+							if (longPressTimerRef.current)
+								clearTimeout(longPressTimerRef.current);
+							longPressTriggeredRef.current = false;
+							longPressTimerRef.current = setTimeout(() => {
+								longPressTriggeredRef.current = true;
+								onLongPressSegment?.(segment.segment, segment.index);
+							}, 500);
+						},
+						onPointerUp: () => {
+							if (longPressTimerRef.current)
+								clearTimeout(longPressTimerRef.current);
+							longPressTimerRef.current = null;
+						},
+						onPointerLeave: () => {
+							if (longPressTimerRef.current)
+								clearTimeout(longPressTimerRef.current);
+							longPressTimerRef.current = null;
 						},
 					},
 					segment.runs.map((run) =>
@@ -78,10 +112,11 @@ export function SelectableTranscriptSurface(
 					),
 				),
 			]),
-		[displaySegments],
+		[displaySegments, onLongPressSegment, presentation, selectionEnabled],
 	);
 
 	const reportSelection = useCallback(() => {
+		if (!selectionEnabled) return;
 		const root = rootRef.current;
 		const selected = window.getSelection();
 		if (
@@ -90,7 +125,7 @@ export function SelectableTranscriptSurface(
 			selected.isCollapsed ||
 			selected.rangeCount === 0
 		) {
-			props.onSelectionChange(null);
+			props.onSelectionChange?.(null);
 			return;
 		}
 		const range = selected.getRangeAt(0);
@@ -107,8 +142,8 @@ export function SelectableTranscriptSurface(
 		);
 		if (startOffset == null || endOffset == null || dragStartOffset == null)
 			return;
-		props.onSelectionChange({ startOffset, endOffset, dragStartOffset });
-	}, [props]);
+		props.onSelectionChange?.({ startOffset, endOffset, dragStartOffset });
+	}, [props, selectionEnabled]);
 
 	useLayoutEffect(() => {
 		if (!props.document.fullText) return;
@@ -143,7 +178,12 @@ export function SelectableTranscriptSurface(
 		segmentElementsRef.current = Array.from(
 			root?.querySelectorAll<HTMLElement>("[data-segment-key]") ?? [],
 		);
-		const targetKey = positionedRef.current ? centerKeyRef.current : null;
+		const activeChanged =
+			previousActiveRef.current !== activeSegmentIndexRef.current;
+		const targetKey =
+			positionedRef.current && !(props.follow && activeChanged)
+				? centerKeyRef.current
+				: null;
 		const target = targetKey
 			? root?.querySelector<HTMLElement>(
 					`[data-segment-key="${CSS.escape(targetKey)}"]`,
@@ -154,12 +194,15 @@ export function SelectableTranscriptSurface(
 		target?.scrollIntoView({ block: "center", behavior: "auto" });
 		positionedRef.current = true;
 		if (root) root.style.opacity = "1";
-	}, [props.document]);
+	}, [props.document, props.follow]);
 
 	useLayoutEffect(
 		() => () => {
 			if (viewportFrameRef.current != null) {
 				window.cancelAnimationFrame(viewportFrameRef.current);
+			}
+			if (longPressTimerRef.current) {
+				clearTimeout(longPressTimerRef.current);
 			}
 		},
 		[],
@@ -171,16 +214,21 @@ export function SelectableTranscriptSurface(
 		previousFollowRef.current = props.follow;
 		previousActiveRef.current = props.activeSegmentIndex;
 		if (!positionedRef.current || !props.follow) return;
-		const resumed = !wasFollowing;
-		const changed = previousActive !== props.activeSegmentIndex;
-		if (!resumed && !changed) return;
+		const behavior = resolveTranscriptScrollBehavior({
+			hasPositioned: positionedRef.current,
+			wasFollowing,
+			follow: props.follow,
+			activeSegmentIndex: props.activeSegmentIndex,
+			previousActiveSegmentIndex: previousActive,
+		});
+		if (!behavior) return;
 		rootRef.current
 			?.querySelector<HTMLElement>(
 				`[data-segment-index="${props.activeSegmentIndex}"]`,
 			)
 			?.scrollIntoView({
 				block: "center",
-				behavior: resumed ? "auto" : "smooth",
+				behavior: behavior === "instant" ? "auto" : "smooth",
 			});
 	}, [props.activeSegmentIndex, props.follow]);
 
@@ -231,7 +279,7 @@ export function SelectableTranscriptSurface(
 			onWheel: () => {
 				userScrollingRef.current = true;
 			},
-			onPointerUp: reportSelection,
+			onPointerUp: selectionEnabled ? reportSelection : undefined,
 			onScroll: (event: React.UIEvent<HTMLDivElement>) => {
 				const scroller = event.currentTarget;
 				if (userScrollingRef.current) props.onManualScroll();
@@ -281,18 +329,18 @@ export function SelectableTranscriptSurface(
 				style: {
 					boxSizing: "border-box",
 					minHeight: "100%",
-					padding: "120px 24px",
+					padding: `${contentPaddingVertical}px 24px`,
 					opacity: 0,
 					whiteSpace: "pre-wrap",
 					wordBreak: "normal",
 					overflowWrap: "normal",
 					hyphens: "none",
-					fontSize: 26 * fontScale,
+					fontSize: (presentation === "karaoke" ? 28 : 26) * fontScale,
 					lineHeight: `${40 * fontScale}px`,
 					fontWeight: 700,
 					textAlign: "right",
 					direction: "rtl",
-					userSelect: "text",
+					userSelect: selectionEnabled ? "text" : "none",
 					color: "rgba(255,255,255,.48)",
 				},
 			},

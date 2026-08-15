@@ -29,6 +29,9 @@ describe("selectable transcript protocol", () => {
 			activeWordIndex: 0,
 			follow: true,
 			initial: true,
+			presentation: "read",
+			selectionEnabled: true,
+			contentPaddingVertical: 120,
 			selection: null,
 		});
 
@@ -39,7 +42,13 @@ describe("selectable transcript protocol", () => {
 		expect(SELECTABLE_TRANSCRIPT_HTML).not.toContain(
 			"<script>alert('no')</script>",
 		);
-		expect(SELECTABLE_TRANSCRIPT_HTML).toContain("createTextNode('\\n\\n')");
+		expect(message.segments[0]?.separatorBefore).toBe("");
+		expect(SELECTABLE_TRANSCRIPT_HTML).toContain(
+			"createTextNode(segment.separatorBefore)",
+		);
+		expect(SELECTABLE_TRANSCRIPT_HTML).toContain(
+			"message.initial || shouldFollowActive",
+		);
 	});
 
 	test("changes the document key when same-length transcript text changes", () => {
@@ -54,6 +63,9 @@ describe("selectable transcript protocol", () => {
 				activeWordIndex: -1,
 				follow: true,
 				initial: true,
+				presentation: "read",
+				selectionEnabled: true,
+				contentPaddingVertical: 120,
 				selection: null,
 			});
 
@@ -87,6 +99,11 @@ describe("selectable transcript protocol", () => {
 		expect(
 			parseTranscriptSurfaceMessage(JSON.stringify({ type: "run-code" })),
 		).toBeNull();
+		expect(
+			parseTranscriptSurfaceMessage(
+				JSON.stringify({ type: "long-press-segment", index: 3 }),
+			),
+		).toEqual({ type: "long-press-segment", index: 3 });
 		expect(
 			parseTranscriptSurfaceMessage(
 				JSON.stringify({

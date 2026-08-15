@@ -7,6 +7,7 @@ describe("transcript follow positioning", () => {
 		expect(
 			resolveTranscriptScrollBehavior({
 				hasPositioned: false,
+				wasFollowing: true,
 				follow: true,
 				activeSegmentIndex: 120,
 				previousActiveSegmentIndex: -1,
@@ -15,6 +16,7 @@ describe("transcript follow positioning", () => {
 		expect(
 			resolveTranscriptScrollBehavior({
 				hasPositioned: true,
+				wasFollowing: true,
 				follow: true,
 				activeSegmentIndex: 121,
 				previousActiveSegmentIndex: 120,
@@ -23,6 +25,7 @@ describe("transcript follow positioning", () => {
 		expect(
 			resolveTranscriptScrollBehavior({
 				hasPositioned: true,
+				wasFollowing: true,
 				follow: true,
 				activeSegmentIndex: 121,
 				previousActiveSegmentIndex: 121,
@@ -31,10 +34,23 @@ describe("transcript follow positioning", () => {
 		expect(
 			resolveTranscriptScrollBehavior({
 				hasPositioned: true,
+				wasFollowing: true,
 				follow: false,
 				activeSegmentIndex: 122,
 				previousActiveSegmentIndex: 121,
 			}),
 		).toBeNull();
+	});
+
+	test("Live resumes following with an immediate catch-up", () => {
+		expect(
+			resolveTranscriptScrollBehavior({
+				hasPositioned: true,
+				wasFollowing: false,
+				follow: true,
+				activeSegmentIndex: 120,
+				previousActiveSegmentIndex: 30,
+			}),
+		).toBe("instant");
 	});
 });

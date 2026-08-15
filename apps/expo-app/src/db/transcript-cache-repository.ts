@@ -1,3 +1,5 @@
+import type { TranscriptTimingSource } from "@acme/blog";
+
 import { TRANSCRIPT_CACHE_TABLES } from "./transcript-cache-schema";
 import type { TranscriptCacheSqliteDatabase } from "./transcript-cache-sqlite";
 
@@ -7,6 +9,7 @@ export type TranscriptCacheWord = {
 	word: string;
 	startSec: number;
 	endSec: number;
+	timingSource?: TranscriptTimingSource;
 };
 
 export type TranscriptCacheSegmentInput = {
