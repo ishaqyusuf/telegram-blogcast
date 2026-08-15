@@ -31,6 +31,9 @@ Tracks the current audio playback experience, supporting components, and future 
 - `apps/expo-app/src/components/audio-blog-view/audio-blog-bottom-nav.tsx`
 - `apps/expo-app/src/components/audio-blog-view/audio-blog-content.tsx`
 - `apps/expo-app/src/components/audio-blog-view/audio-transcript.tsx`
+- `apps/expo-app/src/components/audio-blog-view/karaoke-transcript.tsx`
+- `apps/expo-app/src/components/audio-blog-view/transcript-read-mode.tsx`
+- `apps/expo-app/src/components/audio-blog-view/selectable-transcript-surface.tsx`
 
 ### State And Persistence
 - Store: `apps/expo-app/src/store/audio-store.ts`
@@ -66,8 +69,13 @@ Tracks the current audio playback experience, supporting components, and future 
 - Album suggestions are same-channel audio candidates, ranked by matching tags.
 - Playlists accept audio media only and skip duplicate additions.
 - Transcripts are persisted after successful Local Whisper transcription and read back through the transcript view.
-- Saved transcripts are loaded by time window on the audio screen. The first request targets the current playback minute, playback prefetches nearby windows, and read mode uses virtualized segment rows instead of mounting one full transcript document.
+- Saved transcripts are loaded by time window on the audio screen. The first request targets the current playback minute, playback prefetches nearby windows, and read mode rebuilds its selectable document incrementally while retaining the visible segment anchor.
 - Saved transcript windows take precedence over local Whisper chunk generation. Missing/generated chunks still use the local transcriber, but opening or reading an already saved transcript does not require the transcriber to be online.
+- Karaoke rendering uses exact transcript document offsets and preserves each segment's original Arabic text, whitespace, punctuation, and tashkeel. Active, past, and future states share identical typography and node structure; playback progress changes color only and cannot reflow a line.
+- Read mode is one continuous RTL selectable document. Android and iOS use a locked-down local WebView for native long-press handles, while web uses the equivalent DOM surface for click-and-drag selection. Transcript strings are inserted as text nodes, never interpreted as HTML.
+- A non-empty read-mode selection exposes Copy, Comment, Share, and dismiss actions. Copy and Share preserve the exact selected text and line breaks; Comment uses the original drag anchor to resolve a deterministic transcript timestamp, including backward cross-segment selections.
+- Opening read mode is initially hidden, jumps without animation to the current active segment, then reveals. Later segment transitions follow smoothly; word changes never scroll. Manual scrolling or selecting pauses follow mode, and Live/compass performs an immediate catch-up before smooth following resumes.
+- Prepending or appending transcript windows restores the visible segment by stable identity and rebases selected document offsets, so incremental loading does not jump the viewport or corrupt a selection.
 - Audio transcript chunks require the local MLX Whisper transcriber. Hosted OpenAI/Gemini transcription is not used for chunk transcription.
 - Web uses the API default local transcriber URL `http://127.0.0.1:8787`; mobile must use a reachable Mac LAN URL such as `http://192.168.x.x:8787`.
 - Transcription controls are disabled when the local transcriber health check fails. Start it with `bun run transcriber:dev`.

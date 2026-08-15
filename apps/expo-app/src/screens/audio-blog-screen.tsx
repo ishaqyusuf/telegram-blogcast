@@ -2145,6 +2145,8 @@ export default function AudioBlogScreen() {
 	const [isSelectingAudioArt, setIsSelectingAudioArt] = useState(false);
 	const [transcriptHighlightPaused, setTranscriptHighlightPaused] =
 		useState(false);
+	const [transcriptFollowRequestKey, setTranscriptFollowRequestKey] =
+		useState(0);
 	const [frozenTranscriptPositionSec, setFrozenTranscriptPositionSec] =
 		useState(0);
 	const [markedTranscriptSelection, setMarkedTranscriptSelection] =
@@ -3406,6 +3408,8 @@ export default function AudioBlogScreen() {
 	function openTranscriptModal() {
 		setFrozenTranscriptPositionSec(transcriptAnchorSec);
 		setTranscriptHighlightPaused(false);
+		setMarkedTranscriptSelection(null);
+		setTranscriptFollowRequestKey((value) => value + 1);
 		setTranscriptModalVisible(true);
 		syncPlaybackSnapshot().catch(() => undefined);
 		Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -3422,6 +3426,8 @@ export default function AudioBlogScreen() {
 	function toggleTranscriptHighlightPause() {
 		if (!transcriptHighlightPaused) {
 			setFrozenTranscriptPositionSec(transcriptAnchorSec);
+		} else {
+			setTranscriptFollowRequestKey((value) => value + 1);
 		}
 		setTranscriptHighlightPaused((value) => !value);
 	}
@@ -3430,6 +3436,7 @@ export default function AudioBlogScreen() {
 		setFrozenTranscriptPositionSec(transcriptAnchorSec);
 		setTranscriptHighlightPaused(false);
 		setMarkedTranscriptSelection(null);
+		setTranscriptFollowRequestKey((value) => value + 1);
 		syncPlaybackSnapshot().catch(() => undefined);
 	}
 
@@ -3457,6 +3464,7 @@ export default function AudioBlogScreen() {
 		const text = markedTranscriptSelection?.text;
 		if (!text) return;
 		Clipboard.setString(text);
+		setMarkedTranscriptSelection(null);
 		Alert.alert("Copied", "Highlighted transcript text copied.");
 	}
 
@@ -3464,12 +3472,26 @@ export default function AudioBlogScreen() {
 		const selection = markedTranscriptSelection;
 		const text = selection?.text;
 		if (!selection || !text?.trim() || isAddingTranscriptComment) return;
-		Clipboard.setString(text);
 		addTranscriptComment({
 			blogId: id,
 			content: text,
 			timestampSeconds: Math.max(0, Math.floor(selection.timestampSec)),
 		});
+		setMarkedTranscriptSelection(null);
+	}
+
+	async function shareMarkedTranscriptText() {
+		const text = markedTranscriptSelection?.text;
+		if (!text) return;
+		try {
+			await Share.share({ message: text });
+			setMarkedTranscriptSelection(null);
+		} catch {
+			Alert.alert(
+				"Could not share",
+				"Please try sharing this selection again.",
+			);
+		}
 	}
 
 	function updateFloatingControls(scrollY: number) {
@@ -4065,6 +4087,7 @@ export default function AudioBlogScreen() {
 									!transcriptHighlightPaused && !markedTranscriptSelection
 								}
 								selection={markedTranscriptSelection}
+								followRequestKey={transcriptFollowRequestKey}
 								onSelectionChange={setMarkedTranscriptSelection}
 								onStartReached={requestPreviousTranscriptWindow}
 								onEndReached={requestNextTranscriptWindow}
@@ -4139,6 +4162,23 @@ export default function AudioBlogScreen() {
 											>
 												Comment
 											</Text>
+										</Pressable>
+										<Pressable
+											onPress={() => void shareMarkedTranscriptText()}
+											className="h-11 flex-1 flex-row items-center justify-center gap-2 rounded-full bg-white/10 active:opacity-75"
+										>
+											<Icon name="Share" size={16} color="#ffffff" />
+											<Text className="text-sm font-bold text-white">
+												Share
+											</Text>
+										</Pressable>
+										<Pressable
+											onPress={() => setMarkedTranscriptSelection(null)}
+											className="size-11 items-center justify-center rounded-full bg-white/10 active:opacity-75"
+											accessibilityRole="button"
+											accessibilityLabel="Clear transcript selection"
+										>
+											<Icon name="X" size={16} color="#ffffff" />
 										</Pressable>
 									</View>
 								</>

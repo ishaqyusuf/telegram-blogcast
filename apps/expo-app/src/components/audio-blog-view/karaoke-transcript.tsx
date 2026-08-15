@@ -1,12 +1,25 @@
 import {
+	type TranscriptDisplaySegment,
+	buildTranscriptDisplayRuns,
+} from "@/components/audio-blog-view/transcript-display-runs";
+import { resolveTranscriptScrollBehavior } from "@/components/audio-blog-view/transcript-follow-state";
+import {
 	type TranscriptSegmentData,
 	getTranscriptSegmentKey,
 } from "@/components/audio-blog-view/transcript-segments";
+import { buildTranscriptDocument } from "@/components/audio-blog-view/transcript-timing";
 import { useSyncedTranscript } from "@/components/audio-blog-view/use-synced-transcript";
 import { useAudioStore } from "@/store/audio-store";
 import { LegendList, type LegendListRef } from "@legendapp/list";
 import * as Haptics from "expo-haptics";
-import React, { memo, useCallback, useEffect, useRef, useState } from "react";
+import React, {
+	memo,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { Pressable, Text, View } from "react-native";
 
 interface KaraokeTranscriptProps {
@@ -25,7 +38,7 @@ interface KaraokeTranscriptProps {
 }
 
 type TranscriptRowProps = {
-	segment: TranscriptSegmentData;
+	displaySegment: TranscriptDisplaySegment;
 	index: number;
 	isActive: boolean;
 	activeWordIndex: number;
@@ -35,7 +48,7 @@ type TranscriptRowProps = {
 };
 
 const TranscriptRow = memo(function TranscriptRow({
-	segment,
+	displaySegment,
 	index,
 	isActive,
 	activeWordIndex,
@@ -43,6 +56,7 @@ const TranscriptRow = memo(function TranscriptRow({
 	onPressSegment,
 	onLongPressSegment,
 }: TranscriptRowProps) {
+	const { segment, runs } = displaySegment;
 	return (
 		<Pressable
 			onPress={() => onPressSegment(segment, index)}
@@ -50,32 +64,34 @@ const TranscriptRow = memo(function TranscriptRow({
 		>
 			<Text
 				selectable={selectable}
+				android_hyphenationFrequency="none"
+				lineBreakStrategyIOS="standard"
+				textBreakStrategy="highQuality"
 				style={{
 					fontSize: 28,
 					lineHeight: 40,
 					textAlign: "right",
 					writingDirection: "rtl",
-					fontWeight: isActive ? "800" : "600",
+					fontWeight: "700",
 					color: isActive ? "#ffffff" : "rgba(255, 255, 255, 0.4)",
 				}}
 			>
-				{isActive && segment.words?.length
-					? segment.words.map((word, wordIndex) => {
-							const wordActive = wordIndex === activeWordIndex;
-							return (
-								<Text
-									key={`${word.startSec}-${wordIndex}`}
-									selectable={selectable}
-									style={{
-										color: wordActive ? "#ffffff" : "rgba(255,255,255,0.8)",
-										fontWeight: wordActive ? "900" : undefined,
-									}}
-								>
-									{word.word}{" "}
-								</Text>
-							);
-						})
-					: segment.text}
+				{runs.map((run) => (
+					<Text
+						key={run.key}
+						selectable={selectable}
+						style={{
+							color:
+								isActive && run.wordIndex === activeWordIndex
+									? "#ffffff"
+									: isActive
+										? "rgba(255,255,255,0.82)"
+										: "rgba(255,255,255,0.4)",
+						}}
+					>
+						{run.text}
+					</Text>
+				))}
 			</Text>
 		</Pressable>
 	);
@@ -96,15 +112,21 @@ export function KaraokeTranscript({
 	const listRef = useRef<LegendListRef>(null);
 	const lastTapRef = useRef<{ key: string; at: number } | null>(null);
 	const [followPaused, setFollowPaused] = useState(false);
+	const hasPositionedRef = useRef(false);
+	const previousActiveIdxRef = useRef(-1);
 	const { activeSegmentIndex: activeIdx, activeWordIndex: activeWordIdx } =
 		useSyncedTranscript({ segments, positionSecOverride });
+	const displaySegments = useMemo(
+		() => buildTranscriptDisplayRuns(buildTranscriptDocument(segments)),
+		[segments],
+	);
 
 	const scrollToActiveSegment = useCallback(
-		(animated: boolean) => {
+		(behavior: "instant" | "smooth") => {
 			if (activeIdx < 0 || !segments.length) return;
 			listRef.current?.scrollToIndex({
 				index: activeIdx,
-				animated,
+				animated: behavior === "smooth",
 				viewPosition: 0.5,
 			});
 		},
@@ -113,7 +135,7 @@ export function KaraokeTranscript({
 
 	const resumeFollowing = useCallback(() => {
 		setFollowPaused(false);
-		scrollToActiveSegment(true);
+		scrollToActiveSegment("smooth");
 	}, [scrollToActiveSegment]);
 
 	const handlePressSegment = useCallback(
@@ -140,9 +162,9 @@ export function KaraokeTranscript({
 	);
 
 	const renderItem = useCallback(
-		({ item, index }: { item: TranscriptSegmentData; index: number }) => (
+		({ item, index }: { item: TranscriptDisplaySegment; index: number }) => (
 			<TranscriptRow
-				segment={item}
+				displaySegment={item}
 				index={index}
 				isActive={index === activeIdx}
 				activeWordIndex={index === activeIdx ? activeWordIdx : -1}
@@ -161,10 +183,17 @@ export function KaraokeTranscript({
 	);
 
 	useEffect(() => {
-		if (autoScroll && !followPaused) {
-			scrollToActiveSegment(true);
-		}
-	}, [autoScroll, followPaused, scrollToActiveSegment]);
+		const behavior = resolveTranscriptScrollBehavior({
+			hasPositioned: hasPositionedRef.current,
+			follow: autoScroll && !followPaused,
+			activeSegmentIndex: activeIdx,
+			previousActiveSegmentIndex: previousActiveIdxRef.current,
+		});
+		previousActiveIdxRef.current = activeIdx;
+		if (!behavior) return;
+		scrollToActiveSegment(behavior);
+		hasPositionedRef.current = true;
+	}, [activeIdx, autoScroll, followPaused, scrollToActiveSegment]);
 
 	if (!segments.length) {
 		return (
@@ -186,8 +215,9 @@ export function KaraokeTranscript({
 		<View style={{ flex: 1 }}>
 			<LegendList
 				ref={listRef}
-				data={segments}
-				keyExtractor={getTranscriptSegmentKey}
+				data={displaySegments}
+				keyExtractor={(item) => item.key}
+				initialScrollIndex={activeIdx >= 0 ? activeIdx : 0}
 				extraData={`${activeIdx}:${activeWordIdx}:${selectable ? 1 : 0}`}
 				showsVerticalScrollIndicator={false}
 				nestedScrollEnabled
@@ -212,8 +242,8 @@ export function KaraokeTranscript({
 						position: "absolute",
 						right: 18,
 						bottom: 18,
-						minHeight: 36,
-						borderRadius: 18,
+						minHeight: 44,
+						borderRadius: 22,
 						backgroundColor: "rgba(255,255,255,0.92)",
 						paddingHorizontal: 14,
 						alignItems: "center",

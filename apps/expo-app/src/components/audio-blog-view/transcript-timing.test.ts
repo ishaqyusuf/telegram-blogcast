@@ -1,12 +1,13 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+	type TranscriptSegmentData,
 	buildTranscriptDocument,
 	buildTranscriptTextSelection,
 	findActiveSegmentIndex,
 	findActiveWordIndex,
+	rebaseTranscriptTextSelection,
 	selectTranscriptSegment,
-	type TranscriptSegmentData,
 } from "./transcript-timing";
 
 const segments: TranscriptSegmentData[] = [
@@ -46,17 +47,15 @@ describe("transcript timing helpers", () => {
 	test("builds one continuous document across transcript chunks", () => {
 		const document = buildTranscriptDocument(segments);
 
-		expect(document.fullText).toBe(
-			"alpha beta\n\ngamma delta\n\nepsilon zeta",
-		);
+		expect(document.fullText).toBe("alpha beta\n\ngamma delta\n\nepsilon zeta");
 		expect(document.segmentRanges).toEqual([
 			expect.objectContaining({ index: 0, startOffset: 0, endOffset: 10 }),
 			expect.objectContaining({ index: 1, startOffset: 12, endOffset: 23 }),
 			expect.objectContaining({ index: 2, startOffset: 25, endOffset: 37 }),
 		]);
-		expect(document.wordRangesBySegment.map((ranges) => ranges.length)).toEqual([
-			2, 2, 2,
-		]);
+		expect(document.wordRangesBySegment.map((ranges) => ranges.length)).toEqual(
+			[2, 2, 2],
+		);
 	});
 
 	test("resolves selection metadata across segment and chunk boundaries", () => {
@@ -85,13 +84,39 @@ describe("transcript timing helpers", () => {
 		);
 	});
 
+	test("uses the original drag anchor for a backward multi-segment selection", () => {
+		const document = buildTranscriptDocument(segments);
+		const betaStart = document.fullText.indexOf("beta");
+		const zetaEnd = document.fullText.indexOf("zeta") + "zeta".length;
+
+		const selection = buildTranscriptTextSelection(
+			document,
+			zetaEnd,
+			betaStart,
+			zetaEnd,
+		);
+
+		expect(selection).toEqual(
+			expect.objectContaining({
+				text: "beta\n\ngamma delta\n\nepsilon zeta",
+				dragStartOffset: zetaEnd,
+				timestampSec: 25,
+			}),
+		);
+	});
+
 	test("ignores separator-only selections", () => {
 		const document = buildTranscriptDocument(segments);
 		const separatorStart = document.segmentRanges[0]!.endOffset;
 		const separatorEnd = document.segmentRanges[1]!.startOffset;
 
 		expect(
-			buildTranscriptTextSelection(document, separatorStart, separatorEnd, null),
+			buildTranscriptTextSelection(
+				document,
+				separatorStart,
+				separatorEnd,
+				null,
+			),
 		).toBeNull();
 	});
 
@@ -120,5 +145,85 @@ describe("transcript timing helpers", () => {
 		expect(findActiveWordIndex(segments[1]!.words, 10)).toBe(0);
 		expect(findActiveWordIndex(segments[1]!.words, 15)).toBe(1);
 		expect(findActiveWordIndex(segments[1]!.words, 20)).toBe(1);
+	});
+
+	test("rebases a selection when an earlier transcript window is prepended", () => {
+		const previousDocument = buildTranscriptDocument(segments.slice(1));
+		const selection = buildTranscriptTextSelection(
+			previousDocument,
+			previousDocument.fullText.indexOf("delta"),
+			previousDocument.fullText.indexOf("zeta") + "zeta".length,
+			previousDocument.fullText.indexOf("epsilon"),
+		);
+		const nextDocument = buildTranscriptDocument(segments);
+
+		expect(
+			rebaseTranscriptTextSelection(previousDocument, nextDocument, selection),
+		).toEqual(
+			expect.objectContaining({
+				text: "delta\n\nepsilon zeta",
+				startSegmentIndex: 1,
+				endSegmentIndex: 2,
+				timestampSec: 20,
+			}),
+		);
+	});
+
+	test("does not mistake shifted fallback ids for stable segment identity", () => {
+		const previousSegments = segments.slice(1).map((segment, index) => ({
+			...segment,
+			id: index,
+		}));
+		const nextSegments = segments.map((segment, index) => ({
+			...segment,
+			id: index,
+		}));
+		const previousDocument = buildTranscriptDocument(previousSegments);
+		const selectedSegment = previousSegments[0];
+		if (!selectedSegment) throw new Error("Expected transcript fixture");
+		const selection = selectTranscriptSegment(
+			previousDocument,
+			selectedSegment,
+		);
+
+		expect(
+			rebaseTranscriptTextSelection(
+				previousDocument,
+				buildTranscriptDocument(nextSegments),
+				selection,
+			),
+		).toEqual(
+			expect.objectContaining({
+				text: "gamma delta",
+				startSegmentIndex: 1,
+				timestampSec: 10,
+			}),
+		);
+	});
+
+	test("preserves selection endpoints inside a segment separator", () => {
+		const previousDocument = buildTranscriptDocument(segments.slice(1));
+		const firstRange = previousDocument.segmentRanges[0];
+		if (!firstRange) throw new Error("Expected transcript fixture");
+		const separatorOffset = firstRange.endOffset + 1;
+		const selection = buildTranscriptTextSelection(
+			previousDocument,
+			separatorOffset,
+			previousDocument.fullText.length,
+			separatorOffset,
+		);
+		const nextDocument = buildTranscriptDocument(segments);
+		const nextFirstRange = nextDocument.segmentRanges[1];
+		if (!nextFirstRange)
+			throw new Error("Expected prepended transcript fixture");
+
+		expect(
+			rebaseTranscriptTextSelection(previousDocument, nextDocument, selection),
+		).toEqual(
+			expect.objectContaining({
+				text: "\nepsilon zeta",
+				startOffset: nextFirstRange.endOffset + 1,
+			}),
+		);
 	});
 });

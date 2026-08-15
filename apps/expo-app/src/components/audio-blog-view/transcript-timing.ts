@@ -79,7 +79,9 @@ function normalizeTranscriptWords(words: unknown) {
 	return words
 		.map((word: RawTranscriptWord): TranscriptWordData | null => {
 			const text = String(word?.word ?? word?.text ?? "").trim();
-			const startSec = toFiniteNumber(word?.startSec ?? word?.start ?? word?.from);
+			const startSec = toFiniteNumber(
+				word?.startSec ?? word?.start ?? word?.from,
+			);
 			const endSec = toFiniteNumber(word?.endSec ?? word?.end ?? word?.to);
 
 			if (!text || startSec == null || endSec == null || endSec <= startSec) {
@@ -109,7 +111,7 @@ function distributeWords(segment: {
 
 export function normalizeTranscriptSegment(
 	segment: RawTranscriptSegment,
-	index: number,
+	_index: number,
 ): TranscriptSegmentData {
 	const startSec = toFiniteNumber(segment.startSec ?? segment.from) ?? 0;
 	const endSec = Math.max(
@@ -117,7 +119,7 @@ export function normalizeTranscriptSegment(
 		toFiniteNumber(segment.endSec ?? segment.to) ?? startSec,
 	);
 	const normalized = {
-		id: segment.id ?? index,
+		id: segment.id,
 		startSec,
 		endSec,
 		text: segment.text,
@@ -302,6 +304,10 @@ function resolveTimestampAtOffset(
 	const wordRange = getWordRangeAtOffset(document, offset);
 	if (wordRange) return wordRange.word.startSec;
 
+	const precedingWordRange =
+		offset > 0 ? getWordRangeAtOffset(document, offset - 1) : null;
+	if (precedingWordRange) return precedingWordRange.word.startSec;
+
 	const segmentRange = getSegmentRangeAtOffset(document, offset);
 	return segmentRange?.segment.startSec ?? 0;
 }
@@ -384,5 +390,112 @@ export function selectTranscriptSegment(
 		range.startOffset,
 		range.endOffset,
 		range.startOffset,
+	);
+}
+
+function findMatchingSegmentRange(
+	document: TranscriptDocument,
+	segment: TranscriptSegmentData,
+) {
+	return document.segmentRanges.find(
+		(candidate) =>
+			(candidate.segment.id != null &&
+				candidate.segment.id === segment.id &&
+				candidate.segment.startSec === segment.startSec &&
+				candidate.segment.endSec === segment.endSec) ||
+			(candidate.segment.startSec === segment.startSec &&
+				candidate.segment.endSec === segment.endSec &&
+				candidate.segment.text === segment.text),
+	);
+}
+
+function rebaseSelectionOffset(
+	previousDocument: TranscriptDocument,
+	nextDocument: TranscriptDocument,
+	offset: number,
+) {
+	let precedingRange: TranscriptSegmentRange | undefined;
+	for (
+		let index = previousDocument.segmentRanges.length - 1;
+		index >= 0;
+		index -= 1
+	) {
+		const candidate = previousDocument.segmentRanges[index];
+		if (candidate && candidate.endOffset <= offset) {
+			precedingRange = candidate;
+			break;
+		}
+	}
+	const followingRange = previousDocument.segmentRanges.find(
+		(range) => range.startOffset >= offset,
+	);
+	if (
+		precedingRange &&
+		followingRange &&
+		precedingRange.index + 1 === followingRange.index &&
+		offset >= precedingRange.endOffset &&
+		offset <= followingRange.startOffset
+	) {
+		const nextPrecedingRange = findMatchingSegmentRange(
+			nextDocument,
+			precedingRange.segment,
+		);
+		const nextFollowingRange = findMatchingSegmentRange(
+			nextDocument,
+			followingRange.segment,
+		);
+		if (!nextPrecedingRange || !nextFollowingRange) return null;
+		const separatorOffset = offset - precedingRange.endOffset;
+		return Math.min(
+			nextFollowingRange.startOffset,
+			nextPrecedingRange.endOffset + separatorOffset,
+		);
+	}
+
+	const previousRange = getSegmentRangeAtOffset(previousDocument, offset);
+	if (!previousRange) return null;
+	const nextRange = findMatchingSegmentRange(
+		nextDocument,
+		previousRange.segment,
+	);
+	if (!nextRange) return null;
+	const localOffset = Math.max(
+		0,
+		Math.min(
+			previousRange.endOffset - previousRange.startOffset,
+			offset - previousRange.startOffset,
+		),
+	);
+	return Math.min(nextRange.endOffset, nextRange.startOffset + localOffset);
+}
+
+export function rebaseTranscriptTextSelection(
+	previousDocument: TranscriptDocument,
+	nextDocument: TranscriptDocument,
+	selection: TranscriptTextSelection | null,
+) {
+	if (!selection) return null;
+	const startOffset = rebaseSelectionOffset(
+		previousDocument,
+		nextDocument,
+		selection.startOffset,
+	);
+	const endOffset = rebaseSelectionOffset(
+		previousDocument,
+		nextDocument,
+		selection.endOffset,
+	);
+	const dragStartOffset = rebaseSelectionOffset(
+		previousDocument,
+		nextDocument,
+		selection.dragStartOffset,
+	);
+	if (startOffset == null || endOffset == null || dragStartOffset == null)
+		return null;
+	return buildTranscriptTextSelection(
+		nextDocument,
+		startOffset,
+		endOffset,
+		dragStartOffset,
 	);
 }
