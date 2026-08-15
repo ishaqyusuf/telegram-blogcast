@@ -211,3 +211,11 @@
 - Brain changed: `brain/plans/2026-07-01-bug-fix-audio-detail-does-not-steal-playback.md`, `brain/tasks/roadmap.md`, `brain/tasks/done.md`, `brain/intake/2026-07-01-album-search-audio-ai-followups.md`, `brain/features/audio.md`.
 - Validation passed: `bunx eslint src/screens/audio-blog-screen.tsx src/components/audio-blog-view/karaoke-transcript.tsx` from `apps/expo-app`.
 - Validation limitation: full `bun --cwd apps/expo-app lint` still fails on unrelated existing lint errors outside this slice.
+## 2026-08-15
+
+### Simplify Audio Header Actions And Suppress Footer Under Sheets
+- Status: Done.
+- Source changed: `apps/expo-app/src/components/audio-blog-view/audio-player-header.tsx`, `apps/expo-app/src/components/audio-blog-view/audio-options-sheet.tsx`, `apps/expo-app/src/components/audio-blog-view/audio-options-actions.tsx`, `apps/expo-app/src/components/ui/floating-bottom-sheet.tsx`, `apps/expo-app/src/components/ui/floating-bottom-sheet-store.ts`, `apps/expo-app/src/components/global-audio-bar/index.tsx`, `apps/expo-app/src/screens/audio-blog-screen.tsx`.
+- Architecture changed: `brain/decisions/2026-08-15-floating-sheets-suppress-persistent-footers.md`, `brain/engineering/design-language.md`.
+- Behavior: the player header now keeps only navigation/context/menu; transcript, transcription, and Local Services live in Audio options; every shared floating bottom sheet hides the global audio footer until all presented sheets finish dismissing.
+- Validation: focused store/UI tests, targeted Expo ESLint, relevant Expo test suite, and Android production export.

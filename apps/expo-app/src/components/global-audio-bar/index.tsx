@@ -1,5 +1,6 @@
 import { useAudioStore, type AudioPlayMode } from "@/store/audio-store";
 import { useGlobalAudioBarStore } from "@/store/global-audio-bar-store";
+import { useFloatingBottomSheetStore } from "@/components/ui/floating-bottom-sheet-store";
 import { useColors } from "@/hooks/use-color";
 import { getAudioDisplayTitle } from "@/lib/audio-title";
 import { getNextPlaybackRate } from "@/services/audio-player/notification-controls";
@@ -169,6 +170,9 @@ export function GlobalAudioBar() {
   const unloadAudio = useAudioStore((s) => s.unloadAudio);
   const hidden = useGlobalAudioBarStore((s) => s.hidden);
   const scrollHidden = useGlobalAudioBarStore((s) => s.scrollHidden);
+  const hasOpenFloatingSheet = useFloatingBottomSheetStore(
+    (s) => Object.keys(s.openSheetIds).length > 0,
+  );
   const audioDetailPlayerVisible = useGlobalAudioBarStore(
     (s) => s.audioDetailPlayerVisible,
   );
@@ -241,6 +245,7 @@ export function GlobalAudioBar() {
   const isAudioDetailScreen = viewedAudioId !== null;
   const visible =
     !hidden &&
+    !hasOpenFloatingSheet &&
     Boolean(sound) &&
     (isAudioDetailScreen ? audioDetailPlayerVisible : !scrollHidden);
   const title = getAudioDisplayTitle(blog, "Now Playing");

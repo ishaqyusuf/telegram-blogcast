@@ -18,6 +18,7 @@ export type AudioOptionsSheetProps = {
 	onClose: () => void;
 	onComment: () => void;
 	onOpenLocalServices: () => void;
+	onOpenTranscript: () => void;
 	onResetTranscription: () => void;
 	onShare: () => void;
 	onSleepTimer: () => void;
@@ -26,6 +27,7 @@ export type AudioOptionsSheetProps = {
 	onViewAlbum: () => void;
 	tashkeelEnabled: boolean;
 	transcriptionActionLabel: string;
+	transcriptStatusLabel?: string | null;
 	visible: boolean;
 };
 
@@ -80,10 +82,26 @@ export function AudioOptionsSheet(props: AudioOptionsSheetProps) {
 				</View>
 
 				<View className="mt-3 gap-1">
+					{props.transcriptStatusLabel ? (
+						<AudioOptionRow
+							icon="FileText"
+							label="Read transcript"
+							value={props.transcriptStatusLabel}
+							onPress={dismissThen(props.onOpenTranscript)}
+							showChevron
+						/>
+					) : null}
 					<AudioOptionRow
 						icon="Captions"
-						label={props.transcriptionActionLabel}
+						label="Transcription"
 						onPress={dismissThen(props.onTranscribe)}
+						showChevron
+						value={props.transcriptionActionLabel}
+					/>
+					<AudioOptionRow
+						icon="Wifi"
+						label="Local services"
+						onPress={dismissThen(props.onOpenLocalServices)}
 						showChevron
 					/>
 					<AudioOptionRow
@@ -112,12 +130,7 @@ export function AudioOptionsSheet(props: AudioOptionsSheetProps) {
 							hasAlbum={props.hasAlbum}
 							onAddArt={dismissThen(props.onAddArt)}
 							onChangeAlbum={dismissThen(props.onAddToAlbum)}
-							onOpenLocalServices={dismissThen(
-								props.onOpenLocalServices,
-							)}
-							onResetTranscription={dismissThen(
-								props.onResetTranscription,
-							)}
+							onResetTranscription={dismissThen(props.onResetTranscription)}
 							onToggleTashkeel={props.onToggleTashkeel}
 							tashkeelEnabled={props.tashkeelEnabled}
 						/>

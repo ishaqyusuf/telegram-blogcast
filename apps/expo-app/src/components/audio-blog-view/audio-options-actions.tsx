@@ -54,11 +54,7 @@ export function AudioOptionRow({
 			className="min-h-12 flex-row items-center gap-3 rounded-xl px-3 active:bg-muted"
 			accessibilityRole={isSwitch ? "switch" : "button"}
 			accessibilityState={
-				isSwitch
-					? { checked }
-					: isDisclosure
-						? { expanded }
-						: undefined
+				isSwitch ? { checked } : isDisclosure ? { expanded } : undefined
 			}
 		>
 			<Icon name={icon} className="size-base text-muted-foreground" />
@@ -88,7 +84,6 @@ export type AudioMoreControlsProps = {
 	hasAlbum: boolean;
 	onAddArt: () => void;
 	onChangeAlbum: () => void;
-	onOpenLocalServices: () => void;
 	onResetTranscription: () => void;
 	onToggleTashkeel: () => void;
 	tashkeelEnabled: boolean;
@@ -97,12 +92,6 @@ export type AudioMoreControlsProps = {
 export function AudioMoreControls(props: AudioMoreControlsProps) {
 	return (
 		<View className="mt-1 gap-1 border-t border-border pt-1">
-			<AudioOptionRow
-				icon="Wifi"
-				label="Local services"
-				onPress={props.onOpenLocalServices}
-				showChevron
-			/>
 			<AudioOptionRow
 				checked={props.tashkeelEnabled}
 				icon="Sparkles"

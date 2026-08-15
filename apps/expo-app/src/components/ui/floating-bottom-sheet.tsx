@@ -1,15 +1,31 @@
 import {
 	BottomSheetBackdrop,
-	BottomSheetModal,
-	BottomSheetView,
 	type BottomSheetBackdropProps,
 	type BottomSheetBackgroundProps,
+	BottomSheetModal,
 	type BottomSheetModalProps,
+	BottomSheetView,
 } from "@gorhom/bottom-sheet";
-import { type ReactNode, useCallback, useEffect, useMemo, useRef } from "react";
-import { Platform, StyleSheet, Text, View, useWindowDimensions } from "react-native";
+import {
+	type ReactNode,
+	useCallback,
+	useEffect,
+	useId,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+} from "react";
+import {
+	Platform,
+	StyleSheet,
+	Text,
+	View,
+	useWindowDimensions,
+} from "react-native";
 
 import { useColors } from "@/hooks/use-color";
+
+import { useFloatingBottomSheetStore } from "./floating-bottom-sheet-store";
 
 const SHEET_RADIUS = 32;
 
@@ -54,29 +70,42 @@ export function FloatingBottomSheet({
 }: FloatingBottomSheetProps) {
 	const ref = useRef<BottomSheetModal>(null);
 	const wasPresentedRef = useRef(false);
+	const sheetId = useId();
+	const setSheetOpen = useFloatingBottomSheetStore(
+		(state) => state.setSheetOpen,
+	);
 	const colors = useColors();
 	const { height } = useWindowDimensions();
-	const resolvedBottomInset = bottomInset ?? (Platform.OS === "android" ? 20 : 28);
+	const resolvedBottomInset =
+		bottomInset ?? (Platform.OS === "android" ? 20 : 28);
 	const resolvedMaxDynamicContentSize =
 		maxDynamicContentSize ??
 		Math.max(240, height - resolvedBottomInset - sideInset * 2);
 
-	useEffect(() => {
+	useLayoutEffect(() => {
 		if (visible) {
 			wasPresentedRef.current = true;
+			setSheetOpen(sheetId, true);
 			ref.current?.present();
 			return;
 		}
 
-		if (wasPresentedRef.current) ref.current?.dismiss();
-	}, [visible]);
+		if (wasPresentedRef.current) {
+			ref.current?.dismiss();
+		} else {
+			setSheetOpen(sheetId, false);
+		}
+	}, [setSheetOpen, sheetId, visible]);
+
+	useEffect(() => () => setSheetOpen(sheetId, false), [setSheetOpen, sheetId]);
 
 	const handleDismiss = useCallback(() => {
 		const wasPresented = wasPresentedRef.current;
 		wasPresentedRef.current = false;
+		setSheetOpen(sheetId, false);
 		if (wasPresented && visible) onClose();
 		onDismissed?.();
-	}, [onClose, onDismissed, visible]);
+	}, [onClose, onDismissed, setSheetOpen, sheetId, visible]);
 
 	const renderBackdrop = useCallback(
 		(props: BottomSheetBackdropProps) => (
@@ -95,7 +124,11 @@ export function FloatingBottomSheet({
 		({ pointerEvents, style }: BottomSheetBackgroundProps) => (
 			<View
 				pointerEvents={pointerEvents}
-				style={[style, styles.background, { backgroundColor: colors.card, borderColor: colors.border }]}
+				style={[
+					style,
+					styles.background,
+					{ backgroundColor: colors.card, borderColor: colors.border },
+				]}
 			/>
 		),
 		[colors.border, colors.card],
@@ -106,7 +139,9 @@ export function FloatingBottomSheet({
 
 		return (
 			<View style={styles.handleContainer}>
-				<View style={[styles.handle, { backgroundColor: colors.mutedForeground }]} />
+				<View
+					style={[styles.handle, { backgroundColor: colors.mutedForeground }]}
+				/>
 				{title ? (
 					<Text
 						accessibilityRole="header"
@@ -156,11 +191,20 @@ export function FloatingBottomSheet({
 }
 
 const styles = StyleSheet.create({
-	background: { borderRadius: SHEET_RADIUS, borderWidth: StyleSheet.hairlineWidth },
+	background: {
+		borderRadius: SHEET_RADIUS,
+		borderWidth: StyleSheet.hairlineWidth,
+	},
 	container: { elevation: 2000, zIndex: 2000 },
 	content: { overflow: "hidden" },
 	handle: { borderRadius: 999, height: 6, opacity: 0.25, width: 48 },
 	handleContainer: { alignItems: "center", paddingBottom: 8, paddingTop: 12 },
 	sheet: { borderRadius: SHEET_RADIUS, overflow: "hidden" },
-	title: { fontSize: 16, fontWeight: "700", marginTop: 12, maxWidth: "86%", textAlign: "center" },
+	title: {
+		fontSize: 16,
+		fontWeight: "700",
+		marginTop: 12,
+		maxWidth: "86%",
+		textAlign: "center",
+	},
 });

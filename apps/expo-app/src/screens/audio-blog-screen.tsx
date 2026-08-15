@@ -2468,14 +2468,14 @@ export default function AudioBlogScreen() {
 	});
 	const isCurrentAudioAlreadyTranscribed = transcriptBadge.isFullyTranscribed;
 	const transcriptionActionLabel = !localServicesEnabled
-		? "Enable local services"
+		? "Setup required"
 		: queuedTranscriptionJob
 			? "Queued"
 			: runningTranscriptionJob
 				? "Running"
 				: isCurrentAudioAlreadyTranscribed
-					? "Transcript"
-					: "Transcribe";
+					? "Available"
+					: "Not started";
 	const canResetTranscription =
 		hasSavedTranscript ||
 		transcriptBadge.show ||
@@ -3553,17 +3553,11 @@ export default function AudioBlogScreen() {
 										canOpenContext={Boolean(media?.albumId)}
 										contextName={media?.album?.name || channelName}
 										contextType={media?.album ? "Album" : "Channel"}
-										localServicesEnabled={localServicesEnabled}
 										onClose={() => router.back()}
 										onOpenContext={() =>
 											router.push(`/albums/${media?.albumId}` as any)
 										}
 										onOpenMore={() => setMoreMenuVisible(true)}
-										onOpenTranscript={openTranscriptModal}
-										onOpenTranscription={handleQueueCurrentTranscriptionPress}
-										transcriptStatusLabel={
-											transcriptBadge.show ? transcriptBadge.label : null
-										}
 									/>
 
 									{/* Transcript area */}
@@ -3970,8 +3964,12 @@ export default function AudioBlogScreen() {
 					void shareAudioPost();
 				}}
 				onOpenLocalServices={requestLocalServicesSetup}
+				onOpenTranscript={openTranscriptModal}
 				onTranscribe={handleQueueCurrentTranscriptionPress}
 				transcriptionActionLabel={transcriptionActionLabel}
+				transcriptStatusLabel={
+					transcriptBadge.show ? transcriptBadge.label : null
+				}
 				onResetTranscription={resetCurrentTranscription}
 				onAddArt={() => setAudioArtSheetVisible(true)}
 				onAddToAlbum={() => setAlbumPickerVisible(true)}

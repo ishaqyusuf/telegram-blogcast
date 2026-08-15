@@ -78,6 +78,7 @@ Tracks the current audio playback experience, supporting components, and future 
 - A non-empty read-mode selection exposes Copy, Comment, Share, and dismiss actions. Copy and Share preserve the exact selected flowing text; Comment uses the original drag anchor to resolve a deterministic transcript timestamp, including backward cross-segment selections.
 - Opening read mode is initially hidden, jumps without animation to the current active segment, then reveals. Later segment transitions follow smoothly. Manual scrolling or selecting pauses follow mode; the floating Live control clears selection, catches up instantly, and is the sole current-position control.
 - The read-mode header respects top and bottom system insets. Its Play/Pause action controls real audio playback rather than freezing transcript highlighting.
+- The audio player header keeps only navigation, playback context, and the overflow menu. Read transcript, transcription/CC, and Local Services actions live in the Audio options bottom sheet instead of competing with the transcript viewport.
 - Prepending or appending transcript windows restores the visible segment by stable identity and rebases selected document offsets, so incremental loading does not jump the viewport or corrupt a selection.
 - Audio transcript chunks require the local MLX Whisper transcriber. Hosted OpenAI/Gemini transcription is not used for chunk transcription.
 - Web uses the API default local transcriber URL `http://127.0.0.1:8787`; mobile must use a reachable Mac LAN URL such as `http://192.168.x.x:8787`.
@@ -92,7 +93,7 @@ Tracks the current audio playback experience, supporting components, and future 
 - Playlists are user-curated and can mix audio across channels unless future product rules tighten them.
 - Audio menus and channel chat expose add-to-album and add-to-playlist actions for audio media.
 - Album suggestions support keyword-driven, channel-aware discovery. Album detail separates `Tracks` from `+ Add`; track reorder actions are only shown in `Tracks`, while the add tab can mark all/clear/add suggestions and uses toast feedback.
-- Floating bottom actions use a shared stackable footer registry. The global audio bar is the reserved bottom-most registered layer, and album track/suggestion selection actions stack above it instead of hiding or overlapping the player.
+- Floating bottom actions use a shared stackable footer registry. The global audio bar is the reserved bottom-most registered layer, and album track/suggestion selection actions stack above it instead of hiding or overlapping the player. Any shared `FloatingBottomSheet` suppresses the global audio bar from presentation through completed dismissal, with an id-based registry so overlapping sheets cannot reveal it early.
 - Album suggestion selection exposes a floating action row for mark/unmark all, add selected to the current album, delete selected blog items with confirmation, and add selected media to another album. Long-pressing suggestion add actions opens the full add-to-album modal.
 - Add-to-album and album suggestion inputs use keyboard-aware scrolling so focused inputs and bottom actions remain reachable when the mobile keyboard is open.
 - Album track rows expose direct play/resume/pause controls. The active audio row is highlighted when the currently loaded blog/media belongs to the opened album.
