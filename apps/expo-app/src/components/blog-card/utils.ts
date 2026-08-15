@@ -8,7 +8,10 @@ import {
   getPrimaryImageSource,
 } from "./media-card-behavior";
 
-export { getBlogHref } from "./media-card-behavior";
+export {
+  getBlogHref,
+  getBlogPresentationType,
+} from "./media-card-behavior";
 
 export function getInitials(value?: string | null) {
   if (!value) return "AG";

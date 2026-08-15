@@ -66,6 +66,8 @@ export function useTranscriptionQueue(
 	const pollWhenIdle = options.pollWhenIdle ?? false;
 	const [jobs, setJobs] = useState<TranscriptionJob[]>([]);
 	const [isRunning, setIsRunning] = useState(false);
+	const [isPaused, setIsPaused] = useState(false);
+	const [isPauseUpdating, setIsPauseUpdating] = useState(false);
 	const queueLoadKey = getTranscriptionQueueLoadKey({
 		activeGatewayUrl,
 		mediaId,
@@ -85,6 +87,7 @@ export function useTranscriptionQueue(
 
 	useEffect(() => {
 		setJobs([]);
+		setIsPaused(false);
 		setLoadedQueueKey(null);
 	}, [queueLoadKey]);
 
@@ -99,9 +102,10 @@ export function useTranscriptionQueue(
 		}
 		const requestQueueLoadKey = queueLoadKey;
 		const requestGatewayUrl = activeGatewayUrl;
-    const rows = await localApiClient.blog.getTranscriptionJobs.query({
-      mediaId,
-    });
+		const [rows, queueState] = await Promise.all([
+			localApiClient.blog.getTranscriptionJobs.query({ mediaId }),
+			localApiClient.blog.getTranscriptionQueueState.query(),
+		]);
     if (
       !shouldApplyLocalApiResult(
         requestGatewayUrl,
@@ -111,6 +115,7 @@ export function useTranscriptionQueue(
 			return;
 		if (queueLoadKeyRef.current !== requestQueueLoadKey) return;
 		setJobs(rows);
+		setIsPaused(queueState.isPaused);
 		setLoadedQueueKey(requestQueueLoadKey);
 	}, [
     activeGatewayUrl,
@@ -231,6 +236,45 @@ export function useTranscriptionQueue(
     }
   }, [localServicesEnabled, reload, requestLocalServicesSetup]);
 
+	const setPaused = useCallback(
+		async (nextIsPaused: boolean) => {
+			if (!localServicesEnabled) {
+				requestLocalServicesSetup();
+				throw new Error("Enable local services to manage the transcription queue.");
+			}
+			if (!localApiClient || connectionStatus !== "online") {
+				throw new Error("The selected local API is offline.");
+			}
+
+			const requestGatewayUrl = activeGatewayUrl;
+			setIsPauseUpdating(true);
+			try {
+				const queueState =
+					await localApiClient.blog.setTranscriptionQueuePaused.mutate({
+						isPaused: nextIsPaused,
+					});
+				if (
+					shouldApplyLocalApiResult(
+						requestGatewayUrl,
+						activeGatewayUrlRef.current,
+					)
+				) {
+					setIsPaused(queueState.isPaused);
+				}
+				return queueState;
+			} finally {
+				setIsPauseUpdating(false);
+			}
+		},
+		[
+			activeGatewayUrl,
+			connectionStatus,
+			localApiClient,
+			localServicesEnabled,
+			requestLocalServicesSetup,
+		],
+	);
+
 	useEffect(() => {
 		if (!autoLoad || !localServicesEnabled) return;
 		reload().catch((error) =>
@@ -276,9 +320,12 @@ export function useTranscriptionQueue(
       (job) => job.status === "queued" || job.status === "failed",
     ).length,
 		isRunning,
+		isPaused,
+		isPauseUpdating,
 		isInitialLoadComplete,
 		enqueue,
     deleteJob,
+		setPaused,
     runQueued,
     reload,
   };

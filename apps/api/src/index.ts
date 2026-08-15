@@ -12,9 +12,11 @@ import {
   DEFAULT_TRANSCRIPTION_WORKER_STALE_MS,
   failTranscriptionJob,
   getWorkerIdFromBody,
+  pauseTranscriptionJob,
   saveTranscriptionJobChunk,
   updateTranscriptionJobProgress,
 } from "./transcription-worker";
+import { getTranscriptionQueueControlState } from "./transcription-queue-control";
 const app = new OpenAPIHono<Context>(); //.basePath("/api");
 
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
@@ -145,6 +147,9 @@ app.post("/api/internal/transcription-jobs/claim", async (c) => {
   }
 
   const body = await readJsonBody(c);
+  if (getTranscriptionQueueControlState().isPaused) {
+    return c.json({ ok: true, job: null, isPaused: true });
+  }
   const job = await claimNextTranscriptionJob(db as any, {
     workerId: getWorkerIdFromBody(body),
     staleMs: TRANSCRIPTION_WORKER_STALE_MS,
@@ -153,6 +158,14 @@ app.post("/api/internal/transcription-jobs/claim", async (c) => {
   });
 
   return c.json({ ok: true, job });
+});
+
+app.post("/api/internal/transcription-queue/state", async (c) => {
+  if (!isWorkerAuthorized(c)) {
+    return c.json({ ok: false, error: "Unauthorized worker." }, 401);
+  }
+
+  return c.json({ ok: true, ...getTranscriptionQueueControlState() });
 });
 
 app.post("/api/internal/transcription-jobs/:id/progress", async (c) => {
@@ -246,6 +259,32 @@ app.post("/api/internal/transcription-jobs/:id/chunk", async (c) => {
     const message = err instanceof Error ? err.message : "Invalid chunk.";
     return c.json({ ok: false, error: message }, 400);
   }
+});
+
+app.post("/api/internal/transcription-jobs/:id/pause", async (c) => {
+  if (!isWorkerAuthorized(c)) {
+    return c.json({ ok: false, error: "Unauthorized worker." }, 401);
+  }
+
+  const id = Number.parseInt(c.req.param("id"), 10);
+  if (!Number.isInteger(id)) {
+    return c.json({ ok: false, error: "Invalid transcription job id." }, 400);
+  }
+
+  const body = await readJsonBody(c);
+  const job = await pauseTranscriptionJob(db as any, {
+    id,
+    workerId: getWorkerIdFromBody(body),
+  });
+
+  if (!job) {
+    return c.json(
+      { ok: false, error: "Transcription job is not claimed by this worker." },
+      409,
+    );
+  }
+
+  return c.json({ ok: true, job });
 });
 
 app.post("/api/internal/transcription-jobs/:id/fail", async (c) => {

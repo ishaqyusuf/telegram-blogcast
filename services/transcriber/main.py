@@ -761,7 +761,24 @@ def save_queue_chunk(
     )
 
 
-def process_queue_job(client: httpx.Client, job: dict):
+def transcription_queue_is_paused(client: httpx.Client) -> bool:
+    state = queue_post(
+        client,
+        "/api/internal/transcription-queue/state",
+        {"workerId": TRANSCRIPTION_QUEUE_WORKER_ID},
+    )
+    return bool(state.get("isPaused"))
+
+
+def pause_queue_job(client: httpx.Client, job_id: int):
+    queue_post(
+        client,
+        f"/api/internal/transcription-jobs/{job_id}/pause",
+        {"workerId": TRANSCRIPTION_QUEUE_WORKER_ID},
+    )
+
+
+def process_queue_job(client: httpx.Client, job: dict) -> bool:
     job_id = int(job["id"])
     audio_url = job.get("audioUrl")
     telegram_file_id = job.get("telegramFileId")
@@ -829,6 +846,15 @@ def process_queue_job(client: httpx.Client, job: dict):
                     chunk_end,
                 )
                 continue
+            if transcription_queue_is_paused(client):
+                pause_queue_job(client, job_id)
+                log.info(
+                    "Paused transcription job %s before chunk %s/%s",
+                    job_id,
+                    index,
+                    total_chunks,
+                )
+                return False
             req = TranscribeRequest(
                 audioUrl=audio_url,
                 from_=chunk_start,
@@ -860,6 +886,7 @@ def process_queue_job(client: httpx.Client, job: dict):
             "workerId": TRANSCRIPTION_QUEUE_WORKER_ID,
         },
     )
+    return True
 
 
 def queue_worker_loop():
@@ -887,8 +914,9 @@ def queue_worker_loop():
 
                 log.info("Claimed transcription job %s", job.get("id"))
                 try:
-                    process_queue_job(client, job)
-                    log.info("Completed transcription job %s", job.get("id"))
+                    completed = process_queue_job(client, job)
+                    if completed:
+                        log.info("Completed transcription job %s", job.get("id"))
                 except Exception as job_exc:
                     message = job_error_message(job_exc)
                     progress_percent = getattr(

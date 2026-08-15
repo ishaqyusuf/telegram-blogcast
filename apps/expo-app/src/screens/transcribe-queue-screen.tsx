@@ -399,8 +399,17 @@ export default function TranscribeQueueScreen() {
 	const router = useRouter();
 	const colors = useColors();
 	const { connectionStatus, localApiClient } = useLocalServicesSession();
-	const { jobs, queuedCount, isRunning, deleteJob, runQueued, reload } =
-		useTranscriptionQueue();
+	const {
+		jobs,
+		queuedCount,
+		isRunning,
+		isPaused,
+		isPauseUpdating,
+		deleteJob,
+		setPaused,
+		runQueued,
+		reload,
+	} = useTranscriptionQueue();
 	const [isRefreshing, setIsRefreshing] = useState(false);
 	const [selectedJob, setSelectedJob] = useState<QueueJob | null>(null);
 	const counts = useMemo(
@@ -422,12 +431,25 @@ export default function TranscribeQueueScreen() {
 		);
 		return Math.round(total / jobs.length);
 	}, [jobs]);
+	const isFinishingCurrentChunk = isPaused && (counts.running ?? 0) > 0;
 	const refresh = async () => {
 		setIsRefreshing(true);
 		try {
 			await reload();
 		} finally {
 			setIsRefreshing(false);
+		}
+	};
+	const toggleQueuePaused = async () => {
+		try {
+			await setPaused(!isPaused);
+		} catch (error) {
+			Alert.alert(
+				isPaused ? "Could not resume queue" : "Could not pause queue",
+				error instanceof Error
+					? error.message
+					: "The transcription queue could not be updated.",
+			);
 		}
 	};
 
@@ -551,8 +573,39 @@ export default function TranscribeQueueScreen() {
 							style={{ color: colors.mutedForeground }}
 						>
 							{jobs.length} jobs · {queuedCount} waiting · {overallProgress}%
+							{isPaused
+								? isFinishingCurrentChunk
+									? " · pausing after chunk"
+									: " · paused"
+								: ""}
 						</Text>
 					</View>
+					<Pressable
+						className="min-h-11 min-w-11 items-center justify-center rounded-full border border-primary active:bg-muted"
+						disabled={isPauseUpdating || connectionStatus !== "online"}
+						onPress={() => {
+							void toggleQueuePaused();
+						}}
+						accessibilityRole="button"
+						accessibilityLabel={
+							isPaused ? "Resume transcription queue" : "Pause transcription queue"
+						}
+						accessibilityHint={
+							isPaused
+								? "Allows queued transcription jobs to continue"
+								: "Finishes the current chunk, then stops automatic transcription"
+						}
+						accessibilityState={{ disabled: isPauseUpdating, selected: isPaused }}
+					>
+						{isPauseUpdating ? (
+							<ActivityIndicator size="small" color={colors.primary} />
+						) : (
+							<Icon
+								name={isPaused ? "Play" : "Pause"}
+								className="size-sm text-primary"
+							/>
+						)}
+					</Pressable>
 					<Pressable
 						className="min-h-11 rounded-full bg-primary px-4 items-center justify-center active:opacity-80"
 						disabled={isRunning}

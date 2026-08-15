@@ -19,6 +19,10 @@ import {
 	getEffectiveChannelContentType,
 } from "../../queries/channel-content-filter";
 import { posts, postsSchema } from "../../queries/posts";
+import {
+	getTranscriptionQueueControlState,
+	setTranscriptionQueuePaused,
+} from "../../transcription-queue-control";
 // apps/api/src/routers/blog.route.ts
 import { createTRPCRouter, publicProcedure } from "../init";
 
@@ -1007,6 +1011,16 @@ export const blogRoutes = createTRPCRouter({
 				include: transcriptionJobInclude,
 				orderBy: { createdAt: "desc" },
 			});
+		}),
+
+	getTranscriptionQueueState: publicProcedure.query(() => {
+		return getTranscriptionQueueControlState();
+	}),
+
+	setTranscriptionQueuePaused: publicProcedure
+		.input(z.object({ isPaused: z.boolean() }))
+		.mutation(({ input }) => {
+			return setTranscriptionQueuePaused(input.isPaused);
 		}),
 
 	deleteTranscriptionJob: publicProcedure

@@ -2419,6 +2419,9 @@ export default function AudioBlogScreen() {
 	const activeTranscriptWindowChecked = Boolean(
 		checkedTranscriptWindows[activeTranscriptWindowStart],
 	);
+	const hasSavedTranscript =
+		(transcriptSummary?.segmentCount ?? 0) > 0 ||
+		(transcriptSummary?.maxEndSec ?? 0) > 0;
 	const hasSavedTranscriptInActiveWindow = hasOverlappingSavedTranscript(
 		transcriptWindowValues,
 		activeTranscriptWindowStart,

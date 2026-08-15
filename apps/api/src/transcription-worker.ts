@@ -553,6 +553,33 @@ export async function saveTranscriptionJobChunk(
   });
 }
 
+export async function pauseTranscriptionJob(
+  db: any,
+  input: {
+    id: number;
+    workerId: string;
+  },
+) {
+  const updated = await db.transcriptionJob.updateMany({
+    where: workerOwnedWhere(input.id, input.workerId),
+    data: {
+      status: "queued",
+      stage: "paused",
+      workerId: null,
+      lockedAt: null,
+      heartbeatAt: new Date(),
+      errorMessage: null,
+    },
+  });
+
+  if (updated.count === 0) return null;
+
+  return db.transcriptionJob.findUnique({
+    where: { id: input.id },
+    include: transcriptionWorkerJobInclude,
+  });
+}
+
 export async function failTranscriptionJob(
   db: any,
   input: {
