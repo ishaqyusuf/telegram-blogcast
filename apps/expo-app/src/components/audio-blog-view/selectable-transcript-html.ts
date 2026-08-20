@@ -5,7 +5,7 @@ export const SELECTABLE_TRANSCRIPT_HTML = `<!doctype html>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';" />
   <style>
-    html, body { margin: 0; min-height: 100%; background: #080807; }
+    html, body { margin: 0; min-height: 100%; background: transparent; }
     body { opacity: 0; overflow-y: auto; }
     #root {
       box-sizing: border-box; min-height: 100vh; padding: 120px 24px;
@@ -45,6 +45,9 @@ export const SELECTABLE_TRANSCRIPT_HTML = `<!doctype html>
 
   function applyPresentation(message) {
     state.presentation = message.presentation === 'karaoke' ? 'karaoke' : 'read';
+    const background = state.presentation === 'karaoke' ? 'transparent' : '#080807';
+    document.documentElement.style.background = background;
+    document.body.style.background = background;
     state.selectionEnabled = message.selectionEnabled !== false;
     const padding = Number.isFinite(message.contentPaddingVertical)
       ? Math.max(0, message.contentPaddingVertical) : 120;

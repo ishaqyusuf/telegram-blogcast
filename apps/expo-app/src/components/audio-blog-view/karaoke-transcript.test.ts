@@ -9,6 +9,18 @@ const audioScreenSource = readFileSync(
 	join(currentDir, "../../screens/audio-blog-screen.tsx"),
 	"utf8",
 );
+const surfaceSource = readFileSync(
+	join(currentDir, "selectable-transcript-surface.tsx"),
+	"utf8",
+);
+const webSurfaceSource = readFileSync(
+	join(currentDir, "selectable-transcript-surface.web.tsx"),
+	"utf8",
+);
+const htmlSource = readFileSync(
+	join(currentDir, "selectable-transcript-html.ts"),
+	"utf8",
+);
 
 describe("karaoke transcript scrolling", () => {
 	test("uses the shared inline transcript surface in karaoke mode", () => {
@@ -23,6 +35,20 @@ describe("karaoke transcript scrolling", () => {
 		expect(source).toContain("setFollowPaused(false)");
 		expect(audioScreenSource).toMatch(
 			/<FlatList\s+ref=\{mainScroll\.ref\}[\s\S]*?nestedScrollEnabled/,
+		);
+	});
+
+	test("lets the karaoke transcript inherit the player gradient", () => {
+		expect(source).toContain('backgroundColor: "transparent"');
+		expect(surfaceSource).toContain(
+			'props.presentation === "karaoke" ? "transparent" : "#080807"',
+		);
+		expect(surfaceSource).toContain("opaque={false}");
+		expect(webSurfaceSource).toContain(
+			'presentation === "karaoke" ? "transparent" : "#080807"',
+		);
+		expect(htmlSource).toContain(
+			"state.presentation === 'karaoke' ? 'transparent' : '#080807'",
 		);
 	});
 

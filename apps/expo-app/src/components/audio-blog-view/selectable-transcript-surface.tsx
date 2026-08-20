@@ -37,6 +37,8 @@ export function SelectableTranscriptSurface(
 	const { fontScale } = useWindowDimensions();
 	const fontScaleRef = useRef(fontScale);
 	const [surfaceReady, setSurfaceReady] = useState(false);
+	const surfaceBackgroundColor =
+		props.presentation === "karaoke" ? "transparent" : "#080807";
 	fontScaleRef.current = fontScale;
 	latestPropsRef.current = props;
 	const documentKey = useMemo(
@@ -177,15 +179,16 @@ export function SelectableTranscriptSurface(
 	);
 
 	return (
-		<View style={{ flex: 1, backgroundColor: "#080807" }}>
+		<View style={{ flex: 1, backgroundColor: surfaceBackgroundColor }}>
 			<WebView
 				ref={webViewRef}
 				source={{ html: SELECTABLE_TRANSCRIPT_HTML, baseUrl: "about:blank" }}
 				style={{
 					flex: 1,
-					backgroundColor: "#080807",
+					backgroundColor: surfaceBackgroundColor,
 					opacity: surfaceReady ? 1 : 0,
 				}}
+				opaque={false}
 				nestedScrollEnabled
 				onLoadEnd={() => {
 					loadedRef.current = true;
@@ -209,7 +212,7 @@ export function SelectableTranscriptSurface(
 						inset: 0,
 						alignItems: "center",
 						justifyContent: "center",
-						backgroundColor: "#080807",
+						backgroundColor: surfaceBackgroundColor,
 					}}
 				>
 					<ActivityIndicator color="rgba(255,255,255,0.72)" />

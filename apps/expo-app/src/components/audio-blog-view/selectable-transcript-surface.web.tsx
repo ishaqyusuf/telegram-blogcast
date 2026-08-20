@@ -318,7 +318,12 @@ export function SelectableTranscriptSurface(
 					}
 				});
 			},
-			style: { height: "100%", overflowY: "auto", background: "#080807" },
+			style: {
+				height: "100%",
+				overflowY: "auto",
+				background:
+					presentation === "karaoke" ? "transparent" : "#080807",
+			},
 		},
 		React.createElement(
 			"div",

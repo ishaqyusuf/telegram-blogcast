@@ -78,7 +78,7 @@ export function KaraokeTranscript({
 	}
 
 	return (
-		<View style={{ flex: 1, backgroundColor: "#080807" }}>
+		<View style={{ flex: 1, backgroundColor: "transparent" }}>
 			<SelectableTranscriptSurface
 				document={document}
 				presentation="karaoke"
