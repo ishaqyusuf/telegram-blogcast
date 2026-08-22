@@ -2,6 +2,8 @@ import { SafeArea } from "@/components/safe-area";
 import { useLocalServicesSession } from "@/components/local-services";
 import { Icon } from "@/components/ui/icon";
 import { Pressable } from "@/components/ui/pressable";
+import { Toast } from "@/components/ui/toast";
+import { _trpc } from "@/components/static-trpc";
 import { useColorScheme, useColors } from "@/hooks/use-color";
 import { useTranslation } from "@/lib/i18n";
 import { getLocalApiQueryKey } from "@/lib/local-api-query";
@@ -9,7 +11,7 @@ import {
   isValidIpv4Address,
   normalizeIpv4Input,
 } from "@/lib/local-services-session";
-import { useQuery } from "@/lib/react-query";
+import { useQuery, useQueryClient } from "@/lib/react-query";
 import { setThemeOverride } from "@/lib/theme-preference";
 import { isHttpTranscriberUrl } from "@/lib/transcribe";
 import { LOCAL_API_PORT } from "@/lib/local-service-urls";
@@ -22,12 +24,19 @@ import { useAppSettingsStore } from "@/store/app-settings-store";
 import * as Haptics from "expo-haptics";
 import { type Href, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { ScrollView, Text, TextInput, View } from "react-native";
+import {
+  ActivityIndicator,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 
 const LANGUAGES: AppLanguage[] = ["en", "ar"];
 
 export default function SettingsScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const {
     activeGatewayUrl,
     activeIp,
@@ -54,6 +63,7 @@ export default function SettingsScreen() {
     activeIp ?? "",
   );
   const [localServicesIpMessage, setLocalServicesIpMessage] = useState("");
+  const [syncingChannels, setSyncingChannels] = useState(false);
   const canCheckTranscriber = isHttpTranscriberUrl(resolvedTranscriberUrl);
   const { data: transcriberHealth, isFetching: checkingTranscriber } = useQuery(
     {
@@ -118,6 +128,43 @@ export default function SettingsScreen() {
     const nextScheme = colorScheme === "dark" ? "light" : "dark";
     await setThemeOverride(nextScheme);
     setColorScheme(nextScheme);
+  }
+
+  async function syncTelegramChannels() {
+    if (
+      !localServicesEnabled ||
+      connectionStatus !== "online" ||
+      !localApiClient
+    ) {
+      requestLocalServicesSetup();
+      return;
+    }
+
+    setSyncingChannels(true);
+    try {
+      const channels = await localApiClient.channel.syncChannels.mutate(
+        undefined,
+      );
+      await queryClient.invalidateQueries({
+        queryKey: _trpc.channel.getChannels.queryKey(),
+      });
+      if (process.env.EXPO_OS === "ios") {
+        await Haptics.notificationAsync(
+          Haptics.NotificationFeedbackType.Success,
+        );
+      }
+      Toast.show(
+        `Channel list updated · ${channels.length} channel${channels.length === 1 ? "" : "s"}`,
+        { type: "success", position: "bottom" },
+      );
+    } catch (error) {
+      Toast.show(
+        error instanceof Error ? error.message : "Could not sync channels.",
+        { type: "error", position: "bottom" },
+      );
+    } finally {
+      setSyncingChannels(false);
+    }
   }
 
   return (
@@ -230,6 +277,53 @@ export default function SettingsScreen() {
               size={18}
               className="text-muted-foreground"
             />
+          </Pressable>
+
+          <Pressable
+            onPress={() => void syncTelegramChannels()}
+            disabled={syncingChannels}
+            className={
+              localServicesEnabled && connectionStatus === "online"
+                ? "flex-row items-center gap-3 rounded-xl bg-card p-4 active:opacity-80 disabled:opacity-60"
+                : "flex-row items-center gap-3 rounded-xl bg-card p-4 opacity-60"
+            }
+          >
+            <View className="size-10 items-center justify-center rounded-full bg-secondary">
+              <Icon name="RefreshCw" size={18} className="text-foreground" />
+            </View>
+            <View className="flex-1 gap-1">
+              <Text
+                className="text-foreground"
+                style={{
+                  textAlign,
+                  fontSize: 15,
+                  fontWeight: "700",
+                  writingDirection,
+                }}
+              >
+                {syncingChannels
+                  ? "Syncing Telegram channels…"
+                  : "Sync Telegram channels"}
+              </Text>
+              <Text
+                className="text-muted-foreground"
+                style={{
+                  textAlign,
+                  fontSize: 13,
+                  lineHeight: 19,
+                  writingDirection,
+                }}
+              >
+                {localServicesEnabled
+                  ? "Refresh the channel list from your Telegram account."
+                  : "Enable local services to refresh your channel list."}
+              </Text>
+            </View>
+            {syncingChannels ? (
+              <ActivityIndicator size="small" color={colors.foreground} />
+            ) : (
+              <Icon name="Download" size={18} className="text-muted-foreground" />
+            )}
           </Pressable>
 
           <Pressable

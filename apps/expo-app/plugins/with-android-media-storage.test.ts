@@ -51,7 +51,7 @@ PackageList(this).packages.apply {
     );
   });
 
-  test("stores media inside the active Android application's owned directory", () => {
+  test("stores every app variant in the shared production media directory", () => {
     const moduleSource = getAndroidModule(
       "com.alghurobaa.podcast.preview.media",
     );
@@ -60,10 +60,17 @@ PackageList(this).packages.apply {
       "val appMediaRoot = reactContext.externalMediaDirs.firstOrNull()",
     );
     expect(moduleSource).toContain(
-      "val directory = File(appMediaRoot, mediaType)",
+      'applicationId.removeSuffix(".dev").removeSuffix(".preview")',
     );
-    expect(moduleSource).not.toContain("resolveMediaApplicationId");
-    expect(moduleSource).not.toContain("appMediaRoot?.parentFile");
+    expect(moduleSource).toContain(
+      "val androidMediaRoot = appMediaRoot?.parentFile",
+    );
+    expect(moduleSource).toContain(
+      "resolveMediaApplicationId(reactContext.packageName)",
+    );
+    expect(moduleSource).toContain(
+      "val directory = File(sharedMediaRoot, mediaType)",
+    );
   });
 
   test("fails prebuild when Expo's package-list anchor changes", () => {
