@@ -9,8 +9,6 @@ import {
 import {
 	type ReactNode,
 	useCallback,
-	useEffect,
-	useId,
 	useLayoutEffect,
 	useMemo,
 	useRef,
@@ -25,7 +23,7 @@ import {
 
 import { useColors } from "@/hooks/use-color";
 
-import { useFloatingBottomSheetStore } from "./floating-bottom-sheet-store";
+import { useFloatingBottomSheetRegistration } from "./floating-bottom-sheet-store";
 
 const SHEET_RADIUS = 32;
 
@@ -70,10 +68,8 @@ export function FloatingBottomSheet({
 }: FloatingBottomSheetProps) {
 	const ref = useRef<BottomSheetModal>(null);
 	const wasPresentedRef = useRef(false);
-	const sheetId = useId();
-	const setSheetOpen = useFloatingBottomSheetStore(
-		(state) => state.setSheetOpen,
-	);
+	const { markSheetDismissed, markSheetPresented } =
+		useFloatingBottomSheetRegistration();
 	const colors = useColors();
 	const { height } = useWindowDimensions();
 	const resolvedBottomInset =
@@ -85,7 +81,7 @@ export function FloatingBottomSheet({
 	useLayoutEffect(() => {
 		if (visible) {
 			wasPresentedRef.current = true;
-			setSheetOpen(sheetId, true);
+			markSheetPresented();
 			ref.current?.present();
 			return;
 		}
@@ -93,19 +89,17 @@ export function FloatingBottomSheet({
 		if (wasPresentedRef.current) {
 			ref.current?.dismiss();
 		} else {
-			setSheetOpen(sheetId, false);
+			markSheetDismissed();
 		}
-	}, [setSheetOpen, sheetId, visible]);
-
-	useEffect(() => () => setSheetOpen(sheetId, false), [setSheetOpen, sheetId]);
+	}, [markSheetDismissed, markSheetPresented, visible]);
 
 	const handleDismiss = useCallback(() => {
 		const wasPresented = wasPresentedRef.current;
 		wasPresentedRef.current = false;
-		setSheetOpen(sheetId, false);
+		markSheetDismissed();
 		if (wasPresented && visible) onClose();
 		onDismissed?.();
-	}, [onClose, onDismissed, setSheetOpen, sheetId, visible]);
+	}, [markSheetDismissed, onClose, onDismissed, visible]);
 
 	const renderBackdrop = useCallback(
 		(props: BottomSheetBackdropProps) => (

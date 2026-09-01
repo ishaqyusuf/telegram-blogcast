@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useId } from "react";
 import { create } from "zustand";
 
 type FloatingBottomSheetState = {
@@ -26,3 +27,22 @@ export const useFloatingBottomSheetStore = create<FloatingBottomSheetState>(
 			}),
 	}),
 );
+
+export function useFloatingBottomSheetRegistration() {
+	const sheetId = useId();
+	const setSheetOpen = useFloatingBottomSheetStore(
+		(state) => state.setSheetOpen,
+	);
+
+	const markSheetPresented = useCallback(() => {
+		setSheetOpen(sheetId, true);
+	}, [setSheetOpen, sheetId]);
+
+	const markSheetDismissed = useCallback(() => {
+		setSheetOpen(sheetId, false);
+	}, [setSheetOpen, sheetId]);
+
+	useEffect(() => markSheetDismissed, [markSheetDismissed]);
+
+	return { markSheetDismissed, markSheetPresented };
+}

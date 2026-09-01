@@ -40,6 +40,7 @@ import { Path, Svg } from "react-native-svg";
 
 import { Text } from "./text";
 import { useColors } from "@/hooks/use-color";
+import { useFloatingBottomSheetRegistration } from "./floating-bottom-sheet-store";
 
 type ModalProps = BottomSheetModalProps & {
   title?: string;
@@ -71,27 +72,57 @@ export const Modal = React.forwardRef(
       title,
       detached = false,
       containerStyle,
+      onAnimate,
+      onChange,
+      onDismiss,
       ...props
     }: ModalProps,
-    ref: ModalRef
+    ref: ModalRef,
   ) => {
     const detachedProps = React.useMemo(
       () => getDetachedProps(detached),
-      [detached]
+      [detached],
     );
     const modal = useModal();
     const snapPoints = React.useMemo(() => _snapPoints, [_snapPoints]);
+    const { markSheetDismissed, markSheetPresented } =
+      useFloatingBottomSheetRegistration();
+
+    const handleAnimate = React.useCallback<
+      NonNullable<BottomSheetModalProps["onAnimate"]>
+    >(
+      (fromIndex, toIndex, fromPosition, toPosition) => {
+        if (toIndex >= 0) markSheetPresented();
+        onAnimate?.(fromIndex, toIndex, fromPosition, toPosition);
+      },
+      [markSheetPresented, onAnimate],
+    );
+
+    const handleChange = React.useCallback<
+      NonNullable<BottomSheetModalProps["onChange"]>
+    >(
+      (index, position, type) => {
+        if (index >= 0) markSheetPresented();
+        onChange?.(index, position, type);
+      },
+      [markSheetPresented, onChange],
+    );
+
+    const handleDismiss = React.useCallback(() => {
+      markSheetDismissed();
+      onDismiss?.();
+    }, [markSheetDismissed, onDismiss]);
 
     React.useImperativeHandle(
       ref,
-      () => (modal.ref.current as BottomSheetModal) || null
+      () => (modal.ref.current as BottomSheetModal) || null,
     );
     const colors = useColors();
     const backgroundStyle = React.useMemo(
       () => ({
         backgroundColor: colors.background,
       }),
-      [colors]
+      [colors],
     );
     const renderHandleComponent = React.useCallback(
       () => (
@@ -100,7 +131,7 @@ export const Modal = React.forwardRef(
           <ModalHeader title={title} dismiss={modal.dismiss} />
         </>
       ),
-      [title, modal.dismiss]
+      [title, modal.dismiss],
     );
 
     return (
@@ -114,6 +145,9 @@ export const Modal = React.forwardRef(
         enableDynamicSizing={false}
         handleComponent={renderHandleComponent}
         backgroundStyle={backgroundStyle}
+        onAnimate={handleAnimate}
+        onChange={handleChange}
+        onDismiss={handleDismiss}
         containerStyle={[
           {
             zIndex: 2000,
@@ -123,7 +157,7 @@ export const Modal = React.forwardRef(
         ]}
       />
     );
-  }
+  },
 );
 Modal.displayName = "Modal";
 /**
