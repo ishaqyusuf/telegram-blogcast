@@ -8,6 +8,7 @@ import {
   createBookDocumentFromParagraphs,
   createDocumentFromHtml,
   getDocumentPlainText,
+  hydrateShamelaTocHtml,
   parseShamelaOpenPage,
   serializeDocumentToHtml,
 } from "@acme/document";
@@ -19,7 +20,10 @@ const readerWindowInput = z.object({
   mediaId: z.number().optional(),
   centerSec: z.number().int().nonnegative().optional(),
   radius: z.number().int().min(1).max(10).optional().default(2),
-  direction: z.enum(["initial", "previous", "next"]).optional().default("initial"),
+  direction: z
+    .enum(["initial", "previous", "next"])
+    .optional()
+    .default("initial"),
   cursor: z.number().optional(),
 });
 
@@ -194,6 +198,11 @@ type ParsedPageData = {
     pid?: number;
     text?: string;
     footnoteIds?: string | null;
+    sourceMarks?: {
+      kind: "c5";
+      start: number;
+      end: number;
+    }[];
   }[];
   footnotes?: {
     marker?: string;
@@ -1343,6 +1352,16 @@ function sanitizePageData(parsed: ParsedPageData): ParsedPageData {
             : index + 1,
         text: safeString(paragraph?.text) ?? "",
         footnoteIds: safeString(paragraph?.footnoteIds),
+        sourceMarks: Array.isArray(paragraph?.sourceMarks)
+          ? paragraph.sourceMarks.filter(
+              (mark) =>
+                mark?.kind === "c5" &&
+                Number.isInteger(mark.start) &&
+                Number.isInteger(mark.end) &&
+                mark.start >= 0 &&
+                mark.end > mark.start,
+            )
+          : [],
       }))
       .filter((paragraph) => paragraph.text.length > 0),
     footnotes: (parsed.footnotes ?? [])
@@ -1526,6 +1545,23 @@ function flattenShamelaTocNodes(nodes: ShamelaTocNode[]): ShamelaTocNode[] {
   ]);
 }
 
+async function mapWithConcurrency<T>(
+  values: T[],
+  concurrency: number,
+  worker: (value: T) => Promise<void>,
+) {
+  let cursor = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, values.length) }, async () => {
+      while (cursor < values.length) {
+        const index = cursor;
+        cursor += 1;
+        await worker(values[index]!);
+      }
+    }),
+  );
+}
+
 async function syncParsedShamelaBookTree(
   db: any,
   input: {
@@ -1643,22 +1679,11 @@ async function syncParsedShamelaBookTree(
 
   const tocNodes = input.parsed.facts.toc.nodes;
   const flatNodes = flattenShamelaTocNodes(tocNodes);
-  const volumeIdByNumber = new Map<number, number>();
-  for (const node of tocNodes.filter((item) => item.kind === "volume")) {
-    if (node.volumeNumber == null) continue;
-    const volume = await db.bookVolume.upsert({
-      where: { bookId_number: { bookId: book.id, number: node.volumeNumber } },
-      create: { bookId: book.id, number: node.volumeNumber, title: node.title },
-      update: { title: node.title, deletedAt: null },
-    });
-    volumeIdByNumber.set(node.volumeNumber, volume.id);
-  }
-
   const pageIdByPageNo = new Map<number, number>();
   const nodesWithPages = flatNodes.filter(
     (node) => node.shamelaPageNo != null && (node.path || node.url),
   );
-  for (const node of nodesWithPages) {
+  await mapWithConcurrency(nodesWithPages, 8, async (node) => {
     const shamelaPageNo = node.shamelaPageNo!;
     const shamelaUrl =
       getShamelaStoragePath(node.path ?? node.url!) ??
@@ -1672,26 +1697,19 @@ async function syncParsedShamelaBookTree(
       },
       create: {
         bookId: book.id,
-        volumeId:
-          node.volumeNumber != null
-            ? (volumeIdByNumber.get(node.volumeNumber) ?? null)
-            : null,
+        volumeId: null,
         shamelaPageNo,
         shamelaUrl,
         chapterTitle: node.kind === "chapter" ? node.title : null,
-        topicTitle: node.kind === "chapter" ? node.title : null,
+        topicTitle: node.kind === "topic" ? node.title : null,
         status: "pending",
       },
       update: {
-        volumeId:
-          node.volumeNumber != null
-            ? (volumeIdByNumber.get(node.volumeNumber) ?? undefined)
-            : undefined,
         shamelaUrl,
-        ...(node.kind === "chapter"
+        ...(node.kind !== "section"
           ? {
-              chapterTitle: node.title,
-              topicTitle: node.title,
+              chapterTitle: node.kind === "chapter" ? node.title : undefined,
+              topicTitle: node.kind === "topic" ? node.title : undefined,
             }
           : {}),
         deletedAt: null,
@@ -1699,66 +1717,70 @@ async function syncParsedShamelaBookTree(
       select: { id: true },
     });
     pageIdByPageNo.set(shamelaPageNo, page.id);
-  }
+  });
 
-  async function upsertNode(node: ShamelaTocNode, parentId: number | null) {
-    const pageId =
-      node.shamelaPageNo != null
-        ? (pageIdByPageNo.get(node.shamelaPageNo) ?? null)
+  const nodeIdByTreePath = new Map<string, number>();
+  const maxDepth = Math.max(0, ...flatNodes.map((node) => node.depth));
+  for (let depth = 0; depth <= maxDepth; depth += 1) {
+    const depthNodes = flatNodes.filter((node) => node.depth === depth);
+    await mapWithConcurrency(depthNodes, 8, async (node) => {
+      const parentId = node.parentTreePath
+        ? (nodeIdByTreePath.get(node.parentTreePath) ?? null)
         : null;
-    const nodeShamelaPath = getShamelaStoragePath(node.path ?? node.url);
-    const row = await db.bookTocNode.upsert({
-      where: {
-        bookId_treePath: {
+      const pageId =
+        node.shamelaPageNo != null
+          ? (pageIdByPageNo.get(node.shamelaPageNo) ?? null)
+          : null;
+      const nodeShamelaPath = getShamelaStoragePath(node.path ?? node.url);
+      const row = await db.bookTocNode.upsert({
+        where: {
+          bookId_treePath: {
+            bookId: book.id,
+            treePath: node.treePath,
+          },
+        },
+        create: {
           bookId: book.id,
+          parentId,
+          pageId,
+          kind: node.kind,
+          title: node.title,
+          shamelaPath: nodeShamelaPath,
+          shamelaPageNo: node.shamelaPageNo ?? null,
+          volumeNumber: node.volumeNumber ?? null,
+          depth: node.depth,
+          sortOrder: node.sortOrder,
           treePath: node.treePath,
+          isCurrent: node.active,
+          metadataJson: {
+            url: node.url,
+            parentTreePath: node.parentTreePath,
+            sourceNodeId: node.sourceNodeId,
+          },
+          deletedAt: null,
         },
-      },
-      create: {
-        bookId: book.id,
-        parentId,
-        pageId,
-        kind: node.kind,
-        title: node.title,
-        shamelaPath: nodeShamelaPath,
-        shamelaPageNo: node.shamelaPageNo ?? null,
-        volumeNumber: node.volumeNumber ?? null,
-        depth: node.depth,
-        sortOrder: node.sortOrder,
-        treePath: node.treePath,
-        isCurrent: node.active,
-        metadataJson: {
-          url: node.url,
-          parentTreePath: node.parentTreePath,
+        update: {
+          parentId,
+          pageId,
+          kind: node.kind,
+          title: node.title,
+          shamelaPath: nodeShamelaPath,
+          shamelaPageNo: node.shamelaPageNo ?? null,
+          volumeNumber: node.volumeNumber ?? null,
+          depth: node.depth,
+          sortOrder: node.sortOrder,
+          isCurrent: node.active,
+          metadataJson: {
+            url: node.url,
+            parentTreePath: node.parentTreePath,
+            sourceNodeId: node.sourceNodeId,
+          },
+          deletedAt: null,
         },
-        deletedAt: null,
-      },
-      update: {
-        parentId,
-        pageId,
-        kind: node.kind,
-        title: node.title,
-        shamelaPath: nodeShamelaPath,
-        shamelaPageNo: node.shamelaPageNo ?? null,
-        volumeNumber: node.volumeNumber ?? null,
-        depth: node.depth,
-        sortOrder: node.sortOrder,
-        isCurrent: node.active,
-        metadataJson: {
-          url: node.url,
-          parentTreePath: node.parentTreePath,
-        },
-        deletedAt: null,
-      },
-      select: { id: true },
+        select: { id: true },
+      });
+      nodeIdByTreePath.set(node.treePath, row.id);
     });
-    for (const child of node.children) {
-      await upsertNode(child, row.id);
-    }
-  }
-
-  for (const node of tocNodes) {
-    await upsertNode(node, null);
   }
 
   return {
@@ -1998,6 +2020,7 @@ async function saveParsedPageData(
           pid: paragraph.pid!,
           text: paragraph.text!,
           footnoteIds: paragraph.footnoteIds ?? null,
+          sourceMarks: paragraph.sourceMarks ?? [],
         })),
       });
     }
@@ -2609,24 +2632,81 @@ async function promoteStagedShamelaPageParseInternal(
       ? linkGraph.matchedBookId
       : null);
 
-  if (!bookId && shamelaBookId) {
-    const existingBook = await db.book.findFirst({
+  let existingBook = bookId
+    ? await db.book.findFirst({
+        where: { id: bookId, deletedAt: null },
+        select: { id: true, tocStatus: true },
+      })
+    : null;
+  if (!existingBook && shamelaBookId) {
+    existingBook = await db.book.findFirst({
       where: { shamelaId: shamelaBookId, deletedAt: null },
-      select: { id: true },
+      select: { id: true, tocStatus: true },
     });
     bookId = existingBook?.id ?? null;
   }
 
-  const treeSync = await syncParsedShamelaBookTree(db, {
-    explicitBookId: bookId,
-    parsed: reparsed,
-    fallbackTitle:
-      safeString(staged.rawPage.title) ??
-      safeString(staged.chapterTitle) ??
-      safeString(staged.topicTitle),
-    finalUrl: staged.rawPage.finalUrl,
-  });
-  bookId = treeSync.bookId;
+  const requiresFullToc = existingBook?.tocStatus !== "complete";
+  if (requiresFullToc && !reparsed.facts.toc.complete) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message:
+        "The complete Shamela chapter tree must finish loading before the first page can be imported.",
+    });
+  }
+
+  if (reparsed.facts.toc.complete) {
+    const treeSync = await syncParsedShamelaBookTree(db, {
+      explicitBookId: bookId,
+      parsed: reparsed,
+      fallbackTitle:
+        safeString(staged.rawPage.title) ??
+        safeString(staged.chapterTitle) ??
+        safeString(staged.topicTitle),
+      finalUrl: staged.rawPage.finalUrl,
+    });
+    bookId = treeSync.bookId;
+    await db.book.update({
+      where: { id: bookId },
+      data: { tocStatus: "complete", tocCapturedAt: new Date() },
+    });
+  } else if (existingBook) {
+    bookId = existingBook.id;
+    const parsedBook = reparsed.facts.book;
+    await db.book.update({
+      where: { id: bookId },
+      data: {
+        nameAr: safeString(parsedBook.title) ?? undefined,
+        category: parsedBook.category?.name ?? undefined,
+        categoryUrl: parsedBook.category?.url ?? undefined,
+      },
+    });
+    if (parsedBook.author?.name) {
+      const author = await db.bookAuthor.upsert({
+        where: { name: parsedBook.author.name },
+        create: {
+          name: parsedBook.author.name,
+          nameAr: parsedBook.author.name,
+          url: parsedBook.author.url ?? undefined,
+        },
+        update: {
+          nameAr: parsedBook.author.name,
+          url: parsedBook.author.url ?? undefined,
+        },
+      });
+      await db.book.update({
+        where: { id: bookId },
+        data: { authors: { set: [{ id: author.id }] } },
+      });
+    }
+  }
+
+  if (!bookId) {
+    throw new TRPCError({
+      code: "BAD_REQUEST",
+      message: "Could not resolve the Shamela book for this page.",
+    });
+  }
 
   let volumeId: number | null = null;
   const parsedVolumeNumber =
@@ -2691,6 +2771,21 @@ async function promoteStagedShamelaPageParseInternal(
       .map((block, index) => ({
         pid: index + 1,
         text: String(block.text),
+        sourceMarks: Array.isArray(block.marks)
+          ? block.marks
+              .filter(
+                (mark) =>
+                  mark?.type === "style" &&
+                  mark?.kind === "c5" &&
+                  typeof mark.start === "number" &&
+                  typeof mark.end === "number",
+              )
+              .map((mark) => ({
+                kind: "c5" as const,
+                start: mark.start,
+                end: mark.end,
+              }))
+          : [],
         footnoteIds:
           Array.isArray(block.footnoteRefs) && block.footnoteRefs.length
             ? block.footnoteRefs.join(",")
@@ -2714,6 +2809,11 @@ async function promoteStagedShamelaPageParseInternal(
     importMethod: "mobile_webview_capture",
     provider: "webview",
     rawInput: `shamelaRawPage:${staged.rawPage.id}`,
+  });
+
+  await db.bookPage.update({
+    where: { id: result.page.id },
+    data: { documentJson: document },
   });
 
   await db.shamelaStagedPageParse.update({
@@ -2821,6 +2921,29 @@ export const bookRoutes = createTRPCRouter({
       return {
         data,
         nextCursor: hasMore ? data[data.length - 1]?.id : undefined,
+      };
+    }),
+
+  getShamelaCaptureState: publicProcedure
+    .input(z.object({ shamelaUrl: z.string().min(1) }))
+    .query(async ({ ctx, input }) => {
+      const shamelaId = getShamelaBookIdFromUrl(input.shamelaUrl);
+      if (shamelaId == null) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Invalid Shamela book URL.",
+        });
+      }
+      const book = await ctx.db.book.findFirst({
+        where: { shamelaId, deletedAt: null },
+        select: { id: true, tocStatus: true, tocCapturedAt: true },
+      });
+      return {
+        shamelaId,
+        bookId: book?.id ?? null,
+        tocStatus: book?.tocStatus ?? "pending",
+        tocCapturedAt: book?.tocCapturedAt ?? null,
+        requiresFullToc: book?.tocStatus !== "complete",
       };
     }),
 
@@ -3107,10 +3230,11 @@ export const bookRoutes = createTRPCRouter({
           : null);
       const nextPageNo =
         page.nextShamelaPageNo ??
-        (page.nextShamelaUrl ? getShamelaPageNoFromUrl(page.nextShamelaUrl) : null);
+        (page.nextShamelaUrl
+          ? getShamelaPageNoFromUrl(page.nextShamelaUrl)
+          : null);
       const previousUrl = page.previousShamelaUrl ?? null;
-      const nextUrl =
-        page.nextShamelaUrl ?? null;
+      const nextUrl = page.nextShamelaUrl ?? null;
       const adjacentRows = await ctx.db.bookPage.findMany({
         where: {
           bookId: page.bookId,
@@ -3145,7 +3269,9 @@ export const bookRoutes = createTRPCRouter({
           next: {
             shamelaPageNo: nextPageNo,
             shamelaUrl: nextUrl,
-            page: nextPageNo ? (adjacentByPageNo.get(nextPageNo) ?? null) : null,
+            page: nextPageNo
+              ? (adjacentByPageNo.get(nextPageNo) ?? null)
+              : null,
           },
         },
       };
@@ -3278,10 +3404,7 @@ export const bookRoutes = createTRPCRouter({
           },
         },
       });
-      const data =
-        input.direction === "previous"
-          ? [...rows].reverse()
-          : rows;
+      const data = input.direction === "previous" ? [...rows].reverse() : rows;
       const first = data[0];
       const last = data[data.length - 1];
 
@@ -3557,9 +3680,13 @@ export const bookRoutes = createTRPCRouter({
       const targetPageNo =
         input.direction === "previous"
           ? (currentPage.previousShamelaPageNo ??
-            (storedAdjacentUrl ? getShamelaPageNoFromUrl(storedAdjacentUrl) : null))
+            (storedAdjacentUrl
+              ? getShamelaPageNoFromUrl(storedAdjacentUrl)
+              : null))
           : (currentPage.nextShamelaPageNo ??
-            (storedAdjacentUrl ? getShamelaPageNoFromUrl(storedAdjacentUrl) : null));
+            (storedAdjacentUrl
+              ? getShamelaPageNoFromUrl(storedAdjacentUrl)
+              : null));
       const nextExistingPage = await db.bookPage.findFirst({
         where: {
           bookId: input.bookId,
@@ -3589,8 +3716,7 @@ export const bookRoutes = createTRPCRouter({
       }
 
       const nextUrlCandidate =
-        storedAdjacentUrl ||
-        nextExistingPage?.shamelaUrl;
+        storedAdjacentUrl || nextExistingPage?.shamelaUrl;
 
       if (!nextUrlCandidate) {
         throw new TRPCError({
@@ -4315,6 +4441,97 @@ export const bookRoutes = createTRPCRouter({
         bookId: input.bookId,
       }),
     ),
+
+  captureShamelaPageFromUrl: publicProcedure
+    .input(
+      z.object({
+        shamelaUrl: z.string().min(1),
+        bookId: z.number().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const sourceUrl = buildShamelaPageSourceUrl(input.shamelaUrl);
+      const shamelaId = getShamelaBookIdFromUrl(sourceUrl);
+      const existingBook = await ctx.db.book.findFirst({
+        where: {
+          deletedAt: null,
+          ...(input.bookId ? { id: input.bookId } : { shamelaId }),
+        },
+        select: { id: true, tocStatus: true },
+      });
+      const response = await fetch(sourceUrl, {
+        redirect: "follow",
+        headers: {
+          accept: "text/html,application/xhtml+xml",
+          "user-agent": "Al-Ghurobaa-Book-Importer/1.0",
+        },
+      });
+      if (!response.ok || !isShamelaUrlOrPath(response.url)) {
+        throw new TRPCError({
+          code: "BAD_GATEWAY",
+          message: `Shamela page request failed (${response.status}).`,
+        });
+      }
+
+      let html = await response.text();
+      if (existingBook?.tocStatus !== "complete") {
+        html = await hydrateShamelaTocHtml({
+          html,
+          fetchChildren: async ({ bookId, nodeId }) => {
+            const branchResponse = await fetch(
+              `https://shamela.ws/ajax/titlechilds/${encodeURIComponent(bookId)}/${encodeURIComponent(nodeId)}`,
+              {
+                headers: {
+                  accept: "text/html",
+                  "user-agent": "Al-Ghurobaa-Book-Importer/1.0",
+                },
+              },
+            );
+            if (!branchResponse.ok) {
+              throw new Error(
+                `Shamela chapter branch ${nodeId} failed (${branchResponse.status}).`,
+              );
+            }
+            return branchResponse.text();
+          },
+        });
+      }
+
+      const capture = await captureAndStageShamelaPageInternal(ctx.db, {
+        requestedUrl: sourceUrl,
+        finalUrl: response.url,
+        title:
+          html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.trim() ?? null,
+        html,
+        source: "web-url-capture",
+        bookId: input.bookId ?? existingBook?.id ?? null,
+      });
+      if (!capture.stagedParseId) {
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "The Shamela page could not be staged for import.",
+        });
+      }
+      const promoted = await promoteStagedShamelaPageParseInternal(ctx.db, {
+        stagedParseId: capture.stagedParseId,
+        bookId: input.bookId ?? existingBook?.id ?? null,
+      });
+      const [book, chaptersImported] = await Promise.all([
+        ctx.db.book.findFirstOrThrow({
+          where: { id: promoted.bookId, deletedAt: null },
+          include: { authors: true, shelf: true },
+        }),
+        ctx.db.bookTocNode.count({ where: { bookId: promoted.bookId } }),
+      ]);
+
+      return {
+        book,
+        created: !existingBook,
+        chaptersImported,
+        historyId: promoted.historyId ?? 0,
+        importedPage: promoted.page,
+      };
+    }),
 
   getStagedShamelaPageParse: publicProcedure
     .input(z.object({ stagedParseId: z.number() }))

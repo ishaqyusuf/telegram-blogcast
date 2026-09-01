@@ -10,7 +10,6 @@ import {
   KeyboardAvoidingView,
   type KeyboardEvent,
   InteractionManager,
-  PanResponder,
   Platform,
   ScrollView,
   Share,
@@ -18,6 +17,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 
 import { _trpc } from "@/components/static-trpc";
 import { Modal, useModal } from "@/components/ui/modal";
@@ -50,6 +50,10 @@ import { useAppSettingsStore } from "@/store/app-settings-store";
 import { useTranslation } from "@/lib/i18n";
 import { useColors } from "@/hooks/use-color";
 import { toAbsoluteShamelaUrl } from "@/lib/shamela-url";
+import {
+  getSwipeBookDirection,
+  resolveAdjacentPageAction,
+} from "@/lib/book-reader-navigation";
 import { vanillaTrpc } from "@/trpc/vanilla-client";
 import {
   createDocumentFromHtml,
@@ -100,7 +104,7 @@ export default function BookReaderScreen() {
     }>();
   const router = useRouter();
   const qc = useQueryClient();
-  const { t } = useTranslation();
+  const { t, isRtl } = useTranslation();
   const colors = useColors();
   const bookIdNum = Number(bookId);
   const pageIdNum = Number(pageId);
@@ -110,7 +114,11 @@ export default function BookReaderScreen() {
 
   // ── Reading progress + bookmarks ────────────────────────────────────────────
   const setLastPage = useBookOfflineStore((s) => s.setLastPage);
-  const isBookmarked = useBookOfflineStore((s) => s.isBookmarked);
+  const bookmarked = useBookOfflineStore((s) =>
+    (s.bookmarks[bookIdNum] ?? []).some(
+      (bookmark) => bookmark.pageId === pageIdNum,
+    ),
+  );
   const addBookmark = useBookOfflineStore((s) => s.addBookmark);
   const removeBookmark = useBookOfflineStore((s) => s.removeBookmark);
   const readerFontSize = useAppSettingsStore((s) => s.readerFontSize);
@@ -534,7 +542,6 @@ export default function BookReaderScreen() {
     setSelectedTextRange(null);
   };
 
-  const bookmarked = isBookmarked(bookIdNum, pageIdNum);
   const editorFooterInset =
     keyboardHeight > 0 ? (Platform.OS === "ios" ? 12 : keyboardHeight + 12) : 0;
 
@@ -568,24 +575,22 @@ export default function BookReaderScreen() {
           }
         | undefined;
 
-      if (target?.page?.status === "fetched") {
-        router.replace(`/books/${bookId}/reader/${target.page.id}` as any);
+      const action = resolveAdjacentPageAction(target);
+      if (action.type === "reader") {
+        router.replace(`/books/${bookId}/reader/${action.pageId}` as any);
         return;
       }
-
-      const targetUrl = target?.shamelaUrl ?? target?.page?.shamelaUrl;
-      if (!targetUrl) {
-        Alert.alert(t("error"), "No Shamela link is available for this page.");
+      if (action.type === "boundary") {
         return;
       }
 
       router.push(
         `/book-fetch-browser?url=${encodeURIComponent(
-          toAbsoluteShamelaUrl(targetUrl),
+          toAbsoluteShamelaUrl(action.shamelaUrl),
         )}&bookId=${bookIdNum}&autoPromote=1` as any,
       );
     },
-    [bookId, bookIdNum, mode, page, router, t],
+    [bookId, bookIdNum, mode, page, router],
   );
 
   const mergeReaderPages = useCallback(
@@ -671,22 +676,18 @@ export default function BookReaderScreen() {
     [loadReaderChunk],
   );
 
-  const pageSwipeResponder = useMemo(
+  const pageSwipeGesture = useMemo(
     () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_, gesture) =>
-          Math.abs(gesture.dx) > 42 &&
-          Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.4,
-        onPanResponderRelease: (_, gesture) => {
-          if (!page || mode !== "read") return;
-          if (gesture.dx < -60) {
-            navigateAdjacentPage("next");
-          } else if (gesture.dx > 60) {
-            navigateAdjacentPage("previous");
-          }
-        },
-      }),
-    [mode, navigateAdjacentPage, page],
+      Gesture.Pan()
+        .enabled(Boolean(page) && mode === "read")
+        .activeOffsetX([-42, 42])
+        .failOffsetY([-28, 28])
+        .runOnJS(true)
+        .onEnd((gesture) => {
+          const direction = getSwipeBookDirection(gesture.translationX, isRtl);
+          if (direction) navigateAdjacentPage(direction);
+        }),
+    [isRtl, mode, navigateAdjacentPage, page],
   );
 
   useEffect(() => {
@@ -841,18 +842,18 @@ export default function BookReaderScreen() {
               />
             </View>
           ) : (
-            <ScrollView
-              {...pageSwipeResponder.panHandlers}
-              style={{ backgroundColor: readerPalette.background }}
-              contentContainerStyle={{
-                paddingHorizontal: 20,
-                paddingTop: 20,
-                paddingBottom: 120,
-              }}
-              keyboardShouldPersistTaps="handled"
-              onScroll={handleReaderScroll}
-              scrollEventThrottle={16}
-            >
+            <GestureDetector gesture={pageSwipeGesture}>
+              <ScrollView
+                style={{ backgroundColor: readerPalette.background }}
+                contentContainerStyle={{
+                  paddingHorizontal: 20,
+                  paddingTop: 20,
+                  paddingBottom: 120,
+                }}
+                keyboardShouldPersistTaps="handled"
+                onScroll={handleReaderScroll}
+                scrollEventThrottle={16}
+              >
               {chunkLoadingDirection === "previous" ? (
                 <View style={{ alignItems: "center", paddingBottom: 16 }}>
                   <ActivityIndicator size="small" color={colors.primary} />
@@ -972,8 +973,8 @@ export default function BookReaderScreen() {
                           padding: 18,
                         }}
                       >
-                        <Icon
-                          name="CloudDownload"
+                          <Icon
+                            name="Download"
                           size={24}
                           className="text-primary"
                         />
@@ -1129,7 +1130,8 @@ export default function BookReaderScreen() {
                   <ActivityIndicator size="small" color={colors.primary} />
                 </View>
               ) : null}
-            </ScrollView>
+              </ScrollView>
+            </GestureDetector>
           )}
 
           {mode === "edit" ? (

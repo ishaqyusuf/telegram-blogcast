@@ -51,6 +51,11 @@ type DownloadedBookPayload = {
       pid: number;
       text: string;
       footnoteIds?: string | null;
+      sourceMarks?: Array<{
+        kind: "c5";
+        start: number;
+        end: number;
+      }> | null;
     }>;
     footnotes?: Array<{
       id: number;
@@ -244,6 +249,9 @@ export async function saveBookDownloadToLocalDb(
         pid: paragraph.pid,
         text: paragraph.text,
         footnoteIds: paragraph.footnoteIds ?? null,
+        sourceMarks: paragraph.sourceMarks
+          ? JSON.stringify(paragraph.sourceMarks)
+          : null,
       })),
     );
     if (paragraphs.length > 0) {

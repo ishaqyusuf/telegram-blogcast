@@ -4,7 +4,7 @@ import { Icon } from "@/components/ui/icon";
 import { Pressable } from "@/components/ui/pressable";
 import { useColors } from "@/hooks/use-color";
 import { useTranslation } from "@/lib/i18n";
-import { useMutation, useQueryClient } from "@/lib/react-query";
+import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import {
   BookFetchBrowserCapture,
   useBookFetchBrowserStore,
@@ -61,6 +61,70 @@ const CAPTURE_SCRIPT = `
   true;
 `;
 
+const EXPAND_TOC_SCRIPT = `
+  (function() {
+    if (window.__alGhurobaaTocExpanding) return true;
+    window.__alGhurobaaTocExpanding = true;
+
+    var post = function(payload) {
+      window.ReactNativeWebView.postMessage(JSON.stringify(payload));
+    };
+    var hasDirectList = function(button) {
+      var item = button && button.parentElement;
+      if (!item) return false;
+      return Array.prototype.some.call(item.children, function(child) {
+        return child.tagName === "UL";
+      });
+    };
+    var pendingButtons = function() {
+      return Array.prototype.filter.call(
+        document.querySelectorAll(".s-nav .exp_bu"),
+        function(button) { return !hasDirectList(button); }
+      );
+    };
+    var waitForList = function(button) {
+      return new Promise(function(resolve, reject) {
+        var started = Date.now();
+        var timer = setInterval(function() {
+          if (hasDirectList(button)) {
+            clearInterval(timer);
+            resolve();
+          } else if (Date.now() - started > 12000) {
+            clearInterval(timer);
+            reject(new Error("Timed out while loading chapter branch " + (button.dataset.id || "unknown")));
+          }
+        }, 120);
+      });
+    };
+
+    (async function() {
+      var expanded = 0;
+      while (expanded < 1200) {
+        var pending = pendingButtons();
+        if (!pending.length) {
+          post({ type: "toc-complete", expanded: expanded, remaining: 0 });
+          return;
+        }
+        var button = pending[0];
+        button.click();
+        await waitForList(button);
+        expanded += 1;
+        post({
+          type: "toc-progress",
+          expanded: expanded,
+          remaining: pendingButtons().length
+        });
+      }
+      throw new Error("Chapter expansion safety limit reached.");
+    })().catch(function(error) {
+      post({ type: "toc-error", message: error && error.message ? error.message : "Chapter expansion failed." });
+    }).finally(function() {
+      window.__alGhurobaaTocExpanding = false;
+    });
+  })();
+  true;
+`;
+
 export default function BookFetchBrowserScreen() {
   const { url, bookId, autoPromote } = useLocalSearchParams<{
     url?: string;
@@ -81,10 +145,23 @@ export default function BookFetchBrowserScreen() {
   const [htmlLength, setHtmlLength] = useState(0);
   const [loadProgress, setLoadProgress] = useState(0);
   const [isCapturing, setIsCapturing] = useState(false);
+  const [tocProgress, setTocProgress] = useState<{
+    expanded: number;
+    remaining: number;
+  } | null>(null);
+  const [tocError, setTocError] = useState<string | null>(null);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const parsedBookId =
     bookId && Number.isFinite(Number(bookId)) ? Number(bookId) : undefined;
   const shouldAutoPromote = autoPromote === "1" || autoPromote === "true";
+  const canCheckCaptureState = currentUrl.includes("shamela.ws/book/");
+  const { data: captureState, isLoading: isLoadingCaptureState } = useQuery(
+    _trpc.book.getShamelaCaptureState.queryOptions(
+      { shamelaUrl: currentUrl || url || "" },
+      { enabled: canCheckCaptureState },
+    ),
+  );
+  const requiresFullToc = captureState?.requiresFullToc ?? true;
 
   useEffect(() => {
     setGlobalAudioBarHidden(true);
@@ -144,6 +221,7 @@ export default function BookFetchBrowserScreen() {
   const canCapture = useMemo(() => {
     if (!hasLoadedOnce) return false;
     if (isCapturing || isStaging || isPromoting) return false;
+    if (isLoadingCaptureState) return false;
     if (isCloudflare) return false;
     if (!currentUrl.includes("shamela.ws/book/")) return false;
     return htmlLength > 2000;
@@ -153,6 +231,7 @@ export default function BookFetchBrowserScreen() {
     htmlLength,
     isCapturing,
     isCloudflare,
+    isLoadingCaptureState,
     isPromoting,
     isStaging,
   ]);
@@ -200,6 +279,32 @@ export default function BookFetchBrowserScreen() {
           source: "mobile-webview",
           bookId: parsedBookId,
         });
+        return;
+      }
+
+      if (payload.type === "toc-progress") {
+        setTocProgress({
+          expanded: Number(payload.expanded) || 0,
+          remaining: Number(payload.remaining) || 0,
+        });
+        return;
+      }
+
+      if (payload.type === "toc-complete") {
+        setTocProgress({
+          expanded: Number(payload.expanded) || 0,
+          remaining: 0,
+        });
+        webViewRef.current?.injectJavaScript(CAPTURE_SCRIPT);
+        return;
+      }
+
+      if (payload.type === "toc-error") {
+        const message =
+          payload.message || "Could not load the full chapter tree.";
+        setTocError(message);
+        setIsCapturing(false);
+        Alert.alert("Chapter import paused", message);
       }
     } catch {}
   };
@@ -207,7 +312,11 @@ export default function BookFetchBrowserScreen() {
   const handleCapture = () => {
     if (!canCapture) return;
     setIsCapturing(true);
-    webViewRef.current?.injectJavaScript(CAPTURE_SCRIPT);
+    setTocError(null);
+    setTocProgress(null);
+    webViewRef.current?.injectJavaScript(
+      requiresFullToc ? EXPAND_TOC_SCRIPT : CAPTURE_SCRIPT,
+    );
   };
 
   return (
@@ -286,6 +395,23 @@ export default function BookFetchBrowserScreen() {
               >
                 {`Load ${Math.round(loadProgress * 100)}% · HTML ${htmlLength.toLocaleString()} chars`}
               </Text>
+              {requiresFullToc ? (
+                <Text
+                  style={{
+                    textAlign,
+                    marginTop: 4,
+                    fontSize: 12,
+                    color: tocError ? colors.destructive : colors.primary,
+                    writingDirection,
+                  }}
+                >
+                  {tocError
+                    ? `Chapter tree paused: ${tocError}`
+                    : tocProgress
+                      ? `Chapter tree: ${tocProgress.expanded} loaded · ${tocProgress.remaining} currently pending`
+                      : "First import will load the complete chapter tree."}
+                </Text>
+              ) : null}
             </View>
           </View>
 

@@ -53,11 +53,11 @@ export async function withLocalDbRetry<T>(
 }
 
 async function runStartupStatement(
-  statement: ReturnType<typeof sql>,
+  statement: string,
   options?: { ignoreErrors?: boolean; ignoreLocked?: boolean },
 ) {
   try {
-    await withLocalDbRetry(() => localDb.run(statement), {
+    await withLocalDbRetry(() => expo.execAsync(statement), {
       retries: 5,
       delayMs: 150,
     });
@@ -84,12 +84,12 @@ export async function initLocalDb() {
   }
 
   localDbInitPromise = (async () => {
-    await runStartupStatement(sql`PRAGMA busy_timeout = 5000;`);
-    await runStartupStatement(sql`PRAGMA journal_mode = WAL;`, {
+    await runStartupStatement("PRAGMA busy_timeout = 5000;");
+    await runStartupStatement("PRAGMA journal_mode = WAL;", {
       ignoreErrors: true,
       ignoreLocked: true,
     });
-    await runStartupStatement(sql`PRAGMA foreign_keys = ON;`);
+    await runStartupStatement("PRAGMA foreign_keys = ON;");
 
     await withLocalDb(async () => {
       // ── Book content tables ────────────────────────────────────────────────────
@@ -239,9 +239,15 @@ export async function initLocalDb() {
       page_id      INTEGER NOT NULL,
       pid          INTEGER NOT NULL,
       text         TEXT    NOT NULL,
-      footnote_ids TEXT
+      footnote_ids TEXT,
+      source_marks TEXT
     );
   `);
+      try {
+        await localDb.run(
+          sql`ALTER TABLE local_paragraphs ADD COLUMN source_marks TEXT;`,
+        );
+      } catch {}
 
       await localDb.run(
         sql`CREATE INDEX IF NOT EXISTS idx_local_para_page ON local_paragraphs(page_id);`,

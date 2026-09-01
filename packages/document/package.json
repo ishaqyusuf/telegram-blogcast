@@ -4,6 +4,9 @@
   "main": "src/index.ts",
   "private": true,
   "sideEffects": false,
+  "dependencies": {
+    "htmlparser2": "^8.0.2"
+  },
   "scripts": {
     "clean": "rm -rf .turbo node_modules",
     "lint": "biome check .",

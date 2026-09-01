@@ -9,7 +9,13 @@ import { useQuery } from "@/lib/react-query";
 import { toAbsoluteShamelaUrl } from "@/lib/shamela-url";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useState } from "react";
-import { ActivityIndicator, ScrollView, Text, TextInput, View } from "react-native";
+import {
+  ActivityIndicator,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 
 function normalizeChapterSearch(value: string) {
   return value.trim().toLowerCase();
@@ -61,7 +67,8 @@ function filterTocNodes(nodes: TocNode[], query: string) {
     let current: TocNode | undefined = node;
     while (current) {
       included.add(current.id);
-      current = current.parentId != null ? byId.get(current.parentId) : undefined;
+      current =
+        current.parentId != null ? byId.get(current.parentId) : undefined;
     }
     includeDescendants(node);
   }
@@ -93,7 +100,7 @@ export default function BookChaptersScreen() {
   };
 
   const normalizedQuery = normalizeChapterSearch(query);
-  const tocNodes = (((book as any)?.tocNodes ?? []) as TocNode[]);
+  const tocNodes = ((book as any)?.tocNodes ?? []) as TocNode[];
   const visibleTocNodes = filterTocNodes(tocNodes, normalizedQuery);
   const visiblePages = normalizedQuery
     ? (book?.pages ?? []).filter((page) =>
@@ -125,7 +132,9 @@ export default function BookChaptersScreen() {
               style={{ writingDirection: "rtl" }}
               numberOfLines={1}
             >
-              {book?.nameAr ?? book?.nameEn ?? t("index", { count: visibleCount })}
+              {book?.nameAr ??
+                book?.nameEn ??
+                t("index", { count: visibleCount })}
             </Text>
           </View>
 
@@ -139,8 +148,13 @@ export default function BookChaptersScreen() {
               onChangeText={setQuery}
               placeholder={t("searchChapters")}
               placeholderTextColor={colors.mutedForeground}
-              className="flex-1 text-right text-[14px] text-foreground"
-              style={{ writingDirection: "rtl" }}
+              style={{
+                flex: 1,
+                color: colors.foreground,
+                fontSize: 14,
+                textAlign: "right",
+                writingDirection: "rtl",
+              }}
               autoFocus
               returnKeyType="search"
             />

@@ -2,12 +2,17 @@ import { Text, TextInput, View, Pressable } from "react-native";
 import { HighlightToolbar } from "./highlight-toolbar";
 import { useColors } from "@/hooks/use-color";
 import { withAlpha } from "@/lib/theme";
+import {
+  resolveBookTextSegments,
+  type BookSourceMark,
+} from "@acme/document/book";
 
 type Paragraph = {
   id: number;
   pid: number;
   text: string;
   footnoteIds?: string | null;
+  sourceMarks?: BookSourceMark[] | null;
 };
 
 type HighlightEntry = {
@@ -50,7 +55,10 @@ type Props = {
 
 function parseFootnoteIds(ids?: string | null): string[] {
   if (!ids) return [];
-  return ids.split(",").map((s) => s.trim()).filter(Boolean);
+  return ids
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
 function hexToRgba(hex: string, alpha: number): string {
@@ -83,37 +91,6 @@ function resolveHighlightRange(text: string, highlight: HighlightEntry) {
   return { start, end: start + quoteText.length };
 }
 
-function getHighlightSegments(
-  text: string,
-  highlights: { start: number; end: number; color: string }[],
-) {
-  const boundaries = [
-    0,
-    text.length,
-    ...highlights.flatMap((highlight) => [highlight.start, highlight.end]),
-  ];
-  const sorted = [...new Set(boundaries)]
-    .filter((offset) => offset >= 0 && offset <= text.length)
-    .sort((a, b) => a - b);
-
-  return sorted
-    .slice(0, -1)
-    .map((start, index) => {
-      const end = sorted[index + 1] ?? start;
-      const activeHighlight = highlights
-        .filter((highlight) => highlight.start <= start && highlight.end >= end)
-        .at(-1);
-
-      return {
-        start,
-        end,
-        text: text.slice(start, end),
-        color: activeHighlight?.color ?? null,
-      };
-    })
-    .filter((segment) => segment.end > segment.start && segment.text.length > 0);
-}
-
 export function BookPageView({
   paragraphs,
   highlights = [],
@@ -135,7 +112,9 @@ export function BookPageView({
     <View style={{ gap: 16 }}>
       {paragraphs.map((para) => {
         const footnoteIds = parseFootnoteIds(para.footnoteIds);
-        const paragraphHighlights = highlights.filter((h) => h.paragraphId === para.id);
+        const paragraphHighlights = highlights.filter(
+          (h) => h.paragraphId === para.id,
+        );
         const highlight = paragraphHighlights[0];
         const showToolbar = showToolbarForParagraphId === para.id;
         const rangeHighlights = paragraphHighlights
@@ -158,18 +137,22 @@ export function BookPageView({
           paragraphHighlights.length > 0 && rangeHighlights.length === 0;
         const selectedRange =
           selectedTextRange?.paragraphId === para.id ? selectedTextRange : null;
-        const visibleHighlightSegments = getHighlightSegments(para.text, [
-          ...rangeHighlights,
-          ...(selectedRange
-            ? [
-                {
-                  start: selectedRange.startOffset,
-                  end: selectedRange.endOffset,
-                  color: withAlpha(colors.primary, 0.18),
-                },
-              ]
-            : []),
-        ]);
+        const visibleHighlightSegments = resolveBookTextSegments({
+          text: para.text,
+          sourceMarks: para.sourceMarks,
+          highlights: [
+            ...rangeHighlights,
+            ...(selectedRange
+              ? [
+                  {
+                    start: selectedRange.startOffset,
+                    end: selectedRange.endOffset,
+                    color: withAlpha(colors.primary, 0.18),
+                  },
+                ]
+              : []),
+          ],
+        });
         // Background: highlight color takes precedence over selection
         let bgColor = "transparent";
         if (hasParagraphFallbackHighlight && highlight) {
@@ -184,7 +167,11 @@ export function BookPageView({
                 existingColor={highlight?.color ?? null}
                 onCopy={() => onCopyParagraph?.(para)}
                 onHighlight={() => onHighlightColor?.(para.id, "#facc15")}
-                onDelete={highlight ? () => onHighlightDelete?.(highlight.localId) : undefined}
+                onDelete={
+                  highlight
+                    ? () => onHighlightDelete?.(highlight.localId)
+                    : undefined
+                }
                 onDismiss={() => onDismissHighlight?.()}
               />
             )}
@@ -211,11 +198,14 @@ export function BookPageView({
                   {visibleHighlightSegments.map((segment) => (
                     <Text
                       key={`${segment.start}:${segment.end}`}
-                      style={
-                        segment.color
-                          ? { backgroundColor: segment.color }
-                          : undefined
-                      }
+                      style={{
+                        ...(segment.foregroundColor
+                          ? { color: segment.foregroundColor }
+                          : {}),
+                        ...(segment.backgroundColor
+                          ? { backgroundColor: segment.backgroundColor }
+                          : {}),
+                      }}
                     >
                       {segment.text}
                     </Text>
@@ -228,6 +218,8 @@ export function BookPageView({
                   multiline
                   scrollEnabled={false}
                   showSoftInputOnFocus={false}
+                  autoCorrect={false}
+                  spellCheck={false}
                   caretHidden
                   selectionColor={withAlpha(colors.primary, 0.35)}
                   onChangeText={() => {}}
@@ -283,7 +275,9 @@ export function BookPageView({
                         paddingVertical: 2,
                       }}
                     >
-                      <Text style={{ fontSize: 11, color: colors.primary }}>{marker}</Text>
+                      <Text style={{ fontSize: 11, color: colors.primary }}>
+                        {marker}
+                      </Text>
                     </Pressable>
                   ))}
                 </View>

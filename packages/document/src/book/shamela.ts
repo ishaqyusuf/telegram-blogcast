@@ -29,7 +29,7 @@ export type ShamelaBookMetadata = {
 };
 
 export type ShamelaTocNode = {
-  kind: "volume" | "chapter";
+  kind: "section" | "chapter" | "topic";
   title: string;
   path: string | null;
   url: string | null;
@@ -39,6 +39,7 @@ export type ShamelaTocNode = {
   sortOrder: number;
   treePath: string;
   parentTreePath: string | null;
+  sourceNodeId: string | null;
   active: boolean;
   children: ShamelaTocNode[];
 };
@@ -163,6 +164,8 @@ export type ShamelaOpenPageFacts = {
     nodes: ShamelaTocNode[];
     topLevelCount: number;
     linkCount: number;
+    complete: boolean;
+    unexpandedNodeIds: string[];
     activeNode: ShamelaTocNode | null;
   };
   blocks: Array<{
@@ -209,6 +212,12 @@ export type ShamelaOpenPageParseResult = {
 
 function decodeHtmlEntities(value: string) {
   return value
+    .replace(/&#x([0-9a-f]+);/gi, (_, codePoint: string) =>
+      String.fromCodePoint(Number.parseInt(codePoint, 16)),
+    )
+    .replace(/&#(\d+);/g, (_, codePoint: string) =>
+      String.fromCodePoint(Number.parseInt(codePoint, 10)),
+    )
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
@@ -492,65 +501,139 @@ function flattenToc(nodes: ShamelaTocNode[]): ShamelaTocNode[] {
   return nodes.flatMap((node) => [node, ...flattenToc(node.children)]);
 }
 
-function extractTocTree(html: string): ShamelaTocNode[] {
-  const navBlock = html.match(
-    /<div\b[^>]*class=["'][^"']*\bs-nav\b[^"']*["'][^>]*>([\s\S]*?)<\/div>\s*<\/div>\s*<div\b[^>]*class=["'][^"']*\bcol-md-8\b/i,
-  )?.[1];
-  if (!navBlock) return [];
+function directTags(node: any, tagName?: string) {
+  return (node?.children ?? []).filter(
+    (child: any) =>
+      child?.type === "tag" && (!tagName || child.name === tagName),
+  );
+}
 
-  const topLevelMatches = [
-    ...navBlock.matchAll(
-      /<li>\s*<a\b[^>]*href=["']javascript:;["'][^>]*class=["'][^"']*\bexp_bu\b[^"']*["'][\s\S]*?<\/a>\s*<a\b([^>]*)>([\s\S]*?)<\/a>\s*<ul[^>]*>([\s\S]*?)<\/ul>\s*<\/li>/gi,
-    ),
-  ];
+function hasClass(node: any, className: string) {
+  return String(node?.attribs?.class ?? "")
+    .split(/\s+/)
+    .includes(className);
+}
 
-  return topLevelMatches.map((match, volumeIndex) => {
-    const attrs = match[1] ?? "";
-    const path = getPathFromHref(extractHref(attrs));
-    const treePath = String(volumeIndex + 1);
-    const volumeNumber = volumeIndex + 1;
-    const volumeNode: ShamelaTocNode = {
-      kind: "volume",
-      title: normalizeText(match[2]),
-      path,
-      url: getUrlFromPath(path),
-      shamelaPageNo: getPageNoFromPath(path),
-      volumeNumber,
-      depth: 0,
-      sortOrder: volumeIndex,
-      treePath,
-      parentTreePath: null,
-      active: extractClassNames(attrs).includes("active"),
-      children: [],
+export async function hydrateShamelaTocHtml(input: {
+  html: string;
+  fetchChildren: (target: {
+    bookId: string;
+    nodeId: string;
+  }) => Promise<string>;
+  maxBranches?: number;
+}) {
+  const document = parseDocument(input.html, { decodeEntities: true });
+  const maxBranches = input.maxBranches ?? 1200;
+  let hydratedBranches = 0;
+
+  while (hydratedBranches < maxBranches) {
+    const expander = DomUtils.findOne(
+      (node: any) => {
+        if (node?.name !== "a" || !hasClass(node, "exp_bu")) return false;
+        return !directTags(node.parent, "ul").length;
+      },
+      document.children,
+      true,
+    ) as any;
+    if (!expander) return DomUtils.getOuterHTML(document);
+
+    const nodeId = String(expander.attribs?.["data-id"] ?? "").trim();
+    const bookId = String(expander.attribs?.["data-book-id"] ?? "").trim();
+    if (!nodeId || !bookId || !expander.parent) {
+      throw new Error("A Shamela chapter expander is missing its source id.");
+    }
+
+    const childHtml = await input.fetchChildren({ bookId, nodeId });
+    const fragment = parseDocument(childHtml, { decodeEntities: true });
+    const childList = directTags(fragment, "ul")[0];
+    if (!childList) {
+      throw new Error(`Shamela chapter branch ${nodeId} returned no list.`);
+    }
+    DomUtils.appendChild(expander.parent, childList);
+    hydratedBranches += 1;
+  }
+
+  throw new Error("Shamela chapter expansion safety limit reached.");
+}
+
+function extractTocTree(html: string) {
+  const document = parseDocument(html, { decodeEntities: true });
+  const nav = DomUtils.findOne(
+    (node: any) => node?.name === "div" && hasClass(node, "s-nav"),
+    document.children,
+    true,
+  );
+  const rootList = directTags(nav, "ul")[0];
+  if (!rootList) {
+    return {
+      nodes: [] as ShamelaTocNode[],
+      complete: false,
+      unexpandedNodeIds: [] as string[],
     };
+  }
 
-    volumeNode.children = [
-      ...(match[3] ?? "").matchAll(
-        /<li>\s*-?\s*<a\b([^>]*)>([\s\S]*?)<\/a>\s*<\/li>/gi,
-      ),
-    ]
-      .map((childMatch, childIndex) => {
-        const childAttrs = childMatch[1] ?? "";
-        const childPath = getPathFromHref(extractHref(childAttrs));
+  const unexpandedNodeIds: string[] = [];
+  const parseItems = (
+    list: any,
+    depth: number,
+    parentTreePath: string | null,
+  ): ShamelaTocNode[] =>
+    directTags(list, "li")
+      .map((item: any, index: number) => {
+        const anchors = directTags(item, "a");
+        const expander = anchors.find((anchor: any) =>
+          hasClass(anchor, "exp_bu"),
+        );
+        const link = anchors.find(
+          (anchor: any) => anchor?.attribs?.href !== "javascript:;",
+        );
+        const title = normalizeText(link ? DomUtils.textContent(link) : "");
+        if (!link || !title) return null;
+
+        const path = getPathFromHref(link.attribs?.href);
+        const shamelaPageNo = getPageNoFromPath(path);
+        const sourceNodeId =
+          typeof expander?.attribs?.["data-id"] === "string" &&
+          expander.attribs["data-id"].trim()
+            ? expander.attribs["data-id"].trim()
+            : null;
+        const fallbackIdentity = `page-${shamelaPageNo ?? "unknown"}-${index + 1}`;
+        const identity = sourceNodeId ?? fallbackIdentity;
+        const treePath = parentTreePath
+          ? `${parentTreePath}.${identity}`
+          : identity;
+        const childList = directTags(item, "ul")[0];
+
+        if (expander && !childList) {
+          unexpandedNodeIds.push(sourceNodeId ?? treePath);
+        }
+
         return {
-          kind: "chapter" as const,
-          title: normalizeText(childMatch[2]),
-          path: childPath,
-          url: getUrlFromPath(childPath),
-          shamelaPageNo: getPageNoFromPath(childPath),
-          volumeNumber,
-          depth: 1,
-          sortOrder: childIndex,
-          treePath: `${treePath}.${childIndex + 1}`,
-          parentTreePath: treePath,
-          active: extractClassNames(childAttrs).includes("active"),
-          children: [],
-        };
+          kind: depth === 0 ? "section" : depth === 1 ? "chapter" : "topic",
+          title,
+          path,
+          url: getUrlFromPath(path),
+          shamelaPageNo,
+          volumeNumber: null,
+          depth,
+          sortOrder: index,
+          treePath,
+          parentTreePath,
+          sourceNodeId,
+          active: hasClass(link, "active"),
+          children: childList ? parseItems(childList, depth + 1, treePath) : [],
+        } satisfies ShamelaTocNode;
       })
-      .filter((node) => node.title.length > 0);
+      .filter((node: ShamelaTocNode | null): node is ShamelaTocNode =>
+        Boolean(node),
+      );
 
-    return volumeNode;
-  });
+  const nodes = parseItems(rootList, 0, null);
+  return {
+    nodes,
+    complete: nodes.length > 0 && unexpandedNodeIds.length === 0,
+    unexpandedNodeIds,
+  };
 }
 
 function extractFootnotes(html: string) {
@@ -702,7 +785,8 @@ export function parseShamelaOpenPage(input: {
     items: section.items,
   }));
   const adjacentPages = extractAdjacentPages(input.html);
-  const tocNodes = extractTocTree(input.html);
+  const toc = extractTocTree(input.html);
+  const tocNodes = toc.nodes;
   const flatTocNodes = flattenToc(tocNodes);
   const activeTocNode = flatTocNodes.find((node) => node.active) ?? null;
   if (navigationSections.some((section) => section.head === "فصول الكتاب")) {
@@ -831,6 +915,8 @@ export function parseShamelaOpenPage(input: {
       nodes: tocNodes,
       topLevelCount: tocNodes.length,
       linkCount: flatTocNodes.filter((node) => node.path).length,
+      complete: toc.complete,
+      unexpandedNodeIds: toc.unexpandedNodeIds,
       activeNode: activeTocNode,
     },
     blocks: [
@@ -911,3 +997,4 @@ export function parseShamelaOpenPage(input: {
     diagnostics,
   };
 }
+import { DomUtils, parseDocument } from "htmlparser2";

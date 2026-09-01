@@ -8,7 +8,15 @@ export {
   createBookHighlightAnnotation,
   createBookHighlightAnnotations,
 } from "./highlights";
-export { parseShamelaOpenPage } from "./shamela";
+export { resolveBookTextSegments, SHAMELA_C5_COLOR } from "./reader";
+export type { BookHighlightRange, BookSourceMark } from "./reader";
+export { getSwipeBookDirection, resolveAdjacentPageAction } from "./navigation";
+export type { AdjacentPageAction, AdjacentPageTarget } from "./navigation";
+export {
+  normalizeBookmarkedPageIds,
+  toggleBookmarkedPageId,
+} from "./bookmarks";
+export { hydrateShamelaTocHtml, parseShamelaOpenPage } from "./shamela";
 export type {
   ParseDiagnostic,
   ShamelaBookMetadata,

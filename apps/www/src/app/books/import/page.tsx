@@ -214,7 +214,7 @@ export default function BookImportPage() {
     );
 
     const syncMutation = useMutation(
-        _trpc.book.syncBookFromShamela.mutationOptions({
+        _trpc.book.captureShamelaPageFromUrl.mutationOptions({
             onMutate: () => {
                 setSyncError(null);
                 setSyncResult(null);
@@ -286,7 +286,6 @@ export default function BookImportPage() {
 
         syncMutation.mutate({
             shamelaUrl: sourceUrl,
-            aiModel,
         });
     }
 
@@ -462,7 +461,7 @@ export default function BookImportPage() {
                                         Source Import
                                     </div>
                                     <h2 className="mt-2 text-2xl font-semibold text-zinc-50">
-                                        Shamela preview and sync
+                                        Shamela deterministic capture
                                     </h2>
                                 </div>
                                 <div className="grid flex-1 gap-2 sm:grid-cols-3 md:max-w-xl">
@@ -525,8 +524,9 @@ export default function BookImportPage() {
                                     </button>
                                 </div>
                                 <div className="mt-3 text-xs text-zinc-500">
-                                    Preview first to inspect the extracted title,
-                                    author, table of contents, and linked page.
+                                    Import reads the live page directly. On the
+                                    first capture it loads every lazy chapter
+                                    branch before saving the page and full tree.
                                 </div>
                             </div>
 

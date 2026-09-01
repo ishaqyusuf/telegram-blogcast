@@ -1,13 +1,23 @@
 import { Pressable } from "@/components/ui/pressable";
 import { Icon } from "@/components/ui/icon";
 import { useState, useCallback } from "react";
-import { ActivityIndicator, LayoutAnimation, Platform, Text, UIManager, View } from "react-native";
+import {
+  ActivityIndicator,
+  LayoutAnimation,
+  Platform,
+  Text,
+  UIManager,
+  View,
+} from "react-native";
 import { useTranslation } from "@/lib/i18n";
 import { useColors } from "@/hooks/use-color";
 import { withAlpha } from "@/lib/theme";
 
 // Enable LayoutAnimation on Android
-if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
+if (
+  Platform.OS === "android" &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
@@ -105,10 +115,12 @@ function groupPages(pages: Page[], volumes: Volume[]): VolumeSection[] {
       byChapter.get(key)!.push(page);
     }
 
-    const chapters: ChapterGroup[] = [...byChapter.entries()].map(([chapterTitle, cPages]) => ({
-      chapterTitle,
-      pages: cPages.sort((a, b) => a.shamelaPageNo - b.shamelaPageNo),
-    }));
+    const chapters: ChapterGroup[] = [...byChapter.entries()].map(
+      ([chapterTitle, cPages]) => ({
+        chapterTitle,
+        pages: cPages.sort((a, b) => a.shamelaPageNo - b.shamelaPageNo),
+      }),
+    );
 
     return {
       volumeId,
@@ -141,11 +153,116 @@ function getNodeStatus(node: TocNode) {
   return node.page?.status ?? "pending";
 }
 
+function TocNodeBranch({
+  node,
+  depth,
+  childrenFor,
+  fetchingPageId,
+  onPress,
+}: {
+  node: TocNode;
+  depth: number;
+  childrenFor: (nodeId: number) => TocNode[];
+  fetchingPageId: number | null;
+  onPress: (node: TocNode) => void;
+}) {
+  const [expanded, setExpanded] = useState(depth < 2);
+  const colors = useColors();
+  const children = childrenFor(node.id);
+  const hasChildren = children.length > 0;
+  const status = getNodeStatus(node);
+  const isLoadingThis = Boolean(node.pageId && fetchingPageId === node.pageId);
+
+  const activate = () => {
+    if (hasChildren) {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setExpanded((value) => !value);
+      return;
+    }
+    onPress(node);
+  };
+
+  return (
+    <View>
+      <Pressable
+        onPress={activate}
+        style={{
+          minHeight: 44,
+          flexDirection: "row-reverse",
+          alignItems: "center",
+          gap: 9,
+          paddingLeft: 12,
+          paddingRight: 12 + depth * 16,
+          paddingVertical: 9,
+          borderBottomWidth: 1,
+          borderBottomColor: withAlpha(colors.border, 0.55),
+          backgroundColor: node.isCurrent
+            ? withAlpha(colors.primary, 0.1)
+            : depth === 0
+              ? colors.card
+              : "transparent",
+        }}
+      >
+        {hasChildren ? (
+          <Icon
+            name={expanded ? "ChevronDown" : "ChevronLeft"}
+            size={15}
+            className="text-muted-foreground"
+          />
+        ) : isLoadingThis ? (
+          <ActivityIndicator size="small" color={colors.primary} />
+        ) : (
+          <View
+            style={{
+              width: 7,
+              height: 7,
+              borderRadius: 4,
+              backgroundColor:
+                status === "fetched" ? colors.primary : colors.mutedForeground,
+            }}
+          />
+        )}
+        <Text
+          style={{
+            flex: 1,
+            color:
+              status === "fetched" || hasChildren
+                ? colors.foreground
+                : colors.mutedForeground,
+            fontSize: depth === 0 ? 14 : 13,
+            fontWeight: depth === 0 || node.isCurrent ? "700" : "400",
+            writingDirection: "rtl",
+            textAlign: "right",
+          }}
+        >
+          {node.title}
+        </Text>
+        {!hasChildren && status !== "fetched" ? (
+          <Icon name="Download" size={13} className="text-muted-foreground" />
+        ) : null}
+      </Pressable>
+      {hasChildren && expanded
+        ? children.map((child) => (
+            <TocNodeBranch
+              key={child.id}
+              node={child}
+              depth={depth + 1}
+              childrenFor={childrenFor}
+              fetchingPageId={fetchingPageId}
+              onPress={onPress}
+            />
+          ))
+        : null}
+    </View>
+  );
+}
+
 function getNodeFetchedCounts(node: TocNode, children: TocNode[]) {
   const allNodes = [node, ...children];
   const withPages = allNodes.filter((item) => item.shamelaPageNo != null);
   return {
-    fetched: withPages.filter((item) => getNodeStatus(item) === "fetched").length,
+    fetched: withPages.filter((item) => getNodeStatus(item) === "fetched")
+      .length,
     total: withPages.length,
   };
 }
@@ -186,7 +303,11 @@ function TocChildRow({
       }}
     >
       {isLoadingThis ? (
-        <ActivityIndicator size="small" color={colors.primary} style={{ width: 16 }} />
+        <ActivityIndicator
+          size="small"
+          color={colors.primary}
+          style={{ width: 16 }}
+        />
       ) : (
         <View
           style={{
@@ -202,7 +323,8 @@ function TocChildRow({
         style={{
           flex: 1,
           fontSize: 13,
-          color: status === "fetched" ? colors.foreground : colors.mutedForeground,
+          color:
+            status === "fetched" ? colors.foreground : colors.mutedForeground,
           writingDirection: "rtl",
           textAlign: "right",
           lineHeight: 20,
@@ -213,7 +335,9 @@ function TocChildRow({
         {node.title}
       </Text>
       {status === "fetched" ? (
-        <Text style={{ fontSize: 11, color: colors.mutedForeground, flexShrink: 0 }}>
+        <Text
+          style={{ fontSize: 11, color: colors.mutedForeground, flexShrink: 0 }}
+        >
           {node.page?.printedPageNo != null
             ? t("pageShort", { number: node.page.printedPageNo })
             : node.shamelaPageNo != null
@@ -371,19 +495,26 @@ function TopicRow({
         gap: 10,
         borderBottomWidth: 1,
         borderBottomColor: withAlpha(colors.border, 0.6),
-        backgroundColor: isLoadingThis ? withAlpha(colors.primary, 0.08) : "transparent",
+        backgroundColor: isLoadingThis
+          ? withAlpha(colors.primary, 0.08)
+          : "transparent",
       }}
     >
       {/* Status dot / spinner */}
       {isLoadingThis ? (
-        <ActivityIndicator size="small" color={colors.primary} style={{ width: 16 }} />
+        <ActivityIndicator
+          size="small"
+          color={colors.primary}
+          style={{ width: 16 }}
+        />
       ) : (
         <View
           style={{
             width: 7,
             height: 7,
             borderRadius: 4,
-            backgroundColor: statusColors[page.status] ?? colors.mutedForeground,
+            backgroundColor:
+              statusColors[page.status] ?? colors.mutedForeground,
             flexShrink: 0,
           }}
         />
@@ -394,7 +525,10 @@ function TopicRow({
         style={{
           flex: 1,
           fontSize: 13,
-          color: page.status === "fetched" ? colors.foreground : colors.mutedForeground,
+          color:
+            page.status === "fetched"
+              ? colors.foreground
+              : colors.mutedForeground,
           writingDirection: "rtl",
           textAlign: "right",
           lineHeight: 20,
@@ -406,7 +540,9 @@ function TopicRow({
 
       {/* Page number / download icon */}
       {page.status === "fetched" ? (
-        <Text style={{ fontSize: 11, color: colors.mutedForeground, flexShrink: 0 }}>
+        <Text
+          style={{ fontSize: 11, color: colors.mutedForeground, flexShrink: 0 }}
+        >
           {page.printedPageNo != null
             ? t("pageShort", { number: page.printedPageNo })
             : `#${page.shamelaPageNo}`}
@@ -450,10 +586,14 @@ function ChapterGroupRow({
   const badgeColor = allFetched
     ? withAlpha(colors.primary, 0.15)
     : noneFetched
-    ? withAlpha(colors.mutedForeground, 0.18)
-    : withAlpha(colors.warn, 0.15);
+      ? withAlpha(colors.mutedForeground, 0.18)
+      : withAlpha(colors.warn, 0.15);
 
-  const badgeTextColor = allFetched ? colors.primary : noneFetched ? colors.mutedForeground : colors.warn;
+  const badgeTextColor = allFetched
+    ? colors.primary
+    : noneFetched
+      ? colors.mutedForeground
+      : colors.warn;
 
   return (
     <View>
@@ -501,7 +641,9 @@ function ChapterGroupRow({
             paddingVertical: 2,
           }}
         >
-          <Text style={{ fontSize: 11, color: badgeTextColor, fontWeight: "600" }}>
+          <Text
+            style={{ fontSize: 11, color: badgeTextColor, fontWeight: "600" }}
+          >
             {fetchedCount}/{group.pages.length}
           </Text>
         </View>
@@ -624,7 +766,9 @@ function VolumeSectionRow({
               fontSize: 11,
               fontWeight: "700",
               color:
-                section.fetchedCount === section.totalCount ? colors.primary : colors.mutedForeground,
+                section.fetchedCount === section.totalCount
+                  ? colors.primary
+                  : colors.mutedForeground,
             }}
           >
             {section.fetchedCount}/{section.totalCount}
@@ -676,22 +820,30 @@ export function ChapterTree({
     if (tocTree.roots.length === 0) {
       return (
         <View style={{ paddingVertical: 32, alignItems: "center" }}>
-          <Text style={{ color: colors.mutedForeground, fontSize: 14 }}>{t("noChapters")}</Text>
+          <Text style={{ color: colors.mutedForeground, fontSize: 14 }}>
+            {t("noChapters")}
+          </Text>
         </View>
       );
     }
 
-    const isOnly = tocTree.roots.length === 1;
     return (
-      <View style={{ gap: 6 }}>
+      <View
+        style={{
+          overflow: "hidden",
+          borderRadius: 12,
+          borderWidth: 1,
+          borderColor: colors.border,
+        }}
+      >
         {tocTree.roots.map((root) => (
-          <TocVolumeRow
+          <TocNodeBranch
             key={root.id}
             node={root}
-            children={tocTree.childrenFor(root.id)}
+            depth={0}
+            childrenFor={tocTree.childrenFor}
             fetchingPageId={fetchingPageId}
-            onTocNodePress={onTocNodePress ?? (() => undefined)}
-            isOnly={isOnly}
+            onPress={onTocNodePress ?? (() => undefined)}
           />
         ))}
       </View>
@@ -703,7 +855,9 @@ export function ChapterTree({
   if (sections.length === 0) {
     return (
       <View style={{ paddingVertical: 32, alignItems: "center" }}>
-        <Text style={{ color: colors.mutedForeground, fontSize: 14 }}>{t("noChapters")}</Text>
+        <Text style={{ color: colors.mutedForeground, fontSize: 14 }}>
+          {t("noChapters")}
+        </Text>
       </View>
     );
   }

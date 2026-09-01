@@ -40,6 +40,8 @@ model Book {
   firstShamelaUrl String?
   lastShamelaPageNo Int?
   lastShamelaUrl String?
+  tocStatus      String       @default("pending")
+  tocCapturedAt  DateTime?
   category       String?
   categoryUrl    String?
   shelfId        Int?
@@ -191,6 +193,7 @@ model BookPageParagraph {
   pid         Int
   text        String
   footnoteIds String?
+  sourceMarks Json?
   highlights  BookPageHighlight[]
 
   @@index([pageId])

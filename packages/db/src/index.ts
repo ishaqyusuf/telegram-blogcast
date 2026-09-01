@@ -78,8 +78,9 @@ const prismaClientSingleton = () => {
         : ["error"],
     adapter: new PrismaPg(
       { connectionString },
-      // new Pool({
-      // }),
+      process.env.POSTGRES_SCHEMA?.trim()
+        ? { schema: process.env.POSTGRES_SCHEMA.trim() }
+        : undefined,
     ),
   };
 

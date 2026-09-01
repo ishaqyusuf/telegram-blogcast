@@ -68,6 +68,7 @@ export const localParagraphs = sqliteTable("local_paragraphs", {
   pid: integer("pid").notNull(),
   text: text("text").notNull(),
   footnoteIds: text("footnote_ids"),
+  sourceMarks: text("source_marks"),
 });
 
 export const localFootnotes = sqliteTable("local_footnotes", {
