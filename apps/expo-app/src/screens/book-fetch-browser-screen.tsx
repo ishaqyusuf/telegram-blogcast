@@ -4,7 +4,7 @@ import { Icon } from "@/components/ui/icon";
 import { Pressable } from "@/components/ui/pressable";
 import { useColors } from "@/hooks/use-color";
 import { useTranslation } from "@/lib/i18n";
-import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
+import { useMutation, useQueryClient } from "@/lib/react-query";
 import {
   BookFetchBrowserCapture,
   useBookFetchBrowserStore,
@@ -12,7 +12,7 @@ import {
 import { useGlobalAudioBarStore } from "@/store/global-audio-bar-store";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Text, View } from "react-native";
+import { ActivityIndicator, BackHandler, Text, View } from "react-native";
 import { WebView, WebViewMessageEvent } from "react-native-webview";
 
 const DESKTOP_VIEWPORT_SCRIPT = `
@@ -69,16 +69,17 @@ const EXPAND_TOC_SCRIPT = `
     var post = function(payload) {
       window.ReactNativeWebView.postMessage(JSON.stringify(payload));
     };
+    var index = document.querySelector(".betaka-index") || document.querySelector(".s-nav");
     var hasDirectList = function(button) {
       var item = button && button.parentElement;
       if (!item) return false;
       return Array.prototype.some.call(item.children, function(child) {
-        return child.tagName === "UL";
+        return child.tagName === "UL" && child.querySelector("li");
       });
     };
     var pendingButtons = function() {
       return Array.prototype.filter.call(
-        document.querySelectorAll(".s-nav .exp_bu"),
+        index.querySelectorAll(".exp_bu"),
         function(button) { return !hasDirectList(button); }
       );
     };
@@ -98,6 +99,9 @@ const EXPAND_TOC_SCRIPT = `
     };
 
     (async function() {
+      if (!index || !index.querySelector("ul > li")) {
+        throw new Error("No chapter index found on this book root.");
+      }
       var expanded = 0;
       while (expanded < 1200) {
         var pending = pendingButtons();
@@ -126,10 +130,9 @@ const EXPAND_TOC_SCRIPT = `
 `;
 
 export default function BookFetchBrowserScreen() {
-  const { url, bookId, autoPromote } = useLocalSearchParams<{
+  const { url, bookId } = useLocalSearchParams<{
     url?: string;
     bookId?: string;
-    autoPromote?: string;
   }>();
   const router = useRouter();
   const qc = useQueryClient();
@@ -140,6 +143,16 @@ export default function BookFetchBrowserScreen() {
   const setGlobalAudioBarHidden = useGlobalAudioBarStore((s) => s.setHidden);
 
   const [currentUrl, setCurrentUrl] = useState(url ?? "");
+  const [sourceUrl, setSourceUrl] = useState(url ?? "");
+  const [savedPage, setSavedPage] = useState<{
+    bookId: number;
+    pageId: number;
+    rootUrl: string;
+  } | null>(null);
+  const busyRef = useRef(false);
+  const captureMessageHandled = useRef(false);
+  const mountedRef = useRef(true);
+  const [pageError, setPageError] = useState<string | null>(null);
   const [pageTitle, setPageTitle] = useState("");
   const [isCloudflare, setIsCloudflare] = useState(true);
   const [htmlLength, setHtmlLength] = useState(0);
@@ -153,27 +166,66 @@ export default function BookFetchBrowserScreen() {
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const parsedBookId =
     bookId && Number.isFinite(Number(bookId)) ? Number(bookId) : undefined;
-  const shouldAutoPromote = autoPromote === "1" || autoPromote === "true";
-  const canCheckCaptureState = currentUrl.includes("shamela.ws/book/");
-  const { data: captureState, isLoading: isLoadingCaptureState } = useQuery(
-    _trpc.book.getShamelaCaptureState.queryOptions(
-      { shamelaUrl: currentUrl || url || "" },
-      { enabled: canCheckCaptureState },
-    ),
-  );
-  const requiresFullToc = captureState?.requiresFullToc ?? true;
+  const requiresFullToc = savedPage !== null;
+  const finishCapture = () => {
+    busyRef.current = false;
+    setIsCapturing(false);
+  };
+  const openSavedPage = () => {
+    if (savedPage) {
+      mountedRef.current = false;
+      router.replace(
+        `/books/${savedPage.bookId}/reader/${savedPage.pageId}` as any,
+      );
+    }
+  };
 
   useEffect(() => {
+    mountedRef.current = true;
     setGlobalAudioBarHidden(true);
 
     return () => {
+      mountedRef.current = false;
       setGlobalAudioBarHidden(false);
     };
   }, [setGlobalAudioBarHidden]);
 
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener(
+      "hardwareBackPress",
+      () => {
+        if (busyRef.current) return true;
+        if (!savedPage) return false;
+        openSavedPage();
+        return true;
+      },
+    );
+    return () => subscription.remove();
+  }, [savedPage, router]);
+
+  const { mutate: captureChapters, isPending: isSavingChapters } = useMutation(
+    _trpc.book.captureShamelaChapters.mutationOptions({
+      onSuccess: () => {
+        if (!mountedRef.current) return;
+        finishCapture();
+        qc.invalidateQueries({ queryKey: _trpc.book.getBooks.queryKey() });
+        qc.invalidateQueries({
+          queryKey: _trpc.book.getBook.queryKey({ id: savedPage!.bookId }),
+        });
+        openSavedPage();
+      },
+      onError: (error) => {
+        if (!mountedRef.current) return;
+        finishCapture();
+        setTocError(error.message);
+      },
+    }),
+  );
+
   const { mutate: promotePage, isPending: isPromoting } = useMutation(
     _trpc.book.promoteStagedShamelaPageParse.mutationOptions({
       onSuccess: (result) => {
+        if (!mountedRef.current) return;
         qc.invalidateQueries({ queryKey: _trpc.book.getBooks.queryKey() });
         qc.invalidateQueries({
           queryKey: _trpc.book.getBook.queryKey({ id: result.bookId }),
@@ -181,49 +233,73 @@ export default function BookFetchBrowserScreen() {
         qc.invalidateQueries({
           queryKey: _trpc.book.getPage.queryKey({ pageId: result.page.id }),
         });
-        router.replace(
-          `/books/${result.bookId}/reader/${result.page.id}` as any,
-        );
+        finishCapture();
+        if (result.requiresFullToc && result.shamelaBookId) {
+          const rootUrl = `https://shamela.ws/book/${result.shamelaBookId}`;
+          setSavedPage({
+            bookId: result.bookId,
+            pageId: result.page.id,
+            rootUrl,
+          });
+          setHasLoadedOnce(false);
+          setHtmlLength(0);
+          setIsCloudflare(true);
+          setSourceUrl(rootUrl);
+          setCurrentUrl(rootUrl);
+        } else {
+          router.replace(
+            `/books/${result.bookId}/reader/${result.page.id}` as any,
+          );
+        }
       },
       onError: (error) => {
-        setIsCapturing(false);
-        Alert.alert("Import failed", error.message);
+        if (!mountedRef.current) return;
+        finishCapture();
+        setPageError(error.message);
       },
     }),
   );
   const { mutate: captureAndStagePage, isPending: isStaging } = useMutation(
     _trpc.book.captureAndStageShamelaPage.mutationOptions({
       onSuccess: (result) => {
+        if (!mountedRef.current) return;
         if (!result.stagedParseId) {
-          setIsCapturing(false);
-          router.back();
+          finishCapture();
+          setPageError("Could not persist the page capture. Please retry.");
           return;
         }
-        if (shouldAutoPromote) {
-          promotePage({
-            stagedParseId: result.stagedParseId,
-            bookId: parsedBookId,
-          });
-          return;
-        }
-        setIsCapturing(false);
-        router.replace(
-          `/book-fetch-preview?stagedParseId=${result.stagedParseId}` as any,
-        );
+        promotePage({
+          stagedParseId: result.stagedParseId,
+          bookId: parsedBookId,
+        });
       },
       onError: (error) => {
-        setIsCapturing(false);
-        Alert.alert("Import failed", error.message);
+        if (!mountedRef.current) return;
+        finishCapture();
+        setPageError(error.message);
       },
     }),
   );
 
   const canCapture = useMemo(() => {
     if (!hasLoadedOnce) return false;
-    if (isCapturing || isStaging || isPromoting) return false;
-    if (isLoadingCaptureState) return false;
+    if (isCapturing || isStaging || isPromoting || isSavingChapters)
+      return false;
     if (isCloudflare) return false;
-    if (!currentUrl.includes("shamela.ws/book/")) return false;
+    try {
+      const target = new URL(currentUrl);
+      if (target.protocol !== "https:" || target.hostname !== "shamela.ws")
+        return false;
+      if (
+        savedPage
+          ? target.pathname.replace(/\/$/, "") !==
+            new URL(savedPage.rootUrl).pathname
+          : !/^\/book\/\d+\/\d+\/?$/.test(target.pathname)
+      )
+        return false;
+    } catch {
+      return false;
+    }
     return htmlLength > 2000;
   }, [
     currentUrl,
@@ -231,12 +307,18 @@ export default function BookFetchBrowserScreen() {
     htmlLength,
     isCapturing,
     isCloudflare,
-    isLoadingCaptureState,
+    isSavingChapters,
+    savedPage,
     isPromoting,
     isStaging,
   ]);
 
   const close = () => {
+    if (busyRef.current) return;
+    if (savedPage) {
+      openSavedPage();
+      return;
+    }
     if (!useBookFetchBrowserStore.getState().capture) {
       setCancelled();
     }
@@ -244,6 +326,7 @@ export default function BookFetchBrowserScreen() {
   };
 
   const handleMessage = (event: WebViewMessageEvent) => {
+    if (!mountedRef.current) return;
     try {
       const payload = JSON.parse(event.nativeEvent.data);
 
@@ -262,6 +345,16 @@ export default function BookFetchBrowserScreen() {
       }
 
       if (payload.type === "capture") {
+        if (!busyRef.current || captureMessageHandled.current) return;
+        captureMessageHandled.current = true;
+        if (savedPage) {
+          captureChapters({
+            bookId: savedPage.bookId,
+            finalUrl: payload.href || currentUrl,
+            html: typeof payload.html === "string" ? payload.html : "",
+          });
+          return;
+        }
         const capture: BookFetchBrowserCapture = {
           requestedUrl: url ?? "",
           finalUrl: payload.href || currentUrl,
@@ -283,6 +376,7 @@ export default function BookFetchBrowserScreen() {
       }
 
       if (payload.type === "toc-progress") {
+        if (!busyRef.current || !savedPage) return;
         setTocProgress({
           expanded: Number(payload.expanded) || 0,
           remaining: Number(payload.remaining) || 0,
@@ -291,6 +385,8 @@ export default function BookFetchBrowserScreen() {
       }
 
       if (payload.type === "toc-complete") {
+        if (!busyRef.current || !savedPage || captureMessageHandled.current)
+          return;
         setTocProgress({
           expanded: Number(payload.expanded) || 0,
           remaining: 0,
@@ -303,16 +399,18 @@ export default function BookFetchBrowserScreen() {
         const message =
           payload.message || "Could not load the full chapter tree.";
         setTocError(message);
-        setIsCapturing(false);
-        Alert.alert("Chapter import paused", message);
+        finishCapture();
       }
     } catch {}
   };
 
   const handleCapture = () => {
-    if (!canCapture) return;
+    if (!canCapture || busyRef.current) return;
+    busyRef.current = true;
+    captureMessageHandled.current = false;
     setIsCapturing(true);
     setTocError(null);
+    setPageError(null);
     setTocProgress(null);
     webViewRef.current?.injectJavaScript(
       requiresFullToc ? EXPAND_TOC_SCRIPT : CAPTURE_SCRIPT,
@@ -320,18 +418,15 @@ export default function BookFetchBrowserScreen() {
   };
 
   return (
-    <View
-      className="flex-1 bg-background"
-      style={{ backgroundColor: colors.background }}
-    >
+    <View className="flex-1 bg-background">
       <SafeArea>
-        <View className="flex-1" style={{ backgroundColor: colors.background }}>
+        <View className="flex-1 bg-background">
           <View
-            className="items-center gap-3 border-b border-border px-4 py-3"
-            style={{ flexDirection: isRtl ? "row-reverse" : "row" }}
+            className={`items-center gap-3 border-b border-border px-4 py-3 ${isRtl ? "flex-row-reverse" : "flex-row"}`}
           >
             <Pressable
               onPress={close}
+              disabled={isCapturing}
               className="size-9 items-center justify-center rounded-full bg-card"
             >
               <Icon name="ChevronLeft" size={22} className="text-foreground" />
@@ -363,6 +458,7 @@ export default function BookFetchBrowserScreen() {
             </View>
             <Pressable
               onPress={() => webViewRef.current?.reload()}
+              disabled={isCapturing}
               className="size-9 items-center justify-center rounded-full bg-card"
             >
               <Icon name="RefreshCw" size={18} className="text-foreground" />
@@ -409,8 +505,11 @@ export default function BookFetchBrowserScreen() {
                     ? `Chapter tree paused: ${tocError}`
                     : tocProgress
                       ? `Chapter tree: ${tocProgress.expanded} loaded · ${tocProgress.remaining} currently pending`
-                      : "First import will load the complete chapter tree."}
+                      : "Page saved. Fetch the chapter tree from this book root."}
                 </Text>
+              ) : null}
+              {pageError ? (
+                <Text className="mt-2 text-destructive">{pageError}</Text>
               ) : null}
             </View>
           </View>
@@ -418,7 +517,7 @@ export default function BookFetchBrowserScreen() {
           <View className="flex-1 overflow-hidden">
             <WebView
               ref={webViewRef}
-              source={{ uri: url ?? "" }}
+              source={{ uri: sourceUrl }}
               javaScriptEnabled
               domStorageEnabled
               sharedCookiesEnabled
@@ -429,6 +528,26 @@ export default function BookFetchBrowserScreen() {
                 setHasLoadedOnce(true);
                 webViewRef.current?.injectJavaScript(PROBE_SCRIPT);
               }}
+              onLoadStart={() => {
+                setHasLoadedOnce(false);
+                setHtmlLength(0);
+                if (busyRef.current && !captureMessageHandled.current) {
+                  finishCapture();
+                  if (savedPage)
+                    setTocError(
+                      "Chapter capture interrupted by navigation. Return to the book root and retry.",
+                    );
+                  else
+                    setPageError(
+                      "Page capture interrupted by navigation. Please retry.",
+                    );
+                }
+              }}
+              onError={({ nativeEvent }) => {
+                finishCapture();
+                if (savedPage) setTocError(nativeEvent.description);
+                else setPageError(nativeEvent.description);
+              }}
               onLoadProgress={({ nativeEvent }) => {
                 setLoadProgress(nativeEvent.progress);
               }}
@@ -437,10 +556,7 @@ export default function BookFetchBrowserScreen() {
               }}
               startInLoadingState
               renderLoading={() => (
-                <View
-                  className="flex-1 items-center justify-center bg-background"
-                  style={{ backgroundColor: colors.background }}
-                >
+                <View className="flex-1 items-center justify-center bg-background">
                   <ActivityIndicator size="large" color={colors.primary} />
                 </View>
               )}
@@ -457,18 +573,22 @@ export default function BookFetchBrowserScreen() {
                   : "flex-row items-center justify-center gap-2 rounded-xl bg-secondary py-3"
               }
             >
-              {isCapturing || isStaging || isPromoting ? (
+              {isCapturing || isStaging || isPromoting || isSavingChapters ? (
                 <>
                   <ActivityIndicator
                     size="small"
                     color={colors.primaryForeground}
                   />
                   <Text className="text-[15px] font-bold text-primary-foreground">
-                    {isPromoting
-                      ? "Importing page..."
-                      : isStaging
-                        ? "Saving staged parse..."
-                        : "Capturing page..."}
+                    {isSavingChapters
+                      ? "Saving chapters..."
+                      : savedPage
+                        ? "Loading chapter branches..."
+                        : isPromoting
+                          ? "Importing page..."
+                          : isStaging
+                            ? "Saving page capture..."
+                            : "Capturing page..."}
                   </Text>
                 </>
               ) : (
@@ -491,11 +611,26 @@ export default function BookFetchBrowserScreen() {
                   >
                     {isCloudflare
                       ? "Pass Cloudflare to continue"
-                      : "Fetch this page"}
+                      : savedPage
+                        ? tocError
+                          ? "Retry Chapters"
+                          : "Fetch Book Chapters"
+                        : "Fetch Book Data"}
                   </Text>
                 </>
               )}
             </Pressable>
+            {savedPage ? (
+              <Pressable
+                onPress={openSavedPage}
+                disabled={isSavingChapters}
+                className="items-center py-3"
+              >
+                <Text className="font-semibold text-primary">
+                  View Saved Page
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
         </View>
       </SafeArea>

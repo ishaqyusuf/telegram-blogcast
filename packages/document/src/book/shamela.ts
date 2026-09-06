@@ -556,13 +556,19 @@ export async function hydrateShamelaTocHtml(input: {
   throw new Error("Shamela chapter expansion safety limit reached.");
 }
 
-function extractTocTree(html: string) {
+export function extractShamelaTocTree(html: string) {
   const document = parseDocument(html, { decodeEntities: true });
-  const nav = DomUtils.findOne(
-    (node: any) => node?.name === "div" && hasClass(node, "s-nav"),
-    document.children,
-    true,
-  );
+  const nav =
+    DomUtils.findOne(
+      (node: any) => node?.name === "div" && hasClass(node, "betaka-index"),
+      document.children,
+      true,
+    ) ??
+    DomUtils.findOne(
+      (node: any) => node?.name === "div" && hasClass(node, "s-nav"),
+      document.children,
+      true,
+    );
   const rootList = directTags(nav, "ul")[0];
   if (!rootList) {
     return {
@@ -588,7 +594,12 @@ function extractTocTree(html: string) {
           (anchor: any) => anchor?.attribs?.href !== "javascript:;",
         );
         const title = normalizeText(link ? DomUtils.textContent(link) : "");
-        if (!link || !title) return null;
+        if (!link || !title) {
+          unexpandedNodeIds.push(
+            `invalid-${parentTreePath ?? "root"}-${index}`,
+          );
+          return null;
+        }
 
         const path = getPathFromHref(link.attribs?.href);
         const shamelaPageNo = getPageNoFromPath(path);
@@ -604,7 +615,10 @@ function extractTocTree(html: string) {
           : identity;
         const childList = directTags(item, "ul")[0];
 
-        if (expander && !childList) {
+        if (
+          expander &&
+          (!childList || directTags(childList, "li").length === 0)
+        ) {
           unexpandedNodeIds.push(sourceNodeId ?? treePath);
         }
 
@@ -785,7 +799,7 @@ export function parseShamelaOpenPage(input: {
     items: section.items,
   }));
   const adjacentPages = extractAdjacentPages(input.html);
-  const toc = extractTocTree(input.html);
+  const toc = extractShamelaTocTree(input.html);
   const tocNodes = toc.nodes;
   const flatTocNodes = flattenToc(tocNodes);
   const activeTocNode = flatTocNodes.find((node) => node.active) ?? null;

@@ -75,4 +75,6 @@ Tracks important request/response expectations and typed boundaries between clie
 - `/facebook-saved-sync` loads known identities through `facebookImport.getSavedSyncState`, captures Facebook Saved inside an authenticated WebView, and submits the completed delta through `facebookImport.syncSavedPosts`.
 
 ### TODO
+- `book.promoteStagedShamelaPageParse` persists readable page content independently of chapter completeness and additionally returns `requiresFullToc` and `shamelaBookId`. Promoted-stage retries retain the original saved page ID.
+- `book.captureShamelaChapters({ bookId, finalUrl, html })` accepts a matching HTTPS Shamela book-root capture. It parses only the chapter index, rejects incomplete/foreign trees, and atomically persists hierarchy, stubs, and completion status. Returns `{ bookId, tocNodeCount, pageStubCount }`. It never rewrites existing page content or annotations.
 - Record contract notes per router as features are implemented or refactored.

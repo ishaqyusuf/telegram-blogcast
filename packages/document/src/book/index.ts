@@ -16,7 +16,11 @@ export {
   normalizeBookmarkedPageIds,
   toggleBookmarkedPageId,
 } from "./bookmarks";
-export { hydrateShamelaTocHtml, parseShamelaOpenPage } from "./shamela";
+export {
+  extractShamelaTocTree,
+  hydrateShamelaTocHtml,
+  parseShamelaOpenPage,
+} from "./shamela";
 export type {
   ParseDiagnostic,
   ShamelaBookMetadata,

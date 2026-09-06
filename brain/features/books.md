@@ -24,7 +24,7 @@ Tracks the current scope, architecture, and roadmap for the books experience acr
   - `/books/[bookId]/reader/[pageId]` via `book-reader-screen.tsx`: page reader with offline-first highlights/comments, read-only source enforcement, adjacent Shamela page fetching, and audio reference cards.
   - `/books/[bookId]/search` via `book-search-screen.tsx`: search within book.
   - `/book-fetch` via `book-fetch-screen.tsx`: add book from Shamela URL via AI, browse recent import history, re-import a previous source URL, and paste manual page content into an existing or newly created book.
-  - Shamela browser/preview screens stage a desktop-style Shamela page capture, show the parsed page, and promote the staged parse into the database.
+  - Shamela browser saves and promotes the captured page directly, then opens the book root for a separate chapter capture when its TOC is incomplete. The preview screen remains available for other staged-parse callers.
 - Visual system:
   - Active books screens use the same semantic theme tokens as the home/feed surfaces (`bg-background`, `bg-card`, `text-foreground`, `text-muted-foreground`, `bg-primary`) instead of page-local hard-coded dark colors.
 - Navigation:
@@ -236,6 +236,11 @@ Tracks the current scope, architecture, and roadmap for the books experience acr
 13. Offline search
 
 ### Dev Notes
+- Page-first Shamela capture: `Fetch Book Data` persists formatted page content without expanding or trusting the page sidebar. The browser retains the saved page destination, opens `/book/{shamelaId}` when TOC status is not complete, and exposes `Fetch Book Chapters`.
+- Chapter capture prefers `.betaka-index`, with `.s-nav` compatibility. Hidden populated lists are parsed directly; missing/empty lazy branches must load before capture succeeds. Missing indexes, branch timeouts, safety limits, foreign book links, and duplicate tree identities fail validation.
+- `captureShamelaChapters` saves TOC nodes and page stubs in one transaction, preserving existing page content, metadata, highlights, and comments. It marks the TOC complete only after a successful tree sync; retries reuse node identities and soft-delete obsolete nodes.
+- On chapter errors, the saved page remains available through `View Saved Page`, with `Retry Chapters` on the root. Successful capture returns to the originally imported page reader. Existing books with complete TOCs skip chapter capture.
+- Deployment: on 2026-09-06, the production schema push added the existing schema's missing `Book.tocStatus`, `Book.tocCapturedAt`, and `BookPageParagraph.sourceMarks` fields. The inspected diff was additive only. The root Turbo command required a terminal UI, so the same production-targeted push script was run directly from `packages/db`. Further testing was stopped at the user's request.
 - `_trpc` and `_qc` are globally accessible via `src/components/static-trpc.tsx`.
 - Some book mutations were previously noted as using hardcoded `userId = 1`.
 - Shamela imports rely on raw HTML plus AI extraction.

@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
-import { hydrateShamelaTocHtml, parseShamelaOpenPage } from "./shamela";
+import {
+  extractShamelaTocTree,
+  hydrateShamelaTocHtml,
+  parseShamelaOpenPage,
+} from "./shamela";
 
 const PAGE_URL = "https://shamela.ws/book/21739/1";
 
@@ -25,6 +29,41 @@ function pageHtml(toc: string) {
 }
 
 describe("Shamela open-page parser", () => {
+  test("parses the retained root index without changing its container", async () => {
+    const html = await Bun.file(
+      new URL("./fixtures/shamela-23833-betaka-index.html", import.meta.url),
+    ).text();
+    const toc = extractShamelaTocTree(html);
+    const flatten = (nodes: typeof toc.nodes): typeof toc.nodes =>
+      nodes.flatMap((node) => [node, ...flatten(node.children)]);
+    expect(toc.complete).toBe(true);
+    expect(toc.nodes).toHaveLength(222);
+    expect(flatten(toc.nodes)).toHaveLength(2405);
+    expect(Math.max(...flatten(toc.nodes).map((node) => node.depth))).toBe(4);
+  });
+
+  test("reads hidden children and prefers the book-root index over the sidebar", () => {
+    const toc =
+      extractShamelaTocTree(`<div class="s-nav"><ul><li><a href="/book/21739/1">Sidebar</a></li></ul></div>
+      <div class="betaka-index"><ul><li><a class="exp_bu" data-id="5" href="javascript:;">+</a><a href="/book/21739/5">Parent</a>
+      <ul style="display: none;"><li><a href="/book/21739/7">Child</a></li></ul></li></ul></div>`);
+    expect(toc.complete).toBe(true);
+    expect(toc.nodes[0]?.title).toBe("Parent");
+    expect(toc.nodes[0]?.children[0]?.parentTreePath).toBe("5");
+  });
+
+  test("does not mistake missing or empty lazy branches for success", () => {
+    expect(extractShamelaTocTree("<html>Verification</html>").complete).toBe(
+      false,
+    );
+    for (const children of ["", "<ul style='display:none'></ul>"]) {
+      const toc = extractShamelaTocTree(
+        `<div class="betaka-index"><ul><li><a class="exp_bu" data-id="5" href="javascript:;">+</a><a href="/book/21739/5">Parent</a>${children}</li></ul></div>`,
+      );
+      expect(toc.complete).toBe(false);
+      expect(toc.unexpandedNodeIds).toEqual(["5"]);
+    }
+  });
   test("hydrates every lazy Shamela chapter branch before parsing", async () => {
     const requested: string[] = [];
     const html = await hydrateShamelaTocHtml({
