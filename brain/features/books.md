@@ -236,6 +236,7 @@ Tracks the current scope, architecture, and roadmap for the books experience acr
 13. Offline search
 
 ### Dev Notes
+- Raw Shamela HTML is persisted in `ShamelaRawPage`. Filesystem artifact dumps are local debug copies only: production/Vercel skips them, and local write failures never block database capture. This avoids `EROFS` errors from Vercel's read-only deployment directory.
 - Page-first Shamela capture: `Fetch Book Data` persists formatted page content without expanding or trusting the page sidebar. The browser retains the saved page destination, opens `/book/{shamelaId}` when TOC status is not complete, and exposes `Fetch Book Chapters`.
 - Chapter capture prefers `.betaka-index`, with `.s-nav` compatibility. Hidden populated lists are parsed directly; missing/empty lazy branches must load before capture succeeds. Missing indexes, branch timeouts, safety limits, foreign book links, and duplicate tree identities fail validation.
 - `captureShamelaChapters` saves TOC nodes and page stubs in one transaction, preserving existing page content, metadata, highlights, and comments. It marks the TOC complete only after a successful tree sync; retries reuse node identities and soft-delete obsolete nodes.

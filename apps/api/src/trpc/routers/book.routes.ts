@@ -1033,37 +1033,50 @@ async function dumpShamelaRawArtifact(input: {
   shamelaPageNo?: number | null;
   rawPageId: number;
 }) {
-  const rootDir = path.join(getRepoRoot(), "shamela-raw", "pages");
-  await mkdir(rootDir, { recursive: true });
+  // Raw HTML is persisted in ShamelaRawPage. Files are local debug copies only.
+  if (process.env.VERCEL || process.env.NODE_ENV === "production") return null;
 
-  const pageSegment = input.shamelaPageNo
-    ? `page-${input.shamelaPageNo}`
-    : "page-unknown";
-  const fileBase = `${pageSegment}-raw-${input.rawPageId}-${slugTimestamp()}`;
-  const htmlPath = path.join(rootDir, `${fileBase}.html`);
-  const jsonPath = path.join(rootDir, `${fileBase}.json`);
+  try {
+    const rootDir = path.join(getRepoRoot(), "shamela-raw", "pages");
+    await mkdir(rootDir, { recursive: true });
 
-  await writeFile(htmlPath, input.html, "utf8");
-  await writeFile(
-    jsonPath,
-    JSON.stringify(
+    const pageSegment = input.shamelaPageNo
+      ? `page-${input.shamelaPageNo}`
+      : "page-unknown";
+    const fileBase = `${pageSegment}-raw-${input.rawPageId}-${slugTimestamp()}`;
+    const htmlPath = path.join(rootDir, `${fileBase}.html`);
+    const jsonPath = path.join(rootDir, `${fileBase}.json`);
+
+    await writeFile(htmlPath, input.html, "utf8");
+    await writeFile(
+      jsonPath,
+      JSON.stringify(
+        {
+          requestedUrl: input.requestedUrl,
+          finalUrl: input.finalUrl,
+          title: input.title ?? null,
+          shamelaPageNo: input.shamelaPageNo ?? null,
+          rawPageId: input.rawPageId,
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    return {
+      htmlPath,
+      jsonPath,
+    };
+  } catch (error) {
+    console.warn(
+      "Shamela debug artifact skipped; continuing database capture",
       {
-        requestedUrl: input.requestedUrl,
-        finalUrl: input.finalUrl,
-        title: input.title ?? null,
-        shamelaPageNo: input.shamelaPageNo ?? null,
-        rawPageId: input.rawPageId,
+        code: (error as NodeJS.ErrnoException)?.code ?? "UNKNOWN",
       },
-      null,
-      2,
-    ),
-    "utf8",
-  );
-
-  return {
-    htmlPath,
-    jsonPath,
-  };
+    );
+    return null;
+  }
 }
 
 async function resolveBookLinkGraphStatus(
