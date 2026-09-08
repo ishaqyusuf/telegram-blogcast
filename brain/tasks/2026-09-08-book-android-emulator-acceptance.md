@@ -1,7 +1,7 @@
 # Task: Book Android Emulator Acceptance
 
 ## Status
-In Progress
+Done
 
 ## Priority
 High
@@ -19,8 +19,8 @@ High
 User requested Android emulator testing after the durable mobile book release, then explicitly chose the installed Expo development build. Use current committed JavaScript and `/book/23833/106` against the deployed backend; do not touch the physical phone or substitute web implementation. Prior release: [Durable import](./2026-09-08-durable-mobile-book-import.md).
 
 ## Implementation Progress
-- Completion: 88%
-- Current Checklist: 8/8 - Final review, evidence and preview release
+- Completion: 100%
+- Current Checklist: 8/8 - Complete
 - Blockers: None
 
 ## Implementation Checklist
@@ -31,9 +31,10 @@ User requested Android emulator testing after the durable mobile book release, t
 - [x] Verify recovery and annotation preservation where practical; fix observed defects.
 - [x] Add reader overflow menu and page-sorted Highlights/Bookmarks screens with two-line previews and page navigation.
 - [x] Verify selected highlight colors survive page close/reopen, and test both saved-item lists on the emulator.
-- [ ] Save screenshots, document actual results and limitations, and commit changes.
+- [x] Save screenshots, document actual results and limitations, and commit changes.
 
 ## Validation Evidence
+- Released: implementation commits a33581e8 and a8d962cf pushed to main. Android preview update 2026.09.08.01 published to preview branch for runtime 1.0.111: group 802ec47c-a8e5-4d8f-94ec-61255ecce53b, Android ID 01a0815a-edb3-785d-9b33-7494d7a4c203. Dashboard: https://expo.dev/accounts/ishaqyusuf/projects/alghurobaa/updates/802ec47c-a8e5-4d8f-94ec-61255ecce53b . Sentry auto-upload disabled. Local test PostgreSQL stopped; Metro/emulator left available for user testing. Exact Preview-binary/OTA installation remains untested; tested installed development binary 1.0.109 with current JS. Screenshots include colors-final, highlights-list, bookmarks-two, tree-success, subtree, tree-scroll, search106 and missing-chapter in the artifact folder below.
 - Final focused review: no remaining findings after relative-position recovery correction. Final suite: 47 pass, 0 fail, 189 assertions across 11 files including real isolated PostgreSQL and SQLite. Existing repository type errors/Bun test declarations remain; no changed production-file type errors. No schema changes, so no production db push required. Android preview 2026.09.08.01 publishing next with Sentry auto-upload disabled.
 - Final emulator positioning check opens 106 at its own content with both colors intact after another restart, and 107/bookmark navigation opens its own content. Programmatic scroll no longer loads preceding stubs. 45 regressions pass across 11 files (181 assertions). Final review follow-up preserves page-relative offset when a failed window query recovers; release pending.
 - Full development-client force-stop/start preserves both purple and green highlights. Bookmarked 107 as well; Bookmarks now visibly orders source 106 then 107 (printed 83 then 84), each with a two-line opening-text preview. New position helper has four passing tests; review identified same-route query recovery and edit/read remount edge cases, being corrected before release.
