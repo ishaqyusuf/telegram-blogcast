@@ -207,7 +207,8 @@ export const bookChapterRoutes = createTRPCRouter({
 			});
 			const captureHash = createHash("sha256").update(input.html).digest("hex");
 			const job = await ctx.db.$transaction(async (tx) => {
-				await tx.$queryRaw`SELECT pg_advisory_xact_lock(8173, ${input.bookId})`;
+				// Prisma cannot deserialize PostgreSQL's void return type.
+				await tx.$queryRaw`SELECT pg_advisory_xact_lock(8173, ${input.bookId})::text`;
 				const existing = await tx.bookChapterImport.findUnique({
 					where: { bookId_captureHash: { bookId: input.bookId, captureHash } },
 					select: { ...publicImport, runId: true, ownerHash: true },
