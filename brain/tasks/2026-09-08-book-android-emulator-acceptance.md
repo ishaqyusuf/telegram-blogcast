@@ -1,7 +1,7 @@
 # Task: Book Android Emulator Acceptance
 
 ## Status
-Done
+In Progress
 
 ## Priority
 High
@@ -19,8 +19,8 @@ High
 User requested Android emulator testing after the durable mobile book release, then explicitly chose the installed Expo development build. Use current committed JavaScript and `/book/23833/106` against the deployed backend; do not touch the physical phone or substitute web implementation. Prior release: [Durable import](./2026-09-08-durable-mobile-book-import.md).
 
 ## Implementation Progress
-- Completion: 100%
-- Current Checklist: 8/8 - Complete
+- Completion: 90%
+- Current Checklist: 10/10 - Emulator review and release
 - Blockers: None
 
 ## Implementation Checklist
@@ -32,8 +32,15 @@ User requested Android emulator testing after the durable mobile book release, t
 - [x] Add reader overflow menu and page-sorted Highlights/Bookmarks screens with two-line previews and page navigation.
 - [x] Verify selected highlight colors survive page close/reopen, and test both saved-item lists on the emulator.
 - [x] Save screenshots, document actual results and limitations, and commit changes.
+- [x] Implement Option A inline tree, bottom search, and all-expanded initial state with regression tests.
+- [ ] Review and verify the redesigned screen, then publish the completed follow-up changes.
 
 ## Validation Evidence
+- Final bundle (no diagnostics, horizontal-dominance guard): long press selects text, handle drag extends selection without navigation, saves purple highlight on108, vertical swipe scrolls within108, next horizontal swipe opens missing109 WebView. Second capture/persistence confirmation pending. Main completed sequence108->107 proves saved reverse navigation. Release remaining.
+- Native gesture coordination fixes text-origin swipes: RNGH TextInput overlays plus simultaneous native scroll/pan, route-keyed detector, full touch-down displacement, selection-sequence suppression and final horizontal-dominance guard. Emulator completed 106 -> saved107 -> missing108 WebView -> Fetch Book Data -> reader172 (source108, printed85) -> swipe back to saved107. Final guard reviewed with no findings; 58 focused tests pass (223 assertions) plus 6 PostgreSQL tests (35 assertions). Temporary gesture logs removed; final-bundle second cycle/selection check in progress. Intermittent initial reader loading delays observed; standalone and combined API queries measured 2.6-3.6s from host, so a database bottleneck is not established.
+- Compact tree emulator review passes: all 2,405 rows expanded; Introduction collapse hides 34 descendants; reopening restores all; scroll renders deeper nested rows; bottom search remains above keyboard; 106 returns two matches plus two ancestors. Saved chapter opens reader106 with green/purple intact; unsaved page18 opens correct Shamela WebView (cancelled without import). Screenshots compact-tree-expanded/search-keyboard/scrolled/missing-chapter. Repeated swipe remains incomplete: whitespace swipe works, text-overlay swipes are intercepted by native selection; touch arbitration fix in progress. Six isolated PostgreSQL integration tests pass (35 assertions); test server stopped.
+- Option A implemented with inline RTL branches, bottom keyboard-sticky search, all-expanded on screen focus, virtualized rows and one lean metadata query. Search keeps ancestors; displayed collapse actions and replacement-import progress corrected after review. New tree cache invalidates after chapter completion. 52 tests pass (207 assertions), including all 2,405 retained nodes, 222 collapsed roots, swipe lifecycle and annotations. API commit 643869ec pushed; emulator review pending. No new production-file type errors; existing API/mobile typecheck failures remain.
+- Status correction after follow-up: repeated forward swipes intermittently do nothing on the emulator even though the Next button works. Do not treat prior successful isolated gestures as full acceptance. Repeated swipe -> missing page -> WebView import -> new reader -> swipe back remains incomplete. User redirected to a compact inline chapter-tree design exploration; five HTML options are recorded in ../plans/2026-09-08-chapter-tree-design-options.md. No tree redesign is approved or implemented yet.
 - Released: implementation commits a33581e8 and a8d962cf pushed to main. Android preview update 2026.09.08.01 published to preview branch for runtime 1.0.111: group 802ec47c-a8e5-4d8f-94ec-61255ecce53b, Android ID 01a0815a-edb3-785d-9b33-7494d7a4c203. Dashboard: https://expo.dev/accounts/ishaqyusuf/projects/alghurobaa/updates/802ec47c-a8e5-4d8f-94ec-61255ecce53b . Sentry auto-upload disabled. Local test PostgreSQL stopped; Metro/emulator left available for user testing. Exact Preview-binary/OTA installation remains untested; tested installed development binary 1.0.109 with current JS. Screenshots include colors-final, highlights-list, bookmarks-two, tree-success, subtree, tree-scroll, search106 and missing-chapter in the artifact folder below.
 - Final focused review: no remaining findings after relative-position recovery correction. Final suite: 47 pass, 0 fail, 189 assertions across 11 files including real isolated PostgreSQL and SQLite. Existing repository type errors/Bun test declarations remain; no changed production-file type errors. No schema changes, so no production db push required. Android preview 2026.09.08.01 publishing next with Sentry auto-upload disabled.
 - Final emulator positioning check opens 106 at its own content with both colors intact after another restart, and 107/bookmark navigation opens its own content. Programmatic scroll no longer loads preceding stubs. 45 regressions pass across 11 files (181 assertions). Final review follow-up preserves page-relative offset when a failed window query recovers; release pending.

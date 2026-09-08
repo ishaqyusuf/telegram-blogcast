@@ -55,7 +55,7 @@ import { useTranslation } from "@/lib/i18n";
 import { useColors } from "@/hooks/use-color";
 import { toAbsoluteShamelaUrl } from "@/lib/shamela-url";
 import {
-  getSwipeBookDirection,
+  createReaderSwipeTracker,
   resolveAdjacentPageAction,
 } from "@/lib/book-reader-navigation";
 import { vanillaTrpc } from "@/trpc/vanilla-client";
@@ -113,6 +113,8 @@ export default function BookReaderScreen() {
   const bookIdNum = Number(bookId);
   const pageIdNum = Number(pageId);
   const adjacentNavigationBusy = useRef(false);
+  const readerSwipe = useRef(createReaderSwipeTracker()).current;
+  const readerSelectionActive = useRef(false);
   const adjacentNavigationEpoch = useRef(0);
   useEffect(() => {
     adjacentNavigationBusy.current = false;
@@ -547,6 +549,7 @@ export default function BookReaderScreen() {
     selectedTextRange != null &&
     selectedTextRange.endOffset > selectedTextRange.startOffset &&
     selectedTextRange.quoteText.trim().length > 0;
+  readerSelectionActive.current = hasSelectedText;
 
   useEffect(() => {
     const shouldHideGlobalAudioBar = mode === "read" && hasSelectedText;
@@ -646,7 +649,7 @@ export default function BookReaderScreen() {
         if (epoch === adjacentNavigationEpoch.current) adjacentNavigationBusy.current = false;
       }
     },
-    [bookId, bookIdNum, mode, page, router, t],
+    [bookId, bookIdNum, mode, page, pageIdNum, router, t],
   );
 
   const mergeReaderPages = useCallback(
@@ -736,17 +739,27 @@ export default function BookReaderScreen() {
   );
 
   const pageSwipeGesture = useMemo(
-    () =>
-      Gesture.Pan()
+    () => {
+      const nativeScroll = Gesture.Native().disallowInterruption(false).runOnJS(true);
+      const pan = Gesture.Pan()
         .enabled(Boolean(page) && mode === "read")
+        .maxPointers(1)
         .activeOffsetX([-42, 42])
         .failOffsetY([-28, 28])
         .runOnJS(true)
-        .onEnd((gesture) => {
-          const direction = getSwipeBookDirection(gesture.translationX, isRtl);
+        .onBegin((gesture) => {
+          readerSwipe.begin(readerRouteKey, gesture.absoluteX, gesture.absoluteY, readerSelectionActive.current);
+        })
+        .onEnd((gesture, success) => {
+          const direction = readerSwipe.finish(readerRouteKey, gesture.absoluteX, gesture.absoluteY, success, isRtl);
           if (direction) navigateAdjacentPage(direction);
-        }),
-    [isRtl, mode, navigateAdjacentPage, page],
+        })
+        .onFinalize(() => {
+          readerSwipe.cancel();
+        });
+      return Gesture.Simultaneous(nativeScroll, pan);
+    },
+    [isRtl, mode, navigateAdjacentPage, page, readerRouteKey, readerSwipe],
   );
 
   useEffect(() => {
@@ -893,9 +906,8 @@ export default function BookReaderScreen() {
               />
             </View>
           ) : (
-            <GestureDetector gesture={pageSwipeGesture}>
+            <GestureDetector key={readerRouteKey} gesture={pageSwipeGesture}>
               <ScrollView
-                key={readerRouteKey}
                 ref={attachReaderScroll}
                 maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
                 scrollEnabled={readerPosition.ready}
@@ -1022,6 +1034,9 @@ export default function BookReaderScreen() {
                           isCurrentPage ? selectedTextRange : null
                         }
                         onTextSelection={(selection) => {
+                          if (selection && selection.endOffset > selection.startOffset) {
+                            readerSwipe.blockForSelection();
+                          }
                           if (isCurrentPage) setSelectedTextRange(selection);
                         }}
                         onHighlightColor={

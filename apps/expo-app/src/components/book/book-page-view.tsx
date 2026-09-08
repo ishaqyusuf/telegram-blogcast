@@ -1,4 +1,5 @@
-import { Text, TextInput, View, Pressable } from "react-native";
+import { Text, View, Pressable } from "react-native";
+import { TextInput } from "react-native-gesture-handler";
 import { HighlightToolbar } from "./highlight-toolbar";
 import { useColors } from "@/hooks/use-color";
 import { withAlpha } from "@/lib/theme";

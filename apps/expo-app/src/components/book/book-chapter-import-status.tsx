@@ -12,7 +12,8 @@ const returnedImports = new Set<string>();
 export function BookChapterImportStatus({
 	bookId,
 	pageId,
-}: { bookId: number; pageId?: number }) {
+	hideCompleted = false,
+}: { bookId: number; pageId?: number; hideCompleted?: boolean }) {
 	const router = useRouter();
 	const focused = useIsFocused();
 	const query = useQuery(_trpc.bookChapter.bookState.queryOptions({ bookId }));
@@ -25,7 +26,13 @@ export function BookChapterImportStatus({
 	const book = query.data;
 	if (!book?.shamelaId) return null;
 	const job = book.chapterImports[0];
-	if (book.tocStatus === "complete" && (!job || job.returnPageId === pageId))
+	const settled = !job || job.status === "complete";
+	if (hideCompleted && book.tocStatus === "complete" && settled) return null;
+	if (
+		book.tocStatus === "complete" &&
+		settled &&
+		(!job || job.returnPageId === pageId)
+	)
 		return null;
 	const returnPageId = pageId ?? job?.returnPageId ?? book.pages[0]?.id;
 	if (!returnPageId) return null;

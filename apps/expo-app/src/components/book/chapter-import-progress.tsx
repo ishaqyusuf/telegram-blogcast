@@ -64,6 +64,9 @@ export function ChapterImportProgress({
 		});
 		qc.invalidateQueries({ queryKey: _trpc.bookChapter.list.queryKey() });
 		qc.invalidateQueries({
+			queryKey: _trpc.bookChapter.tree.queryKey({ bookId: job.bookId }),
+		});
+		qc.invalidateQueries({
 			queryKey: _trpc.bookChapter.bookState.queryKey({ bookId: job.bookId }),
 		});
 		onComplete?.();
