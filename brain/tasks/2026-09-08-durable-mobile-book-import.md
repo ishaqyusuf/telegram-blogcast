@@ -1,7 +1,7 @@
 # Task: Durable Mobile Book Import And Reader
 
 ## Status
-In Progress
+Done
 
 ## Priority
 High
@@ -23,8 +23,8 @@ Latest scope: mobile only. Do not implement web capture or a web reader. Give we
 Save the requested page first, capture chapters separately from the book root, queue durable atomic import, retain annotations and metadata, support retries and saved-page navigation. Reader must support searchable/paginated chapters, chapter-tap existing-page lookup or WebView import, and next/previous fetching with mobile swipes. Source verification target is `/book/23833/106`, chapters `/book/23833`. Finish implementation and release, then leave physical-device testing to the user. User requested pausing the goal at that boundary; the agent cannot change goal pause state and must not claim it did.
 
 ## Implementation Progress
-- Completion: 85%
-- Current Checklist: 12/13 - Release production worker, API, and mobile preview
+- Completion: 100%
+- Current Checklist: 13/13 - Release verified; mobile testing handoff ready
 - Blockers: None. User explicitly approved storing the production database connection string in Alghurobaa Trigger. Source-map upload remains excluded.
 
 ## Implementation Checklist
@@ -39,10 +39,15 @@ Save the requested page first, capture chapters separately from the book root, q
 - [x] Implement next/previous page fetching and mobile swipe navigation.
 - [x] Verify annotation/content preservation, completeness, mismatch rejection, failure and retry seams with focused checks.
 - [x] Review changes and keep feature/API/database Brain docs synchronized.
-- [ ] Apply production DB changes, deploy Trigger, commit/push, and publish EAS preview without unauthorized source-map uploads.
-- [ ] Verify release state and provide the mobile testing handoff, recording remaining device checks honestly.
+- [x] Apply production DB changes, deploy Trigger, commit/push, and publish EAS preview without unauthorized source-map uploads.
+- [x] Verify release state and provide the mobile testing handoff, recording remaining device checks honestly.
 
 ## Validation Evidence
+- Final EAS readback confirms active preview channel points to preview branch and latest Android group `089a03c5-3ed0-459c-96a6-71dcd1bd7f67`, runtime `1.0.111`, appVariant preview, updateVersion `2026.09.08`, code commit `d8b19e53`. Worker, API, database schema, git push, and OTA publication are verified. Physical Android acceptance and screenshots were not performed, per the user's deferred testing boundary.
+- Android EAS preview published successfully: update group `089a03c5-3ed0-459c-96a6-71dcd1bd7f67`, Android update `01a08114-5673-7854-ac5f-78af1c98d9b5`, runtime `1.0.111`, version marker `2026.09.08`, app code commit `d8b19e53`. Direct EAS command used SENTRY_DISABLE_AUTO_UPLOAD=true; no separate Sentry source-map upload was run. Only release-evidence Brain files were dirty during publication.
+- Vercel deployment `dpl_39GHaaDocWkPqEVg2r23j3FnMyJn` is Ready and aliased to `https://alghurobaa.vercel.app`. A read-only `bookChapter.list` request returned HTTP 200 and valid tRPC JSON. Android EAS preview publication is in progress with Sentry auto-upload disabled.
+- Cloud recovery smoke run `run_06g8249stiveuk7qpsmru9d901` completed successfully with `{ dispatched: 0, reconciled: 0 }`, proving the deployed task can access the production database. No real book data was added by this check.
+- Commit `d8b19e53` and all preceding implementation commits pushed to origin/main. Vercel production deployment `al-ghurobaa-media-t3-5fid4qcmf-ishaqyusufs-projects.vercel.app` is being verified before EAS publication.
 - Trigger production version `20260908.1` deployed successfully with two detected tasks. The approved POSTGRES_URL was synchronized without exposing its value. Deployment: https://cloud.trigger.dev/projects/v3/proj_ryiraaguagaettphjklm/deployments/1qzqu3i0 . Cloud database-access verification is in progress.
 - User approved the production database connection transfer to Alghurobaa Trigger. Release resumed; verification of actual worker deployment is pending.
 - Release audit correction: worker environment verification is not complete while the production database secret transfer is blocked. Ten of thirteen checklist items are complete (77%), not eleven. Both local commits are present and the checkout was clean on revalidation. No new user approval or running deployment handle is available.
@@ -82,4 +87,17 @@ Save the requested page first, capture chapters separately from the book root, q
 ## Implementation Notes
 - Do not use the reference projects' in-process fallback for chapter imports: it cannot survive a Vercel request ending.
 - Retain captures in PostgreSQL; send only import identity/generation to Trigger. Never send whole book HTML through task logs or embed credentials in mobile bundles.
-- Existing production deployment is `bc84fed7`; current changes are not yet deployed.
+- Current application release is code commit `d8b19e53`, Vercel deployment `dpl_39GHaaDocWkPqEVg2r23j3FnMyJn`, Trigger version `20260908.1`, and Android preview group `089a03c5-3ed0-459c-96a6-71dcd1bd7f67`. Later commits contain release evidence only.
+
+## Mobile Testing Handoff
+Implementation and release are complete; physical-device acceptance is intentionally left for the user's next session. No web capture/reader or substitute web screenshots were created.
+
+1. Open the Android Preview app on runtime 1.0.111 and confirm update marker 2026.09.08.
+2. Import https://shamela.ws/book/23833/106 with Fetch Book Data; verify readable formatted content is saved first.
+3. For an incomplete tree, capture https://shamela.ws/book/23833 with Fetch Book Chapters; verify queued/running status and return to original page 106.
+4. Check chapter hierarchy, global title/page-number search, branch navigation, and loading more chapters on scroll.
+5. Tap an unimported chapter and verify fresh page lookup opens the WebView; a saved page opens the reader directly.
+6. Verify next/previous controls and RTL-aware swipes, including boundary behavior and duplicate-click protection.
+7. Close/reopen during import, exercise retry/cancel/View Saved Page, then re-import a page and verify content formatting and annotations remain intact.
+
+Preview: https://expo.dev/accounts/ishaqyusuf/projects/alghurobaa/updates/089a03c5-3ed0-459c-96a6-71dcd1bd7f67

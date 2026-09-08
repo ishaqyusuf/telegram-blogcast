@@ -237,6 +237,8 @@ Tracks the current scope, architecture, and roadmap for the books experience acr
 13. Offline search
 
 ### Dev Notes
+- Android preview update `2026.09.08` published for runtime `1.0.111`, group `089a03c5-3ed0-459c-96a6-71dcd1bd7f67`; channel mapping verified. Implementation tests and release smoke checks passed. Physical-device testing remains the next user-led acceptance session.
+- Release 2026-09-08: Trigger project `proj_ryiraaguagaettphjklm`, production worker version `20260908.1`, tasks `import-shamela-chapters` and `recover-chapter-imports`. A cloud recovery run completed against production PostgreSQL. API deployment is Ready at alghurobaa.vercel.app; source credentials are server-side only.
 - Scope is mobile-only. No new web import/reader was implemented. Shamela capture remains in the interactive mobile WebView; iframe/curl are not substitutes for that capture session.
 - Imported-book detail omits the full TOC and links to paginated chapter browsing. Detail page import and next-page actions use stored source links and fresh saved-page resolution, not the older server-fetch/auto-fetch-all path. Manual books retain their saved-page list.
 - Import controls use per-install SecureStore ownership tokens, not embedded server keys. A reinstall/new installation cannot manage another installation's existing import, but can view saved pages. Captures and retry generations are bounded. This does not replace the application's future account-auth hardening.

@@ -17,6 +17,7 @@ Tracks how schema changes are applied and what migration workflows are expected 
 - Package-local: `packages/db` scripts for `push`, `db-migrate`, `prisma-generate`, `pull`, and `studio`
 
 ### Operational Notes
+- 2026-09-08: inspected additive production diffs and pushed BookChapterImport plus its nullable ownerHash column using `bun --env-file=../../.env.prod x prisma db push` from packages/db. Existing book/page/annotation data was not rewritten. Prisma 7.7.0 client regenerated. Isolated localhost PostgreSQL was used only for synthetic transaction tests and stopped afterward; no migration files were created.
 - `packages/db` uses Prisma and environment-driven commands.
 - This project does not have a local database workflow, so Prisma database updates should be applied with `bun db:push` only after schema changes.
 - Do not run `bun db:migrate` unless the project gains a local DB setup or the user explicitly asks for it.
