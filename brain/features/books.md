@@ -107,9 +107,7 @@ Tracks the current scope, architecture, and roadmap for the books experience acr
 - `getTokenUsage` tRPC query — admin visibility into AI costs
 
 ### Current Gaps And Future Work
-- Active mobile-only delivery: [Durable Mobile Book Import And Reader](../tasks/2026-09-08-durable-mobile-book-import.md). Trigger background chapter imports, lean node persistence, paginated chapter navigation, and WebView-backed adjacent-page fetching are in progress, not deployed. Web implementation was explicitly removed from scope on 2026-09-08.
-- Reading progress and last-page tracking
-- Bookmarks
+- Mobile-only delivery: [Durable Mobile Book Import And Reader](../tasks/2026-09-08-durable-mobile-book-import.md) is deployed. Android development-client acceptance captured 2,405 chapters and verified hierarchy, search, incremental loading, and WebView-backed missing-page imports. See [acceptance evidence](../tasks/2026-09-08-book-android-emulator-acceptance.md) for build/test limitations. Web implementation remains out of scope.
 - Auto-fetch all pages in sequence
 - Better offline book-content download and incremental sync
 - Real authenticated user mapping for book annotations/import history instead of the current placeholder user binding in public procedures
@@ -129,6 +127,10 @@ Tracks the current scope, architecture, and roadmap for the books experience acr
 
 #### Highlights UI And Offline Sync
 - Status: implemented in the reader with offline-first local SQLite persistence and background sync.
+- Reader overflow menu uses the shared FloatingBottomSheet and opens `/books/[bookId]/saved?kind=highlights` or `kind=bookmarks`; footnotes remain accessible from this menu.
+- Both saved-item lists use two-line truncated previews, printed/source page numbers, source-page ordering, and tap-to-open reader navigation. Highlights show their stored color; bookmarks show the opening paragraph. Summaries are cached locally and refreshed in batches of at most 100 page IDs without downloading full pages.
+- Bookmarks and last-page progress persist locally in the book offline store. Highlight pulls preserve pending local deletions and color edits instead of overwriting unsynced changes.
+- Emulator verified purple and green colors after closing/reopening the page and after a full app restart; bookmarks for source pages 106 and 107 display in order.
 - Reader behavior:
   - Long-press paragraph
   - Show floating toolbar with color swatches and delete action

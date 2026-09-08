@@ -25,6 +25,7 @@ import { SafeArea } from "@/components/safe-area";
 import { BookChapterImportStatus } from "@/components/book/book-chapter-import-status";
 import { BookReaderMenu } from "@/components/book/book-reader-menu";
 import { savedTextPreview } from "@/lib/book-saved-items";
+import { beginReaderDrag, canPaginateReader, createReaderPosition, mountReaderPosition, takeReaderInitialOffset, updateReaderPositionContent } from "@/lib/book-reader-position";
 import { Icon } from "@/components/ui/icon";
 import { BookPageView } from "@/components/book/book-page-view";
 import { BookEditorFooter } from "@/components/book/book-editor-footer";
@@ -121,6 +122,7 @@ export default function BookReaderScreen() {
   const referenceIdNum = referenceId ? Number(referenceId) : undefined;
   const mediaIdNum = mediaId ? Number(mediaId) : undefined;
   const seekSecNum = seekSec ? Number(seekSec) : undefined;
+  const readerRouteKey = `${bookId}:${pageId}:${referenceId ?? ""}:${mediaId ?? ""}:${seekSec ?? ""}`;
 
   // ── Reading progress + bookmarks ────────────────────────────────────────────
   const setLastPage = useBookOfflineStore((s) => s.setLastPage);
@@ -162,6 +164,9 @@ export default function BookReaderScreen() {
   const [editorHtml, setEditorHtml] = useState("");
   const [baseVersion, setBaseVersion] = useState<number>(0);
   const [readerPages, setReaderPages] = useState<any[]>([]);
+  const [readerWindowRoute, setReaderWindowRoute] = useState<string | null>(null);
+  const readerScrollRef = useRef<ScrollView>(null);
+  const readerPositionRef = useRef({ key: "", position: createReaderPosition() });
   const [readerWindowMeta, setReaderWindowMeta] = useState<{
     previousCursor?: number | null;
     nextCursor?: number | null;
@@ -176,7 +181,7 @@ export default function BookReaderScreen() {
   const { data: page, isLoading } = useQuery(
     _trpc.book.getPage.queryOptions({ pageId: pageIdNum }),
   );
-  const { data: initialReaderWindow, isLoading: isLoadingReaderWindow } =
+  const { data: initialReaderWindow, isLoading: isLoadingReaderWindow, isError: isReaderWindowError } =
     useQuery(
       _trpc.book.getReaderWindow.queryOptions({
         pageId: pageIdNum,
@@ -193,6 +198,25 @@ export default function BookReaderScreen() {
         radius: 2,
       }),
     );
+  if (readerPositionRef.current.key !== readerRouteKey) {
+    readerPositionRef.current = { key: readerRouteKey, position: createReaderPosition() };
+  }
+  const readerPosition = readerPositionRef.current.position;
+  const readerContentKey = readerWindowRoute === readerRouteKey ? "window" : "fallback";
+  // Recovery may replace fallback content, but never resets the user's position.
+  updateReaderPositionContent(readerPosition, readerContentKey,
+    readerWindowRoute === readerRouteKey || isReaderWindowError);
+  const attachReaderScroll = useCallback((node: ScrollView | null) => {
+    readerScrollRef.current = node;
+    if (node) mountReaderPosition(readerPosition);
+  }, [readerPosition]);
+  const positionRequestedPage = () => {
+    if (!readerPosition.ready || readerPosition.contentKey !== readerContentKey ||
+      readerPositionRef.current.position !== readerPosition ||
+      !readerScrollRef.current) return;
+    const y = takeReaderInitialOffset(readerPosition);
+    if (y !== null) readerScrollRef.current.scrollTo({ y, animated: false });
+  };
   const { data: pageDocument } = useQuery(
     _trpc.book.getPageDocument.queryOptions(
       { pageId: pageIdNum },
@@ -270,13 +294,14 @@ export default function BookReaderScreen() {
 
   useEffect(() => {
     const data = (initialReaderWindow as any)?.data;
-    if (!Array.isArray(data) || data.length === 0) return;
+    if (!Array.isArray(data)) return;
     setReaderPages(data);
+    setReaderWindowRoute(readerRouteKey);
     setReaderWindowMeta({
       previousCursor: (initialReaderWindow as any)?.meta?.previousCursor ?? null,
       nextCursor: (initialReaderWindow as any)?.meta?.nextCursor ?? null,
     });
-  }, [initialReaderWindow]);
+  }, [initialReaderWindow, readerRouteKey]);
 
   useEffect(() => {
     const showEvent =
@@ -693,8 +718,11 @@ export default function BookReaderScreen() {
 
   const handleReaderScroll = useCallback(
     (event: any) => {
+      if (readerPositionRef.current.position !== readerPosition || !readerPosition.complete) return;
       const { contentOffset, contentSize, layoutMeasurement } =
         event.nativeEvent;
+      readerPosition.lastOffset = contentOffset.y;
+      if (!canPaginateReader(readerPosition)) return;
       if (contentOffset.y < 180) {
         void loadReaderChunk("previous");
       }
@@ -704,7 +732,7 @@ export default function BookReaderScreen() {
         void loadReaderChunk("next");
       }
     },
-    [loadReaderChunk],
+    [loadReaderChunk, readerPosition],
   );
 
   const pageSwipeGesture = useMemo(
@@ -747,7 +775,7 @@ export default function BookReaderScreen() {
     !pageBook?.shamelaId &&
     !pageBook?.shamelaUrl;
   const visibleReaderPages =
-    readerPages.length > 0 ? readerPages : page ? [page] : [];
+    readerWindowRoute === readerRouteKey && readerPages.length > 0 ? readerPages : page ? [page] : [];
   const openFetchReaderPage = (readerPage: any) => {
     const sourceUrl = readerPage?.shamelaUrl;
     if (!sourceUrl) {
@@ -867,6 +895,17 @@ export default function BookReaderScreen() {
           ) : (
             <GestureDetector gesture={pageSwipeGesture}>
               <ScrollView
+                key={readerRouteKey}
+                ref={attachReaderScroll}
+                maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+                scrollEnabled={readerPosition.ready}
+                onScrollBeginDrag={(event) => {
+                  beginReaderDrag(readerPosition, event.nativeEvent.contentOffset.y);
+                }}
+                onLayout={(event) => {
+                  readerPosition.viewportHeight = event.nativeEvent.layout.height;
+                  positionRequestedPage();
+                }}
                 style={{ backgroundColor: readerPalette.background }}
                 contentContainerStyle={{
                   paddingHorizontal: 20,
@@ -921,7 +960,17 @@ export default function BookReaderScreen() {
                   (readerPage.paragraphs?.length ?? 0) > 0;
 
                 return (
-                  <View key={readerPage.id} style={{ marginBottom: 32 }}>
+                  <View key={`${readerContentKey}:${readerPage.id}`} collapsable={false} style={{ marginBottom: 32 }}
+                    onLayout={(event) => {
+                      if (readerPosition.contentKey !== readerContentKey) return;
+                      const { y, height } = event.nativeEvent.layout;
+                      if (isCurrentPage) readerPosition.targetY = y;
+                      if (readerPage.id === visibleReaderPages.at(-1)?.id) {
+                        // Last page margin plus the ScrollView's bottom padding.
+                        readerPosition.contentHeight = y + height + 32 + 120;
+                      }
+                      positionRequestedPage();
+                    }}>
                     {readerPage.topicTitle ? (
                       <Text
                         style={{ writingDirection: "rtl", marginBottom: 16, textAlign: "center", fontSize: 15, fontWeight: "600", color: colors.primary }}
