@@ -17,6 +17,7 @@ Documents the main architectural decisions, runtime boundaries, and integration 
 - Persistence: Prisma models targeting PostgreSQL.
 
 ### Integration Pattern
+- Mobile Books owns one route-independent `BookPageLoaderProvider`: saved-page resolution and the query cache precede concealed WebView acquisition. The source page sends request-scoped bridge messages; existing API staging/promotion validates and persists content. CAPTCHA changes visibility of the existing WebView. The provider does not fetch source HTML over HTTP or couple page loading to chapter-tree import.
 - Shared packages provide reusable domain logic, auth helpers, utilities, DB access, and UI primitives.
 - Clients consume typed APIs instead of talking to the database directly.
 - Database schema is split into domain-focused Prisma files under `packages/db/src/schema`.

@@ -22,6 +22,7 @@ import {
 import { OtaRouteRestorationProvider } from "@/components/ota-route-restoration-provider";
 import { StaticRouter } from "@/components/static-router";
 import { StaticTrpc } from "@/components/static-trpc";
+import { BookPageLoaderProvider } from "@/components/book/book-page-loader-provider";
 import { ToastProviderWithViewport } from "@/components/ui/toast";
 import { initLocalDb } from "@/db/local-db";
 import { useColorScheme, useColors } from "@/hooks/use-color";
@@ -180,6 +181,7 @@ const InitialLayout = () => {
 					<AppStatusBar />
 					{/* <StatusBar style="auto" /> */}
 
+					<BookPageLoaderProvider>
 					<Stack
 						initialRouteName="index"
 						screenOptions={{
@@ -225,6 +227,7 @@ const InitialLayout = () => {
 						<Stack.Screen name="playlists" />
 						<Stack.Screen name="playlists/[playlistId]" />
 						<Stack.Screen name="book-fetch" />
+						<Stack.Screen name="book-read-source" options={{ animation: "none" }} />
 						<Stack.Screen
 							name="book-fetch-browser"
 							options={{ presentation: "fullScreenModal" }}
@@ -236,7 +239,7 @@ const InitialLayout = () => {
 						<Stack.Screen name="books/library/[itemId]" />
 						<Stack.Screen name="books/library/[itemId]/edit" />
 						<Stack.Screen name="books/[bookId]" />
-						<Stack.Screen name="books/[bookId]/reader/[pageId]" />
+						<Stack.Screen name="books/[bookId]/reader/[pageId]" options={{ animation: "none" }} />
 						<Stack.Screen name="books/[bookId]/search" />
 						<Stack.Screen
 							name="blog-options/[blogId]/index"
@@ -256,6 +259,7 @@ const InitialLayout = () => {
 						/>
 						<Stack.Screen name="+not-found" />
 					</Stack>
+					</BookPageLoaderProvider>
 					{/* <Stack>
           <Stack.Protected guard={!token}>
             <Stack.Screen name="(auth)" options={{ headerShown: false }} />

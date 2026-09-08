@@ -8,13 +8,11 @@ import { buildChapterRows } from "@/lib/book-chapter-tree";
 import { useTranslation } from "@/lib/i18n";
 import { useQuery } from "@/lib/react-query";
 import { useBookOfflineStore } from "@/store/book-offline-store";
-import { vanillaTrpc } from "@/trpc/vanilla-client";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import {
 	useCallback,
 	useDeferredValue,
 	useEffect,
-	useRef,
 	useState,
 } from "react";
 import {
@@ -42,18 +40,11 @@ export default function BookChaptersScreen() {
 	const [collapsed, setCollapsed] = useState<Set<number>>(() => new Set());
 	const [openingId, setOpeningId] = useState<number | null>(null);
 	const [openError, setOpenError] = useState<string | null>(null);
-	const busy = useRef(false);
-	const epoch = useRef(0);
 	useFocusEffect(
 		useCallback(() => {
-			const current = ++epoch.current;
-			busy.current = false;
 			setOpeningId(null);
 			setCollapsed(new Set());
-			return () => {
-				if (epoch.current === current) epoch.current++;
-			};
-		}, [bookIdNum]),
+		}, []),
 	);
 	useEffect(() => {
 		setCollapsed(new Set());
@@ -74,39 +65,10 @@ export default function BookChaptersScreen() {
 	const currentSourcePage = useBookOfflineStore(
 		(s) => s.savedPageSummaries[lastPageId]?.sourcePageNo,
 	);
-	const openPage = async (id: number, sourcePageNo: number) => {
-		if (busy.current) return;
-		busy.current = true;
-		const current = epoch.current;
+	const openPage = (id: number, sourcePageNo: number) => {
 		setOpeningId(id);
 		setOpenError(null);
-		try {
-			const target = await vanillaTrpc.bookChapter.resolvePage.query({
-				bookId: bookIdNum,
-				sourcePageNo,
-			});
-			if (current !== epoch.current) return;
-			if (target.pageId)
-				router.push(`/books/${bookId}/reader/${target.pageId}` as any);
-			else if (target.sourceUrl)
-				router.push({
-					pathname: "/book-fetch-browser",
-					params: { bookId, url: target.sourceUrl },
-				} as any);
-			else setOpenError("This chapter has no available page link.");
-		} catch (error) {
-			if (current === epoch.current)
-				setOpenError(
-					error instanceof Error
-						? error.message
-						: "Unable to open this chapter. Tap its title to retry.",
-				);
-		} finally {
-			if (current === epoch.current) {
-				busy.current = false;
-				setOpeningId(null);
-			}
-		}
+		router.push({ pathname: "/book-read-source", params: { bookId, sourcePageNo } } as any);
 	};
 	const toggle = (id: number) => {
 		setQuery("");

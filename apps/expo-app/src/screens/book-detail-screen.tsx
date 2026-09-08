@@ -236,7 +236,7 @@ export default function BookDetailScreen() {
 			if (target.pageId) openReader(target.pageId);
 			else
 				router.push(
-					`/book-fetch-browser?url=${encodeURIComponent(absoluteUrl)}&bookId=${bookIdNum}` as any,
+					`/book-read-source?url=${encodeURIComponent(absoluteUrl)}&bookId=${bookIdNum}` as any,
 				);
 		} catch (error) {
 			Alert.alert(

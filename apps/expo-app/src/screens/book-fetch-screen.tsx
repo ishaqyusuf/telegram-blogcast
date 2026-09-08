@@ -324,7 +324,7 @@ export default function BookFetchScreen() {
     setStep("idle");
     clearBrowserCapture();
     router.push({
-      pathname: "/book-fetch-browser",
+      pathname: "/book-read-source",
       params: { url: toAbsoluteShamelaUrl(trimmed) },
     } as any);
   };

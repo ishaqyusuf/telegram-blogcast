@@ -1,6 +1,7 @@
 import { Pressable } from "@/components/ui/pressable";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useIsFocused } from "@react-navigation/native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -24,6 +25,9 @@ import { Modal, useModal } from "@/components/ui/modal";
 import { SafeArea } from "@/components/safe-area";
 import { BookChapterImportStatus } from "@/components/book/book-chapter-import-status";
 import { BookReaderMenu } from "@/components/book/book-reader-menu";
+import { BookReaderSkeleton } from "@/components/book/book-reader-skeleton";
+import { BookMissingPage } from "@/components/book/book-missing-page";
+import { useBookPageLoader } from "@/components/book/book-page-loader-provider";
 import { savedTextPreview } from "@/lib/book-saved-items";
 import { beginReaderDrag, canPaginateReader, createReaderPosition, mountReaderPosition, takeReaderInitialOffset, updateReaderPositionContent } from "@/lib/book-reader-position";
 import { Icon } from "@/components/ui/icon";
@@ -107,6 +111,10 @@ export default function BookReaderScreen() {
       seekSec?: string;
     }>();
   const router = useRouter();
+  const focused = useIsFocused();
+  const pageLoader = useBookPageLoader();
+  const [visibleMissingPage, setVisibleMissingPage] = useState<number | null>(null);
+  const pageLayouts = useRef(new Map<number, { y: number; height: number; missing: boolean }>());
   const qc = useQueryClient();
   const { t, isRtl } = useTranslation();
   const colors = useColors();
@@ -180,8 +188,8 @@ export default function BookReaderScreen() {
   const editorRef = useRef<BookRichEditorHandle>(null);
 
   // ── Server data ────────────────────────────────────────────────────────────
-  const { data: page, isLoading } = useQuery(
-    _trpc.book.getPage.queryOptions({ pageId: pageIdNum }),
+  const { data: page, isLoading, error: pageLoadError, refetch: refetchPage } = useQuery(
+    _trpc.book.getPage.queryOptions({ pageId: pageIdNum }, { staleTime: 60_000 }),
   );
   const { data: initialReaderWindow, isLoading: isLoadingReaderWindow, isError: isReaderWindowError } =
     useQuery(
@@ -280,8 +288,23 @@ export default function BookReaderScreen() {
 
   // ── Save reading progress on every page open ───────────────────────────────
   useEffect(() => {
+    if (!focused || page?.status !== "fetched" || !page.paragraphs.length) return;
     setLastPage(bookIdNum, pageIdNum);
-  }, [bookIdNum, pageIdNum]);
+  }, [bookIdNum, pageIdNum, focused, page, setLastPage]);
+
+  useEffect(() => {
+    pageLayouts.current.clear();
+    setVisibleMissingPage(null);
+  }, [readerRouteKey]);
+
+  useEffect(() => {
+    if (!focused || mode !== "read" || !page?.nextShamelaUrl || page.status !== "fetched") return;
+    let key: string | undefined;
+    const timer = setTimeout(() => {
+      key = pageLoader.request({ bookId: bookIdNum, url: toAbsoluteShamelaUrl(page.nextShamelaUrl!) }, "prefetch");
+    }, 1_000);
+    return () => { clearTimeout(timer); if (key) pageLoader.cancel(key, true); };
+  }, [focused, mode, page?.nextShamelaUrl, page?.status, bookIdNum, pageLoader]);
 
   useEffect(() => {
     if (!page) return;
@@ -633,23 +656,10 @@ export default function BookReaderScreen() {
         return;
       }
 
-      adjacentNavigationBusy.current = true;
-      const epoch = adjacentNavigationEpoch.current;
-      try {
-        // A page may have been imported since this reader's navigation data was fetched.
-        const sourceUrl = toAbsoluteShamelaUrl(action.shamelaUrl);
-        const sourcePageNo = target?.shamelaPageNo ?? Number(new URL(sourceUrl).pathname.split("/").filter(Boolean).at(-1));
-        const resolved = await vanillaTrpc.bookChapter.resolvePage.query({ bookId: bookIdNum, sourcePageNo });
-        if (epoch !== adjacentNavigationEpoch.current) return;
-        if (resolved.pageId) router.replace(`/books/${bookId}/reader/${resolved.pageId}` as any);
-        else if (resolved.sourceUrl) router.push({ pathname: "/book-fetch-browser", params: { bookId: bookIdNum, url: resolved.sourceUrl } } as any);
-      } catch (error) {
-        if (epoch === adjacentNavigationEpoch.current) Alert.alert(t("error"), error instanceof Error ? error.message : "Could not open this page.");
-      } finally {
-        if (epoch === adjacentNavigationEpoch.current) adjacentNavigationBusy.current = false;
-      }
+      const sourceUrl = toAbsoluteShamelaUrl(action.shamelaUrl);
+      router.replace({ pathname: "/book-read-source", params: { bookId: bookIdNum, url: sourceUrl } } as any);
     },
-    [bookId, bookIdNum, mode, page, pageIdNum, router, t],
+    [bookId, bookIdNum, mode, page, router],
   );
 
   const mergeReaderPages = useCallback(
@@ -725,6 +735,8 @@ export default function BookReaderScreen() {
       const { contentOffset, contentSize, layoutMeasurement } =
         event.nativeEvent;
       readerPosition.lastOffset = contentOffset.y;
+      const missing = [...pageLayouts.current].find(([, layout]) => layout.missing && layout.y < contentOffset.y + layoutMeasurement.height && layout.y + layout.height > contentOffset.y);
+      setVisibleMissingPage(missing?.[0] ?? null);
       if (!canPaginateReader(readerPosition)) return;
       if (contentOffset.y < 180) {
         void loadReaderChunk("previous");
@@ -772,15 +784,11 @@ export default function BookReaderScreen() {
 
   if (isLoading && !initialReaderWindow) {
     return (
-      <View
-        className="flex-1 items-center justify-center bg-background"
-      >
-        <ActivityIndicator color={colors.primary} />
-      </View>
+      <SafeArea><Pressable onPress={() => router.back()} className="p-4"><Icon name="ChevronLeft" size={22} className="text-foreground" /></Pressable><BookReaderSkeleton /></SafeArea>
     );
   }
 
-  if (!page) return null;
+  if (!page) return <SafeArea><Pressable onPress={() => router.back()} className="p-4"><Icon name="ChevronLeft" size={22} className="text-foreground" /></Pressable><BookReaderSkeleton error={pageLoadError?.message ?? "Page unavailable."} onRetry={() => void refetchPage()} /></SafeArea>;
 
   const canEditPage =
     pageBook?.editable !== false &&
@@ -789,18 +797,7 @@ export default function BookReaderScreen() {
     !pageBook?.shamelaUrl;
   const visibleReaderPages =
     readerWindowRoute === readerRouteKey && readerPages.length > 0 ? readerPages : page ? [page] : [];
-  const openFetchReaderPage = (readerPage: any) => {
-    const sourceUrl = readerPage?.shamelaUrl;
-    if (!sourceUrl) {
-      Alert.alert(t("error"), "No Shamela link is available for this page.");
-      return;
-    }
-    router.push(
-      `/book-fetch-browser?url=${encodeURIComponent(
-        toAbsoluteShamelaUrl(sourceUrl),
-      )}&bookId=${bookIdNum}&autoPromote=1` as any,
-    );
-  };
+
 
   return (
     <View
@@ -976,6 +973,7 @@ export default function BookReaderScreen() {
                     onLayout={(event) => {
                       if (readerPosition.contentKey !== readerContentKey) return;
                       const { y, height } = event.nativeEvent.layout;
+                      pageLayouts.current.set(readerPage.id, { y, height, missing: !hasFetchedContent });
                       if (isCurrentPage) readerPosition.targetY = y;
                       if (readerPage.id === visibleReaderPages.at(-1)?.id) {
                         // Last page margin plus the ScrollView's bottom padding.
@@ -1050,49 +1048,8 @@ export default function BookReaderScreen() {
                         textColor={readerPalette.text}
                       />
                     ) : (
-                      <View
-                        style={{
-                          alignItems: "center",
-                          gap: 10,
-                          borderRadius: 14,
-                          backgroundColor: readerPalette.card,
-                          padding: 18,
-                        }}
-                      >
-                          <Icon
-                            name="Download"
-                          size={24}
-                          className="text-primary"
-                        />
-                        <Text
-                          style={{
-                            color: readerPalette.muted,
-                            fontSize: 13,
-                            textAlign: "center",
-                          }}
-                        >
-                          This page has not been fetched yet.
-                        </Text>
-                        <Pressable
-                          onPress={() => openFetchReaderPage(readerPage)}
-                          style={{
-                            borderRadius: 10,
-                            backgroundColor: colors.primary,
-                            paddingHorizontal: 14,
-                            paddingVertical: 9,
-                          }}
-                        >
-                          <Text
-                            style={{
-                              color: colors.primaryForeground,
-                              fontSize: 12,
-                              fontWeight: "800",
-                            }}
-                          >
-                            Fetch page
-                          </Text>
-                        </Pressable>
-                      </View>
+                      <BookMissingPage bookId={bookIdNum} sourcePageNo={readerPage.shamelaPageNo}
+                        enabled={focused && mode === "read" && (isCurrentPage || visibleMissingPage === readerPage.id)} />
                     )}
 
                     {pageComments.length > 0 && (

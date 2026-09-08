@@ -1,5 +1,15 @@
 # Books Feature
 
+## Automatic Mobile Page Loading (2026-09-08)
+- Pasted Shamela page links, chapter titles, and missing adjacent pages open the native reader skeleton through `/book-read-source`.
+- One shared concealed WebView observes stable page content, captures HTML automatically, and reuses existing stage/promote APIs. No direct HTTP source fallback is used.
+- CAPTCHA reveals the same WebView, with Cancel and automatic return to formatted reading after successful verification. Inline failures provide Retry and Open source.
+- A prepared page opens immediately without waiting for a complete chapter tree. Chapter capture remains the separate explicit book-root action.
+- The reader prefetches one known next page while foregrounded; visible missing page blocks acquire content individually. Prefetch cannot show CAPTCHA and yields to reader requests.
+- Request generations and consumer leases protect against stale navigation and duplicate capture; network/app interruption pauses source work, and retry reuses known staged/saved identities.
+- Existing full-book downloads remain separate. This feature does not guarantee source extraction after app termination.
+- Decision: [ADR-002](../decisions/ADR-002-automatic-webview-page-loading.md). Validation: [task](../tasks/2026-09-08-automatic-webview-reader.md).
+
 ## Purpose
 Tracks the current scope, architecture, and roadmap for the books experience across the app and API.
 
