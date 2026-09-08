@@ -30,6 +30,31 @@ const importProcedure = publicProcedure.use(({ ctx, next }) => {
 });
 
 export const bookChapterRoutes = createTRPCRouter({
+	tree: publicProcedure
+		.input(z.object({ bookId: z.number().int().positive() }))
+		.query(async ({ ctx, input }) => {
+			// One lean snapshot lets the client expand every branch without N+1 requests.
+			const rows = await ctx.db.bookTocNode.findMany({
+				where: {
+					bookId: input.bookId,
+					deletedAt: null,
+					book: { deletedAt: null },
+				},
+				select: {
+					id: true,
+					parentId: true,
+					title: true,
+					sortOrder: true,
+					shamelaPageNo: true,
+				},
+			});
+			return {
+				items: rows.map(({ shamelaPageNo, ...node }) => ({
+					...node,
+					sourcePageNo: shamelaPageNo,
+				})),
+			};
+		}),
 	list: publicProcedure
 		.input(
 			z.object({
