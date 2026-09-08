@@ -7,7 +7,7 @@
 - Automatic page capture/promotion, native reader skeletons, chapter/link/swipe entry points, individual missing-page loading, next-page prefetch, request cancellation and app/network recovery.
 - CAPTCHA reveals the same WebView and resumes automatically; chapter capture remains independent.
 - Android emulator verified user-selected 11250/50 (printed 52), Next to 51 (printed 53), and a simulated verification-to-capture handoff. Fixture writes were disabled and test-only code removed. Real CAPTCHA and iOS remain unverified.
-- Validation: 69 focused tests / 226 assertions pass; scoped lint has no errors; existing full-project typecheck diagnostics remain. No schema change. Android EAS preview release 2026.09.08.03 authorized; publication pending.
+- Validation: 69 focused tests / 226 assertions pass; scoped lint has no errors; existing full-project typecheck diagnostics remain. No schema change. Published Android EAS preview `2026.09.08.03`, runtime `1.0.111`, from pushed commit `8084f8ce`. [EAS update](https://expo.dev/accounts/ishaqyusuf/projects/alghurobaa/updates/deca8137-6bcc-44cb-9573-f944d8068d9c).
 - [Task and evidence](./tasks/2026-09-08-automatic-webview-reader.md).
 
 ## 2026-08-15

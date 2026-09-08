@@ -26,4 +26,12 @@ User approved the detailed implementation plan and explicitly selected a conceal
 - Foreground acquisition only. Resume re-resolves work after app/network interruption; closed-app extraction is not guaranteed.
 - Session metadata and staged IDs are bounded in memory. Existing server records survive process death; an interrupted unsaved capture can be reacquired on reopening.
 - Existing full-book offline storage is unchanged; the new loader uses the reader query cache and saved server pages.
-- No native dependency change is required. User subsequently authorized committing all current code, pushing main, and publishing Android EAS preview 2026.09.08.03; release evidence will be recorded after publication.
+- No native dependency change is required.
+
+## Release — 2026-09-08
+- User authorized committing all current code, pushing main, and updating EAS preview.
+- Code snapshot committed and pushed to main: `8084f8ce3391c1a9c1bc2681d528eabd8f94eef5`. It also includes the then-present portable book-cache format and its nine passing tests from concurrent work. Later edits from that task are outside this release.
+- Published Android preview `2026.09.08.03`, runtime `1.0.111`, from an isolated checkout of that commit. Android export succeeded; EAS update metadata confirms the source commit and runtime.
+- Update group: `deca8137-6bcc-44cb-9573-f944d8068d9c`; Android update: `01a08298-c018-7ca2-88f0-32481e8e5874`.
+- [EAS dashboard](https://expo.dev/accounts/ishaqyusuf/projects/alghurobaa/updates/deca8137-6bcc-44cb-9573-f944d8068d9c). Sentry source-map auto-upload was disabled, consistent with the prior preview release.
+- Publication verified; installation of this OTA on a preview device was not checked.
