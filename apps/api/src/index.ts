@@ -4,7 +4,7 @@ import { secureHeaders } from "hono/secure-headers";
 import { cors } from "hono/cors";
 import { trpcServer } from "@hono/trpc-server";
 import { appRouter } from "./trpc/routers/_app";
-import type { TRPCContext } from "./trpc/init";
+import { createTRPCContext } from "./trpc/init";
 import { consoleLog } from "@acme/utils";
 import {
   claimNextTranscriptionJob,
@@ -34,11 +34,11 @@ const TRANSCRIPTION_WORKER_MAX_RETRIES = Number.parseInt(
 );
 
 const serializeHeaders = (headers: Headers) => {
-  if (typeof (headers as any).toJSON === "function") {
-    return (headers as any).toJSON();
+  const safeHeaders = new Headers(headers);
+  for (const name of ["authorization", "cookie", "x-book-import-token"]) {
+    if (safeHeaders.has(name)) safeHeaders.set(name, "[REDACTED]");
   }
-
-  return Object.fromEntries(headers.entries());
+  return Object.fromEntries(safeHeaders.entries());
 };
 
 async function readJsonBody(c: any) {
@@ -95,13 +95,7 @@ app.use("/api/trpc/*", async (c) => {
       };
       consoleLog("ERROR", msg);
     },
-    createContext: ({ req }): TRPCContext => ({
-      db,
-      requestHost: req.headers.get("host") ?? undefined,
-      // a: c.req
-      // user: c.get("user"),
-      // env: env(c),
-    }),
+    createContext: (opts) => createTRPCContext(opts, c),
   });
   return res;
 });
