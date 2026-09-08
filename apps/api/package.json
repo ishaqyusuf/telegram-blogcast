@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@acme/document": "workspace:*",
+    "@acme/jobs": "workspace:*",
     "@acme/blog": "workspace:*",
     "@date-fns/utc": "^2.1.0",
     "@hono/node-server": "^1.14.4",
@@ -29,7 +30,7 @@
     "@acme/telegram": "workspace:*",
     "@acme/utils": "workspace:*",
     "@sindresorhus/slugify": "^2.2.1",
-    "@trigger.dev/sdk": "3.3.17",
+    "@trigger.dev/sdk": "4.0.1",
     "@trpc/server": "^11.4.1",
     "bun-vercel": "^1.0.0-alpha.5",
     "camelcase-keys": "^9.1.3",

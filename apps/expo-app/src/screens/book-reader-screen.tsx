@@ -22,6 +22,7 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { _trpc } from "@/components/static-trpc";
 import { Modal, useModal } from "@/components/ui/modal";
 import { SafeArea } from "@/components/safe-area";
+import { BookChapterImportStatus } from "@/components/book/book-chapter-import-status";
 import { Icon } from "@/components/ui/icon";
 import { BookPageView } from "@/components/book/book-page-view";
 import { BookEditorFooter } from "@/components/book/book-editor-footer";
@@ -108,6 +109,13 @@ export default function BookReaderScreen() {
   const colors = useColors();
   const bookIdNum = Number(bookId);
   const pageIdNum = Number(pageId);
+  const adjacentNavigationBusy = useRef(false);
+  const adjacentNavigationEpoch = useRef(0);
+  useEffect(() => {
+    adjacentNavigationBusy.current = false;
+    adjacentNavigationEpoch.current += 1;
+    return () => { adjacentNavigationEpoch.current += 1; };
+  }, [pageIdNum]);
   const referenceIdNum = referenceId ? Number(referenceId) : undefined;
   const mediaIdNum = mediaId ? Number(mediaId) : undefined;
   const seekSecNum = seekSec ? Number(seekSec) : undefined;
@@ -561,8 +569,8 @@ export default function BookReaderScreen() {
   };
 
   const navigateAdjacentPage = useCallback(
-    (direction: "previous" | "next") => {
-      if (!page || mode !== "read") return;
+    async (direction: "previous" | "next") => {
+      if (!page || mode !== "read" || adjacentNavigationBusy.current) return;
       const target = (page as any).adjacentPages?.[direction] as
         | {
             shamelaPageNo?: number | null;
@@ -584,13 +592,23 @@ export default function BookReaderScreen() {
         return;
       }
 
-      router.push(
-        `/book-fetch-browser?url=${encodeURIComponent(
-          toAbsoluteShamelaUrl(action.shamelaUrl),
-        )}&bookId=${bookIdNum}&autoPromote=1` as any,
-      );
+      adjacentNavigationBusy.current = true;
+      const epoch = adjacentNavigationEpoch.current;
+      try {
+        // A page may have been imported since this reader's navigation data was fetched.
+        const sourceUrl = toAbsoluteShamelaUrl(action.shamelaUrl);
+        const sourcePageNo = target?.shamelaPageNo ?? Number(new URL(sourceUrl).pathname.split("/").filter(Boolean).at(-1));
+        const resolved = await vanillaTrpc.bookChapter.resolvePage.query({ bookId: bookIdNum, sourcePageNo });
+        if (epoch !== adjacentNavigationEpoch.current) return;
+        if (resolved.pageId) router.replace(`/books/${bookId}/reader/${resolved.pageId}` as any);
+        else if (resolved.sourceUrl) router.push({ pathname: "/book-fetch-browser", params: { bookId: bookIdNum, url: resolved.sourceUrl } } as any);
+      } catch (error) {
+        if (epoch === adjacentNavigationEpoch.current) Alert.alert(t("error"), error instanceof Error ? error.message : "Could not open this page.");
+      } finally {
+        if (epoch === adjacentNavigationEpoch.current) adjacentNavigationBusy.current = false;
+      }
     },
-    [bookId, bookIdNum, mode, page, router],
+    [bookId, bookIdNum, mode, page, router, t],
   );
 
   const mergeReaderPages = useCallback(
@@ -702,7 +720,6 @@ export default function BookReaderScreen() {
     return (
       <View
         className="flex-1 items-center justify-center bg-background"
-        style={{ backgroundColor: colors.background }}
       >
         <ActivityIndicator color={colors.primary} />
       </View>
@@ -734,9 +751,9 @@ export default function BookReaderScreen() {
   return (
     <View
       className="flex-1 bg-background"
-      style={{ backgroundColor: colors.background }}
     >
       <SafeArea>
+        <BookChapterImportStatus bookId={bookIdNum} pageId={pageIdNum} />
         <View className="flex-row items-center gap-2.5 border-b border-border px-4 py-2.5">
           <Pressable
             onPress={() => router.back()}
@@ -755,8 +772,7 @@ export default function BookReaderScreen() {
           <View style={{ flex: 1, alignItems: "flex-end" }}>
             {page.chapterTitle && (
               <Text
-                className="text-sm font-bold text-foreground"
-                style={{ writingDirection: "rtl" }}
+                style={{ writingDirection: "rtl", fontSize: 14, fontWeight: "700", color: colors.foreground }}
                 numberOfLines={1}
               >
                 {page.chapterTitle}
@@ -901,8 +917,7 @@ export default function BookReaderScreen() {
                   <View key={readerPage.id} style={{ marginBottom: 32 }}>
                     {readerPage.topicTitle ? (
                       <Text
-                        className="mb-4 text-center text-[15px] font-semibold text-primary"
-                        style={{ writingDirection: "rtl" }}
+                        style={{ writingDirection: "rtl", marginBottom: 16, textAlign: "center", fontSize: 15, fontWeight: "600", color: colors.primary }}
                       >
                         {readerPage.topicTitle}
                       </Text>
@@ -1012,8 +1027,7 @@ export default function BookReaderScreen() {
                     {pageComments.length > 0 && (
                       <View style={{ marginTop: 24, gap: 8 }}>
                         <Text
-                          className="text-right text-sm font-bold text-foreground"
-                          style={{ writingDirection: "rtl" }}
+                          style={{ writingDirection: "rtl", textAlign: "right", fontSize: 14, fontWeight: "700", color: colors.foreground }}
                         >
                           {t("comments", { count: pageComments.length })}
                         </Text>
@@ -1023,8 +1037,7 @@ export default function BookReaderScreen() {
                             className="flex-row-reverse items-start gap-2 rounded-lg bg-card p-2.5"
                           >
                             <Text
-                              className="flex-1 text-right text-sm text-foreground"
-                              style={{ writingDirection: "rtl" }}
+                              style={{ writingDirection: "rtl", flex: 1, textAlign: "right", fontSize: 14, color: colors.foreground }}
                             >
                               {comment.content}
                             </Text>
@@ -1056,8 +1069,7 @@ export default function BookReaderScreen() {
                     {pageAudioReferences.length > 0 && (
                       <View style={{ marginTop: 24, gap: 8 }}>
                         <Text
-                          className="text-right text-sm font-bold text-foreground"
-                          style={{ writingDirection: "rtl" }}
+                          style={{ writingDirection: "rtl", textAlign: "right", fontSize: 14, fontWeight: "700", color: colors.foreground }}
                         >
                           Audio references
                         </Text>
@@ -1097,8 +1109,7 @@ export default function BookReaderScreen() {
                               />
                               <View style={{ flex: 1 }}>
                                 <Text
-                                  className="text-right text-sm font-semibold text-foreground"
-                                  style={{ writingDirection: "rtl" }}
+                                  style={{ writingDirection: "rtl", textAlign: "right", fontSize: 14, fontWeight: "600", color: colors.foreground }}
                                   numberOfLines={1}
                                 >
                                   {label}
@@ -1305,8 +1316,7 @@ export default function BookReaderScreen() {
                     : t("addComment")
                 }
                 placeholderTextColor={colors.mutedForeground}
-                className="flex-1 text-right text-sm text-foreground"
-                style={{ writingDirection: "rtl", maxHeight: 80 }}
+                style={{ writingDirection: "rtl", maxHeight: 80, flex: 1, textAlign: "right", fontSize: 14, color: colors.foreground }}
                 multiline
                 autoFocus
               />

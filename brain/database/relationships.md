@@ -11,6 +11,7 @@ Captures the important cross-domain relationships in the data model at a high le
 ## Template
 
 ### Observed Relationship Areas
+- Book owns durable chapter imports and TOC nodes. BookTocNode.parentId forms the tree; pageId links only existing saved content. BookChapterImport.returnPageId is a retained navigation scalar validated against the book on capture, not a page ownership relation. Publishing chapters never rewrites paragraphs, highlights, comments, or page metadata.
 - Users/auth connect to personalized interactions and saved state.
 - Channels, blogs, audio, books, and media appear to form the core content graph.
 - Transcript and social/interaction schema modules suggest secondary relationships layered on content.

@@ -1,13 +1,11 @@
 import { defineConfig } from "@trigger.dev/sdk/v3";
-import { syncVercelEnvVars } from "@trigger.dev/build/extensions/core";
-import { prismaExtension } from "@trigger.dev/build/extensions/prisma";
-import { PrismaInstrumentation } from "@prisma/instrumentation";
+import { syncEnvVars } from "@trigger.dev/build/extensions/core";
 
 export default defineConfig({
-  project: process.env.TRIGGER_PROJECT_ID!,
-  runtime: "node",
+  project: process.env.TRIGGER_PROJECT_ID?.trim() || "proj_ryiraaguagaettphjklm",
+  runtime: "node-22",
   logLevel: "log",
-  maxDuration: 60,
+  maxDuration: 180,
   retries: {
     enabledInDev: false,
     default: {
@@ -20,22 +18,13 @@ export default defineConfig({
   },
   build: {
     extensions: [
-      // syncVercelEnvVars({
-      //   projectId: process.env.PROJECT_ID_VERCEL!,
-      //   vercelAccessToken: process.env.VERCEL_TRIGGER_ACCESS_TOKEN!,
-      // }),
-      prismaExtension({
-        // version: "5.20.0", // optional, we'll automatically detect the version if not provided
-        // update this to the path of your Prisma schema file
-        version: "^6.5.0",
-        directUrlEnvVarName: "DATABASE_URL", //process.env.DATABASE_URL!,
-        schema: "./src/schema.prisma",
-        // typedSql: true,
-        // migrate: true,
-      }),
+      syncEnvVars(() => {
+        const value = process.env.POSTGRES_URL?.trim();
+        if (!value) throw new Error("POSTGRES_URL is required for the chapter worker.");
+        return { POSTGRES_URL: value, ...(process.env.POSTGRES_SCHEMA
+          ? { POSTGRES_SCHEMA: process.env.POSTGRES_SCHEMA } : {}) };
+      }, { override: true }),
     ],
-    external: ["canvas"],
   },
-  dirs: ["./src/tasks"],
-  instrumentations: [new PrismaInstrumentation()],
+  dirs: ["./src/book-tasks"],
 });

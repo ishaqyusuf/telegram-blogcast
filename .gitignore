@@ -65,6 +65,7 @@ package-lock.json
 .idea/
 
 .env
+.env.prod
 .env.production
 .env.local
 

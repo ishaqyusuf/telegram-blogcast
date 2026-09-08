@@ -49,6 +49,7 @@ model Book {
   volumes        BookVolume[]
   pages          BookPage[]
   tocNodes       BookTocNode[]
+  chapterImports BookChapterImport[]
   importHistory  BookImportHistory[]
   pageImports    BookPageImportHistory[]
   rawPages       ShamelaRawPage[]
@@ -65,6 +66,29 @@ model Book {
   @@index([shelfId])
   @@index([ownerUserId])
   @@index([sourceType])
+}
+
+// The capture is durable before dispatch; Trigger receives only id + generation.
+model BookChapterImport {
+  id            String   @id @default(uuid())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  bookId        Int
+  book          Book     @relation(fields: [bookId], references: [id])
+  returnPageId  Int?
+  captureHash   String
+  ownerHash     String?
+  rawHtml       String   @db.Text
+  status        String   @default("queued")
+  generation    Int      @default(1)
+  runId         String?
+  nodeCount     Int      @default(0)
+  errorMessage  String?
+  completedAt   DateTime?
+
+  @@unique([bookId, captureHash])
+  @@index([bookId, createdAt])
+  @@index([status, updatedAt])
 }
 
 model BookVolume {

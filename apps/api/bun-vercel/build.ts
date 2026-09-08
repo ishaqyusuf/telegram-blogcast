@@ -60,7 +60,7 @@ await Bun.write(
     {
       architecture: arch,
       handler: "bootstrap",
-      maxDuration: 10,
+      maxDuration: 60,
       memory: 1024,
       runtime: "provided.al2",
       supportsWrapper: false,

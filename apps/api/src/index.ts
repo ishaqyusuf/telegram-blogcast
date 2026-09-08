@@ -67,6 +67,7 @@ if (process.env.NODE_ENV === "development")
         "Authorization",
         "content-type",
         "accept-language",
+        "x-book-import-token",
         "Access-Control-Allow-Origin",
       ],
       exposeHeaders: ["Content-Length"],

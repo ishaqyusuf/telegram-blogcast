@@ -41,7 +41,8 @@ High-level map of the API surface and where endpoint logic lives.
   graceful local-runner shutdown.
 
 ### Books Router Highlights
-- `book.syncBookFromShamela`: imports or re-imports a Shamela book URL, stores `BookImportHistory`, refreshes metadata, and syncs TOC chapter stubs.
+- `book.syncBookFromShamela`: legacy metadata/AI hierarchy import with BookImportHistory; no longer creates empty page stubs. Mobile page import uses the WebView page-first capture instead.
+- `bookChapter`: durable root capture, status/latest/bookState, retry/cancel, paginated hierarchy search, and fresh saved-page resolution. Trigger handles publication outside Vercel's request lifetime.
 - `book.getBookImportHistory`: returns recent book import attempts for the fetch screen/history UI.
 - `book.fetchPage`: imports or re-imports a single Shamela page, records `BookPageImportHistory`, refreshes paragraphs/footnotes, and remaps annotations against the new paragraph set.
 - `book.fetchNextPage`: fetches the next sequential Shamela page using the same preservation logic as `fetchPage`.

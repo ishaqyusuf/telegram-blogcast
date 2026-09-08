@@ -29,6 +29,8 @@ Summarizes where the database schema lives and which major data domains exist.
 - `runtime.schema.prisma`
 
 ### Working Notes
+- `BookChapterImport` is the durable chapter-capture outbox: bookId, optional returnPageId, unique (bookId,captureHash), retained raw HTML, status, generation, Trigger runId, counts/errors/timestamps, and nullable hashed installation ownership. No Trigger credentials are stored in rows. Production schema updates are additive.
+- `BookTocNode` remains the canonical hierarchy with parentId and optional existing pageId. The worker uses 500-row upserts, hashed source identity in legacy treePath, source page number, title, depth, and ordering. It writes no per-node URL or metadata JSON. Legacy columns remain compatible; no empty BookPage records are created.
 - Books, blogs, channels, media, transcripts, and interactions are first-class modeled domains.
 - Physical home-library cataloging is modeled separately from digital books with `LibraryItem`, `LibraryVolume`, `LibraryLocation`, and `LibraryLabel`.
 - `File` records are source-aware. Existing imported Telegram media uses `source = "telegram"` and Telegram file IDs; new compose uploads use `source = "vercel_blob"` with Blob URL, download URL, pathname, content type, ETag, and metadata fields.

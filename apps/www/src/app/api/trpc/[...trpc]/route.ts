@@ -2,6 +2,7 @@ import { app } from "@api/index";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 const handleRequest = async (request: Request) => {
   try {

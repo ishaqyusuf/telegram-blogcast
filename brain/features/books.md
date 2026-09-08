@@ -107,6 +107,7 @@ Tracks the current scope, architecture, and roadmap for the books experience acr
 - `getTokenUsage` tRPC query — admin visibility into AI costs
 
 ### Current Gaps And Future Work
+- Active mobile-only delivery: [Durable Mobile Book Import And Reader](../tasks/2026-09-08-durable-mobile-book-import.md). Trigger background chapter imports, lean node persistence, paginated chapter navigation, and WebView-backed adjacent-page fetching are in progress, not deployed. Web implementation was explicitly removed from scope on 2026-09-08.
 - Reading progress and last-page tracking
 - Bookmarks
 - Auto-fetch all pages in sequence
@@ -236,10 +237,18 @@ Tracks the current scope, architecture, and roadmap for the books experience acr
 13. Offline search
 
 ### Dev Notes
+- Scope is mobile-only. No new web import/reader was implemented. Shamela capture remains in the interactive mobile WebView; iframe/curl are not substitutes for that capture session.
+- Imported-book detail omits the full TOC and links to paginated chapter browsing. Detail page import and next-page actions use stored source links and fresh saved-page resolution, not the older server-fetch/auto-fetch-all path. Manual books retain their saved-page list.
+- Import controls use per-install SecureStore ownership tokens, not embedded server keys. A reinstall/new installation cannot manage another installation's existing import, but can view saved pages. Captures and retry generations are bounded. This does not replace the application's future account-auth hardening.
 - Raw Shamela HTML is persisted in `ShamelaRawPage`. Filesystem artifact dumps are local debug copies only: production/Vercel skips them, and local write failures never block database capture. This avoids `EROFS` errors from Vercel's read-only deployment directory.
 - Page-first Shamela capture: `Fetch Book Data` persists formatted page content without expanding or trusting the page sidebar. The browser retains the saved page destination, opens `/book/{shamelaId}` when TOC status is not complete, and exposes `Fetch Book Chapters`.
 - Chapter capture prefers `.betaka-index`, with `.s-nav` compatibility. Hidden populated lists are parsed directly; missing/empty lazy branches must load before capture succeeds. Missing indexes, branch timeouts, safety limits, foreign book links, and duplicate tree identities fail validation.
-- `captureShamelaChapters` saves TOC nodes and page stubs in one transaction, preserving existing page content, metadata, highlights, and comments. It marks the TOC complete only after a successful tree sync; retries reuse node identities and soft-delete obsolete nodes.
+- `bookChapter.capture` stores a durable `BookChapterImport` then dispatches only its ID/generation to Trigger. The old `captureShamelaChapters` procedure delegates to this queue. Capture acceptance is not chapter completion.
+- Trigger imports in 500-node batches inside one PostgreSQL transaction, resolves parent IDs, retires obsolete nodes, and marks both tree and import complete together. It links only existing pages and never creates page stubs or changes content/annotations. A recovery task retries unsent captures and reconciles terminal worker failures.
+- Node writes contain title, local book/page references, source page number, depth, ordering, and a hashed stable source identity in the legacy `treePath` column. Parent keys exist only in the transient join payload. URLs are derived from `Book.shamelaId` and node page number; metadata JSON/browser-current flags are not persisted. Legacy columns remain for compatibility.
+- The older AI TOC path no longer creates empty page records. Its partial hierarchy does not mark a source tree complete; root WebView capture remains authoritative.
+- Mobile chapter browsing paginates 40 siblings at a time with a virtualized list, drills into branches, searches the full tree by title/page number, and rechecks saved pages before opening a missing page in the WebView. Next/previous controls and RTL-aware swipes use the same resolution step for missing targets.
+- Reader/book detail show durable progress or root-capture recovery. Polling stops in the background; leaving does not cancel the job. Retry increments the generation of the retained capture; cancellation never deletes saved content.
 - On chapter errors, the saved page remains available through `View Saved Page`, with `Retry Chapters` on the root. Successful capture returns to the originally imported page reader. Existing books with complete TOCs skip chapter capture.
 - Deployment: on 2026-09-06, the production schema push added the existing schema's missing `Book.tocStatus`, `Book.tocCapturedAt`, and `BookPageParagraph.sourceMarks` fields. The inspected diff was additive only. The root Turbo command required a terminal UI, so the same production-targeted push script was run directly from `packages/db`. Further testing was stopped at the user's request.
 - `_trpc` and `_qc` are globally accessible via `src/components/static-trpc.tsx`.

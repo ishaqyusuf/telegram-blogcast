@@ -1,4 +1,5 @@
 import type { Context } from "hono";
+import { createHash } from "node:crypto";
 import { db, type Database } from "@acme/db";
 import { initTRPC } from "@trpc/server";
 import superjson from "superjson";
@@ -10,6 +11,7 @@ export type TRPCContext = {
   db: Database;
   userId?: number;
   requestHost?: string;
+  bookImportOwnerHash?: string;
   // guestId?: string;
   //   geo: ReturnType<typeof getGeoContext>;
   //   teamId?: string;
@@ -19,6 +21,7 @@ export const createTRPCContext = async (
   c: Context
 ): Promise<TRPCContext> => {
   const header = c.req.header();
+  const importToken = header["x-book-import-token"];
   // consoleLog("HEADERS>>>", header);
   // const auth = header["authorization"] ?? "";
   // const accessToken = auth?.split(" ")[1];
@@ -28,6 +31,8 @@ export const createTRPCContext = async (
   return {
     db,
     requestHost: c.req.header("host"),
+    bookImportOwnerHash: importToken && /^[a-f0-9]{64}$/.test(importToken)
+      ? createHash("sha256").update(importToken).digest("hex") : undefined,
     // userId: Number(userId),
     // guestId,
   };
