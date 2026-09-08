@@ -11,7 +11,7 @@ Tracks work that is actively being implemented or verified.
 ## Template
 
 ### [Durable Mobile Book Import And Reader](./2026-09-08-durable-mobile-book-import.md)
-- Status: Blocked
+- Status: In Progress
 
 ### Tracking Notes
 - Use `brain/tasks/roadmap.md` for broader themes.
