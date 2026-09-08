@@ -1,8 +1,5 @@
 # In Progress
 
-### [Book Android Emulator Acceptance](./2026-09-08-book-android-emulator-acceptance.md)
-- Status: In Progress
-
 ## Purpose
 Tracks work that is actively being implemented or verified.
 

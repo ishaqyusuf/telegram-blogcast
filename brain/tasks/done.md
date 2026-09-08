@@ -1,5 +1,8 @@
 # Done
 
+### [Book Android Emulator Acceptance](./2026-09-08-book-android-emulator-acceptance.md)
+- Status: Done; compact tree and repeated swipe/import acceptance published. Reader loading investigation remains separate.
+
 ### [Durable Mobile Book Import And Reader](./2026-09-08-durable-mobile-book-import.md)
 - Status: Done
 

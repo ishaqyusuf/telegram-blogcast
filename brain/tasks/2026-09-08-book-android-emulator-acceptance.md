@@ -1,7 +1,7 @@
 # Task: Book Android Emulator Acceptance
 
 ## Status
-In Progress
+Done
 
 ## Priority
 High
@@ -19,8 +19,8 @@ High
 User requested Android emulator testing after the durable mobile book release, then explicitly chose the installed Expo development build. Use current committed JavaScript and `/book/23833/106` against the deployed backend; do not touch the physical phone or substitute web implementation. Prior release: [Durable import](./2026-09-08-durable-mobile-book-import.md).
 
 ## Implementation Progress
-- Completion: 90%
-- Current Checklist: 10/10 - Emulator review and release
+- Completion: 100%
+- Current Checklist: Complete
 - Blockers: None
 
 ## Implementation Checklist
@@ -33,9 +33,10 @@ User requested Android emulator testing after the durable mobile book release, t
 - [x] Verify selected highlight colors survive page close/reopen, and test both saved-item lists on the emulator.
 - [x] Save screenshots, document actual results and limitations, and commit changes.
 - [x] Implement Option A inline tree, bottom search, and all-expanded initial state with regression tests.
-- [ ] Review and verify the redesigned screen, then publish the completed follow-up changes.
+- [x] Review and verify the redesigned screen, then publish the completed follow-up changes.
 
 ## Validation Evidence
+- Final acceptance/release: final bundle imported missing109, returned to its reader (printed86), swiped back to saved108 and retained the newly created purple highlight. Both consecutive capture cycles and saved reverse navigation verified. Long-press/selection-handle/vertical-scroll checks pass. 64 tests pass, 0 fail, 258 assertions across 13 files (including isolated PostgreSQL and SQLite). API643869ec and mobileb43b51d7 pushed. Android preview2026.09.08.02 published, runtime1.0.111, group452a06a1-f104-4dcc-9716-fa9d32e5821b, Android01a0819c-3039-792c-aa47-ba481d6626d5. https://expo.dev/accounts/ishaqyusuf/projects/alghurobaa/updates/452a06a1-f104-4dcc-9716-fa9d32e5821b . Sentry auto-upload disabled. No schema changes or production db push. Exact Preview binary/OTA install still unverified; current JS tested on installed development binary1.0.109. Intermittent reader loading remains explicitly tracked in ../plans/2026-09-08-book-reader-loading-investigation.md; this closes feature acceptance, not that performance issue.
 - Final bundle (no diagnostics, horizontal-dominance guard): long press selects text, handle drag extends selection without navigation, saves purple highlight on108, vertical swipe scrolls within108, next horizontal swipe opens missing109 WebView. Second capture/persistence confirmation pending. Main completed sequence108->107 proves saved reverse navigation. Release remaining.
 - Native gesture coordination fixes text-origin swipes: RNGH TextInput overlays plus simultaneous native scroll/pan, route-keyed detector, full touch-down displacement, selection-sequence suppression and final horizontal-dominance guard. Emulator completed 106 -> saved107 -> missing108 WebView -> Fetch Book Data -> reader172 (source108, printed85) -> swipe back to saved107. Final guard reviewed with no findings; 58 focused tests pass (223 assertions) plus 6 PostgreSQL tests (35 assertions). Temporary gesture logs removed; final-bundle second cycle/selection check in progress. Intermittent initial reader loading delays observed; standalone and combined API queries measured 2.6-3.6s from host, so a database bottleneck is not established.
 - Compact tree emulator review passes: all 2,405 rows expanded; Introduction collapse hides 34 descendants; reopening restores all; scroll renders deeper nested rows; bottom search remains above keyboard; 106 returns two matches plus two ancestors. Saved chapter opens reader106 with green/purple intact; unsaved page18 opens correct Shamela WebView (cancelled without import). Screenshots compact-tree-expanded/search-keyboard/scrolled/missing-chapter. Repeated swipe remains incomplete: whitespace swipe works, text-overlay swipes are intercepted by native selection; touch arbitration fix in progress. Six isolated PostgreSQL integration tests pass (35 assertions); test server stopped.
