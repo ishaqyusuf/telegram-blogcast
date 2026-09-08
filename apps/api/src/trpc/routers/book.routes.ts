@@ -4129,6 +4129,26 @@ export const bookRoutes = createTRPCRouter({
 
   // ── Highlights bulk sync ──────────────────────────────────────────────────────
 
+  getSavedPageSummaries: publicProcedure
+    .input(z.object({
+      bookId: z.number().int().positive(),
+      pageIds: z.array(z.number().int().positive()).max(100),
+    }))
+    .query(async ({ ctx, input }) => {
+      const pages = await ctx.db.bookPage.findMany({
+        where: { id: { in: input.pageIds }, bookId: input.bookId, deletedAt: null },
+        select: {
+          id: true, bookId: true, shamelaPageNo: true, printedPageNo: true,
+          paragraphs: { orderBy: { pid: "asc" }, take: 1, select: { text: true } },
+        },
+      });
+      return pages.map((page) => ({
+        pageId: page.id, bookId: page.bookId, sourcePageNo: page.shamelaPageNo,
+        pageNo: page.printedPageNo,
+        preview: (page.paragraphs[0]?.text ?? "").replace(/\s+/g, " ").trim().slice(0, 500),
+      }));
+    }),
+
   getHighlightsForBook: publicProcedure
     .input(z.object({ bookId: z.number() }))
     .query(async ({ ctx, input }) => {

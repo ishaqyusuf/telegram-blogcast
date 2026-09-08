@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import type { SavedPageSummary } from "@/lib/book-saved-items";
 
 export type DownloadedBookMeta = {
   bookId: number;
@@ -26,6 +27,8 @@ type BookOfflineState = {
 
   // Bookmarks: bookId → list of entries
   bookmarks: Record<number, BookmarkEntry[]>;
+  savedPageSummaries: Record<number, SavedPageSummary>;
+  cachePageSummaries: (pages: SavedPageSummary[]) => void;
 
   // ── Download actions ─────────────────────────────────────────────────────
   setDownloaded: (meta: DownloadedBookMeta) => void;
@@ -55,6 +58,13 @@ export const useBookOfflineStore = create<BookOfflineState>()(
       downloadProgress: {},
       readingProgress: {},
       bookmarks: {},
+      savedPageSummaries: {},
+      cachePageSummaries: (pages) => set((s) => ({
+        savedPageSummaries: {
+          ...s.savedPageSummaries,
+          ...Object.fromEntries(pages.map((page) => [page.pageId, page])),
+        },
+      })),
 
       // ── Download ────────────────────────────────────────────────────────────
       setDownloaded: (meta) =>
@@ -143,6 +153,7 @@ export const useBookOfflineStore = create<BookOfflineState>()(
         downloadedBooks: s.downloadedBooks,
         readingProgress: s.readingProgress,
         bookmarks: s.bookmarks,
+        savedPageSummaries: s.savedPageSummaries,
       }),
     }
   )

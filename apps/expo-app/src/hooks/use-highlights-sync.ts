@@ -3,6 +3,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { initLocalDb, localDb, withLocalDbRetry } from "@/db/local-db";
 import { localHighlights, type LocalHighlight } from "@/db/local-schema";
 import { vanillaTrpc } from "@/trpc/vanilla-client";
+import { highlightConflictUpdate } from "@/db/highlight-upsert";
 
 type Highlight = LocalHighlight;
 
@@ -16,28 +17,13 @@ function toDate(value: Date | number | string | null | undefined) {
   return new Date();
 }
 
-async function upsertLocalHighlight(row: LocalHighlight) {
+async function upsertLocalHighlight(row: LocalHighlight, fromServer = false) {
   await initLocalDb();
   await withLocalDbRetry(() =>
     localDb
       .insert(localHighlights)
       .values(row)
-      .onConflictDoUpdate({
-        target: localHighlights.localId,
-        set: {
-          serverId: row.serverId,
-          pageId: row.pageId,
-          paragraphId: row.paragraphId,
-          startOffset: row.startOffset,
-          endOffset: row.endOffset,
-          color: row.color,
-          note: row.note,
-          quoteText: row.quoteText,
-          updatedAt: row.updatedAt,
-          deletedAt: row.deletedAt,
-          syncStatus: row.syncStatus,
-        },
-      }),
+      .onConflictDoUpdate(highlightConflictUpdate(row, fromServer)),
   );
 }
 
@@ -62,6 +48,7 @@ export function useHighlightsSync(bookId: number, pageId: number) {
   }, [bookId, pageId]);
 
   useEffect(() => {
+    void load().catch((error) => console.warn("[Highlights] local load failed", error));
     pullServerHighlights(bookId)
       .catch((error) => console.warn("[Highlights] pull failed", error))
       .then(load)
@@ -161,7 +148,7 @@ export async function pullServerHighlights(bookId: number) {
       updatedAt: toDate(row.updatedAt ?? row.createdAt ?? now),
       deletedAt: null,
       syncStatus: "synced",
-    });
+    }, true);
   }
 }
 

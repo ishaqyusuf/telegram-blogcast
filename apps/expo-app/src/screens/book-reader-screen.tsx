@@ -23,6 +23,8 @@ import { _trpc } from "@/components/static-trpc";
 import { Modal, useModal } from "@/components/ui/modal";
 import { SafeArea } from "@/components/safe-area";
 import { BookChapterImportStatus } from "@/components/book/book-chapter-import-status";
+import { BookReaderMenu } from "@/components/book/book-reader-menu";
+import { savedTextPreview } from "@/lib/book-saved-items";
 import { Icon } from "@/components/ui/icon";
 import { BookPageView } from "@/components/book/book-page-view";
 import { BookEditorFooter } from "@/components/book/book-editor-footer";
@@ -254,6 +256,17 @@ export default function BookReaderScreen() {
   useEffect(() => {
     setLastPage(bookIdNum, pageIdNum);
   }, [bookIdNum, pageIdNum]);
+
+  useEffect(() => {
+    if (!page) return;
+    useBookOfflineStore.getState().cachePageSummaries([{
+      pageId: page.id,
+      bookId: bookIdNum,
+      sourcePageNo: page.shamelaPageNo,
+      pageNo: page.printedPageNo ?? null,
+      preview: savedTextPreview(page.paragraphs[0]?.text),
+    }]);
+  }, [page, bookIdNum]);
 
   useEffect(() => {
     const data = (initialReaderWindow as any)?.data;
@@ -810,16 +823,6 @@ export default function BookReaderScreen() {
             />
           </Pressable>
 
-          <Pressable
-            onPress={() => {
-              setHighlightedMarker(null);
-              footnotesRef.current?.present();
-            }}
-            className="size-[34px] items-center justify-center rounded-full bg-card"
-          >
-            <Icon name="BookMarked" size={18} className="text-foreground" />
-          </Pressable>
-
           {canEditPage && (
             <Pressable
               onPress={() => {
@@ -838,6 +841,10 @@ export default function BookReaderScreen() {
               />
             </Pressable>
           )}
+          <BookReaderMenu bookId={bookIdNum} onFootnotes={() => {
+            setHighlightedMarker(null);
+            footnotesRef.current?.present();
+          }} />
         </View>
 
         {/* Content + keyboard */}
@@ -1172,6 +1179,7 @@ export default function BookReaderScreen() {
                   {HIGHLIGHT_COLORS.map((color) => (
                     <Pressable
                       key={color}
+                      accessibilityLabel={`Highlight color ${color}`}
                       disabled={!hasSelectedText}
                       onPress={() => {
                         setSelectedHighlightColor(color);
