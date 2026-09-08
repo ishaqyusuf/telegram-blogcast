@@ -23,14 +23,14 @@ Latest scope: mobile only. Do not implement web capture or a web reader. Give we
 Save the requested page first, capture chapters separately from the book root, queue durable atomic import, retain annotations and metadata, support retries and saved-page navigation. Reader must support searchable/paginated chapters, chapter-tap existing-page lookup or WebView import, and next/previous fetching with mobile swipes. Source verification target is `/book/23833/106`, chapters `/book/23833`. Finish implementation and release, then leave physical-device testing to the user. User requested pausing the goal at that boundary; the agent cannot change goal pause state and must not claim it did.
 
 ## Implementation Progress
-- Completion: 85%
+- Completion: 77%
 - Current Checklist: 12/13 - Release production worker, API, and mobile preview
 - Blockers: Deployment safety review requires explicit approval to store the production POSTGRES_URL in the Alghurobaa Trigger project. Do not bypass the rejected environment-sync deployment. Source-map upload remains excluded.
 
 ## Implementation Checklist
 - [x] Inspect current code and Halaalvest/EwaTrade Trigger patterns.
 - [x] Create Alghurobaa Podcast Trigger project and store ignored local dev/prod credentials.
-- [x] Complete and verify Vercel and worker deployment environments.
+- [ ] Complete and verify Vercel and worker deployment environments.
 - [x] Implement durable capture, atomic batched worker, retries, idempotency, and failure/cancel recovery.
 - [x] Finish lean chapter storage and derived links without creating empty page stubs.
 - [x] Wire page-first mobile capture to background chapter import and resumable progress.
@@ -43,6 +43,7 @@ Save the requested page first, capture chapters separately from the book root, q
 - [ ] Verify release state and provide the mobile testing handoff, recording remaining device checks honestly.
 
 ## Validation Evidence
+- Release audit correction: worker environment verification is not complete while the production database secret transfer is blocked. Ten of thirteen checklist items are complete (77%), not eleven. Both local commits are present and the checkout was clean on revalidation. No new user approval or running deployment handle is available.
 - Final relevant suites: 35/35 unit/API/parser/capture/navigation tests and 5/5 PostgreSQL integration tests passed (40 total). AST verification found zero style/className combinations across the four changed mobile book screens. Git diff check passed. Temporary PostgreSQL was stopped after validation.
 - Full API typecheck still reports the three pre-existing album/blog/query-response errors. Mobile and jobs checks also retain existing project errors; no errors identify the changed production book/import files. New jobs test import.meta/CommonJS errors were fixed before the final run.
 - Implementation committed locally on main as `bedcafc9` (`feat(books): add durable mobile chapter imports and paginated navigation`). Push/API rollout and EAS publication are intentionally held until the Trigger worker can be deployed with its required database environment; this avoids publishing a mobile flow whose worker is unavailable.
