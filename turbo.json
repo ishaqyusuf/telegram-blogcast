@@ -3,6 +3,9 @@
   "globalDependencies": ["**/.env"],
   "ui": "tui",
   "tasks": {
+    "@acme/db#build": {
+      "cache": false
+    },
     "topo": {
       "dependsOn": ["^topo"]
     },
