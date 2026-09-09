@@ -81,7 +81,7 @@ for (const mode of ["missing", "timeout", "limit"] as const) {
 	});
 }
 
-for (const name of ["book-fetch-browser-screen", "book-chapters-screen"]) {
+for (const name of ["book-fetch-browser-screen", "book-chapters-screen", "book-reader-screen", "book-saved-items-screen", "book-storage-screen", "book-detail-screen", "book-fetch-screen", "books-screen"]) {
 	test(`${name} never combines style and className`, () => {
 		const file = ts.createSourceFile(
 			"capture.tsx",

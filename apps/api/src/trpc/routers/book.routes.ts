@@ -5,6 +5,7 @@ import path from "node:path";
 import { z } from "zod";
 import { createTRPCRouter, publicProcedure } from "../init";
 import { bookChapterRoutes } from "./book-chapter.routes";
+import { readBookPageRecord } from "./book-page-reader";
 import {
   createBookDocumentFromParagraphs,
   createDocumentFromHtml,
@@ -1798,12 +1799,7 @@ async function saveParsedPageData(
       bookId: input.bookId,
       shamelaPageNo: resolvedShamelaPageNo,
     },
-    include: {
-      paragraphs: {
-        select: { id: true, pid: true, text: true },
-        orderBy: { pid: "asc" },
-      },
-    },
+    select: { id: true },
   });
 
   const history = await createBookPageImportHistory(db, {
@@ -1816,150 +1812,165 @@ async function saveParsedPageData(
   });
 
   try {
-    const page = await db.bookPage.upsert({
-      where: {
-        bookId_shamelaPageNo: {
+    return await db.$transaction(async (db: any) => {
+      // Include missing pages in the lock so concurrent first imports also serialize.
+      await db.$queryRaw`SELECT pg_advisory_xact_lock(${input.bookId}::integer, ${resolvedShamelaPageNo}::integer)::text`;
+      const existingPage = await db.bookPage.findFirst({
+        where: { bookId: input.bookId, shamelaPageNo: resolvedShamelaPageNo },
+        include: { paragraphs: { select: { id: true, pid: true, text: true }, orderBy: { pid: "asc" } } },
+      });
+      // Reimports replace the document but must advance the same version used by
+      // editor conflict checks and offline cache ordering.
+      const importedContent = {
+        ...pageData,
+        contentVersion: getStoredContentMeta(existingPage?.rawJson).contentVersion + 1,
+        contentUpdatedAt: new Date().toISOString(),
+      };
+      const page = await db.bookPage.upsert({
+        where: {
+          bookId_shamelaPageNo: {
+            bookId: input.bookId,
+            shamelaPageNo: resolvedShamelaPageNo,
+          },
+        },
+        create: {
           bookId: input.bookId,
+          volumeId: input.volumeId ?? null,
           shamelaPageNo: resolvedShamelaPageNo,
+          shamelaUrl: sourceStoragePath,
+          printedPageNo: pageData.printedPageNo ?? null,
+          chapterTitle: pageData.chapterTitle ?? null,
+          chapterUrl: pageData.chapterUrl ?? null,
+          topicTitle: pageData.topicTitle ?? null,
+          topicUrl: pageData.topicUrl ?? null,
+          previousShamelaPageNo: pageData.previousShamelaPageNo ?? null,
+          previousShamelaUrl,
+          nextShamelaPageNo: pageData.nextShamelaPageNo ?? null,
+          nextShamelaUrl,
+          rawJson: importedContent,
+          status: "fetched",
         },
-      },
-      create: {
-        bookId: input.bookId,
-        volumeId: input.volumeId ?? null,
-        shamelaPageNo: resolvedShamelaPageNo,
-        shamelaUrl: sourceStoragePath,
-        printedPageNo: pageData.printedPageNo ?? null,
-        chapterTitle: pageData.chapterTitle ?? null,
-        chapterUrl: pageData.chapterUrl ?? null,
-        topicTitle: pageData.topicTitle ?? null,
-        topicUrl: pageData.topicUrl ?? null,
-        previousShamelaPageNo: pageData.previousShamelaPageNo ?? null,
-        previousShamelaUrl,
-        nextShamelaPageNo: pageData.nextShamelaPageNo ?? null,
-        nextShamelaUrl,
-        rawJson: pageData,
-        status: "fetched",
-      },
-      update: {
-        volumeId: input.volumeId ?? undefined,
-        shamelaUrl: sourceStoragePath || (existingPage?.shamelaUrl ?? ""),
-        printedPageNo: pageData.printedPageNo ?? null,
-        chapterTitle: pageData.chapterTitle ?? null,
-        chapterUrl: pageData.chapterUrl ?? null,
-        topicTitle: pageData.topicTitle ?? null,
-        topicUrl: pageData.topicUrl ?? null,
-        previousShamelaPageNo: pageData.previousShamelaPageNo ?? null,
-        previousShamelaUrl,
-        nextShamelaPageNo: pageData.nextShamelaPageNo ?? null,
-        nextShamelaUrl,
-        rawJson: pageData,
-        status: "fetched",
-        deletedAt: null,
-      },
-      include: {
-        paragraphs: {
-          select: { id: true, pid: true, text: true },
-          orderBy: { pid: "asc" },
+        update: {
+          volumeId: input.volumeId ?? undefined,
+          shamelaUrl: sourceStoragePath || (existingPage?.shamelaUrl ?? ""),
+          printedPageNo: pageData.printedPageNo ?? null,
+          chapterTitle: pageData.chapterTitle ?? null,
+          chapterUrl: pageData.chapterUrl ?? null,
+          topicTitle: pageData.topicTitle ?? null,
+          topicUrl: pageData.topicUrl ?? null,
+          previousShamelaPageNo: pageData.previousShamelaPageNo ?? null,
+          previousShamelaUrl,
+          nextShamelaPageNo: pageData.nextShamelaPageNo ?? null,
+          nextShamelaUrl,
+          rawJson: importedContent,
+          status: "fetched",
+          deletedAt: null,
         },
-      },
-    });
-
-    const previousParagraphs = existingPage?.paragraphs ?? [];
-
-    await db.bookPageParagraph.deleteMany({ where: { pageId: page.id } });
-    if ((pageData.paragraphs ?? []).length > 0) {
-      await db.bookPageParagraph.createMany({
-        data: (pageData.paragraphs ?? []).map((paragraph) => ({
-          pageId: page.id,
-          pid: paragraph.pid!,
-          text: paragraph.text!,
-          footnoteIds: paragraph.footnoteIds ?? null,
-          sourceMarks: paragraph.sourceMarks ?? [],
-        })),
+        include: {
+          paragraphs: {
+            select: { id: true, pid: true, text: true },
+            orderBy: { pid: "asc" },
+          },
+        },
       });
-    }
 
-    await db.bookPageFootnote.deleteMany({ where: { pageId: page.id } });
-    if ((pageData.footnotes ?? []).length > 0) {
-      await db.bookPageFootnote.createMany({
-        data: (pageData.footnotes ?? []).map((footnote) => ({
-          pageId: page.id,
-          marker: footnote.marker!,
-          type: footnote.type ?? null,
-          content: footnote.content!,
-          linkedParagraphs: footnote.linkedParagraphs ?? null,
-        })),
+      const previousParagraphs = existingPage?.paragraphs ?? [];
+
+      await db.bookPageParagraph.deleteMany({ where: { pageId: page.id } });
+      if ((pageData.paragraphs ?? []).length > 0) {
+        await db.bookPageParagraph.createMany({
+          data: (pageData.paragraphs ?? []).map((paragraph) => ({
+            pageId: page.id,
+            pid: paragraph.pid!,
+            text: paragraph.text!,
+            footnoteIds: paragraph.footnoteIds ?? null,
+            sourceMarks: paragraph.sourceMarks ?? [],
+          })),
+        });
+      }
+
+      await db.bookPageFootnote.deleteMany({ where: { pageId: page.id } });
+      if ((pageData.footnotes ?? []).length > 0) {
+        await db.bookPageFootnote.createMany({
+          data: (pageData.footnotes ?? []).map((footnote) => ({
+            pageId: page.id,
+            marker: footnote.marker!,
+            type: footnote.type ?? null,
+            content: footnote.content!,
+            linkedParagraphs: footnote.linkedParagraphs ?? null,
+          })),
+        });
+      }
+
+      const nextParagraphs = await db.bookPageParagraph.findMany({
+        where: { pageId: page.id },
+        select: { id: true, pid: true, text: true },
+        orderBy: { pid: "asc" },
       });
-    }
 
-    const nextParagraphs = await db.bookPageParagraph.findMany({
-      where: { pageId: page.id },
-      select: { id: true, pid: true, text: true },
-      orderBy: { pid: "asc" },
-    });
+      await rebindPageAnnotations(
+        db,
+        page.id,
+        previousParagraphs,
+        nextParagraphs,
+      );
 
-    await rebindPageAnnotations(
-      db,
-      page.id,
-      previousParagraphs,
-      nextParagraphs,
-    );
+      await db.bookTocNode.updateMany({
+        where: { bookId: input.bookId, shamelaPageNo: resolvedShamelaPageNo, deletedAt: null },
+        data: { pageId: page.id },
+      });
 
-    await db.bookTocNode.updateMany({
-      where: { bookId: input.bookId, shamelaPageNo: resolvedShamelaPageNo, deletedAt: null },
-      data: { pageId: page.id },
-    });
+      await db.book.update({
+        where: { id: input.bookId },
+        data: {
+          contentHash: `${input.bookId}-${Date.now()}`,
+          pagesUpdatedAt: new Date(),
+          ...(pageData.firstShamelaPageNo || firstShamelaUrl
+            ? {
+                firstShamelaPageNo: pageData.firstShamelaPageNo ?? null,
+                firstShamelaUrl,
+              }
+            : {}),
+          ...(pageData.lastShamelaPageNo || lastShamelaUrl
+            ? {
+                lastShamelaPageNo: pageData.lastShamelaPageNo ?? null,
+                lastShamelaUrl,
+              }
+            : {}),
+          ...(shamelaBookUrl
+            ? {
+                sourceType: "shamela",
+                editable: false,
+                shamelaUrl:
+                  getShamelaBookStoragePath(shamelaBookUrl) ?? shamelaBookUrl,
+              }
+            : {}),
+        },
+      });
 
-    await db.book.update({
-      where: { id: input.bookId },
-      data: {
-        contentHash: `${input.bookId}-${Date.now()}`,
-        pagesUpdatedAt: new Date(),
-        ...(pageData.firstShamelaPageNo || firstShamelaUrl
-          ? {
-              firstShamelaPageNo: pageData.firstShamelaPageNo ?? null,
-              firstShamelaUrl,
-            }
-          : {}),
-        ...(pageData.lastShamelaPageNo || lastShamelaUrl
-          ? {
-              lastShamelaPageNo: pageData.lastShamelaPageNo ?? null,
-              lastShamelaUrl,
-            }
-          : {}),
-        ...(shamelaBookUrl
-          ? {
-              sourceType: "shamela",
-              editable: false,
-              shamelaUrl:
-                getShamelaBookStoragePath(shamelaBookUrl) ?? shamelaBookUrl,
-            }
-          : {}),
-      },
-    });
+      const diffSummaryJson = {
+        previousParagraphCount: previousParagraphs.length,
+        nextParagraphCount: nextParagraphs.length,
+        preservedPageId: existingPage?.id === page.id,
+        remappedByPidCount: nextParagraphs.filter((paragraph) =>
+          previousParagraphs.some((previous) => previous.pid === paragraph.pid),
+        ).length,
+      };
 
-    const diffSummaryJson = {
-      previousParagraphCount: previousParagraphs.length,
-      nextParagraphCount: nextParagraphs.length,
-      preservedPageId: existingPage?.id === page.id,
-      remappedByPidCount: nextParagraphs.filter((paragraph) =>
-        previousParagraphs.some((previous) => previous.pid === paragraph.pid),
-      ).length,
-    };
+      await completeBookPageImportHistory(db, history.id, {
+        status: "success",
+        pageId: page.id,
+        shamelaPageNo: page.shamelaPageNo,
+        printedPageNo: page.printedPageNo,
+        paragraphCount: nextParagraphs.length,
+        footnoteCount: (pageData.footnotes ?? []).length,
+        chapterTitle: page.chapterTitle,
+        topicTitle: page.topicTitle,
+        diffSummaryJson,
+      });
 
-    await completeBookPageImportHistory(db, history.id, {
-      status: "success",
-      pageId: page.id,
-      shamelaPageNo: page.shamelaPageNo,
-      printedPageNo: page.printedPageNo,
-      paragraphCount: nextParagraphs.length,
-      footnoteCount: (pageData.footnotes ?? []).length,
-      chapterTitle: page.chapterTitle,
-      topicTitle: page.topicTitle,
-      diffSummaryJson,
-    });
-
-    return { page, historyId: history.id, diffSummaryJson };
+      return { page, historyId: history.id, diffSummaryJson };
+    }, { maxWait: 5000, timeout: 20000 });
   } catch (error) {
     await completeBookPageImportHistory(db, history.id, {
       status: "failed",
@@ -3065,99 +3076,7 @@ export const bookRoutes = createTRPCRouter({
 
   getPage: publicProcedure
     .input(z.object({ pageId: z.number() }))
-    .query(async ({ ctx, input }) => {
-      const page = await ctx.db.bookPage.findFirstOrThrow({
-        where: { id: input.pageId, deletedAt: null },
-        include: {
-          paragraphs: { orderBy: { pid: "asc" } },
-          footnotes: { orderBy: { marker: "asc" } },
-          highlights: { orderBy: { startOffset: "asc" } },
-          audioReferences: {
-            where: { deletedAt: null },
-            include: {
-              media: {
-                select: {
-                  id: true,
-                  title: true,
-                  file: {
-                    select: { id: true, fileName: true, duration: true },
-                  },
-                  album: { select: { id: true, name: true } },
-                  blog: { select: { id: true, content: true } },
-                },
-              },
-            },
-          },
-          comments: {
-            where: { deletedAt: null },
-            orderBy: { createdAt: "asc" },
-          },
-          volume: { select: { id: true, number: true, title: true } },
-          book: {
-            select: {
-              id: true,
-              sourceType: true,
-              editable: true,
-              ownerUserId: true,
-              shamelaId: true,
-              shamelaUrl: true,
-            },
-          },
-        },
-      });
-      const previousPageNo =
-        page.previousShamelaPageNo ??
-        (page.previousShamelaUrl
-          ? getShamelaPageNoFromUrl(page.previousShamelaUrl)
-          : null);
-      const nextPageNo =
-        page.nextShamelaPageNo ??
-        (page.nextShamelaUrl
-          ? getShamelaPageNoFromUrl(page.nextShamelaUrl)
-          : null);
-      const previousUrl = page.previousShamelaUrl ?? null;
-      const nextUrl = page.nextShamelaUrl ?? null;
-      const adjacentRows = await ctx.db.bookPage.findMany({
-        where: {
-          bookId: page.bookId,
-          shamelaPageNo: {
-            in: [previousPageNo, nextPageNo].filter(
-              (value): value is number => typeof value === "number",
-            ),
-          },
-          deletedAt: null,
-        },
-        select: {
-          id: true,
-          shamelaPageNo: true,
-          shamelaUrl: true,
-          status: true,
-        },
-      });
-      const adjacentByPageNo = new Map(
-        adjacentRows.map((row) => [row.shamelaPageNo, row]),
-      );
-
-      return {
-        ...page,
-        adjacentPages: {
-          previous: {
-            shamelaPageNo: previousPageNo,
-            shamelaUrl: previousUrl,
-            page: previousPageNo
-              ? (adjacentByPageNo.get(previousPageNo) ?? null)
-              : null,
-          },
-          next: {
-            shamelaPageNo: nextPageNo,
-            shamelaUrl: nextUrl,
-            page: nextPageNo
-              ? (adjacentByPageNo.get(nextPageNo) ?? null)
-              : null,
-          },
-        },
-      };
-    }),
+    .query(({ ctx, input }) => readBookPageRecord(ctx.db, input.pageId, getShamelaPageNoFromUrl)),
 
   getReaderWindow: publicProcedure
     .input(readerWindowInput)
@@ -3367,82 +3286,89 @@ export const bookRoutes = createTRPCRouter({
         input.pageId,
         getCurrentBookUserId(ctx),
       );
-      const page = await ctx.db.bookPage.findFirstOrThrow({
+      const identity = await ctx.db.bookPage.findFirstOrThrow({
         where: { id: input.pageId, deletedAt: null },
-        select: {
-          id: true,
-          rawJson: true,
-          paragraphs: {
-            select: { id: true, text: true },
-            orderBy: { pid: "asc" },
+        select: { bookId: true, shamelaPageNo: true },
+      });
+      return ctx.db.$transaction(async (db) => {
+        await db.$queryRaw`SELECT pg_advisory_xact_lock(${identity.bookId}::integer, ${identity.shamelaPageNo}::integer)::text`;
+        const page = await db.bookPage.findFirstOrThrow({
+          where: { id: input.pageId, deletedAt: null },
+          select: {
+            id: true,
+            rawJson: true,
+            paragraphs: {
+              select: { id: true, text: true },
+              orderBy: { pid: "asc" },
+            },
           },
-        },
-      });
-      const current = buildPageDocument(page);
-      const currentVersion = current.contentVersion ?? 0;
-
-      if (input.baseVersion != null && input.baseVersion !== currentVersion) {
-        throw new TRPCError({
-          code: "CONFLICT",
-          message: "Page content changed since this draft was opened.",
         });
-      }
+        const current = buildPageDocument(page);
+        const currentVersion = current.contentVersion ?? 0;
 
-      const document = input.contentHtml
-        ? createDocumentFromHtml(input.contentHtml)
-        : (input.document as Parameters<typeof getDocumentPlainText>[0]);
-      const contentHtml =
-        input.contentHtml ?? serializeDocumentToHtml(document);
-      const plainText = input.plainText ?? getDocumentPlainText(document);
-      const nextVersion = currentVersion + 1;
-      const contentUpdatedAt = new Date().toISOString();
-      const baseRawJson = isRecord(page.rawJson) ? page.rawJson : {};
-      const paragraphs = plainText
-        .split(/\n\s*\n|\r\n\s*\r\n/g)
-        .map((paragraph) => safeString(paragraph) ?? "")
-        .filter(Boolean)
-        .map((text, index) => ({
-          pid: index + 1,
-          text,
-          footnoteIds: null as string | null,
-        }));
+        if (input.baseVersion != null && input.baseVersion !== currentVersion) {
+          throw new TRPCError({
+            code: "CONFLICT",
+            message: "Page content changed since this draft was opened.",
+          });
+        }
 
-      await ctx.db.bookPage.update({
-        where: { id: input.pageId },
-        data: {
-          rawJson: {
-            ...baseRawJson,
-            contentDocument: document,
-            contentHtml,
-            contentPlainText: plainText,
-            contentVersion: nextVersion,
-            contentUpdatedAt,
+        const document = input.contentHtml
+          ? createDocumentFromHtml(input.contentHtml)
+          : (input.document as Parameters<typeof getDocumentPlainText>[0]);
+        const contentHtml =
+          input.contentHtml ?? serializeDocumentToHtml(document);
+        const plainText = input.plainText ?? getDocumentPlainText(document);
+        const nextVersion = currentVersion + 1;
+        const contentUpdatedAt = new Date().toISOString();
+        const baseRawJson = isRecord(page.rawJson) ? page.rawJson : {};
+        const paragraphs = plainText
+          .split(/\n\s*\n|\r\n\s*\r\n/g)
+          .map((paragraph) => safeString(paragraph) ?? "")
+          .filter(Boolean)
+          .map((text, index) => ({
+            pid: index + 1,
+            text,
+            footnoteIds: null as string | null,
+          }));
+
+        await db.bookPage.update({
+          where: { id: input.pageId },
+          data: {
+            rawJson: {
+              ...baseRawJson,
+              contentDocument: document,
+              contentHtml,
+              contentPlainText: plainText,
+              contentVersion: nextVersion,
+              contentUpdatedAt,
+            },
           },
-        },
-      });
-
-      await ctx.db.bookPageParagraph.deleteMany({
-        where: { pageId: input.pageId },
-      });
-      if (paragraphs.length > 0) {
-        await ctx.db.bookPageParagraph.createMany({
-          data: paragraphs.map((paragraph) => ({
-            pageId: input.pageId,
-            pid: paragraph.pid,
-            text: paragraph.text,
-            footnoteIds: paragraph.footnoteIds,
-          })),
         });
-      }
 
-      return {
-        pageId: input.pageId,
-        document,
-        contentHtml,
-        plainText,
-        contentVersion: nextVersion,
-        contentUpdatedAt,
-      };
+        await db.bookPageParagraph.deleteMany({
+          where: { pageId: input.pageId },
+        });
+        if (paragraphs.length > 0) {
+          await db.bookPageParagraph.createMany({
+            data: paragraphs.map((paragraph) => ({
+              pageId: input.pageId,
+              pid: paragraph.pid,
+              text: paragraph.text,
+              footnoteIds: paragraph.footnoteIds,
+            })),
+          });
+        }
+
+        return {
+          pageId: input.pageId,
+          document,
+          contentHtml,
+          plainText,
+          contentVersion: nextVersion,
+          contentUpdatedAt,
+        };
+      }, { maxWait: 5000, timeout: 20000 });
     }),
 
   getBookImportHistory: publicProcedure
@@ -3889,6 +3815,31 @@ export const bookRoutes = createTRPCRouter({
     }),
 
   // ── Bulk download ─────────────────────────────────────────────────────────────
+
+  getBookDownloadManifest: publicProcedure
+    .input(z.object({ bookId: z.number().int().positive() }))
+    .query(({ ctx, input }) => ctx.db.$transaction(async (db) => {
+      const book = await db.book.findFirstOrThrow({
+        where: { id: input.bookId, deletedAt: null },
+        select: { id: true, nameAr: true, nameEn: true, shamelaId: true, contentHash: true, pagesUpdatedAt: true },
+      });
+      const pages = await db.bookPage.aggregate({
+        where: { bookId: input.bookId, deletedAt: null, status: "fetched" },
+        _count: { id: true }, _max: { id: true, updatedAt: true },
+      });
+      return {
+        bookId: book.id, nameAr: book.nameAr, nameEn: book.nameEn, sourceBookId: book.shamelaId,
+        maxPageId: pages._max.id ?? 0, totalPages: pages._count.id,
+        revision: JSON.stringify([book.contentHash, book.pagesUpdatedAt, pages._count.id, pages._max.id, pages._max.updatedAt]),
+      };
+    }, { isolationLevel: "RepeatableRead" })),
+
+  getBookDownloadPageIds: publicProcedure
+    .input(z.object({ bookId: z.number().int().positive(), afterId: z.number().int().nonnegative(), maxPageId: z.number().int().nonnegative(), limit: z.number().int().min(1).max(50).default(20) }))
+    .query(({ ctx, input }) => ctx.db.bookPage.findMany({
+      where: { bookId: input.bookId, deletedAt: null, status: "fetched", id: { gt: input.afterId, lte: input.maxPageId }, book: { deletedAt: null } },
+      select: { id: true }, orderBy: { id: "asc" }, take: input.limit,
+    })),
 
   getBookForDownload: publicProcedure
     .input(z.object({ bookId: z.number() }))

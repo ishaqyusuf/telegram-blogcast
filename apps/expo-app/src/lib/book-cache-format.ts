@@ -46,7 +46,7 @@ const pageSchema = z.strictObject({
 	previousSourcePageNo: id.nullable(),
 	nextSourcePageNo: id.nullable(),
 	paragraphs: z.array(paragraphSchema),
-	footnotes: z.array(z.strictObject({ id, marker: z.string(), content: z.string(), type: nullableText })),
+	footnotes: z.array(z.strictObject({ id, marker: z.string(), content: z.string(), type: nullableText, linkedParagraphs: nullableText.optional(), items: z.json().optional() })),
 	document: documentSchema.nullable(),
 	contentHtml: nullableText,
 }).superRefine((page, context) => {

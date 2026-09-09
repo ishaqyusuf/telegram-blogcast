@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { TRPCError } from "@trpc/server";
+import { canExportBookContent } from "./book-content-policy";
 import { z } from "zod";
 import { MAX_CHAPTER_HTML_BYTES } from "@acme/jobs/book-chapter-import";
 import { dispatchChapterImport } from "@acme/jobs/dispatch-chapter-import";
@@ -32,9 +33,13 @@ const importProcedure = publicProcedure.use(({ ctx, next }) => {
 export const bookChapterRoutes = createTRPCRouter({
 	tree: publicProcedure
 		.input(z.object({ bookId: z.number().int().positive() }))
-		.query(async ({ ctx, input }) => {
+		.query(async ({ ctx, input }) => ctx.db.$transaction(async (db) => {
+			const book = await db.book.findFirstOrThrow({
+				where: { id: input.bookId, deletedAt: null },
+				select: { id: true, shamelaId: true, tocStatus: true, sourceType: true, editable: true, blog: { select: { published: true } } },
+			});
 			// One lean snapshot lets the client expand every branch without N+1 requests.
-			const rows = await ctx.db.bookTocNode.findMany({
+			const rows = await db.bookTocNode.findMany({
 				where: {
 					bookId: input.bookId,
 					deletedAt: null,
@@ -47,14 +52,22 @@ export const bookChapterRoutes = createTRPCRouter({
 					sortOrder: true,
 					shamelaPageNo: true,
 				},
+				orderBy: { id: "asc" },
 			});
+			const items = rows.map(({ shamelaPageNo, ...node }) => ({ ...node, sourcePageNo: shamelaPageNo }));
 			return {
-				items: rows.map(({ shamelaPageNo, ...node }) => ({
-					...node,
-					sourcePageNo: shamelaPageNo,
-				})),
+				items,
+				cache: {
+					formatVersion: 1 as const,
+					bookId: book.id,
+					sourceBookId: book.shamelaId,
+					complete: book.tocStatus === "complete",
+					nodeCount: items.length,
+					revision: createHash("sha256").update(JSON.stringify(items)).digest("hex"),
+					exportable: canExportBookContent(book),
+				},
 			};
-		}),
+		}, { isolationLevel: "RepeatableRead", maxWait: 5_000, timeout: 10_000 })),
 	list: publicProcedure
 		.input(
 			z.object({

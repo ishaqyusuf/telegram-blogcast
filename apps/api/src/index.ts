@@ -5,6 +5,7 @@ import { cors } from "hono/cors";
 import { trpcServer } from "@hono/trpc-server";
 import { appRouter } from "./trpc/routers/_app";
 import { createTRPCContext } from "./trpc/init";
+import { trpcErrorLogDetails } from "./trpc/error-log";
 import { consoleLog } from "@acme/utils";
 import {
   claimNextTranscriptionJob,
@@ -87,9 +88,7 @@ app.use("/api/trpc/*", async (c) => {
       const { url, headers } = req;
       const msg = {
         path,
-        input,
-        errorMessage: [error.message, error.code, error.name, error.stack],
-        url,
+        ...trpcErrorLogDetails({ path, input, error, url }),
         headers: serializeHeaders(headers),
         port: process.env.PORT,
       };

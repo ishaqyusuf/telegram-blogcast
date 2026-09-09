@@ -81,6 +81,7 @@ android
 ios
 
 # Local service runtime output
+apps/api/shamela-raw/
 services/facebook-media-bridge/cache/
 services/transcriber/cache/*
 !services/transcriber/cache/audio/

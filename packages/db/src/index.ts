@@ -7,6 +7,7 @@
 
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient, Prisma } from "@prisma/client";
+import { databaseLogDetails, privateDatabaseLogs } from "./logging.js";
 // import { Pool } from "pg";
 
 export { Prisma, PrismaClient };
@@ -67,24 +68,20 @@ const prismaClientSingleton = () => {
     );
   }
 
-  const clientOptions: Prisma.PrismaClientOptions = {
-    log:
-      process.env.NODE_ENV === "development"
-        ? [
-            // "query",
-            "error",
-            "warn",
-          ]
-        : ["error"],
+  const clientOptions = {
+    log: privateDatabaseLogs,
     adapter: new PrismaPg(
       { connectionString },
       process.env.POSTGRES_SCHEMA?.trim()
         ? { schema: process.env.POSTGRES_SCHEMA.trim() }
         : undefined,
     ),
-  };
+  } satisfies Prisma.PrismaClientOptions;
 
-  return new PrismaClient(clientOptions);
+  const client = new PrismaClient(clientOptions);
+  client.$on("error", () => console.error(databaseLogDetails("error")));
+  client.$on("warn", () => console.warn(databaseLogDetails("warn")));
+  return client;
 };
 
 type PrismaClientSingleton = ReturnType<typeof prismaClientSingleton>;

@@ -1,17 +1,20 @@
 import { useCallback, useState } from "react";
 import { ActivityIndicator, FlatList, Text, View } from "react-native";
+import { useNetInfo } from "@react-native-community/netinfo";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
-import { and, eq, isNull } from "drizzle-orm";
 import { SafeArea } from "@/components/safe-area";
 import { Icon } from "@/components/ui/icon";
 import { Pressable } from "@/components/ui/pressable";
-import { initLocalDb, localDb, withLocalDbRetry } from "@/db/local-db";
-import { localHighlights, type LocalHighlight } from "@/db/local-schema";
+import type { LocalHighlight } from "@/db/local-schema";
+import { readBookAnnotations, readerHighlight } from "@/lib/book-annotation-service";
+import { useAuthContext } from "@/hooks/use-auth";
+import { bookCacheScopeForUser } from "@/lib/book-cache-session";
 import { pullServerHighlights } from "@/hooks/use-highlights-sync";
 import { useColors } from "@/hooks/use-color";
 import { savedTextPreview, sortSavedItems } from "@/lib/book-saved-items";
 import { useBookOfflineStore } from "@/store/book-offline-store";
 import { vanillaTrpc } from "@/trpc/vanilla-client";
+import { withBookCacheDeadline } from "@/lib/book-cache-resource";
 
 const EMPTY_BOOKMARKS: never[] = [];
 type SavedItem = {
@@ -34,11 +37,17 @@ export default function BookSavedItemsScreen() {
 	const title = isHighlights ? "Highlights" : "Bookmarks";
 	const router = useRouter();
 	const colors = useColors();
+	const { profile } = useAuthContext();
+	const scope = bookCacheScopeForUser(profile?.user?.id);
+	const network = useNetInfo();
+	const online = network.isConnected === true && network.isInternetReachable !== false;
 	const bookmarks = useBookOfflineStore(
 		(s) => s.bookmarks[id] ?? EMPTY_BOOKMARKS,
 	);
 	const summaries = useBookOfflineStore((s) => s.savedPageSummaries);
-	const [highlights, setHighlights] = useState<LocalHighlight[]>([]);
+	const cachePageSummaries = useBookOfflineStore((s) => s.cachePageSummaries);
+	const [highlightState, setHighlightState] = useState<{ scope: string; bookId: number; rows: LocalHighlight[] }>({ scope, bookId: id, rows: [] });
+	const highlights = highlightState.scope === scope && highlightState.bookId === id ? highlightState.rows : [];
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [refresh, setRefresh] = useState(0);
@@ -46,31 +55,22 @@ export default function BookSavedItemsScreen() {
 	useFocusEffect(
 		useCallback(() => {
 			let active = true;
+			const controller = new AbortController();
 			setLoading(true);
 			setError(null);
 			const loadLocal = async () => {
-				await initLocalDb();
-				const rows = await withLocalDbRetry(() =>
-					localDb
-						.select()
-						.from(localHighlights)
-						.where(
-							and(
-								eq(localHighlights.bookId, id),
-								isNull(localHighlights.deletedAt),
-							),
-						),
-				);
-				if (active) setHighlights(rows);
+				const rows = (await readBookAnnotations(scope, id)).flatMap((row) => { const highlight = readerHighlight(row); return highlight ? [highlight] : []; });
+				if (active) setHighlightState({ scope, bookId: id, rows });
 				return rows;
 			};
 			void (async () => {
 				try {
 					let rows = isHighlights ? await loadLocal() : [];
 					if (active) setLoading(false);
+					if (!active || !online) return;
 					if (isHighlights) {
 						try {
-							await pullServerHighlights(id);
+							await pullServerHighlights(id, scope);
 							rows = await loadLocal();
 						} catch {
 							if (active)
@@ -89,12 +89,12 @@ export default function BookSavedItemsScreen() {
 						active && offset < pageIds.length;
 						offset += 100
 					) {
-						const pages = await vanillaTrpc.book.getSavedPageSummaries.query({
+						const pages = await withBookCacheDeadline((signal) => vanillaTrpc.book.getSavedPageSummaries.query({
 							bookId: id,
 							pageIds: pageIds.slice(offset, offset + 100),
-						});
+						}, { signal }), controller.signal);
 						if (active)
-							useBookOfflineStore.getState().cachePageSummaries(pages);
+							cachePageSummaries(pages);
 					}
 				} catch {
 					if (active)
@@ -105,8 +105,9 @@ export default function BookSavedItemsScreen() {
 			})();
 			return () => {
 				active = false;
+				controller.abort();
 			};
-		}, [id, isHighlights, bookmarks, refresh]),
+		}, [id, scope, isHighlights, bookmarks, refresh, cachePageSummaries, online]),
 	);
 
 	const items = sortSavedItems<SavedItem>(

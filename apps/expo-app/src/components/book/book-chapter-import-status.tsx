@@ -2,6 +2,7 @@ import { _trpc } from "@/components/static-trpc";
 import { Pressable } from "@/components/ui/pressable";
 import { useQuery } from "@/lib/react-query";
 import { useIsFocused } from "@react-navigation/native";
+import { useNetInfo } from "@react-native-community/netinfo";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback } from "react";
 import { Text, View } from "react-native";
@@ -16,12 +17,14 @@ export function BookChapterImportStatus({
 }: { bookId: number; pageId?: number; hideCompleted?: boolean }) {
 	const router = useRouter();
 	const focused = useIsFocused();
-	const query = useQuery(_trpc.bookChapter.bookState.queryOptions({ bookId }));
+	const network = useNetInfo();
+	const active = focused && network.isConnected === true && network.isInternetReachable !== false;
+	const query = useQuery(_trpc.bookChapter.bookState.queryOptions({ bookId }, { enabled: active }));
 	const { refetch } = query;
 	useFocusEffect(
 		useCallback(() => {
-			void refetch();
-		}, [refetch]),
+			if (active) void refetch();
+		}, [refetch, active]),
 	);
 	const book = query.data;
 	if (!book?.shamelaId) return null;
@@ -62,7 +65,7 @@ export function BookChapterImportStatus({
 			{job && job.status !== "complete" ? (
 				<ChapterImportProgress
 					importId={job.id}
-					enabled={focused}
+					enabled={active}
 					onViewPage={viewSavedPage}
 					onComplete={() => {
 						void refetch();

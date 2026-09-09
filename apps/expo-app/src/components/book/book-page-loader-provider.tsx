@@ -25,6 +25,10 @@ import {
 import { buildShamelaCaptureScript } from "@/lib/shamela-capture-scripts";
 import { Pressable } from "@/components/ui/pressable";
 import { useGlobalAudioBarStore } from "@/store/global-audio-bar-store";
+import { readCachedReaderPage, resolveCachedPageTarget, saveCachedReaderPage } from "@/lib/book-cache-reader";
+import { getBookCacheScope } from "@/lib/book-cache-session";
+import { notifyBookCacheChanged } from "@/lib/book-cache-events";
+import type { ReaderPage } from "@/lib/book-cache-page";
 
 const LoaderContext = createContext<BookPageLoader | null>(null);
 export function useBookPageLoader() {
@@ -41,9 +45,23 @@ export function BookPageLoaderProvider({ children }: { children: ReactNode }) {
 	const { isRtl } = useTranslation();
 	const webview = useRef<WebView>(null);
 	const [renderer, setRenderer] = useState(0);
+	const freshlyImported = useRef(new Set<number>());
 	const [loader] = useState(() =>
 		createBookPageLoader({
 			async resolve(target, signal) {
+				const scope = getBookCacheScope();
+				const local = await resolveCachedPageTarget(scope, target).catch((error) => {
+					console.warn("[Book cache] local resolution failed", error);
+					return null;
+				});
+				if (signal.aborted || scope !== getBookCacheScope()) throw new Error("Page request cancelled.");
+				if (local) {
+					qc.setQueryData([...trpc.book.getPage.queryKey({ pageId: local.id }), scope], local);
+					return { result: { bookId: local.bookId, pageId: local.id } };
+				}
+				const connection = await NetInfo.fetch();
+				if (connection.isConnected === false || connection.isInternetReachable === false)
+					throw new Error("This page is not downloaded. Connect to the internet and retry.");
 				const url = target.url ? canonicalPageUrl(target.url) : undefined;
 				let bookId = target.bookId;
 				if (url && !bookId) {
@@ -75,7 +93,7 @@ export function BookPageLoaderProvider({ children }: { children: ReactNode }) {
 					if (page.shamelaUrl && canonicalPageUrl(page.shamelaUrl) !== url)
 						throw new Error("Use a page link from this book.");
 					qc.setQueryData(
-						trpc.book.getPage.queryKey({ pageId: resolved.pageId }),
+						[...trpc.book.getPage.queryKey({ pageId: resolved.pageId }), scope],
 						page,
 					);
 				}
@@ -123,13 +141,21 @@ export function BookPageLoaderProvider({ children }: { children: ReactNode }) {
 				void qc.invalidateQueries({
 					queryKey: trpc.book.getPage.queryKey({ pageId: result.page.id }),
 				});
+				freshlyImported.current.add(result.page.id);
+				notifyBookCacheChanged({ kind: "page", bookId: result.bookId, pageId: result.page.id });
 				return { bookId: result.bookId, pageId: result.page.id };
 			},
 			async prepare(result, signal) {
-				const key = trpc.book.getPage.queryKey({ pageId: result.pageId });
-				const cached = qc.getQueryData(key);
+				const observedAt = Date.now();
+				const scope = getBookCacheScope();
+				const key = [...trpc.book.getPage.queryKey({ pageId: result.pageId }), scope];
+				if (!freshlyImported.current.has(result.pageId)) {
+					const local = await readCachedReaderPage(scope, result.bookId, result.pageId).catch(() => null);
+					if (local) { qc.setQueryData(key, local); return; }
+				}
+				let cached = qc.getQueryData<ReaderPage>(key);
 				if (
-					!cached ||
+					freshlyImported.current.has(result.pageId) || !cached ||
 					cached.status !== "fetched" ||
 					!cached.paragraphs.length
 				) {
@@ -138,6 +164,11 @@ export function BookPageLoaderProvider({ children }: { children: ReactNode }) {
 						{ signal },
 					);
 					qc.setQueryData(key, page);
+					cached = page;
+				}
+				if (cached && !signal.aborted && scope === getBookCacheScope()) {
+					await saveCachedReaderPage(scope, cached, observedAt).catch((error) => console.warn("[Book cache] saved page is online but local caching failed", error));
+					freshlyImported.current.delete(result.pageId);
 				}
 			},
 		}),
@@ -178,7 +209,7 @@ export function BookPageLoaderProvider({ children }: { children: ReactNode }) {
 	useEffect(() => {
 		let appActive = AppState.currentState === "active";
 		let online = true;
-		const sync = () => loader.setForeground(appActive && online);
+		const sync = () => loader.setForeground(appActive);
 		sync();
 		const subscription = AppState.addEventListener("change", (state) => {
 			appActive = state === "active";
@@ -187,6 +218,9 @@ export function BookPageLoaderProvider({ children }: { children: ReactNode }) {
 		const unsubscribe = NetInfo.addEventListener((state) => {
 			online =
 				state.isConnected !== false && state.isInternetReachable !== false;
+			const current = loader.getSnapshot().active;
+			if (!online && current && ["loading", "verification"].includes(current.status))
+				loader.fail(current.id, "Connection lost. Your saved pages are available offline; reconnect and retry this page.");
 			sync();
 		});
 		return () => {

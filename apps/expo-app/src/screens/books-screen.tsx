@@ -9,6 +9,7 @@ import { SafeArea } from "@/components/safe-area";
 import { Icon } from "@/components/ui/icon";
 import { useColors } from "@/hooks/use-color";
 import { BookCard } from "@/components/book/book-card";
+import { CachedBooksShelf } from "@/components/book/cached-books-shelf";
 import { useTranslation } from "@/lib/i18n";
 import { useBookOfflineStore } from "@/store/book-offline-store";
 
@@ -67,7 +68,6 @@ export default function BooksScreen() {
   return (
     <View
       className="flex-1 bg-background"
-      style={{ backgroundColor: colors.background }}
     >
       <SafeArea>
         <View className="flex-row items-center gap-3 px-4 py-3">
@@ -108,6 +108,8 @@ export default function BooksScreen() {
           </Pressable>
         </View>
 
+        <CachedBooksShelf />
+
         {shelves.length > 0 && (
           <ScrollView
             horizontal
@@ -147,12 +149,7 @@ export default function BooksScreen() {
                 }
               >
                 <Text
-                  className={
-                    selectedShelfId === shelf.id
-                      ? "text-sm font-semibold text-primary-foreground"
-                      : "text-sm font-semibold text-foreground"
-                  }
-                  style={{ writingDirection: "rtl" }}
+                  style={{ writingDirection: "rtl", fontSize: 14, fontWeight: "600", color: selectedShelfId === shelf.id ? colors.primaryForeground : colors.foreground }}
                 >
                   {shelf.nameAr ?? shelf.name}
                 </Text>
@@ -163,13 +160,11 @@ export default function BooksScreen() {
 
         {showBookmarks && (
           <View
-            className="mx-4 mb-3 rounded-xl border border-border bg-card px-3 py-3"
-            style={{ backgroundColor: colors.card, gap: 10 }}
+            className="mx-4 mb-3 gap-2.5 rounded-xl border border-border bg-card px-3 py-3"
           >
             <View className="flex-row-reverse items-center justify-between">
               <Text
-                className="text-right text-[14px] font-bold text-foreground"
-                style={{ writingDirection: "rtl" }}
+                style={{ writingDirection: "rtl", textAlign: "right", fontSize: 14, fontWeight: "700", color: colors.foreground }}
               >
                 {t("bookmarks", { count: bookmarkItems.length })}
               </Text>
@@ -178,8 +173,7 @@ export default function BooksScreen() {
 
             {bookmarkItems.length === 0 ? (
               <Text
-                className="text-right text-[13px] text-muted-foreground"
-                style={{ writingDirection: "rtl" }}
+                style={{ writingDirection: "rtl", textAlign: "right", fontSize: 13, color: colors.mutedForeground }}
               >
                 {t("noBookmarks")}
               </Text>
@@ -192,8 +186,7 @@ export default function BooksScreen() {
                 {bookmarkItems.slice(0, 12).map((bookmark) => (
                   <View
                     key={`${bookmark.bookId}-${bookmark.pageId}`}
-                    className="w-[220px] rounded-lg bg-background px-3 py-2.5"
-                    style={{ borderWidth: 1, borderColor: colors.border }}
+                    className="w-[220px] rounded-lg border border-border bg-background px-3 py-2.5"
                   >
                     <Pressable
                       onPress={() =>
@@ -204,16 +197,14 @@ export default function BooksScreen() {
                       style={{ gap: 4 }}
                     >
                       <Text
-                        className="text-right text-[12px] font-semibold text-muted-foreground"
-                        style={{ writingDirection: "rtl" }}
+                        style={{ writingDirection: "rtl", textAlign: "right", fontSize: 12, fontWeight: "600", color: colors.mutedForeground }}
                         numberOfLines={1}
                       >
                         {bookTitles.get(bookmark.bookId) ??
                           `${t("bookTitle")} #${bookmark.bookId}`}
                       </Text>
                       <Text
-                        className="text-right text-[13px] font-bold text-foreground"
-                        style={{ writingDirection: "rtl" }}
+                        style={{ writingDirection: "rtl", textAlign: "right", fontSize: 13, fontWeight: "700", color: colors.foreground }}
                         numberOfLines={2}
                       >
                         {bookmark.chapterTitle ??

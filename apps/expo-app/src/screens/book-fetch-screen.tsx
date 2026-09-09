@@ -419,12 +419,10 @@ export default function BookFetchScreen() {
   return (
     <View
       className="flex-1 bg-background"
-      style={{ backgroundColor: colors.background }}
     >
       <SafeArea>
         <View
-          className="items-center gap-3 px-4 py-3"
-          style={{ flexDirection: isRtl ? "row-reverse" : "row" }}
+          className={`items-center gap-3 px-4 py-3 ${isRtl ? "flex-row-reverse" : "flex-row"}`}
         >
           <Pressable
             onPress={() => router.back()}

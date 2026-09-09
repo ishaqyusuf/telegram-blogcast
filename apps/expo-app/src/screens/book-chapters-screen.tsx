@@ -1,12 +1,11 @@
 import { BookChapterImportStatus } from "@/components/book/book-chapter-import-status";
 import { SafeArea } from "@/components/safe-area";
-import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";
 import { Pressable } from "@/components/ui/pressable";
 import { useColors } from "@/hooks/use-color";
 import { buildChapterRows } from "@/lib/book-chapter-tree";
 import { useTranslation } from "@/lib/i18n";
-import { useQuery } from "@/lib/react-query";
+import { useCachedBookChapters } from "@/hooks/use-cached-book-chapters";
 import { useBookOfflineStore } from "@/store/book-offline-store";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import {
@@ -51,14 +50,12 @@ export default function BookChaptersScreen() {
 		setQuery("");
 		setOpenError(null);
 	}, [bookIdNum]);
-	const chapters = useQuery(
-		_trpc.bookChapter.tree.queryOptions({ bookId: bookIdNum }),
-	);
-	const { refetch } = chapters;
+	const chapters = useCachedBookChapters(bookIdNum);
+	const { refetch, refreshIfStale } = chapters;
 	useFocusEffect(
 		useCallback(() => {
-			void refetch();
-		}, [refetch]),
+			refreshIfStale();
+		}, [refreshIfStale]),
 	);
 	const items = buildChapterRows(chapters.data?.items ?? [], collapsed, search);
 	const lastPageId = useBookOfflineStore((s) => s.readingProgress[bookIdNum]);
@@ -173,7 +170,11 @@ export default function BookChaptersScreen() {
 					keyboardShouldPersistTaps="handled"
 					keyboardDismissMode="on-drag"
 					ListHeaderComponent={
-						<BookChapterImportStatus bookId={bookIdNum} hideCompleted />
+						<View>
+							<BookChapterImportStatus bookId={bookIdNum} hideCompleted />
+							{chapters.cacheError && <Text className="px-3 py-2 text-sm text-destructive">Chapters are visible, but could not be saved offline. {chapters.cacheError.message}</Text>}
+							{chapters.data?.cache?.revision === "legacy-unverified" && <Text className="px-3 py-2 text-sm text-muted-foreground">Older offline chapter index. Connect and refresh to verify that every chapter is included.</Text>}
+						</View>
 					}
 					ListEmptyComponent={
 						chapters.isPending ? (
@@ -194,7 +195,7 @@ export default function BookChaptersScreen() {
 						chapters.isError ? (
 							<Pressable onPress={() => void refetch()} style={{ padding: 20 }}>
 								<Text style={{ textAlign: "center", color: colors.primary }}>
-									Unable to load chapters. Tap to retry.
+									{chapters.error?.message ?? "Unable to load chapters."} Tap to retry.
 								</Text>
 							</Pressable>
 						) : null

@@ -8,7 +8,6 @@ import {
   Alert,
   Clipboard,
   Keyboard,
-  KeyboardAvoidingView,
   type KeyboardEvent,
   InteractionManager,
   Platform,
@@ -19,6 +18,7 @@ import {
   View,
 } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 
 import { _trpc } from "@/components/static-trpc";
 import { Modal, useModal } from "@/components/ui/modal";
@@ -26,6 +26,11 @@ import { SafeArea } from "@/components/safe-area";
 import { BookChapterImportStatus } from "@/components/book/book-chapter-import-status";
 import { BookReaderMenu } from "@/components/book/book-reader-menu";
 import { BookReaderSkeleton } from "@/components/book/book-reader-skeleton";
+import { useCachedReaderPage } from "@/hooks/use-cached-reader-page";
+import { notifyBookCacheChanged } from "@/lib/book-cache-events";
+import { resolveReaderDocument } from "@/lib/book-reader-document";
+import { readerHighlight, readerComment, syncBookAnnotations, useBookAnnotationSyncState } from "@/lib/book-annotation-service";
+import { anchorBookAnnotation } from "@/lib/book-annotation-anchor";
 import { BookMissingPage } from "@/components/book/book-missing-page";
 import { useBookPageLoader } from "@/components/book/book-page-loader-provider";
 import { savedTextPreview } from "@/lib/book-saved-items";
@@ -120,6 +125,8 @@ export default function BookReaderScreen() {
   const colors = useColors();
   const bookIdNum = Number(bookId);
   const pageIdNum = Number(pageId);
+  const annotationSync = useBookAnnotationSyncState();
+  const { data: page, isLoading, error: pageLoadError, cacheError: pageCacheError, refetch: refetchPage, online: readerOnline, scope: readerScope } = useCachedReaderPage(bookIdNum, pageIdNum);
   const adjacentNavigationBusy = useRef(false);
   const readerSwipe = useRef(createReaderSwipeTracker()).current;
   const readerSelectionActive = useRef(false);
@@ -128,14 +135,17 @@ export default function BookReaderScreen() {
     adjacentNavigationBusy.current = false;
     adjacentNavigationEpoch.current += 1;
     return () => { adjacentNavigationEpoch.current += 1; };
-  }, [pageIdNum]);
+  }, [pageIdNum, readerScope]);
   const referenceIdNum = referenceId ? Number(referenceId) : undefined;
   const mediaIdNum = mediaId ? Number(mediaId) : undefined;
   const seekSecNum = seekSec ? Number(seekSec) : undefined;
-  const readerRouteKey = `${bookId}:${pageId}:${referenceId ?? ""}:${mediaId ?? ""}:${seekSec ?? ""}`;
+  const readerRouteKey = `${readerScope}:${bookId}:${pageId}:${referenceId ?? ""}:${mediaId ?? ""}:${seekSec ?? ""}`;
+  const activeReaderRoute = useRef(readerRouteKey);
+  activeReaderRoute.current = readerRouteKey;
 
   // ── Reading progress + bookmarks ────────────────────────────────────────────
   const setLastPage = useBookOfflineStore((s) => s.setLastPage);
+  const cachePageSummaries = useBookOfflineStore((s) => s.cachePageSummaries);
   const bookmarked = useBookOfflineStore((s) =>
     (s.bookmarks[bookIdNum] ?? []).some(
       (bookmark) => bookmark.pageId === pageIdNum,
@@ -164,6 +174,8 @@ export default function BookReaderScreen() {
   const [selectedTextRange, setSelectedTextRange] =
     useState<SelectedTextRange | null>(null);
   const [commentText, setCommentText] = useState("");
+  const [savingComment, setSavingComment] = useState(false);
+  const commentSubmission = useRef<object | null>(null);
   const [showCommentInput, setShowCommentInput] = useState(false);
   const [showHighlightColors, setShowHighlightColors] = useState(false);
   const [selectedHighlightColor, setSelectedHighlightColor] =
@@ -173,6 +185,9 @@ export default function BookReaderScreen() {
   const [editorText, setEditorText] = useState("");
   const [editorHtml, setEditorHtml] = useState("");
   const [baseVersion, setBaseVersion] = useState<number>(0);
+  const [savingEditor, setSavingEditor] = useState(false);
+  const [editorSaveMessage, setEditorSaveMessage] = useState<string | null>(null);
+  const editorInitializedFor = useRef<string | null>(null);
   const [readerPages, setReaderPages] = useState<any[]>([]);
   const [readerWindowRoute, setReaderWindowRoute] = useState<string | null>(null);
   const readerScrollRef = useRef<ScrollView>(null);
@@ -188,12 +203,7 @@ export default function BookReaderScreen() {
   const editorRef = useRef<BookRichEditorHandle>(null);
 
   // ── Server data ────────────────────────────────────────────────────────────
-  const { data: page, isLoading, error: pageLoadError, refetch: refetchPage } = useQuery(
-    _trpc.book.getPage.queryOptions({ pageId: pageIdNum }, { staleTime: 60_000 }),
-  );
-  const { data: initialReaderWindow, isLoading: isLoadingReaderWindow, isError: isReaderWindowError } =
-    useQuery(
-      _trpc.book.getReaderWindow.queryOptions({
+  const readerWindowInput = {
         pageId: pageIdNum,
         referenceId:
           Number.isFinite(referenceIdNum) && referenceIdNum! > 0
@@ -206,8 +216,13 @@ export default function BookReaderScreen() {
             ? Math.floor(seekSecNum!)
             : undefined,
         radius: 2,
-      }),
-    );
+      };
+  const { data: initialReaderWindow, isLoading: isLoadingReaderWindow, isError: isReaderWindowError } =
+    useQuery({
+      queryKey: [..._trpc.book.getReaderWindow.queryKey(readerWindowInput), readerScope],
+      queryFn: ({ signal }) => vanillaTrpc.book.getReaderWindow.query(readerWindowInput, { signal }),
+      enabled: readerOnline,
+    });
   if (readerPositionRef.current.key !== readerRouteKey) {
     readerPositionRef.current = { key: readerRouteKey, position: createReaderPosition() };
   }
@@ -215,7 +230,7 @@ export default function BookReaderScreen() {
   const readerContentKey = readerWindowRoute === readerRouteKey ? "window" : "fallback";
   // Recovery may replace fallback content, but never resets the user's position.
   updateReaderPositionContent(readerPosition, readerContentKey,
-    readerWindowRoute === readerRouteKey || isReaderWindowError);
+    readerWindowRoute === readerRouteKey || isReaderWindowError || !readerOnline);
   const attachReaderScroll = useCallback((node: ScrollView | null) => {
     readerScrollRef.current = node;
     if (node) mountReaderPosition(readerPosition);
@@ -227,13 +242,13 @@ export default function BookReaderScreen() {
     const y = takeReaderInitialOffset(readerPosition);
     if (y !== null) readerScrollRef.current.scrollTo({ y, animated: false });
   };
-  const { data: pageDocument } = useQuery(
-    _trpc.book.getPageDocument.queryOptions(
-      { pageId: pageIdNum },
-      { enabled: mode === "edit" },
-    ),
-  );
-  const { draft, parsedDocument, saveDraft, clearDraft } = useBookPageDraft(
+  const { data: remotePageDocument } = useQuery({
+    queryKey: [..._trpc.book.getPageDocument.queryKey({ pageId: pageIdNum }), readerScope],
+    queryFn: ({ signal }) => vanillaTrpc.book.getPageDocument.query({ pageId: pageIdNum }, { signal }),
+    enabled: mode === "edit" && readerOnline,
+  });
+  const pageDocument = useMemo(() => resolveReaderDocument(page, remotePageDocument), [page, remotePageDocument]);
+  const { draft, parsedDocument, saveDraft, clearDraft, isLoading: draftLoading, error: draftError, reload: reloadDraft } = useBookPageDraft(
     bookIdNum,
     pageIdNum,
     mode === "edit",
@@ -241,14 +256,14 @@ export default function BookReaderScreen() {
 
   // ── Offline-first highlights ───────────────────────────────────────────────
   const {
-    highlights,
+    bookAnnotations: bookHighlights,
     addHighlight,
     deleteHighlight,
     reload: reloadHighlights,
   } = useHighlightsSync(bookIdNum, pageIdNum);
 
   // ── Offline-first comments ─────────────────────────────────────────────────
-  const { comments, addComment, deleteComment } = useCommentsSync(
+  const { bookAnnotations: bookComments, addComment, deleteComment } = useCommentsSync(
     bookIdNum,
     pageIdNum,
   );
@@ -295,27 +310,42 @@ export default function BookReaderScreen() {
   useEffect(() => {
     pageLayouts.current.clear();
     setVisibleMissingPage(null);
+    setChunkLoadingDirection(null);
+    setReaderWindowMeta({});
+    setMode("read");
+    setEditorText("");
+    setEditorHtml("");
+    setSavingEditor(false);
+    setEditorSaveMessage(null);
+    setSelectedTextRange(null);
+    setCommentText("");
+    setShowCommentInput(false);
+    setSavingComment(false);
+    setAnnotationActionError(null);
+    commentSubmission.current = null;
+    editorInitializedFor.current = null;
+    return () => { commentSubmission.current = null; };
   }, [readerRouteKey]);
 
   useEffect(() => {
-    if (!focused || mode !== "read" || !page?.nextShamelaUrl || page.status !== "fetched") return;
+    if (!readerOnline || !focused || mode !== "read" || !page?.nextShamelaUrl || page.status !== "fetched") return;
     let key: string | undefined;
     const timer = setTimeout(() => {
       key = pageLoader.request({ bookId: bookIdNum, url: toAbsoluteShamelaUrl(page.nextShamelaUrl!) }, "prefetch");
     }, 1_000);
     return () => { clearTimeout(timer); if (key) pageLoader.cancel(key, true); };
-  }, [focused, mode, page?.nextShamelaUrl, page?.status, bookIdNum, pageLoader]);
+  }, [readerOnline, focused, mode, page?.nextShamelaUrl, page?.status, bookIdNum, pageLoader]);
 
   useEffect(() => {
     if (!page) return;
-    useBookOfflineStore.getState().cachePageSummaries([{
+    cachePageSummaries([{
       pageId: page.id,
       bookId: bookIdNum,
       sourcePageNo: page.shamelaPageNo,
       pageNo: page.printedPageNo ?? null,
       preview: savedTextPreview(page.paragraphs[0]?.text),
     }]);
-  }, [page, bookIdNum]);
+  }, [page, bookIdNum, cachePageSummaries]);
 
   useEffect(() => {
     const data = (initialReaderWindow as any)?.data;
@@ -368,7 +398,7 @@ export default function BookReaderScreen() {
     useMutation(
       _trpc.book.savePageDocument.mutationOptions({
         onSuccess: async () => {
-          await clearDraft();
+          notifyBookCacheChanged({ kind: "page", bookId: bookIdNum, pageId: pageIdNum });
           qc.invalidateQueries({
             queryKey: _trpc.book.getPage.queryKey({ pageId: pageIdNum }),
           });
@@ -377,9 +407,7 @@ export default function BookReaderScreen() {
               pageId: pageIdNum,
             }),
           });
-          setMode("read");
         },
-        onError: (e) => Alert.alert(t("error"), e.message),
       }),
     );
 
@@ -413,12 +441,14 @@ export default function BookReaderScreen() {
   };
 
   useEffect(() => {
-    if (mode !== "edit") return;
+    if (mode !== "edit") { editorInitializedFor.current = null; return; }
+    if (draftLoading || !pageDocument || editorInitializedFor.current === readerRouteKey) return;
+    editorInitializedFor.current = readerRouteKey;
     const draftText = draft?.plainText;
-    if (draftText) {
+    if (draftText != null) {
       setEditorText(draftText);
       setEditorHtml(draft?.contentHtml ?? serverHtml);
-      setBaseVersion(draft.baseVersion ?? pageDocument?.contentVersion ?? 0);
+      setBaseVersion(draft?.baseVersion ?? pageDocument?.contentVersion ?? 0);
       return;
     }
     if (pageDocument?.plainText != null) {
@@ -428,6 +458,8 @@ export default function BookReaderScreen() {
     }
   }, [
     mode,
+    draftLoading,
+    readerRouteKey,
     draft?.plainText,
     draft?.contentHtml,
     draft?.baseVersion,
@@ -438,7 +470,7 @@ export default function BookReaderScreen() {
   ]);
 
   useEffect(() => {
-    if (mode !== "edit") return;
+    if (mode !== "edit" || draftLoading || savingEditor || editorInitializedFor.current !== readerRouteKey) return;
     if (draftTimerRef.current) {
       clearTimeout(draftTimerRef.current);
     }
@@ -459,7 +491,7 @@ export default function BookReaderScreen() {
         clearTimeout(draftTimerRef.current);
       }
     };
-  }, [mode, editorText, editorHtml, baseVersion, saveDraft]);
+  }, [mode, editorText, editorHtml, baseVersion, saveDraft, draftLoading, savingEditor, readerRouteKey]);
 
   const enterEditMode = () => {
     const initialDocument =
@@ -496,22 +528,44 @@ export default function BookReaderScreen() {
   };
 
   const handleSaveDocument = async () => {
+    if (savingEditor || draftLoading || !page || page.localCache?.restored) return;
+    setSavingEditor(true);
+    setEditorSaveMessage(null);
+    if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
     const document = editorHtml.trim()
       ? createDocumentFromHtml(editorHtml)
       : createDocumentFromPlainText(editorText);
-    await savePageDocument({
-      pageId: pageIdNum,
+    const input = {
       document,
       contentHtml: editorHtml || serializeDocumentToHtml(document),
       plainText: getDocumentPlainText(document),
       baseVersion,
-    });
+    };
+    try {
+      const savedVersion = await saveDraft(input);
+      if (savedVersion === undefined || activeReaderRoute.current !== readerRouteKey) return;
+      if (readerOnline) {
+        await savePageDocument({ pageId: pageIdNum, ...input });
+        await clearDraft(savedVersion);
+      }
+      if (activeReaderRoute.current === readerRouteKey) {
+        if (!readerOnline) setEditorSaveMessage(isRtl ? "حُفظت المسودة على الجهاز. افتح المحرر واحفظ عند الاتصال لرفع التغييرات." : "Draft saved on this device. Reopen the editor and save when online to upload changes.");
+        setMode("read");
+      }
+    } catch (error) {
+      console.warn("[BookDraft] save retained locally when available", error);
+      if (activeReaderRoute.current === readerRouteKey) setEditorSaveMessage(error instanceof Error ? error.message : "Could not save the page. Please retry.");
+    } finally {
+      if (activeReaderRoute.current === readerRouteKey) setSavingEditor(false);
+    }
   };
 
   const runEditorCommand = (command: BookRichEditorCommand) => {
     editorRef.current?.exec(command);
   };
 
+  const highlightMutationPending = useRef(false);
+  const [annotationActionError, setAnnotationActionError] = useState<string | null>(null);
   const handleHighlightColor = async (
     paragraphId: number,
     color: string,
@@ -523,30 +577,24 @@ export default function BookReaderScreen() {
       range.quoteText.trim()
         ? range
         : null;
-    if (!selection) return;
-
-    const existingHighlights = highlights.filter(
-      (highlight) => highlight.paragraphId === paragraphId,
-    );
-    for (const highlight of existingHighlights) {
-      const start = highlight.startOffset ?? null;
-      const end = highlight.endOffset ?? null;
-      const overlaps =
-        start !== null &&
-        end !== null &&
-        start < selection.endOffset &&
-        end > selection.startOffset;
-      if (overlaps) {
-        await deleteHighlight(highlight.localId);
+    if (!selection || page?.localCache?.restored || highlightMutationPending.current) return;
+    highlightMutationPending.current = true;
+    setAnnotationActionError(null);
+    try {
+      await addHighlight(paragraphId, color, {
+        startOffset: selection.startOffset,
+        endOffset: selection.endOffset,
+        quoteText: selection.quoteText,
+      });
+      if (activeReaderRoute.current === readerRouteKey) {
+        setSelectedTextRange(null);
+        setShowHighlightColors(false);
       }
+    } catch {
+      if (activeReaderRoute.current === readerRouteKey) setAnnotationActionError("Could not save the highlight. Please retry.");
+    } finally {
+      highlightMutationPending.current = false;
     }
-    await addHighlight(paragraphId, color, {
-      startOffset: selection.startOffset,
-      endOffset: selection.endOffset,
-      quoteText: selection.quoteText,
-    });
-    setSelectedTextRange(null);
-    setShowHighlightColors(false);
   };
 
   const handleCopyParagraph = (paragraph: { text: string }) => {
@@ -556,9 +604,28 @@ export default function BookReaderScreen() {
   };
 
   const handleHighlightDelete = async (localId: string) => {
-    await deleteHighlight(localId);
-    setSelectedTextRange(null);
-    setShowHighlightColors(false);
+    setAnnotationActionError(null);
+    try {
+      await deleteHighlight(localId);
+      if (activeReaderRoute.current !== readerRouteKey) return;
+      setSelectedTextRange(null);
+      setShowHighlightColors(false);
+    } catch {
+      if (activeReaderRoute.current === readerRouteKey) {
+        setAnnotationActionError("Could not delete the highlight. Please retry.");
+      }
+    }
+  };
+
+  const handleCommentDelete = async (localId: string) => {
+    setAnnotationActionError(null);
+    try {
+      await deleteComment(localId);
+    } catch {
+      if (activeReaderRoute.current === readerRouteKey) {
+        setAnnotationActionError("Could not delete the comment. Please retry.");
+      }
+    }
   };
 
   const selectedParagraph = useMemo(
@@ -607,11 +674,27 @@ export default function BookReaderScreen() {
   };
 
   const submitComment = async () => {
-    if (!commentText.trim()) return;
-    await addComment(commentText.trim(), selectedTextRange?.paragraphId);
-    setCommentText("");
-    setShowCommentInput(false);
-    setSelectedTextRange(null);
+    if (!commentText.trim() || page?.localCache?.restored || commentSubmission.current) return;
+    const submission = {};
+    commentSubmission.current = submission;
+    setSavingComment(true);
+    setAnnotationActionError(null);
+    try {
+      await addComment(commentText.trim(), selectedTextRange?.paragraphId);
+      if (commentSubmission.current !== submission || activeReaderRoute.current !== readerRouteKey) return;
+      setCommentText("");
+      setShowCommentInput(false);
+      setSelectedTextRange(null);
+    } catch {
+      if (commentSubmission.current === submission && activeReaderRoute.current === readerRouteKey) {
+        setAnnotationActionError("Could not save the comment. Your text is retained. Please retry.");
+      }
+    } finally {
+      if (commentSubmission.current === submission && activeReaderRoute.current === readerRouteKey) {
+        commentSubmission.current = null;
+        setSavingComment(false);
+      }
+    }
   };
 
   const editorFooterInset =
@@ -689,7 +772,7 @@ export default function BookReaderScreen() {
         direction === "previous"
           ? readerWindowMeta.previousCursor
           : readerWindowMeta.nextCursor;
-      if (!cursor || chunkLoadingDirection || mode !== "read") return;
+      if (!readerOnline || !cursor || chunkLoadingDirection || mode !== "read") return;
       setChunkLoadingDirection(direction);
       try {
         const result = await vanillaTrpc.book.getReaderWindow.query({
@@ -698,6 +781,7 @@ export default function BookReaderScreen() {
           direction,
           cursor,
         });
+        if (activeReaderRoute.current !== readerRouteKey) return;
         mergeReaderPages((result as any).data ?? [], direction);
         setReaderWindowMeta((current) => ({
           previousCursor:
@@ -710,12 +794,13 @@ export default function BookReaderScreen() {
               : current.nextCursor,
         }));
       } catch (error) {
+        if (activeReaderRoute.current !== readerRouteKey) return;
         Alert.alert(
           t("error"),
           error instanceof Error ? error.message : "Could not load more pages.",
         );
       } finally {
-        setChunkLoadingDirection(null);
+        if (activeReaderRoute.current === readerRouteKey) setChunkLoadingDirection(null);
       }
     },
     [
@@ -723,6 +808,8 @@ export default function BookReaderScreen() {
       mergeReaderPages,
       mode,
       pageIdNum,
+      readerOnline,
+      readerRouteKey,
       readerWindowMeta.nextCursor,
       readerWindowMeta.previousCursor,
       t,
@@ -805,6 +892,9 @@ export default function BookReaderScreen() {
     >
       <SafeArea>
         <BookChapterImportStatus bookId={bookIdNum} pageId={pageIdNum} />
+        {page.localCache?.restored && <Text className="px-4 py-2 text-sm text-muted-foreground">Restored offline copy. Connect and refresh this page before adding highlights or comments.</Text>}
+        {page.localCache?.legacy && <Text className="px-4 py-2 text-sm text-muted-foreground">Recovered from an older download. Existing annotations remain available; connect to refresh the latest page formatting.</Text>}
+        {pageCacheError && <Text className="px-4 py-2 text-sm text-destructive">This page could not be saved offline. {pageCacheError.message}</Text>}
         <View className="flex-row items-center gap-2.5 border-b border-border px-4 py-2.5">
           <Pressable
             onPress={() => router.back()}
@@ -848,6 +938,11 @@ export default function BookReaderScreen() {
 
           <Pressable
             onPress={toggleBookmark}
+            accessibilityRole="button"
+            accessibilityLabel={bookmarked
+              ? (isRtl ? "إزالة الإشارة المرجعية" : "Remove bookmark")
+              : (isRtl ? "إضافة إشارة مرجعية" : "Add bookmark")}
+            accessibilityState={{ selected: bookmarked }}
             className={
               bookmarked
                 ? "size-[34px] items-center justify-center rounded-full bg-primary/15"
@@ -863,6 +958,7 @@ export default function BookReaderScreen() {
 
           {canEditPage && (
             <Pressable
+              disabled={savingEditor || (mode === "edit" && draftLoading)}
               onPress={() => {
                 if (mode === "edit") {
                   void handleSaveDocument();
@@ -885,28 +981,38 @@ export default function BookReaderScreen() {
           }} />
         </View>
 
+        {annotationSync.scope === readerScope && annotationSync.bookId === bookIdNum && annotationSync.error ? <View className="gap-2 px-4 py-2">
+          <Text className="text-sm text-muted-foreground">{isRtl ? "التعليقات والتظليل محفوظة على الجهاز. تعذرت المزامنة الخاصة." : "Annotations are saved on this device. Private sync could not finish."}</Text>
+          <Pressable disabled={annotationSync.working} onPress={() => void syncBookAnnotations(bookIdNum, readerScope)}><Text className="text-sm text-primary">{isRtl ? "إعادة محاولة المزامنة" : "Retry Private Sync"}</Text></Pressable>
+        </View> : null}
+        {annotationActionError ? <Text accessibilityRole="alert" className="px-4 py-2 text-sm text-destructive">{annotationActionError}</Text> : null}
+        {editorSaveMessage ? <Text className="px-4 py-2 text-sm text-muted-foreground">{editorSaveMessage}</Text> : null}
         {/* Content + keyboard */}
         <KeyboardAvoidingView
           style={{ flex: 1 }}
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          behavior={Platform.OS === "ios" ? "padding" : mode === "read" && showCommentInput ? "height" : undefined}
           keyboardVerticalOffset={0}
         >
           {mode === "edit" ? (
             <View style={{ flex: 1 }}>
-              <BookRichEditor
+              {draftError ? <View className="gap-3 p-4">
+                <Text className="text-sm text-foreground">{draftError}</Text>
+                <Pressable onPress={() => void reloadDraft()} className="rounded-xl bg-primary p-3"><Text className="text-center text-primary-foreground">{isRtl ? "إعادة المحاولة" : "Retry Draft Loading"}</Text></Pressable>
+              </View> : draftLoading || savingEditor ? <ActivityIndicator /> : <BookRichEditor
                 ref={editorRef}
                 initialHtml={editorHtml}
                 onChange={({ html, plainText }) => {
                   setEditorHtml(html);
                   setEditorText(plainText);
                 }}
-              />
+              />}
             </View>
           ) : (
             <GestureDetector key={readerRouteKey} gesture={pageSwipeGesture}>
               <ScrollView
                 ref={attachReaderScroll}
-                maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+                // Native anchoring during keyboard resizing can leave Android paragraphs unpainted.
+                maintainVisibleContentPosition={showCommentInput || keyboardHeight > 0 ? undefined : { minIndexForVisible: 0 }}
                 scrollEnabled={readerPosition.ready}
                 onScrollBeginDrag={(event) => {
                   beginReaderDrag(readerPosition, event.nativeEvent.contentOffset.y);
@@ -939,26 +1045,10 @@ export default function BookReaderScreen() {
 
               {visibleReaderPages.map((readerPage: any) => {
                 const isCurrentPage = readerPage.id === pageIdNum;
-                const pageHighlights = isCurrentPage
-                  ? highlights.map((h) => ({
-                      localId: h.localId,
-                      paragraphId: h.paragraphId,
-                      color: h.color,
-                      startOffset: h.startOffset,
-                      endOffset: h.endOffset,
-                      quoteText: h.quoteText,
-                    }))
-                  : ((readerPage.highlights ?? []) as any[]).map((h) => ({
-                      localId: `server-${h.id}`,
-                      paragraphId: h.paragraphId,
-                      color: h.color,
-                      startOffset: h.startOffset,
-                      endOffset: h.endOffset,
-                      quoteText: h.quoteText,
-                    }));
-                const pageComments = isCurrentPage
-                  ? comments
-                  : ((readerPage.comments ?? []) as any[]);
+                const anchoredHighlights = readerPage.localCache?.restored ? [] : bookHighlights.filter((row) => row.pageId === readerPage.id).map((row) => anchorBookAnnotation(row, readerPage.paragraphs ?? []));
+                const pageHighlights = anchoredHighlights.flatMap((row) => { const highlight = readerHighlight(row); return highlight ? [highlight] : []; });
+                const unmatchedHighlights = anchoredHighlights.filter((row) => row.anchorStatus === "unmatched").length;
+                const pageComments = bookComments.filter((row) => row.pageId === readerPage.id).flatMap((row) => { const comment = readerComment(anchorBookAnnotation(row, readerPage.paragraphs ?? [])); return comment ? [comment] : []; });
                 const pageAudioReferences = Array.isArray(
                   readerPage.audioReferences,
                 )
@@ -1020,6 +1110,7 @@ export default function BookReaderScreen() {
                       </Pressable>
                     ) : null}
 
+                    {unmatchedHighlights > 0 ? <Text className="px-4 py-2 text-sm text-muted-foreground">{isRtl ? "بعض التظليلات محفوظة، لكن تعذر تحديد موضعها بعد تغير النص. تجدها في قائمة التظليلات." : "Some saved highlights could not be positioned after the text changed. They remain in your Highlights list."}</Text> : null}
                     {hasFetchedContent ? (
                       <BookPageView
                         paragraphs={readerPage.paragraphs}
@@ -1079,7 +1170,7 @@ export default function BookReaderScreen() {
                             {isCurrentPage ? (
                               <Pressable
                                 onPress={() =>
-                                  deleteComment(comment.localId)
+                                  handleCommentDelete(comment.localId)
                                 }
                               >
                                 <Icon
@@ -1338,6 +1429,7 @@ export default function BookReaderScreen() {
             <View className="flex-row items-center gap-2 border-t border-border bg-card px-3 py-3">
               <TextInput
                 value={commentText}
+                editable={!savingComment}
                 onChangeText={setCommentText}
                 placeholder={
                   selectedTextRange
@@ -1351,9 +1443,12 @@ export default function BookReaderScreen() {
               />
               <Pressable
                 onPress={submitComment}
+                disabled={savingComment || !commentText.trim() || page?.localCache?.restored}
+                accessibilityLabel={t("addComment")}
+                accessibilityState={{ busy: savingComment, disabled: savingComment || !commentText.trim() || Boolean(page?.localCache?.restored) }}
                 className="rounded-lg bg-primary px-3.5 py-2.5"
               >
-                <Icon name="Send" size={16} className="text-background" />
+                {savingComment ? <ActivityIndicator size="small" color={colors.background} /> : <Icon name="Send" size={16} className="text-background" />}
               </Pressable>
             </View>
           )}

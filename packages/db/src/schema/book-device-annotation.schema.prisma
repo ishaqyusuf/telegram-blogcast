@@ -1,0 +1,17 @@
+// Private annotations are owned by an installation capability, never shared user 1.
+model BookDeviceAnnotation {
+  ownerHash String
+  scope     String
+  localId   String
+  bookId    Int
+  pageId    Int
+  kind      String
+  revision  Int
+  deleted   Boolean @default(false)
+  payload   Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@id([ownerHash, scope, localId])
+  @@index([ownerHash, scope, bookId, localId])
+}

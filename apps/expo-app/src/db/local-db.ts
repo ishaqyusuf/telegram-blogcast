@@ -5,6 +5,8 @@ import { sql } from "drizzle-orm";
 
 const expo = openDatabaseSync("al_ghurobaa.db", { enableChangeListener: true });
 
+export const localSqlite = expo;
+
 export const localDb = drizzle(expo, { schema });
 
 let localDbQueue = Promise.resolve();

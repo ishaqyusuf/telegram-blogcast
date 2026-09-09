@@ -5,6 +5,7 @@ import { albumRoutes } from "./album.routes";
 import { blogRoutes } from "./blog.routes";
 import { bookRoutes } from "./book.routes";
 import { bookChapterRoutes } from "./book-chapter.routes";
+import { bookAnnotationRoutes } from "./book-annotation.routes";
 import { channelRoutes } from "./channel.route";
 import { facebookImportRoutes } from "./facebook-import.routes";
 import { libraryRoutes } from "./library.routes";
@@ -20,6 +21,7 @@ export const appRouter = createTRPCRouter({
 	playlist: playlistRoutes,
 	book: bookRoutes,
 	bookChapter: bookChapterRoutes,
+	bookAnnotation: bookAnnotationRoutes,
 	library: libraryRoutes,
 });
 

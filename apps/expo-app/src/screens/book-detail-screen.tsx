@@ -19,7 +19,7 @@ import { SafeArea } from "@/components/safe-area";
 import { Icon } from "@/components/ui/icon";
 import { ChapterTree, type TocNode } from "@/components/book/chapter-tree";
 import { BookChapterImportStatus } from "@/components/book/book-chapter-import-status";
-import { saveBookDownloadToLocalDb } from "@/lib/book-offline-download";
+import { BookDownloadButton } from "@/components/book/book-download-button";
 import { useBookOfflineStore } from "@/store/book-offline-store";
 import { vanillaTrpc } from "@/trpc/vanilla-client";
 import { useTranslation } from "@/lib/i18n";
@@ -95,7 +95,6 @@ export default function BookDetailScreen() {
 	const [fetchUrl, setFetchUrl] = useState("");
 	const [showFetchInput, setShowFetchInput] = useState(false);
 	const fetchingPageId = null;
-	const [isDownloadingBook, setIsDownloadingBook] = useState(false);
 	const [chapterQuery, setChapterQuery] = useState("");
 
 	const navigationBusy = useRef(false);
@@ -105,14 +104,6 @@ export default function BookDetailScreen() {
 	const getLastPage = useBookOfflineStore((s) => s.getLastPage);
 	const getBookmarks = useBookOfflineStore((s) => s.getBookmarks);
 	const removeBookmark = useBookOfflineStore((s) => s.removeBookmark);
-	const setDownloaded = useBookOfflineStore((s) => s.setDownloaded);
-	const setDownloadProgress = useBookOfflineStore((s) => s.setDownloadProgress);
-	const clearDownloadProgress = useBookOfflineStore(
-		(s) => s.clearDownloadProgress,
-	);
-	const downloadProgress = useBookOfflineStore(
-		(s) => s.downloadProgress[bookIdNum] ?? 0,
-	);
 	const [showBookmarks, setShowBookmarks] = useState(false);
 
 	const { data: book, isLoading } = useQuery(
@@ -124,30 +115,6 @@ export default function BookDetailScreen() {
 			limit: 8,
 		}),
 	);
-
-	async function downloadBookForOffline() {
-		if (isDownloadingBook || !Number.isFinite(bookIdNum)) return;
-
-		setIsDownloadingBook(true);
-		setDownloadProgress(bookIdNum, 0.08);
-
-		try {
-			const payload = await vanillaTrpc.book.getBookForDownload.query({
-				bookId: bookIdNum,
-			});
-			setDownloadProgress(bookIdNum, 0.55);
-
-			const meta = await saveBookDownloadToLocalDb(payload);
-			setDownloaded(meta);
-			setDownloadProgress(bookIdNum, 1);
-			Alert.alert(t("savedOffline"), t("downloadOffline"));
-		} catch (e) {
-			Alert.alert(t("error"), e instanceof Error ? e.message : String(e));
-		} finally {
-			setIsDownloadingBook(false);
-			clearDownloadProgress(bookIdNum);
-		}
-	}
 
 	if (isLoading) {
 		return (
@@ -755,42 +722,7 @@ export default function BookDetailScreen() {
 									)}
 								</View>
 
-								<Pressable
-									onPress={downloadBookForOffline}
-									disabled={isDownloadingBook}
-									style={[
-										{
-											flexDirection: "row",
-											alignItems: "center",
-											justifyContent: "center",
-											gap: 8,
-											borderRadius: 12,
-											backgroundColor: colors.card,
-											paddingVertical: 10,
-										},
-										{ opacity: isDownloadingBook ? 0.65 : 1 },
-									]}
-								>
-									{isDownloadingBook ? (
-										<>
-											<ActivityIndicator size="small" color={colors.primary} />
-											<Text className="text-[13px] font-semibold text-primary">
-												{Math.round(downloadProgress * 100)}%
-											</Text>
-										</>
-									) : (
-										<>
-											<Icon
-												name="Download"
-												size={15}
-												className="text-muted-foreground"
-											/>
-											<Text className="text-[13px] font-semibold text-muted-foreground">
-												{t("downloadOffline")}
-											</Text>
-										</>
-									)}
-								</Pressable>
+								<BookDownloadButton bookId={bookIdNum} />
 							</View>
 						)}
 					</View>

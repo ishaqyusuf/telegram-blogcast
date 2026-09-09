@@ -1,4 +1,5 @@
 import { _trpc } from "@/components/static-trpc";
+import { notifyBookCacheChanged } from "@/lib/book-cache-events";
 import { Pressable } from "@/components/ui/pressable";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { useEffect, useRef, useState } from "react";
@@ -56,6 +57,7 @@ export function ChapterImportProgress({
 		const identity = `${job.id}:${job.generation}`;
 		if (notified.current === identity) return;
 		notified.current = identity;
+		notifyBookCacheChanged({ kind: "chapters", bookId: job.bookId });
 		qc.invalidateQueries({
 			queryKey: _trpc.book.getBook.queryKey({ id: job.bookId }),
 		});

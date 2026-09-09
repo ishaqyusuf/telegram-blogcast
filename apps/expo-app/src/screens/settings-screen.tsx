@@ -200,6 +200,17 @@ export default function SettingsScreen() {
           keyboardShouldPersistTaps="handled"
         >
           <Pressable
+            onPress={() => router.push("/book-storage" as Href)}
+            className="flex-row items-center gap-3 rounded-xl bg-card p-4"
+          >
+            <Icon name="Download" size={20} className="text-foreground" />
+            <View className="flex-1 gap-1">
+              <Text className="font-semibold text-foreground">{isRtl ? "تخزين الكتب" : "Book Storage"}</Text>
+              <Text className="text-sm text-muted-foreground">{isRtl ? "المجلد المحلي ومزامنة الملفات" : "Local folder and file synchronization"}</Text>
+            </View>
+            <Icon name="ChevronRight" size={18} className="text-muted-foreground" />
+          </Pressable>
+          <Pressable
             onPress={toggleColorScheme}
             className="flex-row items-center gap-3 rounded-xl bg-card p-4 active:opacity-80"
           >

@@ -9,6 +9,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 import "@/styles/global.css";
 import { AuthProvider, useCreateAuthContext } from "@/hooks/use-auth";
+import { BookCacheLifecycle } from "@/components/book/book-cache-lifecycle";
 
 import { AppAutoUpdateModal } from "@/components/app-auto-update-modal";
 import { AppStatusBar } from "@/components/app-status-bar";
@@ -323,6 +324,7 @@ function RootLayoutNav() {
 									<BottomSheetModalProvider>
 										<FlashMessage position="top" />
 										<InitialLayout />
+										<BookCacheLifecycle />
 									</BottomSheetModalProvider>
 								</TRPCReactProvider>
 							</ToastProviderWithViewport>
