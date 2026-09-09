@@ -27,7 +27,7 @@ In Progress
 ## Implementation Progress
 - Completion: 75%
 - Current Checklist: 4/4
-- Blockers: No implementation blocker; Android and release evidence still pending.
+- Blockers: Literal grant-revocation and physical full-volume acceptance require a controlled test environment; existing native denial/capacity tests do not claim those cases.
 
 ## Implementation Checklist
 - [x] Implement verified staging and previous-copy recovery for SAF files.
@@ -36,6 +36,7 @@ In Progress
 - [ ] Verify permission revocation, partial files, disk exhaustion, and folder switching on Android.
 
 ## Validation Evidence
+- Post-release platform check: emulator-5556 exposes uri_grants but cmd uri_grants help reports No shell command implementation. Activity-manager help exposes no single-grant revoke command, and the installed Expo legacy SAF API exposes acquisition but not releasePersistableUriPermission. Device storage monitor supports force-low/force-not-low/reset only, which simulates warning broadcasts rather than actual write exhaustion. No grants, app data, or storage state were modified during this inspection. Do not substitute those commands for actual revocation/ENOSPC acceptance or clear app data to manufacture a pass.
 - Native missing-grant test temporarily selected an ungranted Download/alghurobaa-cache-check/Books URI through test configuration. Real SAF sync failed all three eligible jobs with readSAFDirectoryAsync: location isn't readable; the cached page remained readable. Restored the original preferred folder configuration. Live Android storage UI subsequently confirms the original path and 0 pending files / 0 need retry. This exercises actual permission denial/recovery, not literal persisted-grant revocation. No original exports were deleted.
 - Separate native Expo SQLite quota test preserved the original page after SQLITE_FULL and successfully retried after increasing the quota; fixture database was closed/deleted. This does not establish physical SAF-volume exhaustion, which remains an explicit acceptance limitation.
 - Android destination-switch acceptance passed: selected the separate Android/media/com.alghurobaa.podcast/Books/Books folder via SAF. Previously acknowledged eligible content was republished: pages 170 and 172, chapters.json, and manifest.json, with zero pending/retry jobs. Six restored-but-unverified pages remained excluded from export, as intended. Screenshot /tmp/alghurobaa-folder-switch-verified.png. Selected the original preferred parent Books folder again through the picker afterward; no original exports were deleted. Empty Download/alghurobaa-cache-check/Books and the nested test export remain emulator-only test artifacts. Permission revocation and disk-exhaustion acceptance remain open.
