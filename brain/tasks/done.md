@@ -1,5 +1,17 @@
 # Done
 
+### [Book Cache 2/8: Versioned Book Content Format](2026-09-08-book-cache-format.md)
+- Status: Done
+
+### [Book Cache 3/8: Transactional SQLite Book Cache](2026-09-08-book-cache-sqlite.md)
+- Status: Done
+
+### [Book Cache 5/8: Local-First Book Screens](2026-09-08-book-cache-reader.md)
+- Status: Done
+
+### [Book Cache 6/8: Annotation Protection And Account Isolation](2026-09-08-book-cache-annotations.md)
+- Status: Done
+
 ### [Automatic WebView Reader](./2026-09-08-automatic-webview-reader.md)
 - Status: Done
 

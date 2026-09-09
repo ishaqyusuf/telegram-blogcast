@@ -1,7 +1,7 @@
 # Task: Local-First Book Screens
 
 ## Status
-In Progress
+Done
 
 ## Priority
 Medium
@@ -25,18 +25,19 @@ In Progress
 [Plan](../plans/2026-09-08-feature-mobile-book-local-cache.md)
 
 ## Implementation Progress
-- Completion: 80%
+- Completion: 100%
 - Current Checklist: 5/5
-- Blockers: No implementation blocker; Android and release evidence still pending.
+- Blockers: None for this ticket; overall preview acceptance remains in Ticket 8.
 
 ## Implementation Checklist
 - [x] Load complete chapter trees locally before background refresh, preserving the chosen tree design.
 - [x] Load pages locally and resolve chapter/swipe targets before server or WebView access.
 - [x] Expose cached books through an offline-accessible library shelf.
 - [x] Finish scoped auxiliary reader queries, local editor content, and reconnect behavior.
-- [ ] Verify force-stop/reopen, offline chapter search, cached swipes, and missing-page recovery on Android.
+- [x] Verify force-stop/reopen, offline chapter search, cached swipes, and missing-page recovery on Android.
 
 ## Validation Evidence
+- Ticket implementation, review and recorded verification committed and pushed in b5f678f3. This ticket is complete; overall story release and remaining platform edge cases stay open in Tickets 1/4/7/8. Earlier pending statements below are historical.
 - Native offline chapter tap now passes after cold restart: all 2405 nodes loaded, bottom search 106 produced two matches plus ancestor rows, and selecting the matching chapter opened cached database page 170/source 106 with the retained purple highlight/bookmark. Wi-Fi/data were disabled throughout and restored afterward. Screenshots /tmp/alghurobaa-offline-chapter-106-search.png and /tmp/alghurobaa-offline-chapter-tap-reader.png. Chapter status query/polling now waits for focused, known-online state rather than making unnecessary offline requests.
 - 2026-09-09 native online missing-page swipes now verified against the isolated localhost API: source 106 -> 105 -> 104 -> 103 -> 102 -> 101 automatically acquired content via the existing approved concealed WebView, returned to each formatted reader, and persisted guest page rows using database IDs 3 through 7. Newly timestamped local raw captures verify actual acquisition rather than only existing-page resolution. Screenshot /tmp/alghurobaa-cache-adjacent-reader.png shows source 101 / printed 78. The incomplete-tree CTA is expected for the isolated server fixture; the local cached hierarchy remains separate. This supersedes historical pending statements about online missing-page navigation.
 - 2026-09-09 Android navigation: with Wi-Fi and mobile data disabled, swiping left moved from source page 106 (printed 83) to cached page 107 (printed 84), and swiping right returned to page 106. Another right swipe to uncached page 105 showed the explicit offline/retry screen without opening a WebView. Screenshots: /tmp/alghurobaa-offline-swipe-next.png and /tmp/alghurobaa-offline-missing-page.png. This boundary replaces the reader route with recovery UI; it does not keep the current reader visible. Both network connections were restored after the check. Online missing-page capture/return acceptance remains pending.

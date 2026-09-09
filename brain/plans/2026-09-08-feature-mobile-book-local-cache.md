@@ -16,7 +16,13 @@ In Progress
 Persist book pages and complete chapter trees for immediate offline reading, with portable files under the user's preferred Android/media/com.alghurobaa.podcast/Books/book-{databaseBookId}/ directory. Preserve formatting, annotations, metadata, and the existing automatic foreground WebView acquisition flow.
 
 ## Current Context
-The app already opens al_ghurobaa.db with Expo SQLite/Drizzle. Legacy downloads write normalized book tables, while the former offline hook was a stub. The automatic WebView reader was committed separately as 8084f8ce. New cache work is in the current main checkout and remains uncommitted. Existing brain/ is retained; no .brain migration is part of this feature.
+The app already opens al_ghurobaa.db with Expo SQLite/Drizzle. Legacy downloads write normalized book tables, while the former offline hook was a stub. The automatic WebView reader was committed separately as 8084f8ce. Cache implementation is committed and pushed on main as b5f678f3. Existing brain/ is retained; no .brain migration is part of this feature.
+
+## Current Release State
+- API deployment for b5f678f3 succeeded; a read-only production download-manifest check returned HTTP 200. The additive production annotation schema was pushed earlier.
+- Android preview 2026.09.09 is published: update group f1d2ffdc-edfe-4cf5-a6a1-80f88874afbd, runtime 1.0.111. Generated version bump and release notes belong to the follow-up release commit.
+- Tickets 2/3/5/6 are complete. Build-variant/remaining storage edge-case and installed-preview acceptance stay open. No claim of whole-story completion.
+- Sentry source-map follow-up failed after OTA publication; retry was safety-rejected pending explicit approval to upload application source maps. Do not republish the OTA to retry source maps.
 
 ## Proposed Approach
 - Keep the live SQLite database and private reader/user metadata in app-private storage. Never relocate or copy the live DB/WAL files into Android/media.

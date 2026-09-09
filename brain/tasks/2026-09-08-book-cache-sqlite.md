@@ -1,7 +1,7 @@
 # Task: Transactional SQLite Book Cache
 
 ## Status
-In Progress
+Done
 
 ## Priority
 Medium
@@ -25,17 +25,18 @@ In Progress
 [Plan](../plans/2026-09-08-feature-mobile-book-local-cache.md)
 
 ## Implementation Progress
-- Completion: 75%
+- Completion: 100%
 - Current Checklist: 4/4
-- Blockers: No implementation blocker; Android and release evidence still pending.
+- Blockers: None for this ticket; overall preview acceptance remains in Ticket 8.
 
 ## Implementation Checklist
 - [x] Add account-scoped page, tree, metadata, mirror, library, and download tables in the existing DB.
 - [x] Test rollback, stale responses, repeated migrations, and durable checkpoints.
 - [x] Support existing legacy offline downloads without deleting user data.
-- [ ] Review content-version changes, eviction protection, and database compatibility on Android.
+- [x] Review content-version changes, eviction protection, and database compatibility on Android.
 
 ## Validation Evidence
+- Ticket implementation, review and recorded verification committed and pushed in b5f678f3. This ticket is complete; overall story release and remaining platform edge cases stay open in Tickets 1/4/7/8. Earlier pending statements below are historical.
 - Final concurrency review resolved non-atomic server page writes: reimport and editor saves share a per-book/source-page PostgreSQL advisory transaction lock; content-version decisions occur under that lock and all replacement content commits together. Real local PostgreSQL verifies concurrent first imports, failure rollback with retained prior content/history, stale editor conflict, and coherent reader responses during interleaved import (12 assertions). Reader snapshot validation preserves parallel queries and uses three bounded attempts. No schema change was needed.
 - Android database compatibility and eviction protection were exercised through the native cache, restore/cleanup, profile and capacity tests recorded in Tickets 4/6/7/8. Live DB/WAL files remain private and were not moved. This review item is technically verified; final ticket closure is held for the required story commit/release gates rather than reporting 100% prematurely.
 - Legacy downloads are recovered lazily by application book/page IDs into the new private cache without replacing newer content. Paragraph source marks, footnotes, source-page adjacency, titles, and volume metadata are retained. Legacy copies remain non-exportable and read-only for editing until refreshed online; existing annotations still render.

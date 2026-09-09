@@ -25,16 +25,16 @@ In Progress
 [Plan](../plans/2026-09-08-feature-mobile-book-local-cache.md)
 
 ## Implementation Progress
-- Completion: 67%
-- Current Checklist: 5/6
-- Blockers: No implementation blocker; Android and release evidence still pending.
+- Completion: 83%
+- Current Checklist: 6/6
+- Blockers: Actual preview APK/build-variant acceptance remains pending; source-map upload requires explicit approval after safety rejection.
 
 ## Implementation Checklist
 - [x] Run the complete focused cache and reader regression suites and scoped type/lint checks.
 - [x] Review all changed production code and resolve actionable findings.
 - [x] Verify real Android folder writes and airplane-mode force-stop/reopen using book 23833 page 106.
 - [x] Verify annotations, downloaded pages, chapter navigation, restore, and account boundaries on Android.
-- [ ] Commit all story code, push the current branch, and document deployment/schema requirements.
+- [x] Commit all story code, push the current branch, and document deployment/schema requirements.
 - [ ] Run Expo Update for the preview channel and verify the actual preview release; do not substitute emulator development evidence.
 
 ## Required Release Sequence
@@ -44,6 +44,11 @@ In Progress
 - If server schema changes become necessary, run the authorized production DB push safely before dependent API/preview rollout. Local SQLite migrations alone do not require it.
 
 ## Validation Evidence
+- Preview publication verified independently with eas update:view: group f1d2ffdc-edfe-4cf5-a6a1-80f88874afbd, Android update 01a085d7-036d-775b-8f5d-d31367b96ff2, branch preview, runtime 1.0.111, message OTA update 2026.09.09, created 2026-09-09T11:04:15.981Z. Dashboard: https://expo.dev/accounts/ishaqyusuf/projects/alghurobaa/updates/f1d2ffdc-edfe-4cf5-a6a1-80f88874afbd. EAS source commit is b5f678f3; the script-generated UPDATE_VERSION bump was uncommitted during export and is being recorded in the follow-up release commit with these notes. No second OTA or native build was started.
+- The combined eas:update script exited 1 only after successful publication because its Sentry follow-up could not resolve SENTRY_ORG. A proposed source-map-only retry with the preview environment was rejected by safety review because generated maps can expose application source code. No bypass or further upload was attempted. Asked user for explicit approval; the OTA remains published and this does not invalidate it. Do not rerun the full publish command to retry source maps.
+- Installed-preview acceptance remains unproven: the old preview APK expired, and the pending user choice is a fresh native build (may use EAS credits) or a saved APK. Remaining literal grant-revocation/physical volume checks are distinguished from the passed native permission-denial, SQLite capacity and injected download-feedback tests. Overall story remains In Progress, not complete.
+- Vercel deployment for b5f678f3 completed successfully. Read-only production check of book.getBookDownloadManifest for book 3 returned HTTP 200 with source book 23833 and eight available pages; no annotation/content write was made. Started the requested bun run eas:update --preview with explicit preview/public API environment and local emulator overrides unset. Script bumped UPDATE_VERSION to 2026.09.09; terminal session 21700 is exporting. Do not start another publication while this session is live. Publication outcome and the generated version follow-up commit remain pending.
+- Implementation committed and pushed: b5f678f3 (feat(books): add private local cache and recoverable Android exports), 104 files. Remote was synchronized before commit and push succeeded without force. Vercel reports a live pending deployment for this commit: https://vercel.com/ishaqyusufs-projects/al-ghurobaa-media-t3/246NssNGivvG3Lsnahw7f1Uj1Nuu. Wait for server readiness before dependent preview publication. Production BookDeviceAnnotation schema was pushed earlier; later page-write fixes require no additional schema changes. Preview publication and actual installed-preview verification are not yet complete.
 - Native acceptance reconciliation: after cold restart with Wi-Fi/data disabled, the chapter tree rendered 2405 nodes; search 106 returned four rows (two matching chapters plus ancestors), and tapping the matching chapter opened database page 170/source 106 with its purple highlight and bookmark intact. Screenshots: /tmp/alghurobaa-offline-chapter-106-search.png, /tmp/alghurobaa-offline-chapter-tap-reader.png. This closes the remaining cached chapter-tap gap alongside earlier annotation/download/restore/profile evidence. Existing development warning toast remains in the reader screenshot; it is not a preview screenshot.
 - Offline UI check found chapter-import status still queried bookState without connectivity. Added focused/known-online guards to its query, focus refetch and progress polling. Component lint passes; native offline tree/search/tap succeeds. Full focused suite remains 200 tests / 694 assertions / 34 files. Expo tsc exits 2 with existing errors and no component diagnostic. Fresh Hermes export succeeds at /tmp/alghurobaa-preview-cache-offline-status, index-cc6b0e6bf594f34f5b1a79c43495c236.hbc (20.6 MB). This export supersedes earlier mobile artifacts.
 - Download storage-feedback acceptance used a reversible one-shot savePage rejection in the running emulator, not physical disk filling. Actual UI displayed database or disk is full, Resume Download and 0/7 checkpoint. Original repository method restored itself and was verified. Retry saved all seven isolated-server pages (cursor 170), then correctly stopped because that server fixture lacks a complete chapter tree; it did not falsely report complete. Screenshot /tmp/alghurobaa-download-storage-error.png. Real native SQLite capacity rollback was separately verified earlier. Wi-Fi/data restored; current local-only API was restarted with reviewed server code (session 44042).

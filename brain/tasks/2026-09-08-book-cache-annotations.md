@@ -1,7 +1,7 @@
 # Task: Annotation Protection And Account Isolation
 
 ## Status
-In Progress
+Done
 
 ## Priority
 Medium
@@ -25,15 +25,15 @@ In Progress
 [Plan](../plans/2026-09-08-feature-mobile-book-local-cache.md)
 
 ## Implementation Progress
-- Completion: 75%
+- Completion: 100%
 - Current Checklist: 4/4
-- Blockers: No implementation blocker; Android and release evidence still pending.
+- Blockers: None for this ticket; overall preview acceptance remains in Ticket 8.
 
 ## Implementation Checklist
 - [x] Keep highlights, comments, drafts, and account identifiers outside portable content files.
 - [x] Scope annotation, draft, bookmark, and pending-sync state without losing legacy user data.
 - [x] Verify retry-safe annotation synchronization and preservation after reimport.
-- [ ] Verify colored highlights, comments, bookmarks, and account switching after restart.
+- [x] Verify colored highlights, comments, bookmarks, and account switching after restart.
 
 ## Current Verified State
 - Native profile isolation now passes: synthetic user:cache-acceptance could not see guest highlights, bookmark, or draft after restart. Guest state returned after restoring the guest session and restarting. The remaining ticket closeout requires final review/commit; earlier statements below about pending profile acceptance are historical.
@@ -45,6 +45,7 @@ In Progress
 - Commit, push, API deployment, and Expo preview publication remain outstanding. Do not reconnect emulator test annotations to production.
 
 ## Validation Evidence
+- Ticket implementation, review and recorded verification committed and pushed in b5f678f3. This ticket is complete; overall story release and remaining platform edge cases stay open in Tickets 1/4/7/8. Earlier pending statements below are historical.
 - Native profile test used the existing profile store with no token change and only the isolated localhost API. Guest scope contained six annotations and the editable-page draft; the other scope initially contained neither. Reader/editor screenshots confirm isolation: /tmp/alghurobaa-profile-isolated-reader.png and /tmp/alghurobaa-profile-isolated-draft.png. Guest restoration screenshot /tmp/alghurobaa-guest-profile-restored.png confirms the purple highlight and bookmark returned. No production records were changed.
 - Offline native draft recovery passed: disabled Wi-Fi/mobile data, force-stopped the app, relaunched through USB-forwarded Metro, opened cached user-source book 90003/page 900170, and entered edit mode. The rich editor restored Original local teDraft-restart-acceptancest paragraph. without a server save. Screenshot /tmp/alghurobaa-draft-offline-restored.png. Guest-owned private SQLite persistence was independently read before restart. Wi-Fi and mobile data were restored afterward. Native profile-switch behavior is not claimed by this check.
 - Draft/profile review found that the hook's load-error update reused the previous state's draft while replacing its profile/page key. Added a scope-aware error-state helper: preserve a draft only for the same key, otherwise clear it while retaining a retryable load error. Two pure state tests plus SQLite repository regressions pass (23 tests, 90 assertions); scoped lint passes. This is a reviewed error-path fix, not native profile-switch acceptance.
