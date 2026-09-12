@@ -1,5 +1,10 @@
 import { Pressable } from "@/components/ui/pressable";
 import { AddToAlbumModal } from "@/components/channel-chat/add-to-album-modal";
+import {
+  AlbumSuggestionChannelFilterSheet,
+  getAlbumSuggestionChannelLabel,
+  type AlbumSuggestionChannel,
+} from "@/components/album/album-suggestion-channel-filter-sheet";
 import { useInfiniteLoader } from "@/components/infinite-loader";
 import { BlogCard, type BlogItem } from "@/components/blog-card";
 import {
@@ -2644,6 +2649,9 @@ function SuggestedMediaRow({
   const title =
     media.title || media.file?.fileName || media.blog?.content || "Untitled";
   const matchingTerms = media.matchingTerms ?? [];
+  const channelLabel =
+    getAlbumSuggestionChannelLabel(media.blog?.channel) ||
+    (media.blog?.channelId ? `Channel ${media.blog.channelId}` : null);
 
   return (
     <Pressable
@@ -2693,6 +2701,14 @@ function SuggestedMediaRow({
             gap: 6,
           }}
         >
+          {channelLabel && (
+            <Text
+              numberOfLines={1}
+              style={{ fontSize: 11, fontWeight: "700", color: colors.primary }}
+            >
+              {channelLabel}
+            </Text>
+          )}
           {duration != null && (
             <Text style={{ fontSize: 11, color: colors.mutedForeground }}>
               {minuteToString(duration)}
@@ -3162,6 +3178,9 @@ export default function AlbumDetailScreen() {
   const { data: albums = [], refetch: refetchAlbums } = useQuery(
     _trpc.album.getAlbums.queryOptions(),
   );
+  const { data: suggestionChannels = [] } = useQuery(
+    _trpc.channel.getChannels.queryOptions(),
+  );
   const { data: authors = [] } = useQuery(
     _trpc.album.getAuthors.queryOptions(),
   );
@@ -3191,6 +3210,11 @@ export default function AlbumDetailScreen() {
   >(new Set());
   const [suggestionsRequested, setSuggestionsRequested] = useState(false);
   const [suggestionKeyword, setSuggestionKeyword] = useState("");
+  const [suggestionChannelId, setSuggestionChannelId] = useState<
+    number | undefined
+  >();
+  const [suggestionChannelFilterOpen, setSuggestionChannelFilterOpen] =
+    useState(false);
   const [addingSuggestionIds, setAddingSuggestionIds] = useState<Set<number>>(
     new Set(),
   );
@@ -3259,9 +3283,25 @@ export default function AlbumDetailScreen() {
     album?.channel?.id ??
     tracks.find((media: any) => typeof media?.blog?.channelId === "number")?.blog
       ?.channelId;
+  const effectiveSuggestionChannelId = albumChannelId ?? suggestionChannelId;
+  const selectedSuggestionChannel = (
+    suggestionChannels as AlbumSuggestionChannel[]
+  ).find((channel) => channel.id === effectiveSuggestionChannelId);
+  const suggestionChannelLabel =
+    getAlbumSuggestionChannelLabel(selectedSuggestionChannel) ||
+    getAlbumSuggestionChannelLabel(album?.channel) ||
+    (effectiveSuggestionChannelId
+      ? `Channel ${effectiveSuggestionChannelId}`
+      : "Choose channel");
   const selectedSuggestionCount = selectedSuggestionIds.size;
   const selectedTrackCount = selectedTrackIds.size;
   const normalizedSuggestionKeyword = suggestionKeyword.trim();
+  const suggestedMediaQueryInput = {
+    albumId: id,
+    channelId: effectiveSuggestionChannelId,
+    limit: SUGGESTION_POOL_LIMIT,
+    keyword: normalizedSuggestionKeyword || undefined,
+  };
   const libraryBooks = Array.isArray((booksData as any)?.data)
     ? ((booksData as any).data as any[])
     : [];
@@ -3310,12 +3350,9 @@ export default function AlbumDetailScreen() {
     isFetching: isFetchingSuggestions,
     refetch: refetchSuggestedMedia,
   } = useQuery({
-    ..._trpc.album.getSuggestedMedia.queryOptions({
-      albumId: id,
-      limit: SUGGESTION_POOL_LIMIT,
-      keyword: normalizedSuggestionKeyword || undefined,
-    }),
-    enabled: suggestionsRequested,
+    ..._trpc.album.getSuggestedMedia.queryOptions(suggestedMediaQueryInput),
+    enabled:
+      suggestionsRequested && typeof effectiveSuggestionChannelId === "number",
   });
   const visibleSuggestedMedia = suggestedMedia.filter(
     (media: any) => !dismissedSuggestionIds.has(media.id),
@@ -3407,11 +3444,9 @@ export default function AlbumDetailScreen() {
           void invalidateAlbumTrackData();
           qc.invalidateQueries({ queryKey: _trpc.album.getAlbums.queryKey() });
           qc.invalidateQueries({
-            queryKey: _trpc.album.getSuggestedMedia.queryKey({
-              albumId: id,
-              limit: SUGGESTION_POOL_LIMIT,
-              keyword: normalizedSuggestionKeyword || undefined,
-            }),
+            queryKey: _trpc.album.getSuggestedMedia.queryKey(
+              suggestedMediaQueryInput,
+            ),
           });
           const addedIds = new Set(variables.mediaIds);
           setDismissedSuggestionIds((prev) => new Set([...prev, ...addedIds]));
@@ -3576,6 +3611,7 @@ export default function AlbumDetailScreen() {
     const savedKeywords = ((album as any).suggestionKeywords ?? "").trim();
     autoLoadedSuggestionAlbumRef.current = album.id;
     setSuggestionKeyword(savedKeywords);
+    setSuggestionChannelId(album.channel?.id);
     setSuggestionsRequested(Boolean(savedKeywords));
     setSelectedSuggestionIds(new Set());
     setDismissedSuggestionIds(new Set());
@@ -3812,11 +3848,9 @@ export default function AlbumDetailScreen() {
       setDeleteSuggestionConfirmVisible(false);
       await Promise.all([
         qc.invalidateQueries({
-          queryKey: _trpc.album.getSuggestedMedia.queryKey({
-            albumId: id,
-            limit: SUGGESTION_POOL_LIMIT,
-            keyword: normalizedSuggestionKeyword || undefined,
-          }),
+          queryKey: _trpc.album.getSuggestedMedia.queryKey(
+            suggestedMediaQueryInput,
+          ),
         }),
         qc.invalidateQueries({ queryKey: _trpc.blog.posts.queryKey() }),
       ]);
@@ -3838,6 +3872,10 @@ export default function AlbumDetailScreen() {
   }
 
   function suggestMoreForAlbum() {
+    if (typeof effectiveSuggestionChannelId !== "number") {
+      setSuggestionChannelFilterOpen(true);
+      return;
+    }
     setSuggestionsRequested(true);
     setSelectedSuggestionIds(new Set());
     setDismissedSuggestionIds(new Set());
@@ -3846,6 +3884,15 @@ export default function AlbumDetailScreen() {
       suggestionKeywords: normalizedSuggestionKeyword,
     });
     void refetchSuggestedMedia();
+  }
+
+  function selectSuggestionChannel(channelId: number) {
+    if (albumChannelId && channelId !== albumChannelId) return;
+    setSuggestionChannelId(channelId);
+    setSuggestionChannelFilterOpen(false);
+    setSuggestionsRequested(true);
+    setSelectedSuggestionIds(new Set());
+    setDismissedSuggestionIds(new Set());
   }
 
   async function applyAlbumArtFromUpload(upload: BlobMediaUpload) {
@@ -4101,11 +4148,9 @@ export default function AlbumDetailScreen() {
       }),
       invalidateAlbumTrackData(),
       qc.invalidateQueries({
-        queryKey: _trpc.album.getSuggestedMedia.queryKey({
-          albumId: id,
-          limit: SUGGESTION_POOL_LIMIT,
-          keyword: normalizedSuggestionKeyword || undefined,
-        }),
+        queryKey: _trpc.album.getSuggestedMedia.queryKey(
+          suggestedMediaQueryInput,
+        ),
       }),
     ]);
   }
@@ -5476,6 +5521,60 @@ export default function AlbumDetailScreen() {
                   </View>
 
                   <View style={{ paddingTop: 12, paddingBottom: 4 }}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Filter suggestions by channel. Current channel: ${suggestionChannelLabel}`}
+                      onPress={() => setSuggestionChannelFilterOpen(true)}
+                      haptic
+                      style={{
+                        minHeight: 44,
+                        borderWidth: 1,
+                        borderColor: colors.border,
+                        backgroundColor: colors.card,
+                        borderRadius: 12,
+                        paddingHorizontal: 12,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 8,
+                        marginBottom: 8,
+                      }}
+                    >
+                      <Icon
+                        name="ListOrdered"
+                        size={16}
+                        color={colors.mutedForeground}
+                      />
+                      <View style={{ flex: 1, gap: 1 }}>
+                        <Text
+                          style={{
+                            fontSize: 10,
+                            fontWeight: "700",
+                            color: colors.mutedForeground,
+                            textTransform: "uppercase",
+                          }}
+                        >
+                          Channel
+                        </Text>
+                        <Text
+                          numberOfLines={1}
+                          style={{
+                            fontSize: 13,
+                            fontWeight: "800",
+                            color: effectiveSuggestionChannelId
+                              ? colors.foreground
+                              : colors.primary,
+                          }}
+                        >
+                          {suggestionChannelLabel}
+                        </Text>
+                      </View>
+                      <Icon
+                        name={albumChannelId ? "Lock" : "ChevronDown"}
+                        size={16}
+                        color={colors.mutedForeground}
+                      />
+                    </Pressable>
+
                     <TextInput
                       value={suggestionKeyword}
                       onChangeText={(value) => {
@@ -5664,6 +5763,15 @@ export default function AlbumDetailScreen() {
         onConfirm={() => {
           void confirmDeleteSelectedSuggestions();
         }}
+      />
+
+      <AlbumSuggestionChannelFilterSheet
+        visible={suggestionChannelFilterOpen}
+        channels={suggestionChannels as AlbumSuggestionChannel[]}
+        selectedChannelId={effectiveSuggestionChannelId}
+        lockedChannelId={albumChannelId}
+        onClose={() => setSuggestionChannelFilterOpen(false)}
+        onSelect={selectSuggestionChannel}
       />
 
       <AlbumArtSourceSheet

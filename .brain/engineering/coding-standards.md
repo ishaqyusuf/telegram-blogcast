@@ -1,0 +1,41 @@
+# Coding Standards
+
+## Purpose
+Defines repository-wide implementation norms so code stays consistent across apps and packages.
+
+## How To Use
+- Update when the team agrees on a new code pattern or naming rule.
+- Prefer linking to deeper standards if this grows too large.
+- Keep rules tied to conventions already visible in the codebase or project docs.
+
+## Template
+
+### General Standards
+- Prefer TypeScript across all packages and apps.
+- Reuse shared workspace packages before adding duplicate logic.
+- Keep domain logic separated from app-specific rendering code.
+- Favor typed contracts and schema validation at API boundaries.
+- In React Native components, do not mix `className` and `style` on the same element by default. Prefer one styling path per element; only use both when there is a clear platform-specific need and document that exception inline.
+
+### Naming
+- File names: `kebab-case`
+- Components: `PascalCase`
+- Variables/functions: `camelCase`
+- Constants: `SCREAMING_SNAKE_CASE`
+
+### Repo Practices
+- Preserve existing user changes unless explicitly asked to overwrite them.
+- Update Brain docs after meaningful architecture, feature, API, or database changes.
+- When changing Prisma schema files in this project, use `bun db:push` only to apply DB updates because there is no local database workflow. Do not run `bun db:migrate` unless the project gains a local DB setup or the user explicitly asks. Do not manually create migration files.
+- Add ADRs for major long-term decisions.
+
+<!-- personal-coding-rules:start -->
+## Global Personal Coding Rules
+
+Agents must treat these global coding rule references as non-negotiable:
+
+- `/Users/M1PRO/.me/coding-standards/global.md`
+- `/Users/M1PRO/.me/coding-standards/expo.md`
+
+Project-specific exceptions require an ADR in `.brain/decisions/` before agents may diverge.
+<!-- personal-coding-rules:end -->

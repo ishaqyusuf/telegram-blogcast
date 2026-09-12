@@ -16,6 +16,7 @@ import { createTRPCRouter, publicProcedure } from "../init";
 
 const suggestedMediaInput = z.object({
 	albumId: z.number(),
+	channelId: z.number().optional(),
 	limit: z.number().int().min(1).max(500).optional().default(25),
 	keyword: z.string().trim().optional(),
 });
@@ -813,7 +814,8 @@ export const albumRoutes = createTRPCRouter({
 			const albumMediaIds = album.medias.map((media) => media.id);
 			const channelId =
 				album.channelId ??
-				album.medias.find((media) => media.blog?.channelId)?.blog?.channelId;
+				album.medias.find((media) => media.blog?.channelId)?.blog?.channelId ??
+				input.channelId;
 
 			if (!channelId) return [];
 
