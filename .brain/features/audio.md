@@ -52,9 +52,12 @@ Tracks the current audio playback experience, supporting components, and future 
   - Duration
   - `isPlaying`
   - Download progress
+- Completed audio downloads are atomically promoted from `.part` files, resolved by stable media identity before any remote URL, and validated against the known file size when available. Android variants use their own scoped media directory; incompatible older native builds fall back to app-private document storage.
+- Feed and album play controls use a filled blue offline state only when a complete readable phone file exists. Download completion and app foregrounding refresh every visible copy.
 
 ### UX Notes
 - Persistent mini-player is a core interaction pattern.
+- The mini-player is suppressed throughout Search and on an audio detail route whose viewed media matches the active media; playback continues and eligible routes restore the player normally.
 - Opening an audio detail screen is passive: it may show the viewed audio's metadata and duration, but it must not replace, stop, seek, or pause the currently active audio until the user presses play on the viewed audio.
 - Oversized Facebook audio is intentionally not loaded into the in-app player. Its thumbnail and metadata remain visible, and the play action opens the Telegram message for files through 50 MiB or the original Facebook post for larger files.
 - Audio-detail scrub dragging is locally controlled until native seek settles; store progress events must not overwrite the thumb/time label while `isSeeking` is active.

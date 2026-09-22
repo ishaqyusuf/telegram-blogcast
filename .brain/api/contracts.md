@@ -71,6 +71,7 @@ Tracks important request/response expectations and typed boundaries between clie
   configured Vercel URLs.
 - Expo Settings owns a shared Local Services IP. When set, clients derive the local API URL from that IP and the API port, derive the transcriber URL from the same IP and transcriber port, and derive the Facebook bridge URL from the same IP and bridge port. Explicit service URL overrides still take precedence over IP-derived defaults.
 - `/blog-import` mobile flow talks to the local API over LAN using the tRPC channel procedures: `channel.getChannels`, `channel.syncChannels`, `channel.toggleFetchable`, `channel.startFetch`, `channel.stopFetch`, and `channel.getFetcherState`.
+- `channel.startFetch` accepts optional `once`. When true, the local Telegram fetcher pages every message newer than the saved high-water mark, completes any outstanding historical backfill, waits for each batch listener to persist, and then reports `completed`. Repeating the operation is idempotent against saved Telegram message IDs.
 - `/facebook-import` mobile flow talks to tRPC `facebookImport.getSummary`, `facebookImport.listMediaImports`, `facebookImport.checkBridge`, and `facebookImport.startMediaImport`.
 - `/facebook-saved-sync` loads known identities through `facebookImport.getSavedSyncState`, captures Facebook Saved inside an authenticated WebView, and submits the completed delta through `facebookImport.syncSavedPosts`.
 

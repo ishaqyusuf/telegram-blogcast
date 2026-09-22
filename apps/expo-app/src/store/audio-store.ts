@@ -1,5 +1,8 @@
+import {
+	getDownloadedAudio,
+	notifyAudioDownloadsChanged,
+} from "@/lib/downloaded-audio";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as LegacyFileSystem from "expo-file-system/legacy";
 import {
 	AppState,
 	DeviceEventEmitter,
@@ -20,11 +23,7 @@ import type { ItemProps } from "@/components/home-feed/home-feed-post-card";
 import { getAudioPlayability, isAudioPlayable } from "@/lib/audio-playability";
 import { getAudioDisplayTitle } from "@/lib/audio-title";
 import { getTelegramFileUrl } from "@/lib/get-telegram-file";
-import {
-	getMediaTargetUri,
-	getUsableCachedMediaUri,
-	sanitizeMediaFileName,
-} from "@/lib/media-cache";
+import { cacheMedia } from "@/lib/media-cache";
 import {
 	REMOTE_PLAYBACK_SNAPSHOT_EVENT,
 	type RemotePlaybackSnapshot,
@@ -68,14 +67,6 @@ let positionInterval: ReturnType<typeof setInterval> | null = null;
 let listenerCleanup: (() => void) | null = null;
 let notificationPermissionPromise: Promise<void> | null = null;
 
-function uniqueUrls(urls: (string | null | undefined)[]) {
-	return urls.filter(
-		(url, index): url is string =>
-			Boolean(url) &&
-			urls.findIndex((candidate) => candidate === url) === index,
-	);
-}
-
 function secondsToMillis(seconds?: number | null) {
 	return Math.max(0, Math.round((seconds ?? 0) * 1000));
 }
@@ -102,18 +93,6 @@ function getPlaybackStateName(
 	state: Awaited<ReturnType<typeof TrackPlayer.getPlaybackState>>,
 ) {
 	return state.state;
-}
-
-function sanitizePublicFileName(fileName: string) {
-	return sanitizeMediaFileName(fileName, "audio.mp3");
-}
-
-async function ensurePrivateAudioFile(fileName: string, cacheKey: string) {
-	return getMediaTargetUri({
-		cacheKey,
-		fileName: sanitizePublicFileName(fileName),
-		kind: "audio",
-	});
 }
 
 async function requestAndroidNotificationPermission() {
@@ -418,10 +397,7 @@ function ensureTrackPlayerListeners() {
 		),
 		AppState.addEventListener("change", (nextState) => {
 			const state = useAudioStore.getState();
-			if (
-				nextState !== "active" ||
-				(!state.sound && !state.activeTrackId)
-			) {
+			if (nextState !== "active" || (!state.sound && !state.activeTrackId)) {
 				return;
 			}
 			void useAudioStore.getState().syncPlaybackSnapshot();
@@ -537,8 +513,16 @@ export const useAudioStore = create<AudioState>()(
           !incomingAlbumId || !nextAlbumQueue?.length;
 
 				try {
+					const downloadIdentity = {
+						mediaId: (blog.audio as any)?.mediaId,
+						blogId: blog.id,
+						fileName,
+						size: (blog.audio as any)?.size,
+					};
+					const privateCachedAudioUri =
+						await getDownloadedAudio(downloadIdentity);
 					const audioPlayability = getAudioPlayability(blog?.audio as any);
-					if (!audioPlayability.canPlay) {
+					if (!privateCachedAudioUri && !audioPlayability.canPlay) {
 						throw new Error(
 							audioPlayability.reason ?? "Audio cannot be played.",
 						);
@@ -585,34 +569,19 @@ export const useAudioStore = create<AudioState>()(
 					await preparePlayer();
 					get().stopPositionTracking();
 
-					const publicFileName = sanitizePublicFileName(fileName);
-          const privateAudioUri = await ensurePrivateAudioFile(
-            publicFileName,
-            nextTrackId,
-          );
-          const privateCachedAudioUri =
-            await getUsableCachedMediaUri(privateAudioUri);
-						const telegramUrl = blog?.audio?.telegramFileId
+					// Only resolve a network source after exhausting the device cache.
+					let audioSource = privateCachedAudioUri;
+					let needsDownload = false;
+					if (!audioSource) {
+						const telegramUrl =
+							!directUrl && blog?.audio?.telegramFileId
 							? (await getTelegramFileUrl(blog.audio.telegramFileId))?.url
 							: null;
-						const sourceUrls = uniqueUrls([directUrl, telegramUrl]);
-          let audioSource: string;
-          let downloadTargetUri: string | null = null;
-
-          if (privateCachedAudioUri) {
-            audioSource = privateCachedAudioUri;
-            set({ localPath: privateCachedAudioUri });
-          } else if (sourceUrls.length > 0) {
-						audioSource = sourceUrls[0];
-              downloadTargetUri = privateAudioUri;
-						set({
-							downloadProgress: 0,
-                isDownloading: true,
-							localPath: null,
-						});
-            } else {
-              throw new Error("Audio URL is not available");
+						audioSource = directUrl || telegramUrl || null;
+						if (!audioSource) throw new Error("Audio URL is not available");
+						needsDownload = true;
             }
+					set({ localPath: privateCachedAudioUri });
 
 					const track = buildTrack(blog, audioSource);
 
@@ -629,7 +598,7 @@ export const useAudioStore = create<AudioState>()(
 						duration: secondsToMillis(progress.duration),
 						error: null,
 						isLoading: false,
-						isDownloading: Boolean(downloadTargetUri),
+						isDownloading: needsDownload,
 						isPlaying: false,
 						hasEnded: false,
 						playSessionStartPosition: null,
@@ -638,45 +607,32 @@ export const useAudioStore = create<AudioState>()(
 						uri: audioSource,
 					});
 
-					if (downloadTargetUri) {
-						set({ downloadProgress: 0, isDownloading: true });
-
-						LegacyFileSystem.createDownloadResumable(
-							audioSource,
-							downloadTargetUri,
-							{},
-							(progress) => {
-								const expected = progress.totalBytesExpectedToWrite;
-								const written = progress.totalBytesWritten;
-
-								if (expected > 0) {
-									set({
-										downloadProgress: Math.max(
-											0,
-											Math.min(1, written / expected),
-										),
-									});
-								}
-							},
-						)
-							.downloadAsync()
-							.then((result) => {
-								if (result) {
-									set({
+					if (needsDownload) {
+						const updateIfCurrent = (patch: Partial<AudioState>) => {
+							if (get().activeTrackId === String(track.id)) set(patch);
+						};
+						void cacheMedia({
+							kind: "audio",
+							cacheKey: downloadIdentity.mediaId
+								? `media-${downloadIdentity.mediaId}`
+								: nextTrackId,
+							fileName,
+							url: audioSource,
+							expectedSize: downloadIdentity.size,
+							onProgress: (downloadProgress) =>
+								updateIfCurrent({ downloadProgress }),
+						})
+							.then((uri) => {
+								notifyAudioDownloadsChanged();
+								updateIfCurrent({
 										downloadProgress: 1,
 										isDownloading: false,
-										localPath: result.uri,
+									localPath: uri,
 									});
-								} else {
-									set({ downloadProgress: 0, isDownloading: false });
-								}
 							})
-							.catch((err) => {
-								console.warn("[audio] Cache download failed:", err);
-                LegacyFileSystem.deleteAsync(downloadTargetUri, {
-                  idempotent: true,
-                }).catch(() => undefined);
-								set({ downloadProgress: 0, isDownloading: false });
+							.catch((error) => {
+								console.warn("[audio] Cache download failed:", error);
+								updateIfCurrent({ downloadProgress: 0, isDownloading: false });
 							});
 					}
 				} catch (err) {

@@ -1,3 +1,4 @@
+import { shouldShowAudioBar } from "@/lib/audio-bar-visibility";
 import { useAudioStore, type AudioPlayMode } from "@/store/audio-store";
 import { useGlobalAudioBarStore } from "@/store/global-audio-bar-store";
 import { useFloatingBottomSheetStore } from "@/components/ui/floating-bottom-sheet-store";
@@ -176,6 +177,9 @@ export function GlobalAudioBar() {
   const audioDetailPlayerVisible = useGlobalAudioBarStore(
     (s) => s.audioDetailPlayerVisible,
   );
+	const viewedAudioMediaId = useGlobalAudioBarStore(
+		(s) => s.viewedAudioMediaId,
+	);
 
   // ── Sleep timer countdown + enforcement ────────────────────────────────────
   const [sleepRemaining, setSleepRemaining] = useState<number | null>(null);
@@ -242,12 +246,17 @@ export function GlobalAudioBar() {
 
   const audioDetailMatch = pathname.match(/^\/blog-view-2\/([^/]+)/);
   const viewedAudioId = audioDetailMatch?.[1] ?? null;
-  const isAudioDetailScreen = viewedAudioId !== null;
-  const visible =
-    !hidden &&
-    !hasOpenFloatingSheet &&
-    Boolean(sound) &&
-    (isAudioDetailScreen ? audioDetailPlayerVisible : !scrollHidden);
+	const visible = shouldShowAudioBar({
+		pathname,
+		hasAudio: Boolean(sound),
+		activeBlogId: blog?.id,
+		activeMediaId: (blog?.audio as any)?.mediaId,
+		viewedMediaId: viewedAudioMediaId,
+		hidden,
+		sheetOpen: hasOpenFloatingSheet,
+		scrollHidden,
+		detailVisible: audioDetailPlayerVisible,
+	});
   const title = getAudioDisplayTitle(blog, "Now Playing");
   const blogId = blog?.id;
   const showTitle = !viewedAudioId || String(blogId) !== viewedAudioId;

@@ -35,6 +35,8 @@ export interface FetchMessagesOptions {
 
   /** Optional lower-bound filter (messages must have id > minId). */
   minId?: number;
+	/** Page forward from minId so incremental sync cannot skip a burst of posts. */
+	oldestFirst?: boolean;
 
   /** When true, resolves Bot API file_ids for media messages (adds latency). */
   resolveFiles?: boolean;
@@ -249,6 +251,7 @@ export async function fetchMessages(
     limit = 20,
     startId,
     minId,
+		oldestFirst = false,
     resolveFiles = false,
     audio = true,
     image = true,
@@ -265,7 +268,15 @@ export async function fetchMessages(
   // GetHistory pagination:
   // - offsetId: fetch messages older than this id (primary paging cursor)
   // - minId: optional lower-bound filter (messages newer than minId)
-  const response = await client.invoke(
+	const response = oldestFirst
+		? {
+				messages: await client.getMessages(channel, {
+					limit,
+					minId: minId ?? 0,
+					reverse: true,
+				}),
+			}
+		: await client.invoke(
     new Api.messages.GetHistory({
       peer: channel,
       offsetId: startId ?? 0,

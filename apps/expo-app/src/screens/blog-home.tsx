@@ -26,9 +26,11 @@ import { BlogHomeChannels } from "@/components/blog-home/blog-home-channels";
 import { BlogHomeFab } from "@/components/blog-home/blog-home-fab";
 import { BlogHomeHeader } from "@/components/blog-home/blog-home-header";
 import { BlogHomeRecentlyPlayed } from "@/components/blog-home/blog-home-recently-played";
-import { useInfiniteLoader } from "@/components/infinite-loader";
+import { useCachedFeed } from "@/hooks/use-cached-feed";
+import { FEED_STATE_KEY } from "@/lib/content-query-cache";
+import { Pressable } from "@/components/ui/pressable";
 import { SafeArea } from "@/components/safe-area";
-import { _trpc } from "@/components/static-trpc";
+import { _qc, _trpc } from "@/components/static-trpc";
 import { FloatingBottomSheet } from "@/components/ui/floating-bottom-sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollToTopButton } from "@/components/ui/scroll-to-top-button";
@@ -130,6 +132,23 @@ export function BlogHomeSkeleton() {
 export default function BlogHomeScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ category?: string }>();
+	type SavedFeedState = {
+		category?: string;
+		offsets?: Record<string, number>;
+	};
+	const [savedFeedState, setSavedFeedState] = useState<SavedFeedState>(
+		() => _qc.getQueryData<SavedFeedState>(FEED_STATE_KEY) ?? {},
+	);
+	const updateSavedFeedState = useCallback(
+		(update: (current: SavedFeedState) => SavedFeedState) => {
+			setSavedFeedState((current) => {
+				const next = update(current);
+				_qc.setQueryData(FEED_STATE_KEY, next);
+				return next;
+			});
+		},
+		[],
+	);
   const { t } = useTranslation();
   const colors = useColors();
   const feedScroll = useScrollChrome<any>();
@@ -162,8 +181,12 @@ export default function BlogHomeScreen() {
       likes: "Likes",
       saved: "Saved",
     };
-    return map[(params.category || "all").toLowerCase()] ?? "All";
-  }, [params.category]);
+		return (
+			map[
+				(params.category || savedFeedState?.category || "all").toLowerCase()
+			] ?? "All"
+		);
+	}, [params.category, savedFeedState]);
 
   const category = useMemo(() => {
     const map: Record<
@@ -196,6 +219,10 @@ export default function BlogHomeScreen() {
       Likes: "likes",
       Saved: "saved",
     };
+		updateSavedFeedState((current) => ({
+			...current,
+			category: map[value],
+		}));
     router.setParams({ category: map[value] });
   };
 
@@ -207,12 +234,21 @@ export default function BlogHomeScreen() {
     isPlaceholderData,
     fetchNextPage,
     refetch,
-  } = useInfiniteLoader({
-    filter: {
+		pendingCount,
+		applyUpdates,
+		error: feedError,
+	} = useCachedFeed(category);
+	const saveScrollOffset = useCallback(
+		(offset: number) => {
+			updateSavedFeedState((current) => ({
+				...current,
       category,
+				offsets: { ...current.offsets, [category]: offset },
+			}));
     },
-    route: _trpc?.blog.posts,
-  });
+		[category, updateSavedFeedState],
+	);
+
   const [hiddenPostIds, setHiddenPostIds] = useState<Set<number>>(new Set());
   const [isPullRefreshing, setIsPullRefreshing] = useState(false);
   const [showAlbumModal, setShowAlbumModal] = useState(false);
@@ -271,10 +307,7 @@ export default function BlogHomeScreen() {
   }, [rawVisiblePosts]);
   const isCategoryLoading = isFetching && isPlaceholderData;
   const isFetchingMore =
-    isFetching &&
-    !isRefetching &&
-    !isPullRefreshing &&
-    !isCategoryLoading;
+		isFetching && !isRefetching && !isPullRefreshing && !isCategoryLoading;
   const handleDeletePost = useCallback(
     async (post: BlogItem) => {
       setHiddenPostIds((prev) => new Set(prev).add(post.id));
@@ -450,8 +483,7 @@ export default function BlogHomeScreen() {
 
   useEffect(() => {
     setHiddenPostIds(new Set());
-    refetch();
-  }, [category, refetch]);
+	}, [category]);
 
   const onRefresh = useCallback(async () => {
     setIsPullRefreshing(true);
@@ -577,7 +609,9 @@ export default function BlogHomeScreen() {
             </View>
           ) : null}
           <LegendList
+						key={category}
             ref={feedScroll.ref}
+						initialScrollOffset={savedFeedState?.offsets?.[category] ?? 0}
             style={{ backgroundColor: colors.background }}
             data={isCategoryLoading ? [] : visiblePosts}
             renderItem={({ item }) => (
@@ -634,7 +668,13 @@ export default function BlogHomeScreen() {
               </View>
             }
             ListEmptyComponent={
-              isCategoryLoading ? <BlogPostCardsSkeleton /> : null
+							isCategoryLoading || (isFetching && !posts.length) ? (
+								<BlogPostCardsSkeleton />
+							) : (
+								<Text style={{ color: colors.mutedForeground, padding: 24 }}>
+									{feedError ?? "No posts yet"}
+								</Text>
+							)
             }
             refreshing={isPullRefreshing || isRefetching}
             onRefresh={onRefresh}
@@ -643,7 +683,13 @@ export default function BlogHomeScreen() {
               isFeedDragActiveRef.current = true;
               pendingHomeHeaderHiddenRef.current = null;
             }}
-            onScrollEndDrag={flushPendingHomeHeaderHidden}
+						onScrollEndDrag={(event) => {
+							flushPendingHomeHeaderHidden();
+							saveScrollOffset(event.nativeEvent.contentOffset.y);
+						}}
+						onMomentumScrollEnd={(event) =>
+							saveScrollOffset(event.nativeEvent.contentOffset.y)
+						}
             scrollEventThrottle={16}
             onEndReached={() => {
               if (hasNextPage && !isFetching) {
@@ -652,6 +698,42 @@ export default function BlogHomeScreen() {
             }}
             onEndReachedThreshold={0.4}
           />
+					{pendingCount > 0 ? (
+						<View
+							pointerEvents="box-none"
+							style={{
+								position: "absolute",
+								top: 52,
+								left: 0,
+								right: 0,
+								zIndex: 40,
+								alignItems: "center",
+							}}
+						>
+							<Pressable
+								accessibilityRole="button"
+								accessibilityLabel="Load new updates"
+								onPress={() => {
+									applyUpdates();
+									saveScrollOffset(0);
+									feedScroll.scrollToTop();
+								}}
+								style={{
+									minHeight: 44,
+									paddingHorizontal: 20,
+									justifyContent: "center",
+									borderRadius: 24,
+									backgroundColor: colors.primary,
+								}}
+							>
+								<Text
+									style={{ color: colors.primaryForeground, fontWeight: "700" }}
+								>
+									New updates ↑
+								</Text>
+							</Pressable>
+						</View>
+					) : null}
           <ScrollToTopButton
             visible={feedScroll.showScrollTop}
             onPress={feedScroll.scrollToTop}

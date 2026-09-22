@@ -1,3 +1,4 @@
+import { useDownloadedAudio } from "@/hooks/use-downloaded-audio";
 import { Pressable } from "@/components/ui/pressable";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { BottomSheetFlatList } from "@gorhom/bottom-sheet";
@@ -200,7 +201,11 @@ function mergeSavedTranscriptWindow(
 	);
 	const newestCurrentRevision = currentRevisionKeys.reduce<number | null>(
 		(newest, revision) =>
-			revision == null ? newest : newest == null ? revision : Math.max(newest, revision),
+			revision == null
+				? newest
+				: newest == null
+					? revision
+					: Math.max(newest, revision),
 		null,
 	);
 	if (
@@ -212,7 +217,8 @@ function mergeSavedTranscriptWindow(
 		return current;
 	}
 	const hasDifferentRevision = Object.values(current).some(
-		(window) => transcriptRevisionKey(window.transcriptUpdatedAt) !== incomingRevision,
+		(window) =>
+			transcriptRevisionKey(window.transcriptUpdatedAt) !== incomingRevision,
 	);
 
 	if (hasDifferentRevision) return { [incoming.windowStartSec]: incoming };
@@ -2208,6 +2214,9 @@ export default function AudioBlogScreen() {
 	const setAudioDetailPlayerVisible = useGlobalAudioBarStore(
 		(state) => state.setAudioDetailPlayerVisible,
 	);
+	const setViewedAudioMediaId = useGlobalAudioBarStore(
+		(state) => state.setViewedAudioMediaId,
+	);
 
 	useFocusEffect(
 		useCallback(() => {
@@ -2226,6 +2235,12 @@ export default function AudioBlogScreen() {
 
 	const media = blog?.medias?.[0];
 	const mediaId = media?.id;
+	useFocusEffect(
+		useCallback(() => {
+			setViewedAudioMediaId(mediaId ?? null);
+			return () => setViewedAudioMediaId(null);
+		}, [mediaId, setViewedAudioMediaId]),
+	);
 	currentTranscriptMediaIdRef.current = mediaId;
 	const audioChannelId = blog?.channelId ?? blog?.channel?.id;
 	const audioArtUrl = getMediaFileUrl((blog as any)?.thumbnail?.file);
@@ -2242,7 +2257,14 @@ export default function AudioBlogScreen() {
 		channelUsername: blog?.channel?.username,
 		telegramMessageId: (blog as any)?.telegramMessageId,
 	});
+	const downloadedUri = useDownloadedAudio({
+		mediaId,
+		blogId: blog?.id,
+		fileName: media?.file?.fileName,
+		size: media?.file?.fileSize,
+	});
 	const localMediaRequired = Boolean(
+		!downloadedUri &&
 		mediaId &&
 			media?.file?.source !== "vercel_blob" &&
 			typeof media?.file?.fileSize === "number" &&
@@ -2255,17 +2277,20 @@ export default function AudioBlogScreen() {
 		gatewayBaseUrl: activeGatewayUrl,
 	});
 	const localMediaReady =
-		localMediaPlayback.state === "ready" && Boolean(localMediaPlayback.url);
+		Boolean(downloadedUri) ||
+		(localMediaPlayback.state === "ready" && Boolean(localMediaPlayback.url));
 	const effectiveExternalMedia = localMediaReady ? null : externalMedia;
 	const telegramFileId =
 		effectiveExternalMedia || media?.file?.source === "vercel_blob"
 			? undefined
 			: media?.file?.fileId;
-	const mediaUrl = localMediaReady
+	const mediaUrl =
+		downloadedUri ??
+		(localMediaReady
 		? localMediaPlayback.url
 		: externalMedia
 			? null
-			: getMediaFileUrl(media?.file as any);
+				: getMediaFileUrl(media?.file as any));
 	const duration = media?.file?.duration;
 	const viewedDurationMs =
 		typeof duration === "number" ? Math.max(0, duration * 1000) : 0;
@@ -2341,10 +2366,10 @@ export default function AudioBlogScreen() {
 		: null;
 	const playDisabledReason = effectiveExternalMedia
 		? null
-		: localMediaDisabledReason ??
+		: (localMediaDisabledReason ??
 			(viewedAudioItem
 				? getAudioPlayability((viewedAudioItem as any).audio).reason
-				: null);
+				: null));
 	const visibleAudioError =
 		playDisabledReason ??
 		(isViewedAudioActive ? audioError : viewedPlaybackError);
@@ -2571,16 +2596,14 @@ export default function AudioBlogScreen() {
 					startSec: normalizedStart,
 					endSec: normalizedStart + SAVED_TRANSCRIPT_WINDOW_SEC,
 					fetchServer: async () =>
-						(await qc.fetchQuery(
-							{
+						(await qc.fetchQuery({
 								..._trpc.blog.getTranscriptWindow.queryOptions({
 									mediaId: requestMediaId,
 									windowStartSec: normalizedStart,
 									windowDurationSec: SAVED_TRANSCRIPT_WINDOW_SEC,
 								}),
 								staleTime: 0,
-							},
-						)) as unknown as ServerTranscriptWindow,
+						})) as unknown as ServerTranscriptWindow,
 					onCachedWindows: (cachedWindows) => {
 						if (!isCurrentRequest() || cachedWindows.length === 0) return;
 						setTranscriptWindows((current) => {
@@ -2774,7 +2797,8 @@ export default function AudioBlogScreen() {
 	useEffect(() => {
 		if (!mediaId || !telegramFileId) return;
 		const requestFallbackChunk = (chunkStartSec: number) => {
-			const containingWindowStart = getSavedTranscriptWindowStart(chunkStartSec);
+			const containingWindowStart =
+				getSavedTranscriptWindowStart(chunkStartSec);
 			if (!checkedTranscriptWindows[containingWindowStart]) return;
 			if (
 				hasOverlappingSavedTranscript(
@@ -3778,7 +3802,9 @@ export default function AudioBlogScreen() {
 										{effectiveExternalMedia ? (
 											<Pressable
 												onPress={() =>
-													void Linking.openURL(effectiveExternalMedia.externalUrl)
+														void Linking.openURL(
+															effectiveExternalMedia.externalUrl,
+														)
 												}
 													className="mt-4 flex-row items-center justify-center gap-2 rounded-full bg-white/15 px-4 py-3"
 												>

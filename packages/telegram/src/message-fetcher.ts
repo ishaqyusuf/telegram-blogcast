@@ -22,7 +22,7 @@ export type { FetchedMessage };
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface FetcherState {
-  status: "idle" | "running" | "retrying" | "stopped";
+	status: "idle" | "running" | "retrying" | "stopped" | "completed";
   channelUsername: string;
   channelId: number;
   phase: "recent" | "backfill" | "idle";
@@ -52,6 +52,7 @@ export interface StartFetcherInput {
   channelMessageIds: number[]; // existing telegramMessageIds for this channel
   resolveFiles?: boolean;
   maxTotalFetch?: number | null;
+	once?: boolean;
 }
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -70,7 +71,7 @@ declare global {
 
 // ── Fetcher ───────────────────────────────────────────────────────────────────
 
-class MessageFetcher extends EventEmitter {
+export class MessageFetcher extends EventEmitter {
   private state: FetcherState = {
     status: "idle",
     channelUsername: "",
@@ -87,6 +88,7 @@ class MessageFetcher extends EventEmitter {
   private channelMessageIds: Set<number> = new Set();
   private newestKnownMessageId: number | null = null;
   private resolveFiles = false;
+	private runOnce = false;
   private maxTotalFetch: number | null | undefined;
 
   // ── Public API ──────────────────────────────────────────────────────────────
@@ -111,6 +113,7 @@ class MessageFetcher extends EventEmitter {
         : null;
     this.resolveFiles = input.resolveFiles ?? false;
     this.maxTotalFetch = input.maxTotalFetch;
+		this.runOnce = input.once ?? false;
     // consoleLog("Channel Message IDs", Array.from(this.channelMessageIds));
     this.state = {
       status: "running",
@@ -164,10 +167,22 @@ class MessageFetcher extends EventEmitter {
 
         // Phase 2: backfill if not fully fetched
         if (!this.state.allFetched) {
+					do {
           await this.backfill(signal);
+					} while (this.runOnce && !signal.aborted && !this.state.allFetched);
           if (signal.aborted) break;
         }
 
+				if (this.runOnce) {
+					this.setState({
+						status: "completed",
+						phase: "idle",
+						error: null,
+						retryCount: 0,
+					});
+					this.abortController = null;
+					break;
+				}
         retryDelay = RETRY_BASE_MS;
         this.setState({ error: null, retryCount: 0, status: "running" });
 
@@ -202,29 +217,45 @@ class MessageFetcher extends EventEmitter {
   private async recentSweep(signal: AbortSignal): Promise<void> {
     this.setState({ phase: "recent" });
 
+		const hasKnownMessages = this.newestKnownMessageId !== null;
+		do {
     const limit = this.limit;
-    if (limit === null || limit === 0) {
+			if (!limit) {
       this.stop();
       return;
     }
-
-    const { messages } = await fetchMessages(this.state.channelUsername, {
+			const minId = this.newestKnownMessageId ?? undefined;
+			const { messages, lastMessageId } = await fetchMessages(
+				this.state.channelUsername,
+				{
       limit,
-      minId: this.newestKnownMessageId ?? undefined,
+					minId,
+					oldestFirst: hasKnownMessages,
       resolveFiles: this.resolveFiles,
-    });
-
-    if (signal.aborted || messages.length === 0) return;
-
+				},
+			);
+			if (signal.aborted) return;
     const newMessages = messages.filter(
-      (m) => !this.channelMessageIds.has(m.id),
+				(message) => !this.channelMessageIds.has(message.id),
     );
-    if (newMessages.length === 0) return;
-
+			if (newMessages.length) {
     await this.emitBatch(newMessages, "recent");
-    for (const message of newMessages) {
-      this.addKnownIds([message.id]);
+				for (const message of newMessages) this.addKnownIds([message.id]);
+			}
+			// Advance over filtered/service messages too, but only after persistence.
+			if (
+				lastMessageId != null &&
+				lastMessageId > (this.newestKnownMessageId ?? 0)
+			) {
+				this.newestKnownMessageId = lastMessageId;
     }
+			if (
+				!hasKnownMessages ||
+				lastMessageId == null ||
+				lastMessageId <= (minId ?? 0)
+			)
+				return;
+		} while (!signal.aborted);
   }
 
   // ── Phase 2: Historical backfill ─────────────────────────────────────────────
@@ -250,17 +281,20 @@ class MessageFetcher extends EventEmitter {
       return;
     }
 
-    const { messages } = await fetchMessages(this.state.channelUsername, {
+		const { messages, lastMessageId } = await fetchMessages(
+			this.state.channelUsername,
+			{
       limit,
       // offsetId here means "get messages older than this id"
       startId: this.state.lastMessageId ?? undefined,
       resolveFiles: this.resolveFiles,
-    });
+			},
+		);
 
     if (signal.aborted) return;
 
     // Empty batch = we've reached the very first message in the channel
-    if (messages.length === 0 && this.state.lastMessageId !== null) {
+		if (messages.length === 0 && lastMessageId === null) {
       this.setState({ allFetched: true });
       await this.emitFetcherEvent({ type: "allFetched" });
       return;
@@ -278,8 +312,8 @@ class MessageFetcher extends EventEmitter {
     }
 
     // Advance DB cursor to the oldest message in this batch
-    const oldestId = messages[0]?.id; // sorted ascending
-    if (oldestId !== undefined) {
+		const oldestId = lastMessageId ?? messages[0]?.id; // raw cursor also covers filtered messages
+		if (oldestId != null) {
       this.setState({ lastMessageId: oldestId });
     }
   }
@@ -290,13 +324,12 @@ class MessageFetcher extends EventEmitter {
     messages: FetchedMessage[],
     phase: FetcherState["phase"],
   ): Promise<void> {
-    this.setState({ totalFetched: this.state.totalFetched + messages.length });
-    consoleLog("State", this.getState());
     await this.emitFetcherEvent({
       type: "messages",
       messages,
       phase,
     });
+		this.setState({ totalFetched: this.state.totalFetched + messages.length });
 
     // Auto-stop when maxTotalFetch is reached
     if (

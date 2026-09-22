@@ -1,3 +1,4 @@
+import { _qc, _trpc } from "@/components/static-trpc";
 import { SafeArea } from "@/components/safe-area";
 import { useLocalServicesSession } from "@/components/local-services";
 import { Icon } from "@/components/ui/icon";
@@ -64,6 +65,8 @@ export default function BlogImportScreen() {
   const [fetcherState, setFetcherState] = useState<FetcherState | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [attemptLabel, setAttemptLabel] = useState("");
+	const [discoveryMessage, setDiscoveryMessage] = useState("");
+	const actionLock = useRef(false);
   const [audioLinkInput, setAudioLinkInput] = useState("");
   const [directImportMessage, setDirectImportMessage] = useState("");
   const loadedConnectionRef = useRef<string | null>(null);
@@ -171,14 +174,30 @@ export default function BlogImportScreen() {
         .query()
         .then((state) => {
           setFetcherState(state as FetcherState);
+					if (state.status !== "running" && state.status !== "retrying") {
+						void loadApiState();
+						void _qc.invalidateQueries({
+							queryKey: _trpc.channel.getChannels.queryKey(),
+						});
+						void _qc.invalidateQueries({
+							queryKey: _trpc.blog.posts.infiniteQueryKey(),
+							refetchType: "none",
+						});
+					}
         })
-        .catch(() => {});
+				.catch(() => {
+					setStatus("offline");
+					setMessage(
+						"Local service disconnected. Reconnect to check synchronization progress.",
+					);
+				});
     }, 3000);
     return () => clearInterval(interval);
-  }, [fetcherState?.status, trpcClient]);
+	}, [fetcherState?.status, trpcClient, loadApiState]);
 
   async function runAction(label: string, fn: () => Promise<unknown>) {
-    if (!trpcClient) return;
+		if (!trpcClient || status !== "online" || actionLock.current) return;
+		actionLock.current = true;
     setBusyAction(label);
     try {
       await fn();
@@ -186,14 +205,23 @@ export default function BlogImportScreen() {
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Action failed.");
     } finally {
+			actionLock.current = false;
       setBusyAction(null);
     }
   }
 
   function startFetch(channel: ChannelRow) {
-    runAction(`start-${channel.id}`, () =>
-      trpcClient!.channel.startFetch.mutate({ channelId: channel.id }),
-    );
+		void runAction(`start-${channel.id}`, async () => {
+			if (!channel.isFetchable)
+				await trpcClient!.channel.toggleFetchable.mutate({
+					channelId: channel.id,
+					isFetchable: true,
+				});
+			await trpcClient!.channel.startFetch.mutate({
+				channelId: channel.id,
+				once: true,
+			});
+		});
   }
 
   function toggleFetchable(channel: ChannelRow) {
@@ -241,7 +269,7 @@ export default function BlogImportScreen() {
             <Icon name="ChevronLeft" size={22} className="text-foreground" />
           </Pressable>
           <Text className="flex-1 text-lg font-bold text-foreground">
-            Blog Import
+						Channel sync
           </Text>
           <Pressable
             onPress={() => {
@@ -403,12 +431,33 @@ export default function BlogImportScreen() {
             ) : null}
           </View>
 
+					{discoveryMessage ? (
+						<Text
+							accessibilityLiveRegion="polite"
+							className="text-sm text-foreground"
+						>
+							{discoveryMessage}
+						</Text>
+					) : null}
           <View className="flex-row gap-2">
             <Pressable
               onPress={() =>
-                runAction("sync", () =>
-                  trpcClient!.channel.syncChannels.mutate(undefined),
-                )
+								runAction("sync", async () => {
+									const known = new Set(channels.map((channel) => channel.id));
+									const discovered =
+										await trpcClient!.channel.syncChannels.mutate();
+									const count = discovered.filter(
+										(channel) => !known.has(channel.id),
+									).length;
+									setDiscoveryMessage(
+										count
+											? `${count} new channels found. Choose a channel to sync.`
+											: "Channel list is up to date. No new channels found.",
+									);
+									void _qc.invalidateQueries({
+										queryKey: _trpc.channel.getChannels.queryKey(),
+									});
+								})
               }
               disabled={status !== "online" || busyAction != null}
               className="h-10 flex-1 items-center justify-center rounded-xl bg-muted active:opacity-80 disabled:opacity-50"
@@ -417,7 +466,7 @@ export default function BlogImportScreen() {
                 <ActivityIndicator size="small" />
               ) : (
                 <Text className="text-sm font-semibold text-foreground">
-                  Sync channels
+									Discover channels
                 </Text>
               )}
             </Pressable>
@@ -481,7 +530,7 @@ export default function BlogImportScreen() {
                 <View className="flex-row gap-2">
                   <Pressable
                     onPress={() => toggleFetchable(item)}
-                    disabled={busyAction != null}
+										disabled={status !== "online" || busyAction != null}
                     className="h-9 flex-1 items-center justify-center rounded-lg bg-muted active:opacity-80 disabled:opacity-50"
                   >
                     <Text className="text-xs font-semibold text-foreground">
@@ -490,11 +539,18 @@ export default function BlogImportScreen() {
                   </Pressable>
                   <Pressable
                     onPress={() => startFetch(item)}
-                    disabled={busyAction != null || !item.isFetchable}
+										disabled={
+											status !== "online" ||
+											busyAction != null ||
+											fetcherState?.status === "running" ||
+											fetcherState?.status === "retrying"
+										}
                     className="h-9 flex-1 items-center justify-center rounded-lg bg-primary active:opacity-80 disabled:opacity-50"
                   >
                     <Text className="text-xs font-bold text-primary-foreground">
-                      Start import
+											{(item.stats?.totalBlogs ?? 0) > 0
+												? "Sync updates"
+												: "Import channel"}
                     </Text>
                   </Pressable>
                 </View>

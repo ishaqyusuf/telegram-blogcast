@@ -1,3 +1,4 @@
+import { useDownloadedAudio } from "@/hooks/use-downloaded-audio";
 import { Pressable } from "@/components/ui/pressable";
 import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
@@ -22,6 +23,15 @@ export function CardFooter({
 	const tags = post.tags?.slice(0, 2) ?? [];
 	const router = useRouter();
 	const colors = useColors();
+	const downloadedUri = useDownloadedAudio({
+		mediaId: post.audio?.mediaId,
+		blogId: post.id,
+		fileName: post.audio?.fileName,
+		size: (post.audio as any)?.size,
+	});
+	const playColor = downloadedUri
+		? colors.downloadedForeground
+		: colors.primary;
 	const loadedBlogId = useAudioStore((s) => s.blog?.id);
 	const globalIsPlaying = useAudioStore((s) => s.isPlaying);
 	const globalIsLoading = useAudioStore((s) => s.isLoading);
@@ -31,15 +41,16 @@ export function CardFooter({
 	const loadAudio = useAudioStore((s) => s.loadAudio);
 	const [playbackPending, setPlaybackPending] = useState(false);
 	const hasAudioSource = !!(
-		post.audio?.telegramFileId || (post.audio as any)?.url
+		downloadedUri ||
+		post.audio?.telegramFileId ||
+		(post.audio as any)?.url
 	);
 	const isCurrent = loadedBlogId === post.id;
 	const isPlaying = isCurrent && globalIsPlaying;
 	const isLoading =
-		playbackPending ||
-		(isCurrent && (globalIsLoading || globalIsDownloading));
+		playbackPending || (isCurrent && (globalIsLoading || globalIsDownloading));
 	const audioPlayability = getAudioPlayability(post.audio as any);
-	const isPlayBlocked = !audioPlayability.canPlay;
+	const isPlayBlocked = !downloadedUri && !audioPlayability.canPlay;
 	const isPlayControlDisabled = isLoading || isPlayBlocked;
 	const albumName = (post.audio as any)?.albumName as string | null | undefined;
 	const albumId = (post.audio as any)?.albumId as number | null | undefined;
@@ -88,7 +99,7 @@ export function CardFooter({
 		post,
 	]);
 
-	if (externalMedia?.externalUrl) {
+	if (!downloadedUri && externalMedia?.externalUrl) {
 		const destinationLabel =
 			externalMedia.destination === "telegram" ? "Telegram" : "Facebook";
 		return (
@@ -168,26 +179,36 @@ export function CardFooter({
 					<Icon name="Share" className="text-muted-foreground" />
 				</Pressable>
 				<Pressable
-					className="min-h-11 min-w-11 items-center justify-center rounded-full active:bg-muted"
-					accessibilityLabel={audioPlayability.reason ?? "Play audio"}
+					accessibilityLabel={
+						downloadedUri
+							? `${isPlaying ? "Pause" : "Play"} audio — Downloaded, available offline`
+							: (audioPlayability.reason ?? "Play audio")
+					}
 					disabled={isPlayControlDisabled}
 					onPress={(e) => {
 						e.stopPropagation();
 						void playPause();
 					}}
 					style={{
-						backgroundColor: isPlayBlocked
+						width: 44,
+						height: 44,
+						alignItems: "center",
+						justifyContent: "center",
+						borderRadius: 22,
+						backgroundColor: downloadedUri
+							? colors.downloaded
+							: isPlayBlocked
 							? colors.muted
 							: withAlpha(colors.primary, isCurrent ? 0.18 : 0.1),
 						opacity: isPlayBlocked ? 0.62 : 1,
 					}}
 				>
 					{isLoading ? (
-						<ActivityIndicator size="small" color={colors.primary} />
+						<ActivityIndicator size="small" color={playColor} />
 					) : (
 						<Icon
 							name={isPlayBlocked ? "Lock" : isPlaying ? "Pause" : "Play"}
-							color={isPlayBlocked ? colors.mutedForeground : colors.primary}
+							color={isPlayBlocked ? colors.mutedForeground : playColor}
 						/>
 					)}
 				</Pressable>

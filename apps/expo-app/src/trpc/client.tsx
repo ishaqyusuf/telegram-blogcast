@@ -6,6 +6,7 @@ import { createTRPCClient, httpBatchLink, loggerLink } from "@trpc/client";
 import { createTRPCContext } from "@trpc/tanstack-react-query";
 import { useState } from "react";
 import superjson from "superjson";
+import { ContentCacheProvider } from "./content-cache-provider";
 import { makeQueryClient } from "./query-client";
 import { trpcFetch } from "./fetch";
 import { AppRouter } from "@api/trpc/routers/_app";
@@ -59,7 +60,9 @@ export function TRPCReactProvider(
   return (
     <QueryClientProvider client={queryClient}>
       <TRPCProvider trpcClient={trpcClient} queryClient={queryClient}>
-        {props.children as any}
+				<ContentCacheProvider client={queryClient}>
+					{props.children}
+				</ContentCacheProvider>
       </TRPCProvider>
     </QueryClientProvider>
   );

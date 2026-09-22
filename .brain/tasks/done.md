@@ -1,5 +1,8 @@
 # Done
 
+### [Mobile Channel Sync, Local Cache, And Playback Visibility](2026-09-22-mobile-channel-sync-and-local-cache.md)
+- Status: Done
+
 ### [Album Suggestion Channel Filter](2026-09-12-album-suggestion-channel-filter.md)
 - Status: Done
 

@@ -35,6 +35,8 @@ export const THEME = {
     border: "rgb(203, 213, 225)",
     input: "rgb(226, 232, 240)",
     ring: "rgb(37, 99, 235)",
+		downloaded: "rgb(37, 99, 235)",
+		downloadedForeground: "rgb(255, 255, 255)",
     mediaForeground: "rgb(255, 255, 255)",
 
     radius: "0.65rem",
@@ -80,6 +82,8 @@ export const THEME = {
     border: "rgb(42, 42, 42)",
     input: "rgb(38, 38, 38)",
     ring: "rgb(74, 222, 128)",
+		downloaded: "rgb(37, 99, 235)",
+		downloadedForeground: "rgb(255, 255, 255)",
     mediaForeground: "rgb(255, 255, 255)",
 
     radius: "0.65rem",

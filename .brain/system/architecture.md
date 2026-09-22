@@ -23,6 +23,7 @@ Documents the main architectural decisions, runtime boundaries, and integration 
 - Database schema is split into domain-focused Prisma files under `packages/db/src/schema`.
 - Expo media uploads use the Next.js web surface for Vercel Blob client-upload token exchange, then persist media ownership through the shared tRPC API.
 - Local Telegram/channel import runs in the Hono API process. Expo can start, stop, and monitor import through tRPC over the LAN, but the mobile process does not import channel data itself.
+- Expo hydrates an allow-listed, bounded React Query content snapshot from AsyncStorage before mounting query consumers. Audio bytes remain in device files and transcript windows remain in the versioned SQLite cache; each cache has separate validation and retention rules.
 - Facebook saved-post discovery has two authenticated capture surfaces: a repository Codex skill using the desktop in-app browser and an Expo WebView using the device session. Both produce the same validated incremental capture contract; the local API exclusively owns JSON merge and database import.
 - The `apps/www` development supervisor owns Next.js, the transcriber, and an optional ngrok tunnel. The assigned public URL is emitted in the existing web task pane, and every child process shares the task lifecycle.
 - The Expo root owns OTA route continuity through a navigation restoration

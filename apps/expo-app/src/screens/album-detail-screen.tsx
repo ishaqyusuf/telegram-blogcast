@@ -1,3 +1,4 @@
+import { useDownloadedAudio } from "@/hooks/use-downloaded-audio";
 import { Pressable } from "@/components/ui/pressable";
 import { AddToAlbumModal } from "@/components/channel-chat/add-to-album-modal";
 import {
@@ -278,7 +279,11 @@ function clipAlbumSearchSnippet(value: string, query: string) {
   return `${start > 0 ? "..." : ""}${snippet}${text.length > start + 92 ? "..." : ""}`;
 }
 
-function getTrackSearchMatch(media: any, query: string, albumAuthor?: any | null) {
+function getTrackSearchMatch(
+	media: any,
+	query: string,
+	albumAuthor?: any | null,
+) {
   const terms = getAlbumSearchTerms(query);
   if (terms.length === 0) return null;
 
@@ -330,6 +335,8 @@ function buildAlbumTrackAudioItem(
       albumName: album?.name,
       albumTrackIndex: media?.albumAudioIndex?.index ?? null,
       mediaId,
+			size: file?.fileSize,
+			source: file?.source,
       telegramFileId: file?.fileId,
       url: audioUrl,
       fileName,
@@ -453,7 +460,6 @@ function EditAlbumModal({
           gap: 16,
         }}
       >
-
           {/* Name */}
           <View style={{ gap: 6 }}>
             <Text
@@ -530,9 +536,7 @@ function EditAlbumModal({
                 alignItems: "center",
               }}
             >
-              <Text
-                style={{ color: colors.mutedForeground, fontWeight: "600" }}
-              >
+						<Text style={{ color: colors.mutedForeground, fontWeight: "600" }}>
                 Cancel
               </Text>
             </Pressable>
@@ -1015,9 +1019,7 @@ function AlbumArtCropSheet({
                 backgroundColor: colors.muted,
               }}
             >
-              <Text
-                style={{ color: colors.mutedForeground, fontWeight: "800" }}
-              >
+						<Text style={{ color: colors.mutedForeground, fontWeight: "800" }}>
                 Cancel
               </Text>
             </Pressable>
@@ -1330,9 +1332,7 @@ function AuthorEditorModal({
             </Pressable>
             <Pressable
               disabled={!canSave || isSaving}
-              onPress={() =>
-                onSave({ name: name.trim(), nameAr: nameAr.trim() })
-              }
+						onPress={() => onSave({ name: name.trim(), nameAr: nameAr.trim() })}
               style={{
                 flex: 1.5,
                 height: 46,
@@ -1344,7 +1344,10 @@ function AuthorEditorModal({
               }}
             >
               {isSaving ? (
-                <ActivityIndicator size="small" color={colors.primaryForeground} />
+							<ActivityIndicator
+								size="small"
+								color={colors.primaryForeground}
+							/>
               ) : (
                 <Text
                   style={{ color: colors.primaryForeground, fontWeight: "900" }}
@@ -1390,7 +1393,11 @@ function ManageAlbumBooksModal({
   const filteredBooks = useMemo(() => {
     if (!normalizedQuery) return books;
     return books.filter((book) =>
-      [book.nameAr, book.nameEn, ...(book.authors ?? []).map(getAuthorDisplayName)]
+			[
+				book.nameAr,
+				book.nameEn,
+				...(book.authors ?? []).map(getAuthorDisplayName),
+			]
         .filter(Boolean)
         .join(" ")
         .toLowerCase()
@@ -1641,7 +1648,10 @@ function ManageAlbumBooksModal({
                               }}
                               numberOfLines={1}
                             >
-                              {book.authors.map(getAuthorDisplayName).filter(Boolean).join("، ")}
+														{book.authors
+															.map(getAuthorDisplayName)
+															.filter(Boolean)
+															.join("، ")}
                             </Text>
                           ) : null}
                         </View>
@@ -1655,7 +1665,9 @@ function ManageAlbumBooksModal({
                           borderRadius: 999,
                           alignItems: "center",
                           justifyContent: "center",
-                          backgroundColor: attached ? colors.card : colors.primary,
+												backgroundColor: attached
+													? colors.card
+													: colors.primary,
                           opacity: isAttaching ? 0.6 : 1,
                         }}
                       >
@@ -1863,6 +1875,17 @@ function TrackRow({
   searchMatch?: { label: string; snippet: string } | null;
 }) {
   const colors = useColors();
+	const downloadedUri = useDownloadedAudio({
+		mediaId: getTrackMediaId(media),
+		blogId: getTrackBlogId(media),
+		fileName: media.file?.fileName ?? media.file?.name,
+		size: media.file?.fileSize,
+	});
+	const playColor = downloadedUri
+		? colors.downloadedForeground
+		: isActiveTrack
+			? colors.primaryForeground
+			: colors.primary;
   const duration = media.file?.duration ?? media.duration;
   const trackDate = media.blog?.blogDate ?? media.blogDate ?? media.date;
   const transcriptBadge = getTranscriptionBadgeState(media);
@@ -1919,24 +1942,30 @@ function TrackRow({
         </View>
       ) : (
         <Pressable
-          disabled={isRemoving || !canPlay || isTrackLoading}
+					disabled={
+						isRemoving || (!canPlay && !downloadedUri) || isTrackLoading
+					}
           onPress={(event) => {
             event.stopPropagation();
             onPlayPress();
           }}
           style={{
-            width: 34,
-            height: 34,
+						width: 44,
+						height: 44,
             borderRadius: 999,
             alignItems: "center",
             justifyContent: "center",
-            backgroundColor: isActiveTrack
+						backgroundColor: downloadedUri
+							? colors.downloaded
+							: isActiveTrack
               ? colors.primary
               : withAlpha(colors.primary, 0.1),
-            opacity: isRemoving || !canPlay ? 0.45 : 1,
+						opacity: isRemoving || (!canPlay && !downloadedUri) ? 0.45 : 1,
           }}
           accessibilityLabel={
-            isTrackPlaying
+						downloadedUri
+							? `${isTrackPlaying ? "Pause" : "Play"} track — Downloaded, available offline`
+							: isTrackPlaying
               ? "Pause track"
               : isActiveTrack
                 ? "Resume track"
@@ -1944,15 +1973,12 @@ function TrackRow({
           }
         >
           {isTrackLoading ? (
-            <ActivityIndicator
-              size="small"
-              color={isActiveTrack ? colors.primaryForeground : colors.primary}
-            />
+						<ActivityIndicator size="small" color={playColor} />
           ) : (
             <Icon
               name={isTrackPlaying ? "Pause" : "Play"}
               size={16}
-              color={isActiveTrack ? colors.primaryForeground : colors.primary}
+							color={playColor}
               style={isTrackPlaying ? undefined : { marginLeft: 2 }}
             />
           )}
@@ -2149,11 +2175,7 @@ function TrackActionRow({
             : colors.muted,
         }}
       >
-        <Icon
-          name={icon}
-          size={18}
-          color={actionColor}
-        />
+				<Icon name={icon} size={18} color={actionColor} />
       </View>
       <View style={{ flex: 1 }}>
         <Text
@@ -2459,8 +2481,7 @@ function TrackMoveAlbumSheet({
                       borderRadius: 8,
                       alignItems: "center",
                       justifyContent: "center",
-                      backgroundColor:
-                        ALBUM_COLORS[index % ALBUM_COLORS.length],
+										backgroundColor: ALBUM_COLORS[index % ALBUM_COLORS.length],
                     }}
                   >
                     <Text
@@ -3281,8 +3302,8 @@ export default function AlbumDetailScreen() {
   const albumArtUrl = getMediaFileUrl((album as any)?.thumbnail?.file);
   const albumChannelId =
     album?.channel?.id ??
-    tracks.find((media: any) => typeof media?.blog?.channelId === "number")?.blog
-      ?.channelId;
+		tracks.find((media: any) => typeof media?.blog?.channelId === "number")
+			?.blog?.channelId;
   const effectiveSuggestionChannelId = albumChannelId ?? suggestionChannelId;
   const selectedSuggestionChannel = (
     suggestionChannels as AlbumSuggestionChannel[]
@@ -4014,7 +4035,9 @@ export default function AlbumDetailScreen() {
       refetchAlbums(),
       refetchBooks(),
       suggestionsRequested ? refetchSuggestedMedia() : Promise.resolve(),
-      channelPicturePickerVisible ? refetchChannelPictures() : Promise.resolve(),
+			channelPicturePickerVisible
+				? refetchChannelPictures()
+				: Promise.resolve(),
     ]);
   }, [
     refetchAlbum,
@@ -4188,15 +4211,14 @@ export default function AlbumDetailScreen() {
       return;
     }
 
-    let queueTracks = tracks;
-    try {
-      const result = await refetchAlbumPlaybackQueue();
-      if (Array.isArray(result.data) && result.data.length > 0) {
-        queueTracks = result.data;
-      }
-    } catch {
-      queueTracks = tracks;
-    }
+		// Use the cached full queue when present, or the already displayed tracks.
+		// Refresh it independently; starting a local track must not await the API.
+		const savedQueue = qc.getQueryData(
+			_trpc.album.getAlbumPlaybackQueue.queryKey({ albumId: id, limit: 1000 }),
+		);
+		const queueTracks =
+			Array.isArray(savedQueue) && savedQueue.length ? savedQueue : tracks;
+		void refetchAlbumPlaybackQueue();
     const albumQueue = buildAlbumTrackQueue(queueTracks, album);
     const audioItem = buildAlbumTrackAudioItem(media, album, albumQueue);
     if (!audioItem) {
@@ -4930,7 +4952,6 @@ export default function AlbumDetailScreen() {
                   />
                 </Pressable>
               </View>
-
             </View>
 
             <View style={{ paddingHorizontal: 16, marginBottom: 8 }}>

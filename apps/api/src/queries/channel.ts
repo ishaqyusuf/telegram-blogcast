@@ -393,6 +393,7 @@ export async function clearChannelRecords(
 export const startFetchSchema = z.object({
   channelId: z.number(),
   maxTotalFetch: z.number().positive().optional(), // 🧩 added
+	once: z.boolean().optional(),
 });
 export type StartFetchSchema = z.infer<typeof startFetchSchema>;
 
@@ -587,6 +588,7 @@ export async function startFetch(ctx: TRPCContext, input: StartFetchSchema) {
     lastMessageId,
     resolveFiles: true,
     maxTotalFetch: input.maxTotalFetch, // 🧩 added
+		once: input.once,
     channelMessageIds: channelMessageIds,
     allFetched: channel.allFetched ?? false,
   });

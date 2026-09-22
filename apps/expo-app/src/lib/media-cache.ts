@@ -1,4 +1,5 @@
 import * as LegacyFileSystem from "expo-file-system/legacy";
+import * as Application from "expo-application";
 import { NativeModules, Platform } from "react-native";
 
 export type MediaCacheKind = "audio" | "video" | "image" | "document";
@@ -13,6 +14,7 @@ type CacheMediaOptions = {
   kind: MediaCacheKind;
   onProgress?: (progress: number) => void;
   url: string;
+	expectedSize?: number | null;
 };
 
 const androidMediaStorage = NativeModules.AndroidMediaStorage as
@@ -35,16 +37,7 @@ export function sanitizeMediaFileName(fileName: string, fallback: string) {
   return (sanitized || fallback).slice(0, 180);
 }
 
-async function getMediaDirectoryUri(kind: MediaCacheKind) {
-  if (Platform.OS === "android") {
-    if (!androidMediaStorage) {
-      throw new Error(
-        "Android media storage is unavailable. Rebuild the app and try again.",
-      );
-    }
-    return androidMediaStorage.getMediaDirectory(kind);
-  }
-
+async function getPrivateMediaDirectoryUri(kind: MediaCacheKind) {
   if (!LegacyFileSystem.documentDirectory) {
     throw new Error("Media storage is not available on this device.");
   }
@@ -58,6 +51,22 @@ async function getMediaDirectoryUri(kind: MediaCacheKind) {
     intermediates: true,
   });
   return directoryUri;
+}
+
+async function getMediaDirectoryUri(kind: MediaCacheKind) {
+	if (Platform.OS !== "android" || !androidMediaStorage) {
+		return getPrivateMediaDirectoryUri(kind);
+	}
+
+	const directoryUri = await androidMediaStorage.getMediaDirectory(kind);
+	const applicationId = Application.applicationId;
+	const ownsDirectory =
+		!applicationId || directoryUri.includes(`/Android/media/${applicationId}/`);
+
+	// Older development builds pointed at the production package's scoped
+	// directory, which Android correctly refuses to write. Keep those builds
+	// functional while the native module is upgraded with the next app build.
+	return ownsDirectory ? directoryUri : getPrivateMediaDirectoryUri(kind);
 }
 
 export async function getMediaTargetUri({
@@ -94,13 +103,23 @@ async function downloadMedia(options: CacheMediaOptions) {
   const targetUri = await getMediaTargetUri(options);
   const cachedUri = await getUsableCachedMediaUri(targetUri);
   if (cachedUri) {
-    options.onProgress?.(1);
-    return cachedUri;
+		const cachedInfo = await LegacyFileSystem.getInfoAsync(cachedUri);
+		const expectedSize = options.expectedSize ?? 0;
+		if (!(expectedSize > 0 && cachedInfo.exists && cachedInfo.size !== expectedSize)) {
+			options.onProgress?.(1);
+			return cachedUri;
+		}
+		await LegacyFileSystem.deleteAsync(cachedUri, { idempotent: true });
   }
+
+	const partialUri = `${targetUri}.part`;
+	await LegacyFileSystem.deleteAsync(partialUri, { idempotent: true }).catch(
+		() => undefined,
+	);
 
   const download = LegacyFileSystem.createDownloadResumable(
     options.url,
-    targetUri,
+		partialUri,
     {},
     (progress) => {
       const expected = progress.totalBytesExpectedToWrite;
@@ -116,13 +135,30 @@ async function downloadMedia(options: CacheMediaOptions) {
     const downloadedUri = result?.uri
       ? await getUsableCachedMediaUri(result.uri)
       : null;
-    if (!downloadedUri) {
+		const info = downloadedUri
+			? await LegacyFileSystem.getInfoAsync(downloadedUri)
+			: null;
+		const expectedSize = options.expectedSize ?? 0;
+		if (
+			!downloadedUri ||
+			!result ||
+			result.status < 200 ||
+			result.status >= 300 ||
+			(expectedSize > 0 && info?.exists && info.size !== expectedSize)
+		) {
       throw new Error("The media download did not produce a readable file.");
     }
+		await LegacyFileSystem.moveAsync({ from: downloadedUri, to: targetUri });
+		const promotedUri = await getUsableCachedMediaUri(targetUri);
+		if (!promotedUri) {
+			throw new Error(
+				"The media download could not be promoted to local storage.",
+			);
+		}
     options.onProgress?.(1);
-    return downloadedUri;
+		return promotedUri;
   } catch (error) {
-    await LegacyFileSystem.deleteAsync(targetUri, { idempotent: true }).catch(
+		await LegacyFileSystem.deleteAsync(partialUri, { idempotent: true }).catch(
       () => undefined,
     );
     throw error;

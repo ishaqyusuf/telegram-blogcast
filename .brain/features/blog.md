@@ -17,13 +17,15 @@ Tracks the current blog-reading experience and blog-related discovery surfaces.
 
 ### Current Capabilities
 - Blog list and detail views
+- Mobile content queries persist a bounded, environment-scoped snapshot for feed, audio detail, albums, album tracks, and channels. Disk hydration precedes query mounting, and failed background refreshes keep readable cached content.
+- Home restores its selected category, loaded pages, and saved scroll offset. Focus/reconnect checks stage newly visible posts behind a top-center “New updates” action, preserving older loaded pages and pagination until the user applies them.
 - Audio blog support
 - Hashtag filtering
 - Home-screen integrations including book preview
 - Blog compose supports translated labels and Vercel Blob-backed media uploads for images, audio, video, and documents.
 - Media rendering is source-aware: existing Telegram-imported media remains supported, while new user uploads resolve from Vercel Blob URLs.
 - Channel chat supports selecting exactly two same-channel posts and merging them into one canonical post, preserving media, tags, and comments while soft-deleting the secondary post.
-- Local-only blog import can be controlled from the Expo `/blog-import` screen when the local API is reachable on the device LAN.
+- Local-only channel discovery and blog import can be controlled from Channels through the Expo `/blog-import` screen when the local API is reachable on the device LAN. Initial and incremental sync run as one-shot local-service jobs with completion, retry, and disconnect states.
 - Settings includes a Facebook Import screen for `Blog.source = "facebook"` rows. It shows media import status and starts a local bridge batch that probes Facebook media, importing files up to 20 MiB normally while treating larger results as thumbnail-backed external media.
 - Facebook saved-post discovery is incremental and separate from media import. A repository Codex skill can capture recent saves through the desktop in-app browser, while the Facebook Import screen can open an authenticated mobile WebView capture. Both stop at a known-post boundary and submit only completed deltas to the local API, which updates `exports/facebook-saved.json` and missing `Blog.source = "facebook"` rows.
 - Blog/search cards are album-aware for audio posts, showing album badges when membership exists and add-to-album actions when eligible.

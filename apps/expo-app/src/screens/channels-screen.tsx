@@ -89,6 +89,14 @@ export default function ChannelsScreen() {
               </Text>
             ) : null}
           </Pressable>
+					<Pressable
+						accessibilityRole="button"
+						accessibilityLabel="Discover and sync channels"
+						onPress={() => router.push("/blog-import")}
+						className="min-h-11 min-w-11 items-center justify-center rounded-full bg-muted"
+					>
+						<Icon name="Plus" size={22} className="text-foreground" />
+					</Pressable>
           <View className="px-2 py-0.5 rounded-full bg-muted">
             <Text className="text-xs font-medium text-muted-foreground">
               {channels.length}
