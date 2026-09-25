@@ -6,6 +6,7 @@ import { z } from "zod";
 import { createTRPCRouter, publicProcedure } from "../init";
 import { bookChapterRoutes } from "./book-chapter.routes";
 import { readBookPageRecord } from "./book-page-reader";
+import { importBookCoverFromUrl } from "../../services/book-cover-import";
 import {
   createBookDocumentFromParagraphs,
   createDocumentFromHtml,
@@ -3041,6 +3042,21 @@ export const bookRoutes = createTRPCRouter({
       }
 
       return book;
+    }),
+
+  importBookCover: publicProcedure
+    .input(z.object({ bookId: z.number().int().positive(), imageUrl: z.string().url().max(2048) }))
+    .mutation(async ({ ctx, input }) => {
+      const book = await ctx.db.book.findFirstOrThrow({
+        where: { id: input.bookId, deletedAt: null },
+        select: { id: true, ownerUserId: true },
+      });
+      if (book.ownerUserId != null && book.ownerUserId !== getCurrentBookUserId(ctx)) {
+        throw new TRPCError({ code: "FORBIDDEN", message: "This book belongs to another user." });
+      }
+      const coverUrl = await importBookCoverFromUrl(book.id, input.imageUrl);
+      await ctx.db.book.update({ where: { id: book.id }, data: { coverUrl } });
+      return { coverUrl };
     }),
 
   deleteBook: publicProcedure

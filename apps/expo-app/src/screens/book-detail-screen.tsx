@@ -1,11 +1,10 @@
 import { Pressable } from "@/components/ui/pressable";
-import { useQuery } from "@/lib/react-query";
+import { useQuery, useQueryClient } from "@/lib/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useRef, useState } from "react";
 import {
 	ActivityIndicator,
 	Alert,
-	Image,
 	KeyboardAvoidingView,
 	Platform,
 	ScrollView,
@@ -20,6 +19,8 @@ import { Icon } from "@/components/ui/icon";
 import { ChapterTree, type TocNode } from "@/components/book/chapter-tree";
 import { BookChapterImportStatus } from "@/components/book/book-chapter-import-status";
 import { BookDownloadButton } from "@/components/book/book-download-button";
+import { BookDetailHero } from "@/components/book/book-detail-hero";
+import { BookSourceCapture } from "@/components/book/book-source-capture";
 import { useBookOfflineStore } from "@/store/book-offline-store";
 import { vanillaTrpc } from "@/trpc/vanilla-client";
 import { useTranslation } from "@/lib/i18n";
@@ -88,11 +89,15 @@ function filterTocNodes(nodes: TocNode[], query: string) {
 export default function BookDetailScreen() {
 	const { bookId } = useLocalSearchParams<{ bookId: string }>();
 	const router = useRouter();
-	const { t } = useTranslation();
+	const { t, isRtl } = useTranslation();
 	const colors = useColors();
+	const qc = useQueryClient();
 	const bookIdNum = Number(bookId);
 
 	const [fetchUrl, setFetchUrl] = useState("");
+	const [coverUrlInput, setCoverUrlInput] = useState("");
+	const [showCoverInput, setShowCoverInput] = useState(false);
+	const [isSavingCover, setIsSavingCover] = useState(false);
 	const [showFetchInput, setShowFetchInput] = useState(false);
 	const fetchingPageId = null;
 	const [chapterQuery, setChapterQuery] = useState("");
@@ -106,7 +111,7 @@ export default function BookDetailScreen() {
 	const removeBookmark = useBookOfflineStore((s) => s.removeBookmark);
 	const [showBookmarks, setShowBookmarks] = useState(false);
 
-	const { data: book, isLoading } = useQuery(
+	const { data: book, isLoading, refetch: refetchBook } = useQuery(
 		_trpc.book.getBook.queryOptions({ id: bookIdNum, includeToc: false }),
 	);
 	const { data: pageImportHistory } = useQuery(
@@ -235,6 +240,21 @@ export default function BookDetailScreen() {
 		if (authorText) params.set("authorText", authorText);
 		router.push(`/books/library/new?${params.toString()}` as any);
 	};
+	const saveCover = async () => {
+		if (isSavingCover) return;
+		setIsSavingCover(true);
+		try {
+			await vanillaTrpc.book.importBookCover.mutate({ bookId: bookIdNum, imageUrl: coverUrlInput.trim() });
+			await refetchBook();
+			void qc.invalidateQueries({ queryKey: _trpc.book.getBooks.queryKey() });
+			setShowCoverInput(false);
+			setCoverUrlInput("");
+		} catch (error) {
+			Alert.alert(t("error"), error instanceof Error ? error.message : "Could not save this cover.");
+		} finally {
+			setIsSavingCover(false);
+		}
+	};
 	const tocNodes = ((book as any).tocNodes ?? []) as TocNode[];
 	const normalizedChapterQuery = normalizeChapterSearch(chapterQuery);
 	const visibleTocNodes = filterTocNodes(tocNodes, normalizedChapterQuery);
@@ -310,106 +330,35 @@ export default function BookDetailScreen() {
 					style={{ backgroundColor: colors.background }}
 					contentContainerStyle={{ paddingBottom: 120 }}
 				>
-					<BookChapterImportStatus bookId={bookIdNum} />
-					<View
-						style={{
-							flexDirection: "row",
-							gap: 14,
-							paddingHorizontal: 16,
-							marginBottom: 20,
-						}}
-					>
-						<View
-							style={{
-								width: 110,
-								height: 154,
-								borderRadius: 10,
-								overflow: "hidden",
-								backgroundColor: book.coverColor ?? colors.primary,
-								flexShrink: 0,
-								alignItems: "center",
-								justifyContent: "center",
-							}}
-						>
-							{book.coverUrl ? (
-								<Image
-									source={{ uri: book.coverUrl }}
-									style={{ width: "100%", height: "100%" }}
-									resizeMode="cover"
+					<BookDetailHero
+						book={book}
+						fetchedCount={fetchedCount}
+						knownCount={totalCount}
+						volumeCount={book.volumes.length}
+						continuePageNo={lastReadPage?.printedPageNo ?? lastReadPage?.shamelaPageNo ?? null}
+						onEditCover={() => setShowCoverInput(true)}
+						/>
+						{showCoverInput ? (
+							<View style={{ marginHorizontal: 16, marginBottom: 16, padding: 16, borderRadius: 14, backgroundColor: colors.card, gap: 10 }}>
+								<Text style={{ color: colors.foreground, fontWeight: "700", fontSize: 14 }}>{t("coverImageUrl")}</Text>
+								<TextInput
+									value={coverUrlInput}
+									onChangeText={setCoverUrlInput}
+									placeholder="https://example.com/cover.jpg"
+									placeholderTextColor={colors.mutedForeground}
+									autoCapitalize="none"
+									autoCorrect={false}
+									keyboardType="url"
+									style={{ color: colors.foreground, borderColor: colors.border, borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 11 }}
 								/>
-							) : (
-								<Text
-									style={{
-										fontSize: 24,
-										fontWeight: "bold",
-										color: "white",
-										textAlign: "center",
-										writingDirection: "rtl",
-									}}
-								>
-									{(book.nameAr ?? book.nameEn ?? t("bookTitle")).slice(0, 2)}
-								</Text>
-							)}
-						</View>
-
-						<View style={{ flex: 1, gap: 6, justifyContent: "center" }}>
-							<Text
-								style={[
-									{
-										textAlign: "right",
-										fontSize: 18,
-										fontWeight: "800",
-										color: colors.foreground,
-									},
-									{ writingDirection: "rtl" },
-								]}
-							>
-								{book.nameAr ?? book.nameEn}
-							</Text>
-							{book.nameEn && (
-								<Text className="text-[13px] text-muted-foreground">
-									{book.nameEn}
-								</Text>
-							)}
-							{book.authors.length > 0 && (
-								<Text
-									style={[
-										{ textAlign: "right", fontSize: 14, color: colors.primary },
-										{ writingDirection: "rtl" },
-									]}
-								>
-									{book.authors.map((a) => a.nameAr ?? a.name).join("، ")}
-								</Text>
-							)}
-							{book.shelf && (
-								<View className="self-end rounded-md bg-card px-2 py-0.5">
-									<Text
-										style={[
-											{ fontSize: 12, color: colors.mutedForeground },
-											{ writingDirection: "rtl" },
-										]}
-									>
-										{book.shelf.nameAr ?? book.shelf.name}
-									</Text>
+								<Text style={{ color: colors.mutedForeground, fontSize: 12 }}>{isRtl ? "سيتم حفظ الصورة في مخزن التطبيق." : "The image will be copied into app storage."}</Text>
+								<View style={{ flexDirection: "row", gap: 8 }}>
+									<Pressable onPress={() => setShowCoverInput(false)} disabled={isSavingCover} style={{ flex: 1, alignItems: "center", padding: 11, borderRadius: 10, borderColor: colors.border, borderWidth: 1 }}><Text style={{ color: colors.foreground }}>{t("cancel")}</Text></Pressable>
+									<Pressable onPress={() => void saveCover()} disabled={isSavingCover || !coverUrlInput.trim()} style={{ flex: 1, alignItems: "center", padding: 11, borderRadius: 10, backgroundColor: colors.primary, opacity: isSavingCover || !coverUrlInput.trim() ? 0.5 : 1 }}><Text style={{ color: colors.background, fontWeight: "700" }}>{isSavingCover ? (isRtl ? "جار الحفظ…" : "Saving…") : t("save")}</Text></Pressable>
 								</View>
-							)}
-							{book.category && (
-								<Text
-									style={[
-										{
-											textAlign: "right",
-											fontSize: 12,
-											color: colors.mutedForeground,
-										},
-										{ writingDirection: "rtl" },
-									]}
-								>
-									{book.category}
-								</Text>
-							)}
-						</View>
-					</View>
-
+							</View>
+						) : null}
+						<BookChapterImportStatus bookId={bookIdNum} />
 					{isImportedBook && (
 						<View
 							style={[
@@ -722,7 +671,13 @@ export default function BookDetailScreen() {
 									)}
 								</View>
 
-								<BookDownloadButton bookId={bookIdNum} />
+									<BookDownloadButton bookId={bookIdNum} />
+									<BookSourceCapture
+										bookId={bookIdNum}
+										firstPageNo={book.firstShamelaPageNo}
+										lastPageNo={book.lastShamelaPageNo}
+										pages={book.pages}
+									/>
 							</View>
 						)}
 					</View>

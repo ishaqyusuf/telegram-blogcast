@@ -321,7 +321,7 @@ export function BookPageLoaderProvider({ children }: { children: ReactNode }) {
 						</View>
 						<WebView
 							ref={webview}
-							key={renderer}
+							key={`${renderer}:${sourceUri}`}
 							source={source}
 							style={{ flex: 1 }}
 							injectedJavaScript={

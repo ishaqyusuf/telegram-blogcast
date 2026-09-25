@@ -23,6 +23,7 @@ export type BookOfflineState = {
 
   // Reading progress: bookId → last-read pageId
   readingProgress: Record<number, number>;
+  readingProgressUpdatedAt: Record<number, number>;
 
   // Bookmarks: bookId → list of entries
   bookmarks: Record<number, BookmarkEntry[]>;
@@ -66,6 +67,7 @@ export function createBookOfflineStore(storage: StateStorage, scope: string) {
       downloadedBooks: {},
       downloadProgress: {},
       readingProgress: {},
+      readingProgressUpdatedAt: {},
       bookmarks: {},
       savedPageSummaries: {},
       cachePageSummaries: (pages) => set((s) => ({
@@ -118,6 +120,7 @@ export function createBookOfflineStore(storage: StateStorage, scope: string) {
       setLastPage: (bookId, pageId) =>
         set((s) => ({
           readingProgress: { ...s.readingProgress, [bookId]: pageId },
+          readingProgressUpdatedAt: { ...s.readingProgressUpdatedAt, [bookId]: Date.now() },
         })),
 
       getLastPage: (bookId) => get().readingProgress[bookId] ?? null,
@@ -125,7 +128,8 @@ export function createBookOfflineStore(storage: StateStorage, scope: string) {
       clearLastPage: (bookId) =>
         set((s) => {
           const { [bookId]: _, ...rest } = s.readingProgress;
-          return { readingProgress: rest };
+          const { [bookId]: _updatedAt, ...updatedAt } = s.readingProgressUpdatedAt;
+          return { readingProgress: rest, readingProgressUpdatedAt: updatedAt };
         }),
 
       // ── Bookmarks ───────────────────────────────────────────────────────────
@@ -171,6 +175,7 @@ export function createBookOfflineStore(storage: StateStorage, scope: string) {
       partialize: (s) => ({
         downloadedBooks: s.downloadedBooks,
         readingProgress: s.readingProgress,
+        readingProgressUpdatedAt: s.readingProgressUpdatedAt,
         bookmarks: s.bookmarks,
         savedPageSummaries: s.savedPageSummaries,
       }),

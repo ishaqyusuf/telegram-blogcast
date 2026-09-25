@@ -265,9 +265,9 @@ export function BookPageView({
                     marginTop: 4,
                   }}
                 >
-                  {footnoteIds.map((marker) => (
+                  {footnoteIds.map((marker, index) => (
                     <Pressable
-                      key={marker}
+                      key={`${marker}:${index}`}
                       onPress={() => onFootnotePress?.(marker)}
                       style={{
                         backgroundColor: withAlpha(colors.primary, 0.2),

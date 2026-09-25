@@ -111,7 +111,8 @@ function ViewedActivityCard({ item }: { item: RecentlyViewedItem }) {
       </View>
       <Text
         className="text-xs font-bold text-foreground"
-        numberOfLines={2}
+        numberOfLines={1}
+        ellipsizeMode="tail"
         style={{ color: colors.foreground }}
       >
         {item.title}
@@ -296,7 +297,8 @@ export function BlogHomeRecentlyPlayed() {
               </View>
               <Text
                 className="text-xs font-bold text-foreground"
-                numberOfLines={2}
+                numberOfLines={1}
+                ellipsizeMode="tail"
                 style={{ color: colors.foreground }}
               >
                 {title}

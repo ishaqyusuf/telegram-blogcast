@@ -120,6 +120,7 @@ export default function BookReaderScreen() {
   const pageLoader = useBookPageLoader();
   const [visibleMissingPage, setVisibleMissingPage] = useState<number | null>(null);
   const pageLayouts = useRef(new Map<number, { y: number; height: number; missing: boolean }>());
+  const lastVisiblePage = useRef<number | null>(null);
   const qc = useQueryClient();
   const { t, isRtl } = useTranslation();
   const colors = useColors();
@@ -309,6 +310,7 @@ export default function BookReaderScreen() {
 
   useEffect(() => {
     pageLayouts.current.clear();
+    lastVisiblePage.current = null;
     setVisibleMissingPage(null);
     setChunkLoadingDirection(null);
     setReaderWindowMeta({});
@@ -822,6 +824,16 @@ export default function BookReaderScreen() {
       const { contentOffset, contentSize, layoutMeasurement } =
         event.nativeEvent;
       readerPosition.lastOffset = contentOffset.y;
+      // The continuous window can show a different page without changing the
+      // route. Persist the page the reader actually reached.
+      const readingLine = contentOffset.y + layoutMeasurement.height * 0.3;
+      const visible = [...pageLayouts.current].find(([, layout]) =>
+        !layout.missing && layout.y <= readingLine && layout.y + layout.height > readingLine,
+      );
+      if (focused && visible && visible[0] !== lastVisiblePage.current) {
+        lastVisiblePage.current = visible[0];
+        setLastPage(bookIdNum, visible[0]);
+      }
       const missing = [...pageLayouts.current].find(([, layout]) => layout.missing && layout.y < contentOffset.y + layoutMeasurement.height && layout.y + layout.height > contentOffset.y);
       setVisibleMissingPage(missing?.[0] ?? null);
       if (!canPaginateReader(readerPosition)) return;
@@ -834,11 +846,12 @@ export default function BookReaderScreen() {
         void loadReaderChunk("next");
       }
     },
-    [loadReaderChunk, readerPosition],
+    [bookIdNum, focused, loadReaderChunk, readerPosition, setLastPage],
   );
 
   const pageSwipeGesture = useMemo(
     () => {
+      const sourceReadsRightToLeft = isRtl || Boolean(page?.book?.shamelaId);
       const nativeScroll = Gesture.Native().disallowInterruption(false).runOnJS(true);
       const pan = Gesture.Pan()
         .enabled(Boolean(page) && mode === "read")
@@ -850,7 +863,7 @@ export default function BookReaderScreen() {
           readerSwipe.begin(readerRouteKey, gesture.absoluteX, gesture.absoluteY, readerSelectionActive.current);
         })
         .onEnd((gesture, success) => {
-          const direction = readerSwipe.finish(readerRouteKey, gesture.absoluteX, gesture.absoluteY, success, isRtl);
+          const direction = readerSwipe.finish(readerRouteKey, gesture.absoluteX, gesture.absoluteY, success, sourceReadsRightToLeft);
           if (direction) navigateAdjacentPage(direction);
         })
         .onFinalize(() => {
@@ -883,7 +896,10 @@ export default function BookReaderScreen() {
     !pageBook?.shamelaId &&
     !pageBook?.shamelaUrl;
   const visibleReaderPages =
-    readerWindowRoute === readerRouteKey && readerPages.length > 0 ? readerPages : page ? [page] : [];
+    readerWindowRoute === readerRouteKey && readerPages.length > 0
+      ? readerPages.map((readerPage) => readerPage.id === pageIdNum && page.status === "fetched" && page.paragraphs.length > 0 &&
+          (readerPage.status !== "fetched" || !readerPage.paragraphs?.length) ? page : readerPage)
+      : [page];
 
 
   return (

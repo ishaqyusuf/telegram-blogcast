@@ -1184,7 +1184,10 @@ export const blogRoutes = createTRPCRouter({
 			const { db } = ctx;
 			return db.recentlyPlayed.findMany({
 				where: { userId: 1 },
-				orderBy: { playedAt: "desc" },
+				// Older data can contain several rows for one media item. Keep the
+				// newest play before applying the requested list limit.
+				distinct: ["mediaId"],
+				orderBy: [{ playedAt: "desc" }, { id: "desc" }],
 				take: input.limit,
 				include: {
 					Media: {
@@ -1218,6 +1221,7 @@ export const blogRoutes = createTRPCRouter({
 			// Upsert: one record per media per user
 			const existing = await db.recentlyPlayed.findFirst({
 				where: { mediaId: input.mediaId, userId: 1 },
+				orderBy: [{ playedAt: "desc" }, { id: "desc" }],
 			});
 			if (existing) {
 				return db.recentlyPlayed.update({

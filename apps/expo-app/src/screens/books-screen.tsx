@@ -16,7 +16,7 @@ import { useBookOfflineStore } from "@/store/book-offline-store";
 export default function BooksScreen() {
   const router = useRouter();
   const colors = useColors();
-  const { t } = useTranslation();
+  const { t, isRtl } = useTranslation();
   const [selectedShelfId, setSelectedShelfId] = useState<number | undefined>(
     undefined,
   );
@@ -66,45 +66,43 @@ export default function BooksScreen() {
   };
 
   return (
-    <View
-      className="flex-1 bg-background"
-    >
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
       <SafeArea>
         <View className="flex-row items-center gap-3 px-4 py-3">
           <Pressable
             onPress={() => router.back()}
-            className="size-9 items-center justify-center rounded-full bg-card"
+            className="size-9 items-center justify-center rounded-full"
+            style={{ backgroundColor: colors.card }}
           >
-            <Icon name="ChevronLeft" size={22} className="text-foreground" />
+            <Icon name="ChevronLeft" size={22} color={colors.foreground} />
           </Pressable>
-          <Text className="flex-1 text-lg font-bold text-foreground">
+          <Text className="flex-1 text-lg font-bold" style={{ color: colors.foreground }}>
             {t("digitalBooks")}
           </Text>
           <Pressable
             onPress={() => router.push("/books/library" as any)}
-            className="size-9 items-center justify-center rounded-full bg-card"
+            className="size-9 items-center justify-center rounded-full"
+            style={{ backgroundColor: colors.card }}
           >
-            <Icon name="Library" size={18} className="text-foreground" />
+            <Icon name="Library" size={18} color={colors.foreground} />
           </Pressable>
           <Pressable
             onPress={() => setShowBookmarks((value) => !value)}
-            className={
-              showBookmarks
-                ? "size-9 items-center justify-center rounded-full bg-primary/15"
-                : "size-9 items-center justify-center rounded-full bg-card"
-            }
+            className="size-9 items-center justify-center rounded-full"
+            style={{ backgroundColor: showBookmarks ? "#DCEFE3" : colors.card }}
           >
             <Icon
               name="Bookmark"
               size={18}
-              className={showBookmarks ? "text-primary" : "text-foreground"}
+              color={showBookmarks ? "#207453" : colors.foreground}
             />
           </Pressable>
           <Pressable
             onPress={() => router.push("/book-fetch" as any)}
-            className="size-9 items-center justify-center rounded-full bg-primary"
+            className="size-9 items-center justify-center rounded-full"
+            style={{ backgroundColor: "#1F6E50" }}
           >
-            <Icon name="Plus" size={20} className="text-background" />
+            <Icon name="Plus" size={20} color="#FFFFFF" />
           </Pressable>
         </View>
 
@@ -122,18 +120,10 @@ export default function BooksScreen() {
           >
             <Pressable
               onPress={() => setSelectedShelfId(undefined)}
-              className={
-                selectedShelfId === undefined
-                  ? "rounded-full bg-primary px-4 py-1.5"
-                  : "rounded-full bg-card px-4 py-1.5"
-              }
+              style={{ borderRadius: 999, paddingHorizontal: 15, minHeight: 34, alignItems: "center", justifyContent: "center", backgroundColor: selectedShelfId === undefined ? "#1F6E50" : colors.card }}
             >
               <Text
-                className={
-                  selectedShelfId === undefined
-                    ? "text-sm font-semibold text-primary-foreground"
-                    : "text-sm font-semibold text-foreground"
-                }
+                style={{ color: selectedShelfId === undefined ? "#FFFFFF" : colors.foreground, fontSize: 14, lineHeight: 19, fontWeight: "600" }}
               >
                 {t("all")}
               </Text>
@@ -142,14 +132,10 @@ export default function BooksScreen() {
               <Pressable
                 key={shelf.id}
                 onPress={() => setSelectedShelfId(shelf.id)}
-                className={
-                  selectedShelfId === shelf.id
-                    ? "rounded-full bg-primary px-4 py-1.5"
-                    : "rounded-full bg-card px-4 py-1.5"
-                }
+                style={{ borderRadius: 999, paddingHorizontal: 15, minHeight: 34, alignItems: "center", justifyContent: "center", backgroundColor: selectedShelfId === shelf.id ? "#1F6E50" : colors.card }}
               >
                 <Text
-                  style={{ writingDirection: "rtl", fontSize: 14, fontWeight: "600", color: selectedShelfId === shelf.id ? colors.primaryForeground : colors.foreground }}
+                  style={{ writingDirection: "rtl", fontSize: 14, lineHeight: 19, fontWeight: "600", color: selectedShelfId === shelf.id ? "#FFFFFF" : colors.foreground }}
                 >
                   {shelf.nameAr ?? shelf.name}
                 </Text>
@@ -236,6 +222,11 @@ export default function BooksScreen() {
           </View>
         )}
 
+        <View style={{ paddingHorizontal: 16, paddingTop: 5, paddingBottom: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+          <Text style={{ color: colors.foreground, fontSize: 18, fontWeight: "800" }}>{isRtl ? "استكشف الكتب" : "Explore books"}</Text>
+          <Text style={{ color: colors.mutedForeground, fontSize: 11, fontWeight: "700" }}>{isLoading ? "" : isRtl ? `${books.length} كتاب` : `${books.length} books`}</Text>
+        </View>
+
         {isLoading ? (
           <View className="flex-1 items-center justify-center">
             <Text className="text-muted-foreground">{t("loading")}</Text>
@@ -250,17 +241,18 @@ export default function BooksScreen() {
             style={{ backgroundColor: colors.background }}
             data={books}
             keyExtractor={(item) => String(item.id)}
-            numColumns={3}
+            numColumns={2}
             contentContainerStyle={{
-              paddingHorizontal: 12,
+              paddingHorizontal: 16,
               paddingBottom: 120,
             }}
-            columnWrapperStyle={{ gap: 10, marginBottom: 16 }}
+            columnWrapperStyle={{ gap: 12, marginBottom: 18 }}
             renderItem={({ item, index }) => (
               <BookCard
                 book={item}
                 index={index}
                 onPress={() => openBook(item)}
+                onDetails={() => router.push(`/books/${item.id}`)}
               />
             )}
           />

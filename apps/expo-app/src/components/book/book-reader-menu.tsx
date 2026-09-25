@@ -32,6 +32,16 @@ export function BookReaderMenu({
 					action?.();
 				}}
 			>
+				<Pressable
+					accessibilityRole="button"
+					onPress={() => {
+						setOpen(false);
+						pendingAction.current = () => router.push(`/books/${bookId}`);
+					}}
+					className="min-h-12 justify-center rounded-xl px-4 py-3"
+				>
+					<Text className="text-base font-medium text-foreground">Book details</Text>
+				</Pressable>
 				{(["Highlights", "Bookmarks", "Footnotes"] as const).map((label) => (
 					<Pressable
 						key={label}
