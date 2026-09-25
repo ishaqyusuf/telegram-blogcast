@@ -50,6 +50,11 @@ This ticket set tracks the work requested in this thread. The existing `app.conf
 
 - Compare three interactive Books list layouts, recommend one, and apply the user's selected direction, 02 Reading First.
 
+## B10 — Commit, push, and mobile release
+
+- Commit and push the feature code and review artifacts.
+- Verify server deployment and publish an Android update to a compatible installed build; record channel, runtime, and commit.
+
 ## Status at handoff
 
 | Ticket | Status | Evidence or remaining work |
@@ -63,3 +68,4 @@ This ticket set tracks the work requested in this thread. The existing `app.conf
 | B07 | Complete for focused checks | 50 focused tests pass; Biome on new files and `git diff --check` pass. Existing unrelated TypeScript errors prevent a clean whole-repo typecheck. |
 | B08 | Implemented and verified | Live recent-play API returned 49 records with 49 unique media IDs; card titles are one line. |
 | B09 | Implemented | Three list concepts at `books-list-workshop/index.html`; user selected 02 Reading First, now visible in the Android Books list. |
+| B10 | Preview released | Feature commit `7422e146` pushed to `main`; Vercel deployed it. Android EAS Update group `0da4f727-229f-491c-98ac-41dbd46e0c60` published to preview runtime `1.0.111`. Production has no listed Android EAS build. See `release.md`. |
