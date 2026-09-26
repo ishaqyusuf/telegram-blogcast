@@ -1,0 +1,74 @@
+{
+	"version": 1,
+	"project": "alghurobaa",
+	"targets": [
+		{
+			"id": "database",
+			"kind": "database",
+			"environments": ["preview", "production"],
+			"sourcePaths": [
+				"packages/db/src/schema/**/*.prisma",
+				"packages/db/prisma.config.ts"
+			],
+			"impactTargets": ["web", "jobs"]
+		},
+		{
+			"id": "web",
+			"kind": "web",
+			"environments": ["preview", "production"],
+			"sourcePaths": [
+				"apps/www/**",
+				"apps/api/**",
+				"packages/**",
+				"vercel.json",
+				"package.json",
+				"bun.lock",
+				"turbo.json"
+			],
+			"prerequisites": ["database"]
+		},
+		{
+			"id": "mobile",
+			"kind": "mobile",
+			"environments": ["preview", "production"],
+			"sourcePaths": [
+				"apps/expo-app/**",
+				"apps/api/src/trpc/**",
+				"packages/blog/**",
+				"packages/document/**",
+				"packages/utils/**",
+				"scripts/eas-account-runner.ts",
+				"package.json",
+				"bun.lock",
+				"turbo.json"
+			],
+			"nativeCandidatePaths": [
+				"apps/expo-app/app.config.ts",
+				"apps/expo-app/eas.json",
+				"apps/expo-app/package.json",
+				"apps/expo-app/plugins/**",
+				"android/**",
+				"ios/**",
+				"package.json",
+				"bun.lock",
+				"patches/**"
+			],
+			"prerequisites": ["web"]
+		},
+		{
+			"id": "jobs",
+			"kind": "jobs",
+			"environments": ["preview", "production"],
+			"sourcePaths": [
+				"packages/jobs/**",
+				"packages/db/**",
+				"packages/document/**",
+				"packages/utils/**",
+				"package.json",
+				"bun.lock",
+				"turbo.json"
+			],
+			"prerequisites": ["database"]
+		}
+	]
+}

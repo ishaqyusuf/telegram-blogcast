@@ -23,6 +23,7 @@ Central navigation document for the repository Brain. Use it to quickly find the
 - Database: [`.brain/database/schema.md`](./database/schema.md), [`.brain/database/relationships.md`](./database/relationships.md), [`.brain/database/migrations.md`](./database/migrations.md)
 - API: [`.brain/api/endpoints.md`](./api/endpoints.md), [`.brain/api/contracts.md`](./api/contracts.md), [`.brain/api/permissions.md`](./api/permissions.md)
 - Features: [`.brain/features/books.md`](./features/books.md), [`.brain/features/audio.md`](./features/audio.md), [`.brain/features/blog.md`](./features/blog.md)
+- Release assurance: [feature](./features/release-assurance.md), [runbook](./runbooks/release-assurance.md)
 - UX: [`.brain/engineering/design-language.md`](./engineering/design-language.md)
 - Tasks: [`.brain/tasks/backlog.md`](./tasks/backlog.md), [`.brain/tasks/in-progress.md`](./tasks/in-progress.md), [`.brain/tasks/done.md`](./tasks/done.md), [`.brain/tasks/roadmap.md`](./tasks/roadmap.md)
 - Reusable templates: [`.brain/templates/feature.md`](./templates/feature.md), [`.brain/templates/adr.md`](./templates/adr.md), [`.brain/templates/bug.md`](./templates/bug.md)

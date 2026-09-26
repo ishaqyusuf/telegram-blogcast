@@ -1,5 +1,23 @@
 # Progress
 
+## 2026-09-26
+
+### Release assurance source integration
+- Pinned the reusable toolkit and modeled PostgreSQL/Prisma, the combined
+  Vercel web/API project, Android Expo delivery, and Trigger jobs.
+- Added advisory local planning, a fail-closed signed exact-revision gate, and
+  protected verification-only Preview/Production workflows.
+- Pinned EAS CLI 20.2.0 in the Expo workspace so native fingerprints do not
+  depend on a developer machine's global CLI.
+- The repository-local EAS fingerprint probe reached its provider client but
+  the read-only GraphQL lookup failed in this environment; hosted evidence
+  collection remains an activation step and focused contract tests pass.
+- `bun run check-deps` still reports 32 pre-existing workspace mismatches; the
+  new `eas-cli` pin is not one of them.
+- Recorded that Preview Expo still targets the Production web origin and
+  Trigger Preview shares Production; both remain activation blockers.
+- No hosted deployment, database push, secret, or provider setting changed.
+
 ## 2026-09-08
 
 ### Automatic Mobile WebView Reader

@@ -15,6 +15,12 @@ Documents the main architectural decisions, runtime boundaries, and integration 
 - Client surfaces: Expo app and Next.js web app.
 - Server surface: Hono API with tRPC routers and REST helpers.
 - Persistence: Prisma models targeting PostgreSQL.
+- Release assurance uses a committed, SHA-pinned release-only toolkit snapshot
+  under `.release/toolkit/`. The root manifest tracks PostgreSQL/Prisma, the
+  combined Next.js web/API Vercel project, Android Expo delivery, and Trigger
+  jobs for Preview and Production. Protected CI verifies signed exact-revision
+  provider evidence and performs no hosted writes. See
+  [the release ADR](../decisions/2026-09-26-release-assurance-provider-evidence-boundary.md).
 
 ### Integration Pattern
 - Mobile Books owns one route-independent `BookPageLoaderProvider`: saved-page resolution and the query cache precede concealed WebView acquisition. The source page sends request-scoped bridge messages; existing API staging/promotion validates and persists content. CAPTCHA changes visibility of the existing WebView. The provider does not fetch source HTML over HTTP or couple page loading to chapter-tree import.

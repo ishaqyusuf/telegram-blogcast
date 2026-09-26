@@ -26,6 +26,10 @@ Defines repository-wide implementation norms so code stays consistent across app
 ### Repo Practices
 - Preserve existing user changes unless explicitly asked to overwrite them.
 - Update Brain docs after meaningful architecture, feature, API, or database changes.
+- Inspect release obligations with `bun run release:status --env preview|production`.
+  Status is advisory; `bun run release:check --env preview|production` must
+  remain fail-closed unless fresh signed provider evidence proves every
+  required target for the exact Git revision.
 - When changing Prisma schema files in this project, use `bun db:push` only to apply DB updates because there is no local database workflow. Do not run `bun db:migrate` unless the project gains a local DB setup or the user explicitly asks. Do not manually create migration files.
 - Add ADRs for major long-term decisions.
 
