@@ -1,6 +1,6 @@
 # Task: Audio Screen Design Workshop
 
-- Status: Native implementation verified on Android — Preview publication pending
+- Status: Done — Android Preview published
 - Created: 2026-09-29
 - Updated: 2026-09-29
 - Artifact: [Audio screen comparison](../../artifacts/audio-screen-workshop/index.html)
@@ -20,7 +20,7 @@ Use the user's recording of the current Android audio experience and the latest 
 - [x] Receive user approval to implement direction 01 in the native audio screen.
 - [x] Implement the inline player, tabs, Details actions, and transcript footer in Expo.
 - [x] Verify player, tabs, transcript scroll, and keyboard composer on Android emulator.
-- [ ] Commit, push, and publish the Android EAS Preview update.
+- [x] Commit, push, and publish the Android EAS Preview update.
 
 ## Accepted refinements
 
@@ -40,3 +40,9 @@ Browser checks covered default tab/order, tab-triggered inline reveal, Details a
 ## Brain impact
 
 The native UX behavior is documented in `.brain/features/audio.md` and the inline-audio-lesson ADR. No API or database contract changed.
+
+## Release
+
+- Implementation commit `f7d3c66dae0c41632794fe35e00141d0992de437` was pushed to `origin/main`.
+- Android EAS Preview update `2026.09.29.01` was published to the preview branch on runtime `1.0.111`: group `9ea27ce0-e9b7-4e80-a9cf-628f5a9665db`, Android update `01a0ef09-e2e1-744e-8395-43c93f69dea4`.
+- Channel readback confirmed `preview` points to that branch and update, with the expected commit and update version. Sentry automatic source-map upload was disabled during OTA publication.

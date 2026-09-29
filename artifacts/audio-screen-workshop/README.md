@@ -59,4 +59,6 @@ Direction 01 was selected for native implementation. The HTML comparison remains
 
 The Expo development build on an Android emulator was checked for the full-screen player, default Comments tab, inline tab reveal with transport context, Details utilities, Books content, return to player, and independent transcript scrolling. The inline comment composer was checked with the software keyboard open; its input remains above the keyboard. Focused ESLint and `git diff --check` passed. No comment was submitted during verification.
 
+The Android Preview update is [published on Expo](https://expo.dev/accounts/ishaqyusuf/projects/alghurobaa/updates/9ea27ce0-e9b7-4e80-a9cf-628f5a9665db) as `2026.09.29.01` for runtime `1.0.111`.
+
 Screenshots: [player](assets/native-player.png), [Comments](assets/native-comments.png), [Details](assets/native-details.png), [Books](assets/native-books.png), and [comment keyboard](assets/native-comment-keyboard.png).

@@ -1,8 +1,5 @@
 # In Progress
 
-### [Audio Screen Design Workshop](2026-09-29-audio-screen-workshop.md)
-- Status: Direction 01 selected — revised preview ready for review
-
 ### [Media Download Controls, Audio Rename, and Transcript Actions](2026-09-29-media-download-controls-and-audio-rename.md)
 - Status: In Progress
 
