@@ -41,6 +41,7 @@ Tracks the current blog-reading experience and blog-related discovery surfaces.
 - Opening the local/admin web Blog or Telegram dashboard checks downloaded Telegram channels once per browser session, presents updated and other downloaded channels in a shared selection dialog, and sends selected refreshes to the dashboard terminal. The Telegram update procedures reject non-local hosts.
 
 ### Important Surface Areas
+- Proposed rich authoring: [Blog rich text editor plan](../plans/2026-09-29-feature-blog-rich-text-editor.md). Current New/Edit Blog still uses a plain multiline input with token-colored preview; rich authoring is not implemented.
 - `apps/expo-app/src/screens/blog-home.tsx`
 - `apps/expo-app/src/screens/text-blog-screen.tsx`
 - `apps/expo-app/src/screens/audio-blog-screen.tsx`
