@@ -1,6 +1,6 @@
 # Task: Audio Screen Design Workshop
 
-- Status: Workshop ready — awaiting design direction
+- Status: Direction 01 selected — revised preview ready for review
 - Created: 2026-09-29
 - Updated: 2026-09-29
 - Artifact: [Audio screen comparison](../../artifacts/audio-screen-workshop/index.html)
@@ -16,9 +16,23 @@ Use the user's recording of the current Android audio experience and the latest 
 - [x] Review the recording's key visual states and relevant audio source/Brain context.
 - [x] Build three interactive candidates: Immersive live, Reading room, and Lesson workspace.
 - [x] Verify the rendered layouts and central local interactions in the in-app browser.
-- [ ] Capture the user's preferred direction or combination, then refine or implement according to their instruction.
+- [x] Capture the user's selection of direction 01 and refine the HTML preview.
+- [ ] Review the revised preview with the user before proceeding to native implementation.
 
-The recommendation is candidate 01 as the closest evolution of the current experience. This is a review recommendation, not a selected product decision.
+## Accepted refinements
+
+- Direction 01 retains the full-screen player at the top of a continuous scrolling page.
+- Scroll gestures outside the transcript move the lesson page. Transcript gestures scroll its text independently.
+- Inline tabs below the player are ordered **Details · Comments · Books**, with Comments selected by default. They do not open section modals.
+- Tapping a tab from the player scrolls the inline section into view while retaining some transport context. Continuing to scroll moves through the content; scrolling back to the top restores the full-screen player.
+- Saved/Download, Transcribed/Transcribe, and Copy move into Details, freeing space for the transcript and lowering the transport controls.
+- Remove the Live transcript header row. Place Read as a ghost button at the far left of the transcript's bottom action row, with flexible space before Live at the far right. Live retains its return-to-follow behavior after manual transcript scrolling.
+
+The original comparison is preserved in `artifacts/audio-screen-workshop/initial-comparison.html`. The active preview is `index.html?option=1`.
+
+## Revision verification
+
+Browser checks covered default tab/order, tab-triggered inline reveal, Details actions, independent transcript scrolling, outer-page scrolling, restoration of the full-screen player, and local comment submission without a section modal. Screenshots and the detailed scope are recorded in the artifact README. Native implementation is not part of this preview revision.
 
 ## Brain impact
 

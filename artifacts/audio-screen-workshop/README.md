@@ -4,11 +4,23 @@ Three interactive design candidates for the Android audio screen. Open `index.ht
 
 ## Directions
 
-1. **Immersive live** — evolve the current transcript-led player with a stable title, explicit Read action, blue transport, and visible destinations for details, books, and comments. Recommended starting point because it retains the current listening hierarchy.
+1. **Immersive live (selected, revised)** — retain a full-screen transcript-led player, followed by inline Details, Comments, and Books on the same scrolling page.
 2. **Reading room** — make the selectable transcript the main screen, with playback in a compact bottom dock. Best suited to reading and annotating while listening.
 3. **Lesson workspace** — put transcript, comments, and books behind visible tabs while retaining the lesson and transport above them. Improves discovery of related content at the cost of transcript space.
 
 Direct views: `?option=1`, `?option=2`, and `?option=3`.
+
+## Selected direction revision
+
+The user selected direction 01 and requested another preview with these changes:
+
+- The player and the supporting sections share one outer scroll surface. The transcript keeps its own independent scroll area.
+- Tabs appear at the lower edge of the initial full-screen player: **Details · Comments · Books**. Comments is selected by default.
+- Selecting a tab scrolls its panel into view with approximately 160 pixels of player context retained above it. Further scrolling lets the tabs stick to the top of the lesson viewport. Scrolling back up restores the full-screen player.
+- Details, Comments, and Books render inline, including comments opened from transport or selected transcript text.
+- Saved/Download, Transcribed/Transcribe, and Copy are in Details. The transport sits lower and the transcript gains vertical space.
+- The Live transcript heading row is removed. Read is a ghost button on the far left of the bottom transcript action row; flexible space separates it from Live on the far right. Live appears after manual transcript scrolling.
+- The original three-way comparison remains available at `initial-comparison.html`. Options 02 and 03 remain available in the current comparison.
 
 ## Grounding
 
@@ -35,8 +47,10 @@ The comparison selector shows ready, loading, and missing transcript states. A g
 - Saved the review image at `assets/comparison.png`.
 - Native Android behavior and real media services are outside this HTML workshop's validation.
 
+Revision checks verified the default Comments tab and tab order, inline reveal without a section modal, utility actions in Details, independent transcript scroll, outer-page scrolling, return to the full-screen player, and inline local comment submission. The revised screenshots are `assets/revised-player.png` and `assets/revised-details.png`.
+
 ## Preview lifecycle
 
 The local Python preview server was started for this workshop on port 8849 (execution session 15492). Keep it available during review. To restart: `python3 -m http.server 8849 --bind 127.0.0.1 --directory artifacts/audio-screen-workshop` from the repository root. Stop only this preview server after a final choice and implementation verification.
 
-No design has been selected for production. Follow-up feedback should refine or combine these numbered candidates.
+Direction 01 is selected. The current deliverable is its revised HTML preview for user review before native implementation.
