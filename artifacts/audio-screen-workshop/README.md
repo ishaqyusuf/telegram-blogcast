@@ -16,10 +16,10 @@ The user selected direction 01 and requested another preview with these changes:
 
 - The player and the supporting sections share one outer scroll surface. The transcript keeps its own independent scroll area.
 - Tabs appear at the lower edge of the initial full-screen player: **Details · Comments · Books**. Comments is selected by default.
-- Selecting a tab scrolls its panel into view with approximately 160 pixels of player context retained above it. Further scrolling lets the tabs stick to the top of the lesson viewport. Scrolling back up restores the full-screen player.
+- Selecting a tab scrolls its panel into view with approximately 160 pixels of player context retained above it. Scrolling back up restores the full-screen player.
 - Details, Comments, and Books render inline, including comments opened from transport or selected transcript text.
 - Saved/Download, Transcribed/Transcribe, and Copy are in Details. The transport sits lower and the transcript gains vertical space.
-- The Live transcript heading row is removed. Read is a ghost button on the far left of the bottom transcript action row; flexible space separates it from Live on the far right. Live appears after manual transcript scrolling.
+- The Live transcript heading row is removed. Read is a ghost button on the far left of the bottom transcript action row; flexible space separates it from Live on the far right. Live resumes following after manual transcript scrolling.
 - The original three-way comparison remains available at `initial-comparison.html`. Options 02 and 03 remain available in the current comparison.
 
 ## Grounding
@@ -45,7 +45,7 @@ The comparison selector shows ready, loading, and missing transcript states. A g
 - Verified Comments and Books tabs, missing and loading transcript states, keyboard Reset activation, and the single-direction view.
 - Browser console error inspection returned no errors.
 - Saved the review image at `assets/comparison.png`.
-- Native Android behavior and real media services are outside this HTML workshop's validation.
+- The original HTML comparison uses local sample state; native Android behavior is verified separately below.
 
 Revision checks verified the default Comments tab and tab order, inline reveal without a section modal, utility actions in Details, independent transcript scroll, outer-page scrolling, return to the full-screen player, and inline local comment submission. The revised screenshots are `assets/revised-player.png` and `assets/revised-details.png`.
 
@@ -53,4 +53,10 @@ Revision checks verified the default Comments tab and tab order, inline reveal w
 
 The local Python preview server was started for this workshop on port 8849 (execution session 15492). Keep it available during review. To restart: `python3 -m http.server 8849 --bind 127.0.0.1 --directory artifacts/audio-screen-workshop` from the repository root. Stop only this preview server after a final choice and implementation verification.
 
-Direction 01 is selected. The current deliverable is its revised HTML preview for user review before native implementation.
+Direction 01 was selected for native implementation. The HTML comparison remains available as the design record.
+
+## Native Android verification
+
+The Expo development build on an Android emulator was checked for the full-screen player, default Comments tab, inline tab reveal with transport context, Details utilities, Books content, return to player, and independent transcript scrolling. The inline comment composer was checked with the software keyboard open; its input remains above the keyboard. Focused ESLint and `git diff --check` passed. No comment was submitted during verification.
+
+Screenshots: [player](assets/native-player.png), [Comments](assets/native-comments.png), [Details](assets/native-details.png), [Books](assets/native-books.png), and [comment keyboard](assets/native-comment-keyboard.png).

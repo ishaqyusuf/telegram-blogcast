@@ -29,6 +29,7 @@ interface CommentInputProps {
   compact?: boolean;
   onClose?: () => void;
   timestampMode?: boolean;
+  onFocus?: () => void;
 }
 
 export function CommentInput({
@@ -39,6 +40,7 @@ export function CommentInput({
   compact,
   onClose,
   timestampMode,
+  onFocus,
 }: CommentInputProps) {
   const colors = useColors();
   const qc = useQueryClient();
@@ -117,6 +119,7 @@ export function CommentInput({
           )}
           <TextInput
             value={text}
+            onFocus={onFocus}
             onChangeText={setText}
             placeholder="Add a comment…"
             placeholderTextColor={colors.mutedForeground}
@@ -175,6 +178,7 @@ export function CommentInput({
           )}
           <TextInput
             value={text}
+            onFocus={onFocus}
             onChangeText={setText}
             placeholder="Add a comment…"
             placeholderTextColor={colors.mutedForeground}

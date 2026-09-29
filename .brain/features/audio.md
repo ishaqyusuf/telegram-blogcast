@@ -64,6 +64,9 @@ Tracks the current audio playback experience, supporting components, and future 
 - Loading a different audio item uses its latest in-session position when present, otherwise reads server history (with a bounded timeout), and seeks before play; a completed track starts from the beginning. The persisted native/local position still restores the currently loaded track after app restart. The history screen's Play button opens and starts the selected audio at its saved position.
 
 ### UX Notes
+- The audio detail screen uses one vertical lesson page: a full-screen transcript-led player followed by inline Details, Comments, and Books tabs. Comments is selected by default. Selecting a tab reveals it with part of the transport still visible; scrolling up restores the player.
+- Transcript text scrolls independently of the lesson page. Read is a transparent ghost action at the left of its footer; Live sits at the far right and resumes follow after manual transcript scrolling when the viewed audio is active. The separate Live transcript heading is removed.
+- Download/Saved, full Transcribe/Transcribed, and Copy are in Details. The Comments tab uses the existing timestamped comment list and composer, including keyboard-aware reveal. Audio options and comment deep links open that inline tab.
 - Persistent mini-player is a core interaction pattern.
 - The mini-player is suppressed throughout Search and on an audio detail route whose viewed media matches the active media; playback continues and eligible routes restore the player normally.
 - Opening an audio detail screen is passive: it may show the viewed audio's metadata and duration, but it must not replace, stop, seek, or pause the currently active audio until the user presses play on the viewed audio.

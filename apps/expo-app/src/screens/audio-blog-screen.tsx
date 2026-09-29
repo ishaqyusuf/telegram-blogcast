@@ -15,11 +15,10 @@ import {
 	Animated,
 	Clipboard,
 	FlatList,
-	KeyboardAvoidingView,
+	Keyboard,
 	Linking,
 	Modal,
 	PanResponder,
-	Platform,
 	ScrollView,
 	Share,
 	Text,
@@ -46,8 +45,6 @@ import { BlogCard, type BlogItem } from "@/components/blog-card";
 import { AddToPlaylistModal } from "@/components/channel-chat/add-to-playlist-modal";
 import { useCommentsState } from "@/components/comments-sheet";
 import { CommentInput } from "@/components/comments-sheet/comment-input";
-import { CommentsAudioContext } from "@/components/comments-sheet/comments-audio-context";
-import { CommentsHeader } from "@/components/comments-sheet/comments-header";
 import { CommentsList } from "@/components/comments-sheet/comments-list";
 import { useLocalServicesSession } from "@/components/local-services";
 import { SafeArea } from "@/components/safe-area";
@@ -70,7 +67,10 @@ import { useColors } from "@/hooks/use-color";
 import { useLocalMediaPlayback } from "@/hooks/use-local-media-playback";
 import { useScrollChrome } from "@/hooks/use-scroll-chrome";
 import { useTashkeelTranscript } from "@/hooks/use-tashkeel-transcript";
-import { getTranscriptionJobProgress, useTranscriptionQueue } from "@/hooks/use-transcription-queue";
+import {
+  getTranscriptionJobProgress,
+  useTranscriptionQueue,
+} from "@/hooks/use-transcription-queue";
 import {
 	TELEGRAM_BOT_DOWNLOAD_LIMIT_BYTES,
 	getAudioPlayability,
@@ -82,7 +82,10 @@ import { type BlobMediaUpload, uploadBlogMediaAsset } from "@/lib/blob-upload";
 import { getTelegramFileUrl } from "@/lib/get-telegram-file";
 import { getLocalApiQueryKey } from "@/lib/local-api-query";
 import { getMediaFileUrl } from "@/lib/media-source";
-import { cacheFullTranscript, FULL_TRANSCRIPT_WINDOW_SEC } from "@/lib/full-transcript-cache";
+import {
+  cacheFullTranscript,
+  FULL_TRANSCRIPT_WINDOW_SEC,
+} from "@/lib/full-transcript-cache";
 import { getBlogShareUrl } from "@/lib/share-links";
 import { isHttpTranscriberUrl } from "@/lib/transcribe";
 import {
@@ -146,7 +149,7 @@ function formatPercent(value: number) {
 	return `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`;
 }
 
-type Tab = "info" | "books";
+type Tab = "details" | "comments" | "books";
 const TRANSCRIPT_CHUNK_SEC = 30;
 const TRANSCRIPT_PREFETCH_AT_SEC = 20;
 const SAVED_TRANSCRIPT_WINDOW_SEC = 60;
@@ -1061,7 +1064,6 @@ function PlayerSection({
 	playDisabledReason,
 	onSeek,
 	onPlusPress,
-	onReadPress,
 }: {
 	theme?: "light" | "dark";
 	isActiveAudio: boolean;
@@ -1075,7 +1077,6 @@ function PlayerSection({
 	playDisabledReason?: string | null;
 	onSeek?: (positionMillis: number) => void | Promise<void>;
 	onPlusPress?: () => void;
-	onReadPress?: () => void;
 }) {
 	const colors = useColors();
 	const playbackRate = useAudioStore((s) => s.playbackRate);
@@ -1314,17 +1315,6 @@ function PlayerSection({
 			<View className="flex-row items-center justify-between">
 				<View className="flex-row items-center gap-2">
 					<Pressable
-						onPress={onReadPress}
-						className="size-10 items-center justify-center rounded-full active:opacity-70"
-						disabled={!onReadPress}
-						style={{
-							backgroundColor: trackBgColor,
-							opacity: onReadPress ? 1 : 0.45,
-						}}
-					>
-						<Icon name="BookOpen" size={20} color={mutedFgColor} />
-					</Pressable>
-					<Pressable
 						onPress={cycleSpeed}
 						className="rounded-md px-2 py-1 active:opacity-70"
 						style={{ backgroundColor: trackBgColor }}
@@ -1487,15 +1477,7 @@ function FloatingPlayerWidget({
 
 // ── Info tab ──────────────────────────────────────────────────────────────────
 
-function InfoTab({
-	blog,
-	commentsState,
-	onCommentsPress,
-}: {
-	blog: any;
-	commentsState: any;
-	onCommentsPress: () => void;
-}) {
+function InfoTab({ blog }: { blog: any }) {
 	const colors = useColors();
 	const tags =
 		blog.blogTags?.map((bt: any) => bt.tags?.title).filter(Boolean) ?? [];
@@ -1561,35 +1543,6 @@ function InfoTab({
 						))}
 					</View>
 				)}
-			</View>
-
-			{/* Inline comments section */}
-			<View className="mt-2">
-				<View className="flex-row items-center justify-between mb-3">
-					<View className="flex-row items-center gap-2">
-						<Icon name="MessageCircle" size={18} className="text-foreground" />
-						<Text className="text-sm font-bold text-foreground">Comments</Text>
-						<View className="px-1.5 py-0.5 rounded-full bg-muted">
-							<Text className="text-xs text-muted-foreground">
-								{commentsState.comments?.length ?? 0}
-							</Text>
-						</View>
-					</View>
-					<Pressable
-						onPress={onCommentsPress}
-						className="flex-row items-center gap-1 px-3 py-1.5 rounded-full bg-primary active:opacity-80"
-					>
-						<Icon name="Plus" size={14} className="text-primary-foreground" />
-						<Text className="text-xs font-bold text-primary-foreground">
-							New Comment
-						</Text>
-					</Pressable>
-				</View>
-
-				{/* Embedded comments list */}
-				<View className="rounded-xl bg-card overflow-hidden">
-					<CommentsList state={commentsState} />
-				</View>
 			</View>
 		</View>
 	);
@@ -2119,6 +2072,31 @@ export default function AudioBlogScreen() {
 	} = useLocalServicesSession();
 	const { height: windowHeight } = useWindowDimensions();
 	const mainScroll = useScrollChrome<FlatList<any>>();
+	const commentInputRef = useRef<View>(null);
+	const outerScrollYRef = useRef(0);
+
+	const scrollComposerAboveKeyboard = useCallback((keyboardHeight: number) => {
+		setTimeout(() => {
+			commentInputRef.current?.measureInWindow((_x, y, _width, height) => {
+				const overlap = y + height - (windowHeight - keyboardHeight - 16);
+				if (overlap > 0) {
+					mainScroll.ref.current?.scrollToOffset({
+						offset: outerScrollYRef.current + overlap + 24,
+						animated: true,
+					});
+				}
+			});
+		}, 250);
+	}, [mainScroll.ref, windowHeight]);
+
+	useEffect(() => {
+		const show = Keyboard.addListener("keyboardDidShow", (event) => {
+			setKeyboardHeight(event.endCoordinates.height);
+			scrollComposerAboveKeyboard(event.endCoordinates.height);
+		});
+		const hide = Keyboard.addListener("keyboardDidHide", () => setKeyboardHeight(0));
+		return () => { show.remove(); hide.remove(); };
+	}, [scrollComposerAboveKeyboard]);
 	const {
 		blogId,
 		openComments: openCommentsParam,
@@ -2134,8 +2112,9 @@ export default function AudioBlogScreen() {
 	const seekTargetSec = Number(seekSecParam);
 	const hasSeekTarget = Number.isFinite(seekTargetSec) && seekTargetSec >= 0;
 
-	const [activeTab, setActiveTab] = useState<Tab>("info");
-	const [showComments, setShowComments] = useState(openCommentsParam === "1");
+  const [activeTab, setActiveTab] = useState<Tab>("comments");
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  const pendingInitialCommentsRevealRef = useRef(openCommentsParam === "1");
 	const [moreMenuVisible, setMoreMenuVisible] = useState(false);
 	const [sleepTimerVisible, setSleepTimerVisible] = useState(false);
 	const [albumPickerVisible, setAlbumPickerVisible] = useState(false);
@@ -2149,7 +2128,6 @@ export default function AudioBlogScreen() {
 	const [addingAlbumId, setAddingAlbumId] = useState<number | null>(null);
 	const [dismissedRelatedAlbumMediaId, setDismissedRelatedAlbumMediaId] =
 		useState<number | null>(null);
-	const [controlsLayout, setControlsLayout] = useState({ y: 0, height: 0 });
 	const [showFloatingControls, setShowFloatingControls] = useState(false);
 	const [transcriptModalVisible, setTranscriptModalVisible] = useState(false);
 	const [audioArtSheetVisible, setAudioArtSheetVisible] = useState(false);
@@ -2232,9 +2210,9 @@ export default function AudioBlogScreen() {
 
 	useFocusEffect(
 		useCallback(() => {
-			setAudioDetailPlayerVisible(showFloatingControls && !showComments);
+      setAudioDetailPlayerVisible(showFloatingControls);
 			return () => setAudioDetailPlayerVisible(false);
-		}, [setAudioDetailPlayerVisible, showComments, showFloatingControls]),
+    }, [setAudioDetailPlayerVisible, showFloatingControls]),
 	);
 
 	const { data: blog } = useQuery({
@@ -2273,7 +2251,13 @@ export default function AudioBlogScreen() {
 		channelUsername: blog?.channel?.username,
 		telegramMessageId: (blog as any)?.telegramMessageId,
 	});
-	const { downloadedUri, isDownloading: isDownloadOnlyBusy, progress: downloadOnlyProgress, download: downloadOnlyAudio, error: downloadOnlyError } = useAudioDownload({
+  const {
+    downloadedUri,
+    isDownloading: isDownloadOnlyBusy,
+    progress: downloadOnlyProgress,
+    download: downloadOnlyAudio,
+    error: downloadOnlyError,
+  } = useAudioDownload({
 		mediaId,
 		blogId: blog?.id,
 		fileName: media?.file?.fileName,
@@ -2414,8 +2398,7 @@ export default function AudioBlogScreen() {
 			!transcriptModalVisible &&
 			!audioArtSheetVisible &&
 			!channelPicturePickerVisible &&
-			!showFloatingControls &&
-			!showComments,
+    !showFloatingControls,
 	);
 
 	const {
@@ -2511,16 +2494,26 @@ export default function AudioBlogScreen() {
 		duration: duration ?? (media as any)?.duration ?? null,
 	});
 	const isCurrentAudioAlreadyTranscribed = transcriptBadge.isFullyTranscribed;
-	const fullTranscriptionJob = mediaTranscriptionJobs.find((job) => job.fromSec == null && job.toSec == null);
-	const fullTranscriptReady = isCurrentAudioAlreadyTranscribed || (fullTranscriptionJob?.status === "completed" && hasSavedTranscript);
+  const fullTranscriptionJob = mediaTranscriptionJobs.find(
+    (job) => job.fromSec == null && job.toSec == null,
+  );
+  const fullTranscriptReady =
+    isCurrentAudioAlreadyTranscribed ||
+    (fullTranscriptionJob?.status === "completed" && hasSavedTranscript);
 	const fullTranscriptionQueued = fullTranscriptionJob?.status === "queued";
 	const fullTranscriptionRunning = fullTranscriptionJob?.status === "running";
-	const isFullTranscriptionBusy = isQueueingTranscription || fullTranscriptionQueued || fullTranscriptionRunning;
-	const fullTranscriptionProgress = fullTranscriptionRunning && fullTranscriptionJob ? getTranscriptionJobProgress(fullTranscriptionJob) : 0;
-	const hasFailedFullTranscription = fullTranscriptionJob?.status === "failed" && !fullTranscriptReady;
-	const { mutateAsync: saveTitleOverride, isPending: isSavingTitleOverride } = useMutation(
-		_trpc.blog.updateMediaTitleOverride.mutationOptions(),
-	);
+  const isFullTranscriptionBusy =
+    isQueueingTranscription ||
+    fullTranscriptionQueued ||
+    fullTranscriptionRunning;
+  const fullTranscriptionProgress =
+    fullTranscriptionRunning && fullTranscriptionJob
+      ? getTranscriptionJobProgress(fullTranscriptionJob)
+      : 0;
+  const hasFailedFullTranscription =
+    fullTranscriptionJob?.status === "failed" && !fullTranscriptReady;
+  const { mutateAsync: saveTitleOverride, isPending: isSavingTitleOverride } =
+    useMutation(_trpc.blog.updateMediaTitleOverride.mutationOptions());
 	const fullTranscriptQuery = useQuery({
 		..._trpc.blog.getTranscript.queryOptions({ mediaId: mediaId ?? 0 }),
 		enabled: false,
@@ -2754,7 +2747,10 @@ export default function AudioBlogScreen() {
 				onFirstWindow: (window) => {
 					if (!isCurrent()) return;
 					setTranscriptWindows((current) => {
-						const next = mergeSavedTranscriptWindow(current, toSavedTranscriptWindow(window));
+              const next = mergeSavedTranscriptWindow(
+                current,
+                toSavedTranscriptWindow(window),
+              );
 						transcriptWindowsRef.current = next;
 						return next;
 					});
@@ -2765,8 +2761,11 @@ export default function AudioBlogScreen() {
 						windowStartSec,
 						windowDurationSec: FULL_TRANSCRIPT_WINDOW_SEC,
 					}),
-			}))
-			.catch((error) => console.warn("[audio] Full transcript cache failed:", error));
+        }),
+      )
+      .catch((error) =>
+        console.warn("[audio] Full transcript cache failed:", error),
+      );
 	}, [isCurrentAudioAlreadyTranscribed, mediaId, transcriptCacheController]);
 
 	const requestTranscriptChunk = useCallback(
@@ -3028,14 +3027,11 @@ export default function AudioBlogScreen() {
 	);
 
 	useEffect(() => {
-		void SystemUI.setBackgroundColorAsync(
-			showComments ? colors.background : dominantColor,
-		);
+    void SystemUI.setBackgroundColorAsync(dominantColor);
 		return () => {
 			void SystemUI.setBackgroundColorAsync(colors.background);
 		};
-	}, [colors.background, dominantColor, showComments]);
-
+  }, [colors.background, dominantColor]);
 
 	const markViewed = useRecentlyViewedStore((s) => s.markViewed);
 	useEffect(() => {
@@ -3434,7 +3430,10 @@ export default function AudioBlogScreen() {
 			qc.invalidateQueries({ queryKey: _trpc.blog.search.queryKey() }),
 			qc.invalidateQueries({ queryKey: _trpc.album.getAlbumTracks.queryKey() }),
 		]).catch((error) => console.warn("[audio] Rename refresh failed:", error));
-		Toast.show(value ? "Audio renamed" : "Original title restored", { type: "success", position: "bottom" });
+    Toast.show(value ? "Audio renamed" : "Original title restored", {
+      type: "success",
+      position: "bottom",
+    });
 	}
 
 	async function copyFullTranscript() {
@@ -3450,13 +3449,22 @@ export default function AudioBlogScreen() {
 					startSec: segment.startSec,
 					endSec: segment.endSec,
 					text: segment.text,
-				}, index)) ?? [];
+              },
+              index,
+            ),
+          ) ?? [];
 			const text = buildTranscriptDocument(segments).fullText;
 			if (!text) throw new Error("No saved transcript is available yet.");
 			Clipboard.setString(text);
-			Toast.show("Full transcript copied", { type: "success", position: "bottom" });
+      Toast.show("Full transcript copied", {
+        type: "success",
+        position: "bottom",
+      });
 		} catch (error) {
-			Toast.show(error instanceof Error ? error.message : "Could not copy transcript", { type: "error", position: "bottom" });
+      Toast.show(
+        error instanceof Error ? error.message : "Could not copy transcript",
+        { type: "error", position: "bottom" },
+      );
 		} finally {
 			setIsCopyingFullTranscript(false);
 		}
@@ -3626,79 +3634,63 @@ export default function AudioBlogScreen() {
 	}
 
 	function updateFloatingControls(scrollY: number) {
-		if (!controlsLayout.height) return;
 		setShowFloatingControls(
-			scrollY > controlsLayout.y + controlsLayout.height + 12,
+      scrollY > windowHeight - NEXT_CONTENT_PEEK_HEIGHT - 80,
 		);
 	}
+
+  function revealTab(tab: Tab) {
+    setActiveTab(tab);
+    requestAnimationFrame(() => {
+      mainScroll.ref.current?.scrollToOffset({
+        offset: Math.max(0, windowHeight - NEXT_CONTENT_PEEK_HEIGHT - 160),
+        animated: true,
+      });
+    });
+  }
 
 	return (
 		<View
 			className="flex-1 bg-background"
 			style={{ backgroundColor: colors.background }}
 		>
-			{!showComments && (
 				<StatusBar
 					style="light"
 					backgroundColor={dominantColor}
 					translucent={false}
 				/>
-			)}
-			<SafeArea
-				style={{
-					flex: 1,
-					backgroundColor: showComments ? colors.background : dominantColor,
-				}}
-			>
-				{/* ── Comments inline view (YouTube-style) ───────────────── */}
-				{showComments ? (
-					<KeyboardAvoidingView
-						style={{ flex: 1 }}
-						behavior={Platform.OS === "ios" ? "padding" : "height"}
-					>
-						<CommentsHeader
-							state={commentsState}
-							onClose={() => setShowComments(false)}
-						/>
-						<CommentsAudioContext />
-						<View style={{ flex: 1 }}>
-							<CommentsList state={commentsState} />
-						</View>
-						<CommentInput
-							blogId={id}
-							autoFocus={openCommentsParam === "1"}
-							noKeyboardAvoid
-							timestampMode
-							onCommentAdded={commentsState.refetch}
-						/>
-					</KeyboardAvoidingView>
-				) : (
+      <SafeArea style={{ flex: 1, backgroundColor: dominantColor }}>
 					<FlatList
 						ref={mainScroll.ref}
 						data={[]}
 						renderItem={() => null}
 						keyExtractor={(_, index) => String(index)}
 						showsVerticalScrollIndicator={false}
+						keyboardShouldPersistTaps="handled"
 						nestedScrollEnabled
 						scrollEventThrottle={mainScroll.scrollEventThrottle}
 						contentContainerStyle={{
-							paddingBottom: 120,
+							paddingBottom: 120 + keyboardHeight,
 							backgroundColor: colors.background,
 						}}
 						onScroll={(event) => {
 							mainScroll.onScroll(event);
+							outerScrollYRef.current = event.nativeEvent.contentOffset.y;
 							updateFloatingControls(event.nativeEvent.contentOffset.y);
 						}}
+          onContentSizeChange={() => {
+            if (pendingInitialCommentsRevealRef.current) {
+              pendingInitialCommentsRevealRef.current = false;
+              revealTab("comments");
+            }
+          }}
 						ListHeaderComponent={
 							<>
 								<LinearGradient
 									colors={audioGradientColors}
 									locations={[0, 0.46, 0.78, 1]}
 									style={{
-										height: Math.max(
-											0,
-											windowHeight - NEXT_CONTENT_PEEK_HEIGHT,
-										),
+                  height: Math.max(0, windowHeight - NEXT_CONTENT_PEEK_HEIGHT),
 										paddingTop: 12,
 										paddingBottom: Math.max(
 											18,
@@ -3732,6 +3724,7 @@ export default function AudioBlogScreen() {
 										{transcriptSegments.length > 0 ? (
 											<KaraokeTranscript
 												segments={transcriptSegments}
+                      onReadPress={openTranscriptModal}
 												positionSecOverride={
 													isViewedAudioActive ? undefined : transcriptAnchorSec
 												}
@@ -3906,13 +3899,7 @@ export default function AudioBlogScreen() {
 										</View>
 
 										{/* Player controls */}
-										<View
-											className="px-6 pt-5"
-											onLayout={(event) => {
-												const { y, height } = event.nativeEvent.layout;
-												setControlsLayout({ y, height });
-											}}
-										>
+                  <View className="px-6 pt-5">
 											<PlayerSection
 												theme="dark"
 												isActiveAudio={isViewedAudioActive}
@@ -3930,41 +3917,8 @@ export default function AudioBlogScreen() {
 														? undefined
 														: () => setAlbumPickerVisible(true)
 												}
-												onReadPress={openTranscriptModal}
 											/>
-											<View className="mt-3 flex-row items-center justify-center gap-2">
-												<Pressable
-													onPress={() => { void downloadOnlyAudio(mediaUrl); }}
-													disabled={Boolean(downloadedUri) || isDownloadOnlyBusy || !mediaId || Boolean(effectiveExternalMedia)}
-													accessibilityRole="button"
-													accessibilityLabel={downloadedUri ? "Audio downloaded" : "Download audio"}
-													className="min-h-11 flex-row items-center gap-1.5 rounded-full bg-white/15 px-3 active:opacity-70"
-												>
-													{isDownloadOnlyBusy ? <ActivityIndicator size="small" color="#fff" /> : <Icon name={downloadedUri ? "Check" : "Download"} size={16} color="#fff" />}
-													<Text className="text-xs font-bold text-white">{downloadedUri ? "Saved" : isDownloadOnlyBusy ? `${Math.round(downloadOnlyProgress * 100)}%` : "Download"}</Text>
-												</Pressable>
-												<Pressable
-													onPress={() => { if (!isFullTranscriptionBusy && !fullTranscriptReady) void queueCurrentTranscription(); }}
-													disabled={!mediaId || isFullTranscriptionBusy || fullTranscriptReady}
-													accessibilityRole="button"
-													accessibilityLabel={fullTranscriptReady ? "Full transcript available" : isFullTranscriptionBusy ? "Full transcription in progress" : "Transcribe full audio"}
-													className="min-h-11 flex-row items-center gap-1.5 rounded-full bg-white/15 px-3 active:opacity-70"
-												>
-													{isFullTranscriptionBusy ? <ActivityIndicator size="small" color="#fff" /> : <Icon name={fullTranscriptReady ? "Check" : "Captions"} size={16} color={fullTranscriptReady ? "#22c55e" : "#fff"} />}
-													<Text style={{ fontSize: 12, fontWeight: "700", color: fullTranscriptReady ? "#22c55e" : "#fff" }}>{fullTranscriptReady ? "Transcribed" : fullTranscriptionRunning ? `${fullTranscriptionProgress}%` : fullTranscriptionQueued ? "Queued" : hasFailedFullTranscription ? "Retry" : "Transcribe"}</Text>
-												</Pressable>
-												<Pressable
-													onPress={() => { void copyFullTranscript(); }}
-													disabled={!mediaId || isCopyingFullTranscript}
-													accessibilityRole="button"
-													accessibilityLabel="Copy full transcript"
-													className="min-h-11 flex-row items-center gap-1.5 rounded-full bg-white/15 px-3 active:opacity-70"
-												>
-													{isCopyingFullTranscript ? <ActivityIndicator size="small" color="#fff" /> : <Icon name="Copy" size={16} color="#fff" />}
-													<Text className="text-xs font-bold text-white">Copy</Text>
-												</Pressable>
-											</View>
-											{!downloadedUri && (downloadOnlyError || (isViewedAudioActive ? activeDownloadError : null)) ? <Text className="mt-2 text-center text-xs text-white">{downloadOnlyError || activeDownloadError} — tap Download to retry.</Text> : null}
+
 										{effectiveExternalMedia ? (
 											<Pressable
 												onPress={() =>
@@ -4013,85 +3967,206 @@ export default function AudioBlogScreen() {
 									</View>
 								</LinearGradient>
 
-								{/* Album strip below controls */}
-								{media?.album && (
+              {/* Inline lesson tabs */}
+              <View
+                className="mx-6 mt-4 flex-row rounded-xl bg-muted p-1"
+                accessibilityRole="tablist"
+              >
+                {(["details", "comments", "books"] as Tab[]).map((tab) => (
 									<Pressable
-										onPress={() =>
-											router.push(`/albums/${media.albumId}` as any)
-										}
-										style={{
-											flexDirection: "row",
-											alignItems: "center",
-											gap: 10,
-											marginHorizontal: 24,
-											marginTop: 16,
-											paddingHorizontal: 14,
-											paddingVertical: 10,
-											backgroundColor: colors.card,
-											borderRadius: 12,
-											borderWidth: 1,
-											borderColor: colors.border,
-										}}
+                    key={tab}
+                    onPress={() => revealTab(tab)}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: activeTab === tab }}
+                    className={`min-h-11 flex-1 items-center justify-center rounded-lg ${activeTab === tab ? "bg-card shadow-sm" : ""}`}
 									>
-										<Icon name="Disc3" size={16} className="text-primary" />
-										<View style={{ flex: 1 }}>
 											<Text
-												style={{
-													fontSize: 13,
-													fontWeight: "700",
-													color: colors.primary,
-												}}
-												numberOfLines={1}
+                      className={`text-sm font-bold ${activeTab === tab ? "text-foreground" : "text-muted-foreground"}`}
 											>
-												{media.album.name}
+                      {tab === "details"
+                        ? "Details"
+                        : tab === "comments"
+                          ? "Comments"
+                          : "Books"}
 											</Text>
-											{media.albumAudioIndex?.index && (
-												<Text
-													style={{
-														fontSize: 11,
-														color: colors.mutedForeground,
-													}}
+                  </Pressable>
+                ))}
+              </View>
+
+              <View className="mt-4 px-6 pb-8">
+                <Pressable
+                  onPress={mainScroll.scrollToTop}
+                  accessibilityRole="button"
+                  className="mb-4 min-h-11 flex-row items-center gap-2 self-start rounded-full border border-border px-4"
 												>
-													Track {media.albumAudioIndex.index}
+                  <Icon
+                    name="ArrowUp"
+                    size={15}
+                    className="text-muted-foreground"
+                  />
+                  <Text className="text-xs font-bold text-muted-foreground">
+                    Full-screen player
 												</Text>
+                </Pressable>
+                {activeTab === "details" ? (
+                  <View className="gap-4">
+                    <View className="flex-row gap-2">
+                      <Pressable
+                        onPress={() => {
+                          void downloadOnlyAudio(mediaUrl);
+                        }}
+                        disabled={
+                          Boolean(downloadedUri) ||
+                          isDownloadOnlyBusy ||
+                          !mediaId ||
+                          Boolean(effectiveExternalMedia)
+                        }
+                        accessibilityRole="button"
+                        accessibilityLabel={
+                          downloadedUri ? "Audio downloaded" : "Download audio"
+                        }
+                        className="min-h-12 flex-1 items-center justify-center gap-1 rounded-xl border border-border bg-card p-2 disabled:opacity-50"
+                      >
+                        {isDownloadOnlyBusy ? (
+                          <ActivityIndicator
+                            size="small"
+                            color={colors.primary}
+                          />
+                        ) : (
+                          <Icon
+                            name={downloadedUri ? "Check" : "Download"}
+                            size={18}
+                            className="text-primary"
+                          />
 											)}
-										</View>
+                        <Text className="text-xs font-bold text-foreground">
+                          {downloadedUri
+                            ? "Saved"
+                            : isDownloadOnlyBusy
+                              ? `${Math.round(downloadOnlyProgress * 100)}%`
+                              : "Download"}
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => {
+                          if (!isFullTranscriptionBusy && !fullTranscriptReady)
+                            void queueCurrentTranscription();
+                        }}
+                        disabled={
+                          !mediaId ||
+                          isFullTranscriptionBusy ||
+                          fullTranscriptReady
+                        }
+                        accessibilityRole="button"
+                        accessibilityLabel={
+                          fullTranscriptReady
+                            ? "Full transcript available"
+                            : isFullTranscriptionBusy
+                              ? "Full transcription in progress"
+                              : "Transcribe full audio"
+                        }
+                        className="min-h-12 flex-1 items-center justify-center gap-1 rounded-xl border border-border bg-card p-2 disabled:opacity-50"
+                      >
+                        {isFullTranscriptionBusy ? (
+                          <ActivityIndicator
+                            size="small"
+                            color={colors.primary}
+                          />
+                        ) : (
 										<Icon
-											name="ChevronRight"
-											size={14}
-											className="text-muted-foreground"
+                            name={fullTranscriptReady ? "Check" : "Captions"}
+                            size={18}
+                            className="text-primary"
 										/>
+                        )}
+                        <Text className="text-xs font-bold text-foreground">
+                          {fullTranscriptReady
+                            ? "Transcribed"
+                            : fullTranscriptionRunning
+                              ? `${fullTranscriptionProgress}%`
+                              : fullTranscriptionQueued
+                                ? "Queued"
+                                : hasFailedFullTranscription
+                                  ? "Retry"
+                                  : "Transcribe"}
+                        </Text>
 									</Pressable>
+                      <Pressable
+                        onPress={() => {
+                          void copyFullTranscript();
+                        }}
+                        disabled={!mediaId || isCopyingFullTranscript}
+                        accessibilityRole="button"
+                        accessibilityLabel="Copy full transcript"
+                        className="min-h-12 flex-1 items-center justify-center gap-1 rounded-xl border border-border bg-card p-2 disabled:opacity-50"
+                      >
+                        {isCopyingFullTranscript ? (
+                          <ActivityIndicator
+                            size="small"
+                            color={colors.primary}
+                          />
+                        ) : (
+                          <Icon
+                            name="Copy"
+                            size={18}
+                            className="text-primary"
+                          />
 								)}
-
-								{/* Tabs */}
-								<View className="mx-6 mt-4">
-									<View className="flex-row rounded-xl bg-muted p-1">
-										{(["info", "books"] as Tab[]).map((tab) => (
+                        <Text className="text-xs font-bold text-foreground">
+                          Copy
+                        </Text>
+                      </Pressable>
+                    </View>
+                    {!downloadedUri &&
+                    (downloadOnlyError ||
+                      (isViewedAudioActive ? activeDownloadError : null)) ? (
+                      <Text className="text-xs text-destructive">
+                        {downloadOnlyError || activeDownloadError} — tap
+                        Download to retry.
+                      </Text>
+                    ) : null}
+                    {media?.album ? (
 											<Pressable
-												key={tab}
-												onPress={() => setActiveTab(tab)}
-												className={`flex-1 py-2 rounded-lg items-center ${activeTab === tab ? "bg-card shadow-sm" : ""}`}
+                        onPress={() =>
+                          router.push(`/albums/${media.albumId}` as any)
+                        }
+                        accessibilityRole="button"
+                        className="min-h-12 flex-row items-center gap-3 rounded-xl border border-border bg-card px-4"
 											>
+                        <Icon name="Disc3" size={18} className="text-primary" />
+                        <View className="flex-1">
 												<Text
-													className={`text-sm font-bold capitalize ${activeTab === tab ? "text-foreground" : "text-muted-foreground"}`}
+                            className="text-sm font-bold text-foreground"
+                            numberOfLines={1}
 												>
-													{tab === "info" ? "Info" : "Books"}
+                            {media.album.name}
 												</Text>
-											</Pressable>
-										))}
+                          {media.albumAudioIndex?.index ? (
+                            <Text className="text-xs text-muted-foreground">
+                              Track {media.albumAudioIndex.index}
+                            </Text>
+                          ) : null}
 									</View>
+                        <Icon
+                          name="ChevronRight"
+                          size={16}
+                          className="text-muted-foreground"
+                        />
+                      </Pressable>
+                    ) : null}
+                    <InfoTab blog={blog ?? {}} />
 								</View>
-
-								{/* Tab content */}
-								<View className="mt-3 px-6">
-									{activeTab === "info" ? (
-										<InfoTab
-											blog={blog ?? {}}
-											commentsState={commentsState}
-											onCommentsPress={() => setShowComments(true)}
-										/>
-									) : activeTab === "books" && mediaId ? (
+                ) : activeTab === "comments" ? (
+                  <View className="gap-3">
+                    <Text className="text-lg font-bold text-foreground">
+                      Comments ({commentsState.comments?.length ?? 0})
+                    </Text>
+                    <CommentsList state={commentsState} inline />
+											<View ref={commentInputRef} collapsable={false}>
+												<CommentInput blogId={id} timestampMode onCommentAdded={commentsState.refetch} onFocus={() => scrollComposerAboveKeyboard(Keyboard.metrics()?.height ?? 300)} />
+											</View>
+                  </View>
+                ) : mediaId ? (
 										<AudioBookReferences
 											mediaId={mediaId}
 											albumId={media?.albumId}
@@ -4107,18 +4182,15 @@ export default function AudioBlogScreen() {
 							</>
 						}
 					/>
-				)}
 			</SafeArea>
 
-			{!showComments && (
 				<ScrollToTopButton
 					visible={mainScroll.showScrollTop}
 					onPress={mainScroll.scrollToTop}
 					bottom={showFloatingControls ? 108 : 24}
 				/>
-			)}
 
-			{!showComments && !sound && (
+      {!sound && (
 				<FloatingPlayerWidget
 					visible={showFloatingControls}
 					isActiveAudio={isViewedAudioActive}
@@ -4151,7 +4223,7 @@ export default function AudioBlogScreen() {
 				hasAlbum={!!media?.album}
 				canResetTranscription={canResetTranscription}
 				onClose={() => setMoreMenuVisible(false)}
-				onComment={() => setShowComments(true)}
+        onComment={() => revealTab("comments")}
 				onShare={() => {
 					void shareAudioPost();
 				}}

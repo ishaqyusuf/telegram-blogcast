@@ -13,6 +13,7 @@ interface KaraokeTranscriptProps {
 	autoScroll?: boolean;
 	playbackEnabled?: boolean;
 	onSegmentLongPress?: (segment: TranscriptSegmentData) => void;
+  onReadPress?: () => void;
 	onPressSegment?: (
 		segment: TranscriptSegmentData,
 		index: number,
@@ -27,6 +28,7 @@ export function KaraokeTranscript({
 	autoScroll = true,
 	playbackEnabled = true,
 	onSegmentLongPress,
+  onReadPress,
 	onPressSegment,
 	contentPaddingVertical = 120,
 }: KaraokeTranscriptProps) {
@@ -92,29 +94,26 @@ export function KaraokeTranscript({
 				onPressSegment={handlePressSegment}
 				onLongPressSegment={handleLongPressSegment}
 			/>
-			{autoScroll && followPaused ? (
+			<View style={{ minHeight: 48, flexDirection: "row", alignItems: "center", paddingHorizontal: 8 }}>
+				<Pressable
+					onPress={onReadPress}
+					accessibilityRole="button"
+					accessibilityLabel="Read transcript"
+					style={{ minHeight: 44, minWidth: 44, paddingHorizontal: 12, alignItems: "center", justifyContent: "center", borderRadius: 22, borderWidth: 1, borderColor: "rgba(255,255,255,0.3)", backgroundColor: "transparent" }}
+				>
+					<Text style={{ color: "#fff", fontSize: 12, fontWeight: "700" }}>Read</Text>
+				</Pressable>
+				<View style={{ flex: 1 }} />
 				<Pressable
 					onPress={() => setFollowPaused(false)}
+					disabled={!autoScroll}
 					accessibilityRole="button"
 					accessibilityLabel="Return to live transcript position"
-					style={{
-						position: "absolute",
-						right: 18,
-						bottom: 18,
-						minWidth: 44,
-						minHeight: 44,
-						borderRadius: 22,
-						backgroundColor: "rgba(255,255,255,0.92)",
-						paddingHorizontal: 14,
-						alignItems: "center",
-						justifyContent: "center",
-					}}
+					style={{ minWidth: 44, minHeight: 44, borderRadius: 22, backgroundColor: followPaused ? "rgba(255,255,255,0.92)" : "rgba(255,255,255,0.16)", paddingHorizontal: 14, alignItems: "center", justifyContent: "center", opacity: autoScroll ? 1 : 0.6 }}
 				>
-					<Text style={{ color: "#111111", fontSize: 12, fontWeight: "800" }}>
-						Live
-					</Text>
+					<Text style={{ color: followPaused ? "#111111" : "#ffffff", fontSize: 12, fontWeight: "800" }}>Live</Text>
 				</Pressable>
-			) : null}
+			</View>
 		</View>
 	);
 }
