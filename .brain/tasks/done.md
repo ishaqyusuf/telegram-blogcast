@@ -1,5 +1,11 @@
 # Done
 
+### [Audio Offline Status, Detail Preview, and Transcript Cache](2026-09-29-audio-offline-detail-transcript-cache.md)
+- Status: Done locally — device UI verification unavailable
+
+### [Audio Play History and Resume](2026-09-29-audio-play-history-resume.md)
+- Status: Done locally
+
 ### [Release assurance source integration](2026-09-26-release-assurance-integration.md)
 - Status: Done locally — Hosted Activation Pending
 

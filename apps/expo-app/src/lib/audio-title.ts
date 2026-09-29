@@ -1,6 +1,7 @@
 type AudioTitleValue = string | null | undefined;
 
 type AudioTitleMedia = {
+	titleOverride?: AudioTitleValue;
   title?: AudioTitleValue;
   fileName?: AudioTitleValue;
   displayName?: AudioTitleValue;
@@ -39,6 +40,8 @@ export function getAudioDisplayTitle(
     ? (source.media[0] ?? null)
     : (source?.media ?? source?.medias?.[0] ?? null);
   const audio = source?.audio ?? null;
+	const override = clean(audio?.titleOverride) ?? clean(media?.titleOverride);
+	if (override) return override;
 
   const primary = clean(source?.caption) ?? clean(source?.content);
   const mediaLabel =

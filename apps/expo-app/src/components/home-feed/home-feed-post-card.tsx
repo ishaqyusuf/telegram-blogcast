@@ -7,6 +7,7 @@ import { HomeFeedAudioPlayer } from "./home-feed-audio-player";
 import { RouterOutputs } from "@api/trpc/routers/_app";
 import { formatDate } from "@acme/utils/dayjs";
 import { getAudioDisplayTitle } from "@/lib/audio-title";
+import { rememberAudioDetailFromPost } from "@/lib/audio-detail-preview";
 import { minuteToString } from "@/lib/utils";
 import { getBlogHref, getPrimaryImageUrl } from "@/components/blog-card/utils";
 import { Icon } from "@/components/ui/icon";
@@ -123,6 +124,7 @@ export function HomeFeedPostCard({ post }: { post: ItemProps }) {
   return (
     <Pressable
       onPress={() => {
+        rememberAudioDetailFromPost(post);
         router.push(getBlogHref({ id: post.id, type: post.type } as any) as any);
       }}
     >

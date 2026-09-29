@@ -23,6 +23,12 @@ High-level map of the API surface and where endpoint logic lives.
 - Podcasts
 - App/root router composition
 
+### Blog Play History
+- `blog.getPlayHistory` reads the latest saved progress for one media item; `blog.getRecentlyPlayed` lists distinct media in most recently played order; `blog.savePlayHistory` updates progress and recency when playback occurs.
+
+### Audio Rename
+- `blog.updateMediaTitleOverride` sets or clears the separate display-name override for an audio `Media` row. Blog and album search include the override.
+
 ### Channels Router Highlights
 - `channel.importTelegramAudioLink`: imports one public Telegram audio post link into the same Blog/File/Media shape used by the channel fetcher. Duplicate channel/message imports return the existing blog instead of creating a second record.
 

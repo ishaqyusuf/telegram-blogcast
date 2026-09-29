@@ -64,6 +64,7 @@ type BlogMediaFile = {
 type BlogMediaItem = {
     mimeType: string;
     title: string | null;
+    titleOverride: string | null;
     album: { name: string | null } | null;
     transcript: {
         status: string | null;
@@ -102,7 +103,8 @@ function pickAudioMedia(medias: BlogMediaItem[]) {
     return {
         src: getMediaFileUrl(media?.file),
         mediaId: media?.id ?? null,
-        title: media?.title ?? media?.file?.fileName ?? null,
+        title: media?.titleOverride ?? media?.title ?? media?.file?.fileName ?? null,
+        titleOverride: media?.titleOverride ?? null,
         duration: media?.file?.duration ?? null,
         size: media?.file?.fileSize ?? null,
         albumName: media?.album?.name ?? null,
@@ -398,7 +400,7 @@ async function getBlogFeed(input: {
                 row.channel?.title ?? `@${row.channel?.username ?? "channel"}`,
             audioSrc: audio.src,
             audioMediaId: audio.mediaId,
-            audioTitle: appendDistinct(row.content, audio.title),
+            audioTitle: audio.titleOverride || appendDistinct(row.content, audio.title),
             audioDuration: audio.duration,
             audioSize: audio.size,
             albumName: audio.albumName,

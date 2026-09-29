@@ -1,4 +1,6 @@
-import { useDownloadedAudio } from "@/hooks/use-downloaded-audio";
+import { useAudioDownload } from "@/hooks/use-audio-download";
+import { AudioDownloadBadge } from "@/components/audio-blog-view/audio-download-badge";
+import { AudioRenameSheet } from "@/components/audio-blog-view/audio-rename-sheet";
 import { Pressable } from "@/components/ui/pressable";
 import { AddToAlbumModal } from "@/components/channel-chat/add-to-album-modal";
 import {
@@ -75,6 +77,7 @@ import { useScrollChrome } from "@/hooks/use-scroll-chrome";
 import { useTranscriptionQueue } from "@/hooks/use-transcription-queue";
 import { getPrimaryImageUrl } from "@/components/blog-card/utils";
 import { getWebUrl } from "@/lib/base-url";
+import { rememberAudioDetailFromMedia } from "@/lib/audio-detail-preview";
 import { getTelegramFileUrl } from "@/lib/get-telegram-file";
 import { getMediaFileUrl } from "@/lib/media-source";
 import { withAlpha } from "@/lib/theme";
@@ -204,6 +207,7 @@ function getTrackMediaId(media: any) {
 
 function getTrackTitle(media: any) {
   return (
+    media?.titleOverride ||
     media?.title ||
     media?.file?.fileName ||
     media?.file?.name ||
@@ -255,6 +259,7 @@ function getTrackSearchFields(media: any, albumAuthor?: any | null) {
 
   return [
     { label: "Title", text: getTrackTitle(media) },
+    { label: "Original title", text: media?.title },
     { label: "File", text: media?.file?.fileName ?? media?.file?.name },
     { label: "Caption", text: media?.blog?.content },
     { label: "Author", text: getAuthorDisplayName(media?.author) },
@@ -341,6 +346,7 @@ function buildAlbumTrackAudioItem(
       url: audioUrl,
       fileName,
       title: media?.title,
+      titleOverride: media?.titleOverride,
       duration: file?.duration ?? media?.duration,
       ...(albumQueue?.length ? { albumQueue } : {}),
     },
@@ -1875,12 +1881,14 @@ function TrackRow({
   searchMatch?: { label: string; snippet: string } | null;
 }) {
   const colors = useColors();
-	const downloadedUri = useDownloadedAudio({
+	const { downloadedUri, isDownloading: isDownloadOnlyBusy, progress: downloadOnlyProgress, download: downloadOnly, error: downloadOnlyError } = useAudioDownload({
 		mediaId: getTrackMediaId(media),
 		blogId: getTrackBlogId(media),
 		fileName: media.file?.fileName ?? media.file?.name,
 		size: media.file?.fileSize,
+		url: getMediaFileUrl(media.file),
 	});
+	const backgroundDownloadError = useAudioStore((s) => s.downloadError);
 	const playColor = downloadedUri
 		? colors.downloadedForeground
 		: isActiveTrack
@@ -1941,6 +1949,7 @@ function TrackRow({
           ) : null}
         </View>
       ) : (
+        <View style={{ width: 52, height: 52 }}>
         <Pressable
 					disabled={
 						isRemoving || (!canPlay && !downloadedUri) || isTrackLoading
@@ -1983,6 +1992,15 @@ function TrackRow({
             />
           )}
         </Pressable>
+        <AudioDownloadBadge
+          downloaded={Boolean(downloadedUri)}
+          downloading={isDownloadOnlyBusy}
+          error={downloadOnlyError || (isActiveTrack ? backgroundDownloadError : null)}
+          progress={downloadOnlyProgress}
+          disabled={isRemoving || !canPlay || !media.file?.fileName}
+          onPress={() => { void downloadOnly().then((uri) => { if (!uri) Toast.show("Audio download failed", { type: "error", position: "bottom" }); }); }}
+        />
+        </View>
       )}
       <View style={{ flex: 1, gap: 2 }}>
         <View
@@ -2210,6 +2228,7 @@ function TrackActionsSheet({
   isBusy,
   onClose,
   onMoveRequest,
+  onRename,
   onOpenPost,
   onShare,
   onComment,
@@ -2222,6 +2241,7 @@ function TrackActionsSheet({
   isBusy?: boolean;
   onClose: () => void;
   onMoveRequest: () => void;
+  onRename: () => void;
   onOpenPost: () => void;
   onShare: () => void;
   onComment: () => void;
@@ -2232,8 +2252,7 @@ function TrackActionsSheet({
   const colors = useColors();
   const { isEnabled: localServicesEnabled } = useLocalServicesSession();
   const { height: windowHeight } = useWindowDimensions();
-  const title =
-    media?.title || media?.file?.fileName || media?.blog?.content || "Track";
+  const title = getTrackTitle(media);
   const canOpenPost = Boolean(getTrackBlogHref(media));
   const onComingSoon = () => {
     Alert.alert("Coming soon", "This action is not connected yet.");
@@ -2292,6 +2311,13 @@ function TrackActionsSheet({
           showsVerticalScrollIndicator={false}
         >
           <View>
+            <TrackActionRow
+              label="Rename"
+              description="Set a searchable title for this audio"
+              icon="Pencil"
+              disabled={isBusy || !media?.id}
+              onPress={() => runAndClose(onRename)}
+            />
             <TrackActionRow
               label="Remove from album"
               description="Keep the post but remove this track here"
@@ -2412,7 +2438,7 @@ function TrackMoveAlbumSheet({
   const colors = useColors();
   const { height: windowHeight } = useWindowDimensions();
   const title =
-    media?.title || media?.file?.fileName || media?.blog?.content || "Track";
+    getTrackTitle(media);
   const targetAlbums = albums.filter((album) => album.id !== currentAlbumId);
 
   return (
@@ -2621,7 +2647,7 @@ function ReorderRow({
           }}
           numberOfLines={1}
         >
-          {media.title || media.file?.fileName || "Untitled"}
+          {getTrackTitle(media)}
         </Text>
         {metadata.length > 0 && (
           <Text
@@ -2668,7 +2694,7 @@ function SuggestedMediaRow({
   const duration = media.file?.duration;
   const sizeLabel = formatMediaSizeMb(media.file?.fileSize ?? media.fileSize);
   const title =
-    media.title || media.file?.fileName || media.blog?.content || "Untitled";
+    getTrackTitle(media);
   const matchingTerms = media.matchingTerms ?? [];
   const channelLabel =
     getAlbumSuggestionChannelLabel(media.blog?.channel) ||
@@ -3167,6 +3193,10 @@ export default function AlbumDetailScreen() {
   const [pendingPlaybackMediaId, setPendingPlaybackMediaId] = useState<
     number | null
   >(null);
+  const [trackToRename, setTrackToRename] = useState<any | null>(null);
+  const { mutateAsync: saveTitleOverride, isPending: isSavingTitleOverride } = useMutation(
+    _trpc.blog.updateMediaTitleOverride.mutationOptions(),
+  );
 
   const {
     data: album,
@@ -4264,6 +4294,24 @@ export default function AlbumDetailScreen() {
     setTrackMoveTarget(selectedTrackForActions);
   }
 
+  async function saveTrackRename(value: string | null) {
+    if (!trackToRename?.id) return;
+    try {
+      await saveTitleOverride({ mediaId: trackToRename.id, titleOverride: value });
+      setTrackToRename(null);
+      setLocalTracks(null);
+      await Promise.all([
+        invalidateAlbumTrackData(),
+        qc.invalidateQueries({ queryKey: _trpc.album.getAlbum.queryKey({ id }) }),
+        qc.invalidateQueries({ queryKey: _trpc.blog.posts.queryKey() }),
+        qc.invalidateQueries({ queryKey: _trpc.blog.search.queryKey() }),
+      ]);
+      Toast.show(value ? "Audio renamed" : "Original title restored", { type: "success", position: "bottom" });
+    } catch (error) {
+      Toast.show(error instanceof Error ? error.message : "Could not rename audio", { type: "error", position: "bottom" });
+    }
+  }
+
   function openSelectedTrackMovePicker() {
     if (selectedTrackCount === 0) return;
     setTrackMoveTarget({
@@ -4906,6 +4954,7 @@ export default function AlbumDetailScreen() {
                   onPress={() => {
                     const first = tracks[0];
                     if (first?.blog?.id) {
+                      rememberAudioDetailFromMedia(first, album);
                       router.push(`/blog-view-2/${first.blog.id}` as any);
                     }
                   }}
@@ -5260,6 +5309,7 @@ export default function AlbumDetailScreen() {
                                 return;
                               }
                               if (media.blog?.id) {
+                                rememberAudioDetailFromMedia(media, album);
                                 router.push(
                                   `/blog-view-2/${media.blog.id}` as any,
                                 );
@@ -5869,6 +5919,7 @@ export default function AlbumDetailScreen() {
         isBusy={isRemovingMedia || isMovingMedia || isResettingTrack}
         onClose={() => setSelectedTrackForActions(null)}
         onMoveRequest={openTrackMovePicker}
+        onRename={() => setTrackToRename(selectedTrackForActions)}
         onOpenPost={() => openSelectedTrackPost(false)}
         onShare={() => {
           void shareSelectedTrackPost();
@@ -5883,6 +5934,14 @@ export default function AlbumDetailScreen() {
             removeTrackFromAlbum(selectedTrackForActions.id);
           }
         }}
+      />
+      <AudioRenameSheet
+        visible={Boolean(trackToRename)}
+        currentOverride={trackToRename?.titleOverride}
+        originalTitle={trackToRename?.title || trackToRename?.file?.fileName || "Untitled"}
+        saving={isSavingTitleOverride}
+        onClose={() => setTrackToRename(null)}
+        onSave={(value) => { void saveTrackRename(value); }}
       />
       <TrackMoveAlbumSheet
         visible={Boolean(trackMoveTarget)}

@@ -291,6 +291,24 @@ export default function SettingsScreen() {
           </Pressable>
 
           <Pressable
+            onPress={() => router.push("/channel-update-settings" as Href)}
+            className="flex-row items-center gap-3 rounded-xl bg-card p-4 active:opacity-80"
+          >
+            <View className="size-10 items-center justify-center rounded-full bg-secondary">
+              <Icon name="RefreshCw" size={18} className="text-foreground" />
+            </View>
+            <View className="flex-1 gap-1">
+              <Text className="text-[15px] font-bold text-foreground">
+                Channel updates
+              </Text>
+              <Text className="text-[13px] leading-[19px] text-muted-foreground">
+                Automatically update marked channels without popups.
+              </Text>
+            </View>
+            <Icon name="ChevronRight" size={18} className="text-muted-foreground" />
+          </Pressable>
+
+          <Pressable
             onPress={() => void syncTelegramChannels()}
             disabled={syncingChannels}
             className={

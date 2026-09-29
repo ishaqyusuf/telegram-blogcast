@@ -47,5 +47,6 @@ Summarizes where the database schema lives and which major data domains exist.
 - Physical catalog entries use nullable `LibraryItem.bookId` to link an owned printed item/set to an existing digital `Book`; physical ownership metadata remains outside `Book`.
 - Automatic album index generation is modeled in `album-auto-index.schema.prisma` with `AlbumAutoIndexRun`, `AlbumAutoIndexAlbumSuggestion`, and `AlbumAutoIndexMediaSuggestion`. Runs store channel/provider/model/status, bounded input JSON, raw AI response JSON, parsed JSON, counts, and failure errors; child rows store normalized existing-album or proposed-album suggestions plus snapshots for review. Proposed album suggestion rows keep `albumId` null until approval creates the album.
 - `TranscriptionJob` owns DB-backed queue state for local Whisper work, including progress percentage, stage, worker ID, lock time, heartbeat, optional chunk counters, retry count, and error message.
+- `Media.titleOverride` is a nullable, searchable audio display-name override. `Media.title` and `File.fileName` remain the original fallback values; clearing the override restores that fallback.
 - `LocalGatewayLease` stores the singleton, short-lived preview ngrok origin
   under key `preview-local-gateway`, with expiry and update timestamps.

@@ -4,6 +4,7 @@ model Media {
     mimeType        String // audio.. pdf.. img
     file            File?             @relation(fields: [fileId], references: [id])
     title           String?
+    titleOverride   String?
     authorId        Int?
     author          Author?           @relation(fields: [authorId], references: [id])
     mediaIndexId    Int?              @unique

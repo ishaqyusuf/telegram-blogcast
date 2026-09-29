@@ -1,5 +1,11 @@
 # In Progress
 
+### [Media Download Controls, Audio Rename, and Transcript Actions](2026-09-29-media-download-controls-and-audio-rename.md)
+- Status: In Progress
+
+### [Background Channel Updates](2026-09-28-background-channel-updates.md)
+- Status: Implementation complete — UI testing paused by user
+
 ### [Book Cache 1/8: Android Book Folder Access](2026-09-08-android-book-folder.md)
 - Status: In Progress
 

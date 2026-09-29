@@ -14,6 +14,9 @@ import { WebView } from "react-native-webview";
 import { Icon } from "@/components/ui/icon";
 import { useColors } from "@/hooks/use-color";
 import { getAudioDisplayTitle } from "@/lib/audio-title";
+import { buildTelegramFileProxy } from "@/lib/media-source";
+import { TELEGRAM_BOT_DOWNLOAD_LIMIT_BYTES } from "@/lib/audio-playability";
+import { MediaDownloadAction } from "./media-download-action";
 import { useTranslation } from "@/lib/i18n";
 import { withAlpha } from "@/lib/theme";
 
@@ -285,6 +288,17 @@ function CardVideo({
           </View>
         ) : null}
       </View>
+      {!externalMedia && (video?.source === "vercel_blob" || !video?.size || video.size <= TELEGRAM_BOT_DOWNLOAD_LIMIT_BYTES) ? (
+        <View style={{ position: "absolute", right: 10, bottom: 10 }}>
+          <MediaDownloadAction
+            kind="video"
+            cacheKey={video?.mediaId ?? post.id}
+            fileName={video?.fileName || `video-${post.id}.mp4`}
+            url={video?.url || buildTelegramFileProxy(video?.telegramFileId)}
+            expectedSize={video?.size}
+          />
+        </View>
+      ) : null}
     </Pressable>
   );
 }
@@ -469,6 +483,7 @@ function CardPdf({
     getInlinePreviewText(post.caption) ||
     "PDF document";
   const sizeLabel = formatFileSize(doc?.size ?? file?.fileSize);
+  const storedFileName = fileName.toLowerCase().endsWith(".pdf") ? fileName : `${fileName}.pdf`;
 
   return (
     <Pressable
@@ -498,6 +513,11 @@ function CardPdf({
           {sizeLabel ? `PDF document · ${sizeLabel}` : "PDF document"}
         </Text>
       </View>
+      {previewUrl && (file?.source === "vercel_blob" || !file?.fileSize || file.fileSize <= TELEGRAM_BOT_DOWNLOAD_LIMIT_BYTES) ? (
+        <View style={{ position: "absolute", right: 10, bottom: 10 }}>
+          <MediaDownloadAction kind="document" cacheKey={post.id} fileName={storedFileName} url={previewUrl} expectedSize={doc?.size ?? file?.fileSize} />
+        </View>
+      ) : null}
     </Pressable>
   );
 }

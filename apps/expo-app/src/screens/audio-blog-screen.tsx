@@ -1,4 +1,4 @@
-import { useDownloadedAudio } from "@/hooks/use-downloaded-audio";
+import { useAudioDownload } from "@/hooks/use-audio-download";
 import { Pressable } from "@/components/ui/pressable";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { BottomSheetFlatList } from "@gorhom/bottom-sheet";
@@ -29,6 +29,7 @@ import {
 } from "react-native";
 
 import { AudioOptionsSheet } from "@/components/audio-blog-view/audio-options-sheet";
+import { AudioRenameSheet } from "@/components/audio-blog-view/audio-rename-sheet";
 import { AudioPlayerHeader } from "@/components/audio-blog-view/audio-player-header";
 import { KaraokeTranscript } from "@/components/audio-blog-view/karaoke-transcript";
 import { TashkeelToggle } from "@/components/audio-blog-view/tashkeel-toggle";
@@ -67,19 +68,20 @@ import type {
 } from "@/db/transcript-cache-repository";
 import { useColors } from "@/hooks/use-color";
 import { useLocalMediaPlayback } from "@/hooks/use-local-media-playback";
-import { usePlayHistorySync } from "@/hooks/use-play-history-sync";
 import { useScrollChrome } from "@/hooks/use-scroll-chrome";
 import { useTashkeelTranscript } from "@/hooks/use-tashkeel-transcript";
-import { useTranscriptionQueue } from "@/hooks/use-transcription-queue";
+import { getTranscriptionJobProgress, useTranscriptionQueue } from "@/hooks/use-transcription-queue";
 import {
 	TELEGRAM_BOT_DOWNLOAD_LIMIT_BYTES,
 	getAudioPlayability,
 } from "@/lib/audio-playability";
 import { getAudioDisplayTitle } from "@/lib/audio-title";
+import { getAudioDetailPreview } from "@/lib/audio-detail-preview";
 import { type BlobMediaUpload, uploadBlogMediaAsset } from "@/lib/blob-upload";
 import { getTelegramFileUrl } from "@/lib/get-telegram-file";
 import { getLocalApiQueryKey } from "@/lib/local-api-query";
 import { getMediaFileUrl } from "@/lib/media-source";
+import { cacheFullTranscript, FULL_TRANSCRIPT_WINDOW_SEC } from "@/lib/full-transcript-cache";
 import { getBlogShareUrl } from "@/lib/share-links";
 import { isHttpTranscriberUrl } from "@/lib/transcribe";
 import {
@@ -92,6 +94,7 @@ import { getTranscriptionBadgeState } from "@/lib/transcription-status";
 import { getNextPlaybackRate } from "@/services/audio-player/notification-controls";
 import { useAppSettingsStore } from "@/store/app-settings-store";
 import { useAudioStore } from "@/store/audio-store";
+import { vanillaTrpc } from "@/trpc/vanilla-client";
 import { useGlobalAudioBarStore } from "@/store/global-audio-bar-store";
 import { useRecentlyViewedStore } from "@/store/recently-viewed-store";
 import { getLargeMediaExternalMedia } from "@acme/blog/facebook-media";
@@ -237,6 +240,8 @@ function hasOverlappingSavedTranscript(
 			window.windowEndSec > windowStartSec &&
 			window.segments.some(
 				(segment) =>
+					typeof segment.startSec === "number" &&
+					typeof segment.endSec === "number" &&
 					segment.startSec < windowEndSec && segment.endSec > windowStartSec,
 			),
 	);
@@ -2117,10 +2122,12 @@ export default function AudioBlogScreen() {
 		blogId,
 		openComments: openCommentsParam,
 		seekSec: seekSecParam,
+		autoPlay: autoPlayParam,
 	} = useLocalSearchParams<{
 		blogId: string;
 		openComments?: string;
 		seekSec?: string;
+		autoPlay?: string;
 	}>();
 	const id = Number(blogId);
 	const seekTargetSec = Number(seekSecParam);
@@ -2135,6 +2142,8 @@ export default function AudioBlogScreen() {
 	const [transcriptionRequestVisible, setTranscriptionRequestVisible] =
 		useState(false);
 	const [isQueueingTranscription, setIsQueueingTranscription] = useState(false);
+	const [renameVisible, setRenameVisible] = useState(false);
+	const [isCopyingFullTranscript, setIsCopyingFullTranscript] = useState(false);
 	const [addingAlbumId, setAddingAlbumId] = useState<number | null>(null);
 	const [dismissedRelatedAlbumMediaId, setDismissedRelatedAlbumMediaId] =
 		useState<number | null>(null);
@@ -2184,8 +2193,8 @@ export default function AudioBlogScreen() {
 	const failedTranscriptWindowsRef = useRef<Set<number>>(new Set());
 	const checkedTranscriptWindowsRef = useRef<Record<number, boolean>>({});
 	const staleTranscriptWindowsRef = useRef<Set<number>>(new Set());
-	const currentTranscriptMediaIdRef = useRef<number | undefined>();
-	const previousTranscriptMediaIdRef = useRef<number | undefined>();
+	const currentTranscriptMediaIdRef = useRef<number | undefined>(undefined);
+	const previousTranscriptMediaIdRef = useRef<number | undefined>(undefined);
 	const transcriptRequestEpochRef = useRef(0);
 	const lastTranscriptTapRef = useRef(0);
 	const transcriberUrl = localServiceUrls?.transcriberBaseUrl ?? null;
@@ -2202,6 +2211,7 @@ export default function AudioBlogScreen() {
 	const activeIsLoading = useAudioStore((s) => s.isLoading);
 	const activeIsDownloading = useAudioStore((s) => s.isDownloading);
 	const activeDownloadProgress = useAudioStore((s) => s.downloadProgress);
+	const activeDownloadError = useAudioStore((s) => s.downloadError);
 	const sound = useAudioStore((s) => s.sound);
 	const commentsState = useCommentsState(id);
 	const loadedBlog = useAudioStore((s) => s.blog);
@@ -2225,7 +2235,11 @@ export default function AudioBlogScreen() {
 		}, [setAudioDetailPlayerVisible, showComments, showFloatingControls]),
 	);
 
-	const { data: blog } = useQuery(_trpc.blog.getBlog.queryOptions({ id }));
+	const { data: blog } = useQuery({
+		..._trpc.blog.getBlog.queryOptions({ id }),
+		placeholderData: () => getAudioDetailPreview(id),
+		refetchOnMount: "always",
+	});
 
 	useFocusEffect(
 		useCallback(() => {
@@ -2257,11 +2271,13 @@ export default function AudioBlogScreen() {
 		channelUsername: blog?.channel?.username,
 		telegramMessageId: (blog as any)?.telegramMessageId,
 	});
-	const downloadedUri = useDownloadedAudio({
+	const { downloadedUri, isDownloading: isDownloadOnlyBusy, progress: downloadOnlyProgress, download: downloadOnlyAudio, error: downloadOnlyError } = useAudioDownload({
 		mediaId,
 		blogId: blog?.id,
 		fileName: media?.file?.fileName,
 		size: media?.file?.fileSize,
+		url: getMediaFileUrl(media?.file as any),
+		telegramFileId: media?.file?.source === "vercel_blob" ? null : media?.file?.fileId,
 	});
 	const localMediaRequired = Boolean(
 		!downloadedUri &&
@@ -2348,6 +2364,7 @@ export default function AudioBlogScreen() {
 				gatewayPlayable: localMediaReady,
 				fileName: file.fileName,
 				title: media.title,
+				titleOverride: media.titleOverride,
 				size: file.fileSize,
 				duration: file.duration,
 				artwork: audioArtUrl ?? undefined,
@@ -2492,6 +2509,20 @@ export default function AudioBlogScreen() {
 		duration: duration ?? (media as any)?.duration ?? null,
 	});
 	const isCurrentAudioAlreadyTranscribed = transcriptBadge.isFullyTranscribed;
+	const fullTranscriptionJob = mediaTranscriptionJobs.find((job) => job.fromSec == null && job.toSec == null);
+	const fullTranscriptReady = isCurrentAudioAlreadyTranscribed || (fullTranscriptionJob?.status === "completed" && hasSavedTranscript);
+	const fullTranscriptionQueued = fullTranscriptionJob?.status === "queued";
+	const fullTranscriptionRunning = fullTranscriptionJob?.status === "running";
+	const isFullTranscriptionBusy = isQueueingTranscription || fullTranscriptionQueued || fullTranscriptionRunning;
+	const fullTranscriptionProgress = fullTranscriptionRunning && fullTranscriptionJob ? getTranscriptionJobProgress(fullTranscriptionJob) : 0;
+	const hasFailedFullTranscription = fullTranscriptionJob?.status === "failed" && !fullTranscriptReady;
+	const { mutateAsync: saveTitleOverride, isPending: isSavingTitleOverride } = useMutation(
+		_trpc.blog.updateMediaTitleOverride.mutationOptions(),
+	);
+	const fullTranscriptQuery = useQuery({
+		..._trpc.blog.getTranscript.queryOptions({ mediaId: mediaId ?? 0 }),
+		enabled: false,
+	});
 	const transcriptionActionLabel = !localServicesEnabled
 		? "Setup required"
 		: queuedTranscriptionJob
@@ -2595,6 +2626,7 @@ export default function AudioBlogScreen() {
 					mediaId: requestMediaId,
 					startSec: normalizedStart,
 					endSec: normalizedStart + SAVED_TRANSCRIPT_WINDOW_SEC,
+					skipServerWhenCompleteCached: !options?.force,
 					fetchServer: async () =>
 						(await qc.fetchQuery({
 								..._trpc.blog.getTranscriptWindow.queryOptions({
@@ -2659,7 +2691,7 @@ export default function AudioBlogScreen() {
 						(value) => value !== normalizedStart,
 					);
 				setPendingTranscriptWindows(pendingTranscriptWindowsRef.current);
-				if (outcome?.status === "applied") {
+				if (outcome?.status === "applied" || outcome?.status === "cached") {
 					staleTranscriptWindowsRef.current.delete(normalizedStart);
 					markChecked();
 				} else if (
@@ -2703,6 +2735,38 @@ export default function AudioBlogScreen() {
 		transcriptJobSnapshotInitializedRef.current = false;
 	}, [mediaId, transcriptCacheController]);
 
+	useEffect(() => {
+		if (!mediaId || !isCurrentAudioAlreadyTranscribed) return;
+		const requestMediaId = mediaId;
+		const requestEpoch = transcriptRequestEpochRef.current;
+		const isCurrent = () =>
+			currentTranscriptMediaIdRef.current === requestMediaId &&
+			transcriptRequestEpochRef.current === requestEpoch;
+		void getTranscriptCache()
+			.catch(recoverTranscriptCache)
+			.then((cache) => cacheFullTranscript({
+				mediaId: requestMediaId,
+				cache,
+				controller: transcriptCacheController,
+				isCurrent,
+				onFirstWindow: (window) => {
+					if (!isCurrent()) return;
+					setTranscriptWindows((current) => {
+						const next = mergeSavedTranscriptWindow(current, toSavedTranscriptWindow(window));
+						transcriptWindowsRef.current = next;
+						return next;
+					});
+				},
+				fetchWindow: (windowStartSec) =>
+					vanillaTrpc.blog.getTranscriptWindow.query({
+						mediaId: requestMediaId,
+						windowStartSec,
+						windowDurationSec: FULL_TRANSCRIPT_WINDOW_SEC,
+					}),
+			}))
+			.catch((error) => console.warn("[audio] Full transcript cache failed:", error));
+	}, [isCurrentAudioAlreadyTranscribed, mediaId, transcriptCacheController]);
+
 	const requestTranscriptChunk = useCallback(
 		(chunkStartSec: number) => {
 			if (!localServicesEnabled) return;
@@ -2745,6 +2809,7 @@ export default function AudioBlogScreen() {
 						},
 					}));
 					setTranscriptError(null);
+					void requestTranscriptWindow(data.chunkStartSec, { force: true });
 				},
 				(error) => {
 					failedTranscriptChunksRef.current.add(chunkStartSec);
@@ -2772,6 +2837,7 @@ export default function AudioBlogScreen() {
 			getTranscriptChunkAsync,
 			localServicesEnabled,
 			mediaId,
+			requestTranscriptWindow,
 			telegramFileId,
 			transcriptChunks,
 			transcriberUrl,
@@ -2968,7 +3034,6 @@ export default function AudioBlogScreen() {
 		};
 	}, [colors.background, dominantColor, showComments]);
 
-	usePlayHistorySync(mediaId);
 
 	const markViewed = useRecentlyViewedStore((s) => s.markViewed);
 	useEffect(() => {
@@ -3055,6 +3120,28 @@ export default function AudioBlogScreen() {
 		effectiveExternalMedia,
 		isViewedAudioActive,
 		loadAudio,
+		playDisabledReason,
+		viewedAudioItem,
+	]);
+
+	const autoPlayedBlogIdRef = useRef<number | null>(null);
+	useEffect(() => {
+		if (autoPlayParam !== "1" || !viewedAudioItem || !blog) return;
+		if (autoPlayedBlogIdRef.current === blog.id) return;
+		if (isViewedAudioActive && activeIsPlaying) {
+			autoPlayedBlogIdRef.current = blog.id;
+			return;
+		}
+		if (playDisabledReason || effectiveExternalMedia) return;
+		autoPlayedBlogIdRef.current = blog.id;
+		void handleViewedPlayPause();
+	}, [
+		activeIsPlaying,
+		autoPlayParam,
+		blog,
+		effectiveExternalMedia,
+		handleViewedPlayPause,
+		isViewedAudioActive,
 		playDisabledReason,
 		viewedAudioItem,
 	]);
@@ -3326,6 +3413,48 @@ export default function AudioBlogScreen() {
 			return false;
 		} finally {
 			setIsQueueingTranscription(false);
+		}
+	}
+
+	async function saveAudioRename(value: string | null) {
+		if (!mediaId) return;
+		try {
+			await saveTitleOverride({ mediaId, titleOverride: value });
+			setRenameVisible(false);
+			await Promise.all([
+				qc.invalidateQueries({ queryKey: _trpc.blog.getBlog.queryKey({ id }) }),
+				qc.invalidateQueries({ queryKey: _trpc.blog.posts.queryKey() }),
+				qc.invalidateQueries({ queryKey: _trpc.blog.search.queryKey() }),
+				qc.invalidateQueries({ queryKey: _trpc.album.getAlbumTracks.queryKey() }),
+			]);
+			Toast.show(value ? "Audio renamed" : "Original title restored", { type: "success", position: "bottom" });
+		} catch (error) {
+			Toast.show(error instanceof Error ? error.message : "Could not rename audio", { type: "error", position: "bottom" });
+		}
+	}
+
+	async function copyFullTranscript() {
+		if (!mediaId || isCopyingFullTranscript) return;
+		setIsCopyingFullTranscript(true);
+		try {
+			const result = await fullTranscriptQuery.refetch();
+			if (result.error) throw result.error;
+			const segments = result.data?.segments
+				?.filter((segment) => segment.status === "done")
+				.map((segment, index) => normalizeTranscriptSegment({
+					id: segment.id,
+					startSec: segment.startSec,
+					endSec: segment.endSec,
+					text: segment.text,
+				}, index)) ?? [];
+			const text = buildTranscriptDocument(segments).fullText;
+			if (!text) throw new Error("No saved transcript is available yet.");
+			Clipboard.setString(text);
+			Toast.show("Full transcript copied", { type: "success", position: "bottom" });
+		} catch (error) {
+			Toast.show(error instanceof Error ? error.message : "Could not copy transcript", { type: "error", position: "bottom" });
+		} finally {
+			setIsCopyingFullTranscript(false);
 		}
 	}
 
@@ -3799,6 +3928,39 @@ export default function AudioBlogScreen() {
 												}
 												onReadPress={openTranscriptModal}
 											/>
+											<View className="mt-3 flex-row items-center justify-center gap-2">
+												<Pressable
+													onPress={() => { void downloadOnlyAudio(mediaUrl); }}
+													disabled={Boolean(downloadedUri) || isDownloadOnlyBusy || !mediaId || Boolean(effectiveExternalMedia)}
+													accessibilityRole="button"
+													accessibilityLabel={downloadedUri ? "Audio downloaded" : "Download audio"}
+													className="min-h-11 flex-row items-center gap-1.5 rounded-full bg-white/15 px-3 active:opacity-70"
+												>
+													{isDownloadOnlyBusy ? <ActivityIndicator size="small" color="#fff" /> : <Icon name={downloadedUri ? "Check" : "Download"} size={16} color="#fff" />}
+													<Text className="text-xs font-bold text-white">{downloadedUri ? "Saved" : isDownloadOnlyBusy ? `${Math.round(downloadOnlyProgress * 100)}%` : "Download"}</Text>
+												</Pressable>
+												<Pressable
+													onPress={() => { if (!isFullTranscriptionBusy && !fullTranscriptReady) void queueCurrentTranscription(); }}
+													disabled={!mediaId || isFullTranscriptionBusy || fullTranscriptReady}
+													accessibilityRole="button"
+													accessibilityLabel={fullTranscriptReady ? "Full transcript available" : isFullTranscriptionBusy ? "Full transcription in progress" : "Transcribe full audio"}
+													className="min-h-11 flex-row items-center gap-1.5 rounded-full bg-white/15 px-3 active:opacity-70"
+												>
+													{isFullTranscriptionBusy ? <ActivityIndicator size="small" color="#fff" /> : <Icon name={fullTranscriptReady ? "Check" : "Captions"} size={16} color={fullTranscriptReady ? "#22c55e" : "#fff"} />}
+													<Text style={{ fontSize: 12, fontWeight: "700", color: fullTranscriptReady ? "#22c55e" : "#fff" }}>{fullTranscriptReady ? "Transcribed" : fullTranscriptionRunning ? `${fullTranscriptionProgress}%` : fullTranscriptionQueued ? "Queued" : hasFailedFullTranscription ? "Retry" : "Transcribe"}</Text>
+												</Pressable>
+												<Pressable
+													onPress={() => { void copyFullTranscript(); }}
+													disabled={!mediaId || isCopyingFullTranscript}
+													accessibilityRole="button"
+													accessibilityLabel="Copy full transcript"
+													className="min-h-11 flex-row items-center gap-1.5 rounded-full bg-white/15 px-3 active:opacity-70"
+												>
+													{isCopyingFullTranscript ? <ActivityIndicator size="small" color="#fff" /> : <Icon name="Copy" size={16} color="#fff" />}
+													<Text className="text-xs font-bold text-white">Copy</Text>
+												</Pressable>
+											</View>
+											{!downloadedUri && (downloadOnlyError || (isViewedAudioActive ? activeDownloadError : null)) ? <Text className="mt-2 text-center text-xs text-white">{downloadOnlyError || activeDownloadError} — tap Download to retry.</Text> : null}
 										{effectiveExternalMedia ? (
 											<Pressable
 												onPress={() =>
@@ -3992,6 +4154,7 @@ export default function AudioBlogScreen() {
 				onOpenLocalServices={requestLocalServicesSetup}
 				onOpenTranscript={openTranscriptModal}
 				onTranscribe={handleQueueCurrentTranscriptionPress}
+				onRename={() => setRenameVisible(true)}
 				transcriptionActionLabel={transcriptionActionLabel}
 				transcriptStatusLabel={
 					transcriptBadge.show ? transcriptBadge.label : null
@@ -4006,6 +4169,14 @@ export default function AudioBlogScreen() {
 				onSleepTimer={() => setSleepTimerVisible(true)}
 				onToggleTashkeel={toggleTranscriptTashkeel}
 				tashkeelEnabled={transcriptTashkeelEnabled}
+			/>
+			<AudioRenameSheet
+				visible={renameVisible}
+				currentOverride={media?.titleOverride}
+				originalTitle={media?.title || media?.file?.fileName || "Untitled"}
+				saving={isSavingTitleOverride}
+				onClose={() => setRenameVisible(false)}
+				onSave={(value) => { void saveAudioRename(value); }}
 			/>
 
 			<TranscriptionRequestModal

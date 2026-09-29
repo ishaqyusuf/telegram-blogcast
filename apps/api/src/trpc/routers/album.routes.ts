@@ -165,11 +165,12 @@ function scoreTextAgainstTerms(
 }
 
 function getMediaSearchText(media: {
+	titleOverride?: string | null;
 	title?: string | null;
 	file?: { fileName?: string | null } | null;
 	blog?: { content?: string | null } | null;
 }) {
-	return [media.title, media.file?.fileName, media.blog?.content]
+	return [media.titleOverride, media.title, media.file?.fileName, media.blog?.content]
 		.filter(Boolean)
 		.join(" ");
 }
@@ -237,6 +238,7 @@ function getAlbumTrackSearchWhere(q?: string | null): Prisma.MediaWhereInput {
 	return {
 		AND: terms.map((term) => ({
 			OR: [
+				{ titleOverride: { contains: term, mode: "insensitive" } },
 				{ title: { contains: term, mode: "insensitive" } },
 				{ file: { fileName: { contains: term, mode: "insensitive" } } },
 				{ blog: { content: { contains: term, mode: "insensitive" } } },
@@ -905,8 +907,8 @@ export const albumRoutes = createTRPCRouter({
 			return candidates
 				.map((media) => {
 					const titleScore =
-						scoreTextAgainstTerms(media.title, albumTitleTerms) * 3 +
-						scoreTextAgainstTerms(media.title, existingAudioTerms) * 2;
+						scoreTextAgainstTerms(media.titleOverride ?? media.title, albumTitleTerms) * 3 +
+						scoreTextAgainstTerms(media.titleOverride ?? media.title, existingAudioTerms) * 2;
 					const fileNameScore =
 						scoreTextAgainstTerms(media.file?.fileName, albumTitleTerms) * 3 +
 						scoreTextAgainstTerms(media.file?.fileName, existingAudioTerms) * 2;
@@ -1054,7 +1056,7 @@ export const albumRoutes = createTRPCRouter({
 					const suggestions = candidates
 						.map((media) => {
 							const matchScore =
-								scoreTextAgainstTerms(media.title, terms) * 3 +
+						scoreTextAgainstTerms(media.titleOverride ?? media.title, terms) * 3 +
 								scoreTextAgainstTerms(media.file?.fileName, terms) * 2 +
 								scoreTextAgainstTerms(media.blog?.content, terms);
 							const matchesKeyword = mediaMatchesKeywordClauses(
@@ -1139,7 +1141,7 @@ export const albumRoutes = createTRPCRouter({
 
 			const mediaText = getMediaSearchText(media);
 			const mediaTitleTerms = tokenizeSearchText(
-				[media.title, media.file?.fileName].filter(Boolean).join(" "),
+				[media.titleOverride, media.title, media.file?.fileName].filter(Boolean).join(" "),
 			).slice(0, 20);
 			const relatedAlbums = albums
 				.map((album) => {

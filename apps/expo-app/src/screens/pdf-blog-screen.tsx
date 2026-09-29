@@ -77,7 +77,7 @@ export default function PdfBlogScreen() {
     documentMedia?.file?.fileName || `${documentTitle}.pdf`;
 
   useEffect(() => {
-    if (!Pdf || !documentUrl || !canQuery) return;
+    if (!documentUrl || !canQuery) return;
 
     let isActive = true;
     setPdfError(null);
@@ -89,6 +89,7 @@ export default function PdfBlogScreen() {
     void storePdf({
       documentId: id,
       fileName: documentFileName,
+      expectedSize: documentMedia?.file?.fileSize,
       url: documentUrl,
       onProgress: (progress) => {
         if (isActive) setDownloadProgress(progress);
@@ -111,7 +112,7 @@ export default function PdfBlogScreen() {
     return () => {
       isActive = false;
     };
-  }, [Pdf, attempt, canQuery, documentFileName, documentUrl, id]);
+  }, [attempt, canQuery, documentFileName, documentMedia?.file?.fileSize, documentUrl, id]);
 
   useEffect(() => {
     if (!pdfRenderer.error) return;
@@ -143,6 +144,15 @@ export default function PdfBlogScreen() {
             {currentPage} / {pageCount}
           </Text>
         ) : null}
+        <Pressable
+          onPress={() => setAttempt((value) => value + 1)}
+          disabled={!documentUrl || Boolean(localPdfUri) || (!pdfError && downloadProgress > 0 && downloadProgress < 1)}
+          accessibilityRole="button"
+          accessibilityLabel={localPdfUri ? "PDF downloaded" : pdfError ? "Retry PDF download" : "Download PDF"}
+          className="ml-2 min-h-11 min-w-11 items-center justify-center rounded-full bg-muted"
+        >
+          {!localPdfUri && downloadProgress > 0 && downloadProgress < 1 && !pdfError ? <ActivityIndicator size="small" color={colors.primary} /> : <Icon name={localPdfUri ? "Check" : "Download"} size={20} color={localPdfUri ? colors.primary : colors.foreground} />}
+        </Pressable>
       </View>
 
       {isLoading || (Pdf && documentUrl && !localPdfUri && !pdfError) ? (

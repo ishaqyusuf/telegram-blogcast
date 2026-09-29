@@ -11,6 +11,7 @@ export type TranscriptCacheWindowRequest<
 	startSec: number;
 	endSec: number;
 	fetchServer: () => Promise<TWindow>;
+	skipServerWhenCompleteCached?: boolean;
 	onCachedWindows: (windows: CachedTranscriptWindow[]) => void;
 	onServerWindow: (window: TWindow) => void;
 	onServerError: (error: unknown) => void;
@@ -18,6 +19,7 @@ export type TranscriptCacheWindowRequest<
 
 export type TranscriptCacheWindowOutcome =
 	| { status: "applied" }
+	| { status: "cached" }
 	| { status: "stale-rejected" }
 	| { status: "error"; error: unknown }
 	| { status: "cancelled" };
@@ -37,6 +39,34 @@ export type TranscriptCacheController = {
 
 function requestKey(mediaId: number, startSec: number, endSec: number) {
 	return `${mediaId}:${startSec}:${endSec}`;
+}
+
+function hasCompleteCachedRange(
+	windows: readonly CachedTranscriptWindow[],
+	startSec: number,
+	endSec: number,
+) {
+	const complete = windows.filter((window) =>
+		window.status === "done" &&
+		window.durationSec != null &&
+		window.durationSec > 0 &&
+		window.maxEndSec >= window.durationSec - 3,
+	);
+	if (complete.length === 0) return false;
+	const revision = complete[0];
+	let coveredUntil = startSec;
+	for (const window of complete
+		.filter((candidate) =>
+			candidate.transcriptId === revision.transcriptId &&
+			(candidate.transcriptUpdatedAt?.getTime() ?? null) ===
+				(revision.transcriptUpdatedAt?.getTime() ?? null),
+		)
+		.sort((a, b) => a.windowStartSec - b.windowStartSec)) {
+		if (window.windowStartSec > coveredUntil) break;
+		coveredUntil = Math.max(coveredUntil, window.windowEndSec);
+		if (coveredUntil >= endSec) return true;
+	}
+	return false;
 }
 
 /**
@@ -190,6 +220,10 @@ export function createTranscriptCacheController(
 				);
 			}
 			request.onCachedWindows(cachedWindows);
+			if (
+				request.skipServerWhenCompleteCached &&
+				hasCompleteCachedRange(cachedWindows, request.startSec, request.endSec)
+			) return { status: "cached" };
 		}
 
 		let serverWindow: TWindow;

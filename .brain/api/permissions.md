@@ -11,6 +11,7 @@ Documents authentication and authorization expectations across the API surface.
 ## Template
 
 ### Current Signals In Code
+- `blog.updateMediaTitleOverride` currently uses the existing public blog-router procedure, matching adjacent write routes. It validates media type but does not enforce a per-user edit permission; adding scoped auth remains a separate API security change.
 - Auth-related middleware exists at `apps/api/src/trpc/middleware/auth-permission.ts`.
 - Shared auth functionality also exists in `packages/auth`.
 - Better Auth is present in app dependencies and project docs.

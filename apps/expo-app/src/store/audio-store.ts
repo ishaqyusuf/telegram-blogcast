@@ -24,6 +24,8 @@ import { getAudioPlayability, isAudioPlayable } from "@/lib/audio-playability";
 import { getAudioDisplayTitle } from "@/lib/audio-title";
 import { getTelegramFileUrl } from "@/lib/get-telegram-file";
 import { cacheMedia } from "@/lib/media-cache";
+import { getResumePosition, getSessionPosition } from "@/lib/play-history";
+import { vanillaTrpc } from "@/trpc/vanilla-client";
 import {
 	REMOTE_PLAYBACK_SNAPSHOT_EVENT,
 	type RemotePlaybackSnapshot,
@@ -44,6 +46,7 @@ const CONTEXT_REWIND_THRESHOLD_MS = CONTEXT_REWIND_MS;
 const END_REPLAY_RESET_THRESHOLD_MS = 750;
 const POSITION_POLL_MS = 250;
 const STALE_AUDIO_MS = 12 * 60 * 60 * 1000;
+const RESUME_LOOKUP_TIMEOUT_MS = 2000;
 const DEFAULT_ARTWORK = Image.resolveAssetSource(
 	require("../../assets/icons/loading-icon.png"),
 ).uri;
@@ -87,6 +90,24 @@ function isAtAudioEnd(positionMs: number, durationMs: number) {
   return (
     durationMs > 0 && positionMs >= durationMs - END_REPLAY_RESET_THRESHOLD_MS
   );
+}
+
+async function getSavedPosition(mediaId: number | undefined) {
+	if (!mediaId) return 0;
+	const sessionPosition = getSessionPosition(mediaId);
+	if (sessionPosition !== undefined) return sessionPosition;
+	try {
+		const history = await Promise.race([
+			vanillaTrpc.blog.getPlayHistory.query({ mediaId }),
+			new Promise<null>((resolve) =>
+				setTimeout(() => resolve(null), RESUME_LOOKUP_TIMEOUT_MS),
+			),
+		]);
+		return history?.progress ?? 0;
+	} catch (error) {
+		console.warn("[audio] Failed to load saved position:", error);
+		return 0;
+	}
 }
 
 function getPlaybackStateName(
@@ -425,6 +446,7 @@ interface AudioState {
 	isLoading: boolean;
 	isDownloading: boolean;
 	downloadProgress: number;
+	downloadError: string | null;
 	duration: number;
 	position: number;
 	uri: string | null;
@@ -477,6 +499,7 @@ export const useAudioStore = create<AudioState>()(
 			isLoading: false,
 			isDownloading: false,
 			downloadProgress: 0,
+			downloadError: null,
 			duration: 0,
 			position: 0,
 			uri: null,
@@ -555,6 +578,7 @@ export const useAudioStore = create<AudioState>()(
 
 					set({
 						downloadProgress: 0,
+						downloadError: null,
 						error: null,
 						isDownloading: false,
 						isLoading: true,
@@ -584,11 +608,17 @@ export const useAudioStore = create<AudioState>()(
 					set({ localPath: privateCachedAudioUri });
 
 					const track = buildTrack(blog, audioSource);
+					const savedPosition = await getSavedPosition(downloadIdentity.mediaId);
 
 					await TrackPlayer.reset();
 					await TrackPlayer.add(track);
 					await TrackPlayer.setVolume(get().volume);
 					await TrackPlayer.setRate(get().playbackRate);
+					const knownDuration = secondsToMillis(blog.audio?.duration);
+					const resumePosition = getResumePosition(savedPosition, knownDuration);
+					if (resumePosition > 0) {
+						await TrackPlayer.seekTo(millisToSeconds(resumePosition));
+					}
 
 					const progress = await TrackPlayer.getProgress();
 
@@ -599,10 +629,11 @@ export const useAudioStore = create<AudioState>()(
 						error: null,
 						isLoading: false,
 						isDownloading: needsDownload,
+						downloadError: null,
 						isPlaying: false,
 						hasEnded: false,
 						playSessionStartPosition: null,
-						position: 0,
+						position: resumePosition,
 						sound: LOADED_SOUND_MARKER,
 						uri: audioSource,
 					});
@@ -627,18 +658,24 @@ export const useAudioStore = create<AudioState>()(
 								updateIfCurrent({
 										downloadProgress: 1,
 										isDownloading: false,
+										downloadError: null,
 									localPath: uri,
 									});
 							})
 							.catch((error) => {
 								console.warn("[audio] Cache download failed:", error);
-								updateIfCurrent({ downloadProgress: 0, isDownloading: false });
+								updateIfCurrent({
+									downloadProgress: 0,
+									isDownloading: false,
+									downloadError: error instanceof Error ? error.message : "Audio download failed",
+								});
 							});
 					}
 				} catch (err) {
 					set({
 						error: err instanceof Error ? err.message : "Failed to load audio",
 						isDownloading: false,
+						downloadError: null,
 						isLoading: false,
 					});
 				}
@@ -842,6 +879,7 @@ export const useAudioStore = create<AudioState>()(
 					set({
 						activeTrackId: null,
 						downloadProgress: 0,
+						downloadError: null,
 						duration: 0,
 						error: null,
 						hasEnded: false,

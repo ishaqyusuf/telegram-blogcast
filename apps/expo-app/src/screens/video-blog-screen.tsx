@@ -583,6 +583,7 @@ export default function VideoBlogScreen() {
 			cacheKey: videoCacheKey,
 			fileName: videoFileName,
 			kind: "video",
+			expectedSize: mediaFile?.fileSize,
 			url: videoUrl,
 			onProgress: (nextProgress) => {
 				if (isActive) setVideoCacheProgress(nextProgress);
@@ -603,7 +604,7 @@ export default function VideoBlogScreen() {
 		return () => {
 			isActive = false;
 		};
-	}, [videoCacheAttempt, videoCacheKey, videoFileName, videoUrl]);
+	}, [videoCacheAttempt, videoCacheKey, videoFileName, videoUrl, mediaFile?.fileSize]);
 
 	const handlePlaybackStatusUpdate = useCallback(
 		(nextStatus: AVPlaybackStatus) => {
@@ -1005,6 +1006,15 @@ export default function VideoBlogScreen() {
 							<Icon name="ArrowLeft" size={27} color="#FFFFFF" />
 						</Pressable>
 
+						<Pressable
+							onPress={() => setVideoCacheAttempt((attempt) => attempt + 1)}
+							disabled={!videoUrl || Boolean(cachedVideoUri) || (!videoCacheError && videoCacheProgress > 0 && videoCacheProgress < 1)}
+							accessibilityRole="button"
+							accessibilityLabel={cachedVideoUri ? "Video downloaded" : videoCacheError ? "Retry video download" : "Download video"}
+							className="size-[52px] items-center justify-center rounded-full bg-[#1A2834] active:opacity-80"
+						>
+							{!cachedVideoUri && videoCacheProgress > 0 && videoCacheProgress < 1 && !videoCacheError ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Icon name={cachedVideoUri ? "Check" : "Download"} size={24} color={cachedVideoUri ? "#22c55e" : "#FFFFFF"} />}
+						</Pressable>
 						<Pressable
 							onPress={handleMorePress}
 							accessibilityLabel="Video options"

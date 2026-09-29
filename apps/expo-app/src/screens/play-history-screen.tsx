@@ -1,13 +1,14 @@
 import { Pressable } from "@/components/ui/pressable";
 import { useQuery } from "@/lib/react-query";
 import { formatDate } from "@acme/utils/dayjs";
-import { useRouter } from "expo-router";
+import { type Href, useRouter } from "expo-router";
 import { FlatList, Text, View } from "react-native";
 
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";
 import { getAudioDisplayTitle } from "@/lib/audio-title";
+import { rememberAudioDetailFromMedia } from "@/lib/audio-detail-preview";
 import { minuteToString } from "@/lib/utils";
 import { useColors } from "@/hooks/use-color";
 import { useTranslation } from "@/lib/i18n";
@@ -70,10 +71,11 @@ export default function PlayHistoryScreen() {
 
             return (
               <Pressable
-                onPress={() =>
-                  item.Media?.blog?.id &&
-                  router.push(`/blog-view-2/${item.Media.blog.id}` as any)
-                }
+                onPress={() => {
+                  if (!item.Media?.blog?.id) return;
+                  rememberAudioDetailFromMedia(item.Media);
+                  router.push(`/blog-view-2/${item.Media.blog.id}` as any);
+                }}
                 className="bg-card rounded-xl p-3 active:opacity-80"
               >
                 <View className="flex-row items-center gap-3">
@@ -125,7 +127,18 @@ export default function PlayHistoryScreen() {
                   </View>
 
                   {/* Resume play button */}
-                  <Pressable className="size-9 rounded-full bg-primary items-center justify-center active:opacity-80 shrink-0">
+                  <Pressable
+                    onPress={(event) => {
+                      event.stopPropagation();
+                      if (item.Media?.blog?.id) {
+                        rememberAudioDetailFromMedia(item.Media);
+                        router.push(`/blog-view-2/${item.Media.blog.id}?autoPlay=1` as Href);
+                      }
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Resume ${title}`}
+                    className="size-9 rounded-full bg-primary items-center justify-center active:opacity-80 shrink-0"
+                  >
                     <Icon
                       name="Play"
                       size={16}

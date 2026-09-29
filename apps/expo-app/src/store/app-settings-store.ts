@@ -25,6 +25,10 @@ type AppSettingsState = {
 	transcriptionModel: TranscriptionModel;
 	albumOrganizerModel: AlbumOrganizerModel;
 	transcriptTashkeelEnabled: boolean;
+	channelAutoUpdateEnabled: boolean;
+	channelAutoUpdateIds: number[];
+	setChannelAutoUpdateEnabled: (enabled: boolean) => void;
+	toggleChannelAutoUpdate: (channelId: number) => void;
 	setLanguage: (language: AppLanguage) => void;
 	setReaderFontSize: (fontSize: number) => void;
 	setReaderLineSpacing: (lineSpacing: ReaderLineSpacing) => void;
@@ -54,6 +58,16 @@ export const useAppSettingsStore = create<AppSettingsState>()(
 			transcriptionModel: "whisper-local",
 			albumOrganizerModel: "deepseek",
 			transcriptTashkeelEnabled: false,
+			channelAutoUpdateEnabled: false,
+			channelAutoUpdateIds: [],
+			setChannelAutoUpdateEnabled: (channelAutoUpdateEnabled) =>
+				set({ channelAutoUpdateEnabled }),
+			toggleChannelAutoUpdate: (channelId) =>
+				set((state) => ({
+					channelAutoUpdateIds: state.channelAutoUpdateIds.includes(channelId)
+						? state.channelAutoUpdateIds.filter((id) => id !== channelId)
+						: [...state.channelAutoUpdateIds, channelId],
+				})),
 			setLanguage: (language) => set({ language }),
 			setReaderFontSize: (fontSize) =>
 				set({ readerFontSize: Math.max(14, Math.min(28, fontSize)) }),

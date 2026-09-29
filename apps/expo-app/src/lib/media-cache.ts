@@ -20,7 +20,10 @@ type CacheMediaOptions = {
 const androidMediaStorage = NativeModules.AndroidMediaStorage as
   | AndroidMediaStorageModule
   | undefined;
-const pendingDownloads = new Map<string, Promise<string>>();
+const pendingDownloads = new Map<string, {
+  promise: Promise<string>;
+  listeners: Set<(progress: number) => void>;
+}>();
 
 function joinFileUri(root: string, ...parts: string[]) {
   return `${root.replace(/\/+$/g, "")}/${parts
@@ -58,7 +61,12 @@ async function getMediaDirectoryUri(kind: MediaCacheKind) {
 		return getPrivateMediaDirectoryUri(kind);
 	}
 
-	const directoryUri = await androidMediaStorage.getMediaDirectory(kind);
+	let directoryUri: string;
+	try {
+		directoryUri = await androidMediaStorage.getMediaDirectory(kind);
+	} catch {
+		return getPrivateMediaDirectoryUri(kind);
+	}
 	const applicationId = Application.applicationId;
 	const ownsDirectory =
 		!applicationId || directoryUri.includes(`/Android/media/${applicationId}/`);
@@ -83,6 +91,20 @@ export async function getMediaTargetUri({
     cacheKey === null || cacheKey === undefined || cacheKey === ""
       ? ""
       : `${sanitizeMediaFileName(String(cacheKey), kind)}-`;
+  return joinFileUri(directoryUri, `${prefix}${safeFileName}`);
+}
+
+/** Find files created by builds that used app-private storage. */
+export async function getPrivateMediaTargetUri({
+  cacheKey,
+  fileName,
+  kind,
+}: Pick<CacheMediaOptions, "cacheKey" | "fileName" | "kind">) {
+  const directoryUri = await getPrivateMediaDirectoryUri(kind);
+  const safeFileName = sanitizeMediaFileName(fileName, `${kind}-${cacheKey ?? Date.now()}`);
+  const prefix = cacheKey === null || cacheKey === undefined || cacheKey === ""
+    ? ""
+    : `${sanitizeMediaFileName(String(cacheKey), kind)}-`;
   return joinFileUri(directoryUri, `${prefix}${safeFileName}`);
 }
 
@@ -166,13 +188,23 @@ async function downloadMedia(options: CacheMediaOptions) {
 }
 
 export function cacheMedia(options: CacheMediaOptions) {
-  const key = `${options.kind}:${options.cacheKey ?? ""}:${options.url}`;
+  const key = `${options.kind}:${options.cacheKey ?? ""}:${sanitizeMediaFileName(options.fileName, options.kind)}`;
   const pending = pendingDownloads.get(key);
-  if (pending) return pending;
+  if (pending) {
+    if (options.onProgress) pending.listeners.add(options.onProgress);
+    return pending.promise;
+  }
 
-  const task = downloadMedia(options).finally(() => {
+  const listeners = new Set<(progress: number) => void>();
+  if (options.onProgress) listeners.add(options.onProgress);
+  const task = downloadMedia({
+    ...options,
+    onProgress: (progress) => {
+      for (const listener of listeners) listener(progress);
+    },
+  }).finally(() => {
     pendingDownloads.delete(key);
   });
-  pendingDownloads.set(key, task);
+  pendingDownloads.set(key, { promise: task, listeners });
   return task;
 }

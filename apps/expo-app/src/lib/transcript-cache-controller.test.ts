@@ -52,6 +52,33 @@ function createFakeCache(overrides: Partial<TranscriptCacheRepository> = {}) {
 }
 
 describe("transcript cache controller", () => {
+	test("reads a complete cached range without streaming that window again", async () => {
+		let fetches = 0;
+		const complete = {
+			...cachedWindow,
+			maxEndSec: 179,
+		};
+		const cache = createFakeCache({ readOverlappingWindows: async () => [complete] });
+		const controller = createTranscriptCacheController({
+			getCache: async () => cache,
+			recoverCache: async () => cache,
+		});
+		const seen: CachedTranscriptWindow[][] = [];
+		const outcome = await controller.requestWindow({
+			mediaId: 42,
+			startSec: 0,
+			endSec: 60,
+			skipServerWhenCompleteCached: true,
+			fetchServer: async () => { fetches++; return serverWindow; },
+			onCachedWindows: (windows) => seen.push(windows),
+			onServerWindow: () => undefined,
+			onServerError: () => undefined,
+		});
+		expect(outcome).toEqual({ status: "cached" });
+		expect(seen).toEqual([[complete]]);
+		expect(fetches).toBe(0);
+	});
+
 	test("renders cached windows before refreshing and persists the server response", async () => {
 		const events: string[] = [];
 		let persistedWindow: ServerTranscriptWindow | undefined;

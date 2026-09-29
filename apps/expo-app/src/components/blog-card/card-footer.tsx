@@ -1,4 +1,6 @@
-import { useDownloadedAudio } from "@/hooks/use-downloaded-audio";
+import { useAudioDownload } from "@/hooks/use-audio-download";
+import { AudioDownloadBadge } from "@/components/audio-blog-view/audio-download-badge";
+import { Toast } from "@/components/ui/toast";
 import { Pressable } from "@/components/ui/pressable";
 import { useRouter } from "expo-router";
 import { useCallback, useState } from "react";
@@ -23,11 +25,13 @@ export function CardFooter({
 	const tags = post.tags?.slice(0, 2) ?? [];
 	const router = useRouter();
 	const colors = useColors();
-	const downloadedUri = useDownloadedAudio({
+	const { downloadedUri, isDownloading: isDownloadOnlyBusy, progress: downloadOnlyProgress, download: downloadOnly, error: downloadOnlyError } = useAudioDownload({
 		mediaId: post.audio?.mediaId,
 		blogId: post.id,
 		fileName: post.audio?.fileName,
 		size: (post.audio as any)?.size,
+		url: (post.audio as any)?.url,
+		telegramFileId: post.audio?.telegramFileId,
 	});
 	const playColor = downloadedUri
 		? colors.downloadedForeground
@@ -36,6 +40,7 @@ export function CardFooter({
 	const globalIsPlaying = useAudioStore((s) => s.isPlaying);
 	const globalIsLoading = useAudioStore((s) => s.isLoading);
 	const globalIsDownloading = useAudioStore((s) => s.isDownloading);
+	const globalDownloadError = useAudioStore((s) => s.downloadError);
 	const pauseAudio = useAudioStore((s) => s.pause);
 	const playAudio = useAudioStore((s) => s.play);
 	const loadAudio = useAudioStore((s) => s.loadAudio);
@@ -178,6 +183,7 @@ export function CardFooter({
 				<Pressable className="min-h-11 min-w-11 items-center justify-center rounded-full active:bg-muted">
 					<Icon name="Share" className="text-muted-foreground" />
 				</Pressable>
+				<View style={{ width: 52, height: 52 }}>
 				<Pressable
 					accessibilityLabel={
 						downloadedUri
@@ -212,6 +218,15 @@ export function CardFooter({
 						/>
 					)}
 				</Pressable>
+				<AudioDownloadBadge
+					downloaded={Boolean(downloadedUri)}
+					downloading={isDownloadOnlyBusy || (isCurrent && globalIsDownloading)}
+					error={downloadOnlyError || (isCurrent ? globalDownloadError : null)}
+					progress={downloadOnlyProgress}
+					disabled={isPlayBlocked || !post.audio?.fileName}
+					onPress={() => { void downloadOnly().then((uri) => { if (!uri) Toast.show("Audio download failed", { type: "error", position: "bottom" }); }); }}
+				/>
+				</View>
 			</View>
 		);
 	}

@@ -3,6 +3,7 @@ import { cacheMedia, sanitizeMediaFileName } from "@/lib/media-cache";
 type DownloadPdfOptions = {
   documentId: number;
   fileName?: string | null;
+  expectedSize?: number | null;
   onProgress?: (progress: number) => void;
   url: string;
 };
@@ -28,6 +29,7 @@ function getPdfFileName(
 export async function storePdf({
   documentId,
   fileName,
+  expectedSize,
   onProgress,
   url,
 }: DownloadPdfOptions): Promise<StoredPdf> {
@@ -36,6 +38,7 @@ export async function storePdf({
     cacheKey: documentId,
     fileName: safeFileName,
     kind: "document",
+    expectedSize,
     onProgress,
     url,
   });

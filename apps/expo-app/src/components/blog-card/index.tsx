@@ -24,6 +24,7 @@ import { useColors } from "@/hooks/use-color";
 import { useRecentlyViewedStore } from "@/store/recently-viewed-store";
 
 import { getAudioDisplayTitle } from "@/lib/audio-title";
+import { rememberAudioDetailFromPost } from "@/lib/audio-detail-preview";
 import { CardFooter } from "./card-footer";
 import { CardHeader } from "./card-header";
 import { CardMedia } from "./card-media";
@@ -69,6 +70,7 @@ export function BlogCard({
 	);
 
 	const handlePress = () => {
+		rememberAudioDetailFromPost(post);
 		if (onPress) {
 			onPress(post);
 			return;

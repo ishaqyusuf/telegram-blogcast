@@ -32,6 +32,7 @@ import { Toast } from "@/components/ui/toast";
 import { useInfiniteLoader } from "@/components/infinite-loader";
 import { minuteToString } from "@/lib/utils";
 import { getAudioDisplayTitle } from "@/lib/audio-title";
+import { rememberAudioDetailFromPost } from "@/lib/audio-detail-preview";
 import { updateBlogPostByMediaIdInCache } from "@/lib/blog-post-cache";
 import { AddToAlbumModal } from "@/components/channel-chat/add-to-album-modal";
 import { AddToPlaylistModal } from "@/components/channel-chat/add-to-playlist-modal";
@@ -218,7 +219,10 @@ function AudioBubble({
       </Text>
       <View className="flex-row items-center gap-3">
         <Pressable
-          onPress={() => router.push(`/blog-view-2/${post.id}` as any)}
+          onPress={() => {
+            rememberAudioDetailFromPost(post);
+            router.push(`/blog-view-2/${post.id}` as any);
+          }}
           className="size-10 rounded-full bg-primary items-center justify-center active:opacity-80 shrink-0"
         >
           <Icon
@@ -470,6 +474,7 @@ function BubbleRow({
     } else if (post.type === "video") {
       router.push(`/blog-view/${post.id}` as any);
     } else {
+      rememberAudioDetailFromPost(post);
       router.push(`/blog-view-2/${post.id}` as any);
     }
   };

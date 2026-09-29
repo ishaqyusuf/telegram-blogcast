@@ -337,6 +337,7 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
 
         return {
           title: media.title,
+          titleOverride: media.titleOverride,
           mediaId: media.id,
           source: media.file.source ?? "telegram",
           telegramFileId: externalMedia ? null : media.file.fileId,
@@ -393,6 +394,7 @@ export async function posts(ctx: TRPCContext, query: PostsSchema) {
         media: blog.medias.map((media) => ({
           id: media.id,
           title: media.title,
+          titleOverride: media.titleOverride,
           mimeType: media.mimeType,
           file: serializeFile(media.file),
           url: getMediaUrl(media.file),
@@ -457,6 +459,7 @@ function wherePosts(query: PostsSchema) {
           medias: {
             some: {
               OR: [
+                { titleOverride: { contains: q, mode: "insensitive" } },
                 { title: { contains: q, mode: "insensitive" } },
                 {
                   file: {
@@ -566,6 +569,7 @@ function blogVideo(type: BlogType, blog) {
     const file = media.file;
     return {
       title: media.title,
+      titleOverride: media.titleOverride,
       mediaId: media.id,
       source: file.source ?? "telegram",
       telegramFileId: file.fileId,
@@ -574,7 +578,7 @@ function blogVideo(type: BlogType, blog) {
           ? file.blobDownloadUrl || file.blobUrl
           : null,
       fileName: file.fileName,
-      displayName: media.title || file.fileName,
+      displayName: media.titleOverride || media.title || file.fileName,
       size: file.fileSize,
       duration: file.duration,
       width: file.width,
@@ -609,10 +613,11 @@ function blogAudio(type: BlogType, blog) {
     }
     return {
       title: media.title,
+      titleOverride: media.titleOverride,
       mediaId: media.id,
       telegramFileId: media.file.fileId,
       fileName: media.file?.fileName,
-      displayName,
+      displayName: media.titleOverride || displayName,
       size: media.file.fileSize,
       duration: media.file.duration,
       authorId: media.album?.albumAuthorId || media.authorId,

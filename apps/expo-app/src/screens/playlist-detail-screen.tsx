@@ -4,6 +4,7 @@ import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";
 import { useColors } from "@/hooks/use-color";
 import { getAudioDisplayTitle } from "@/lib/audio-title";
+import { rememberAudioDetailFromMedia } from "@/lib/audio-detail-preview";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { minuteToString } from "@/lib/utils";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -119,10 +120,11 @@ export default function PlaylistDetailScreen() {
               });
               return (
                 <Pressable
-                  onPress={() =>
-                    media?.blog?.id &&
-                    router.push(`/blog-view-2/${media.blog.id}` as any)
-                  }
+                  onPress={() => {
+                    if (!media?.blog?.id) return;
+                    rememberAudioDetailFromMedia(media);
+                    router.push(`/blog-view-2/${media.blog.id}` as any);
+                  }}
                   className="mb-2 flex-row items-center gap-3 rounded-xl bg-card p-3 active:opacity-80"
                 >
                   <View className="size-10 items-center justify-center rounded-lg bg-muted">

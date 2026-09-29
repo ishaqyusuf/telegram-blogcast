@@ -18,9 +18,11 @@
 - Keep audio bytes in device storage. Download to `.part`, validate HTTP status and expected size when known, then atomically promote. Resolve by media ID before consulting network URLs.
 - Use the installed Android variant's scoped media directory. If an older native module returns a directory owned by another package, use app-private document storage until the binary is upgraded.
 - Keep transcript windows in the existing versioned SQLite repository; cached windows render before server refresh and revision rules prevent stale responses from replacing newer data.
+- Seed audio detail from metadata already present at the navigation source, then refresh the complete `getBlog` record through the existing persisted query cache. For a complete saved transcript, check the first window for revisions and fill missing ranges in the SQLite window cache in the background; locally complete ranges need no repeat streaming.
 
 ## Consequences
 - Repeat and offline launches can render saved content without a successful API request, while auth, local-service status, and probe queries remain excluded.
 - Cache size is bounded and older pages may be evicted; a true miss still requires the network.
 - Downloaded styling represents a complete readable phone file rather than a remote gateway URL or partial download.
+- Playback and caching remain separate operations. If playback succeeds but the sidecar download fails, the UI shows a retry state and does not claim the audio is offline.
 - Background feed changes require an explicit user action, preventing position jumps at the cost of showing slightly stale content until accepted.

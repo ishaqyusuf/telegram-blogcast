@@ -1,5 +1,5 @@
 import * as FileSystem from "expo-file-system/legacy";
-import { getMediaTargetUri, getUsableCachedMediaUri } from "./media-cache";
+import { getMediaTargetUri, getPrivateMediaTargetUri, getUsableCachedMediaUri } from "./media-cache";
 
 export type AudioDownloadIdentity = {
 	mediaId?: number | null;
@@ -25,21 +25,40 @@ export async function getDownloadedAudio(input: AudioDownloadIdentity) {
 		input.blogId,
 	].filter((key): key is string | number => key != null);
 	for (const cacheKey of keys) {
-		const uri = await getMediaTargetUri({
+		const target = {
 			cacheKey,
 			fileName: input.fileName,
 			kind: "audio",
-		});
-		const found = await getUsableCachedMediaUri(uri);
-		if (!found) continue;
-		const info = await FileSystem.getInfoAsync(uri);
-		if (!info.exists) continue;
-		// New files are atomically promoted. Adopt old downloads only when their
-		// server-provided length proves that the old direct-to-final write finished.
-		if (input.size && input.size > 0 && info.size !== input.size) continue;
-		if (typeof cacheKey === "number" && !(input.size && input.size > 0))
-			continue;
-		return uri;
+		} as const;
+		const candidates = new Set([
+			await getMediaTargetUri(target),
+			await getPrivateMediaTargetUri(target),
+		]);
+		for (const uri of candidates) {
+			const found = await getUsableCachedMediaUri(uri);
+			if (!found) continue;
+			const info = await FileSystem.getInfoAsync(uri);
+			if (!info.exists) continue;
+			// Old direct-to-final writes require a known size to prove completion.
+			if (input.size && input.size > 0 && info.size !== input.size) continue;
+			if (typeof cacheKey === "number" && !(input.size && input.size > 0))
+				continue;
+			return uri;
+		}
+		// A source filename can change without changing the media ID. Recover a
+		// previously verified final file by stable ID when its size is known.
+		if (typeof cacheKey === "string" && input.size && input.size > 0) {
+			for (const targetUri of candidates) {
+				const directory = targetUri.slice(0, targetUri.lastIndexOf("/"));
+				const names = await FileSystem.readDirectoryAsync(directory).catch(() => []);
+				for (const name of names) {
+					if (!name.startsWith(`${cacheKey}-`) || name.endsWith(".part")) continue;
+					const uri = `${directory}/${name}`;
+					const info = await FileSystem.getInfoAsync(uri).catch(() => null);
+					if (info?.exists && info.size === input.size) return uri;
+				}
+			}
+		}
 	}
 	return null;
 }

@@ -4,6 +4,7 @@ import { useGlobalAudioBarStore } from "@/store/global-audio-bar-store";
 import { useFloatingBottomSheetStore } from "@/components/ui/floating-bottom-sheet-store";
 import { useColors } from "@/hooks/use-color";
 import { getAudioDisplayTitle } from "@/lib/audio-title";
+import { rememberAudioDetailFromPost } from "@/lib/audio-detail-preview";
 import { getNextPlaybackRate } from "@/services/audio-player/notification-controls";
 import { usePathname, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
@@ -287,7 +288,14 @@ export function GlobalAudioBar() {
 
   const openComments = () => {
     if (!blogId) return;
+    if (blog) rememberAudioDetailFromPost(blog);
     router.push(`/blog-view-2/${blogId}?openComments=1` as any);
+  };
+
+  const openAudioDetail = () => {
+    if (!blogId) return;
+    if (blog) rememberAudioDetailFromPost(blog);
+    router.push(`/blog-view-2/${blogId}` as any);
   };
 
   const CARD_H = 64;
@@ -328,7 +336,7 @@ export function GlobalAudioBar() {
           >
             {/* Album art — spinning disc */}
             <Pressable
-              onPress={() => router.push(`/blog-view-2/${blogId}` as any)}
+              onPress={openAudioDetail}
               style={{
                 width: ART,
                 height: ART,
@@ -356,7 +364,7 @@ export function GlobalAudioBar() {
 
             {/* Track info */}
             <Pressable
-              onPress={() => router.push(`/blog-view-2/${blogId}` as any)}
+              onPress={openAudioDetail}
               style={{ flex: 1, minWidth: 86 }}
             >
               {showTitle ? (

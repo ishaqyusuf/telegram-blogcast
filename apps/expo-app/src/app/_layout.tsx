@@ -31,6 +31,7 @@ import { useTranscriptionQueue } from "@/hooks/use-transcription-queue";
 import { Sentry, initSentry } from "@/lib/sentry";
 import { getThemeOverride } from "@/lib/theme-preference";
 import { useAudioStore } from "@/store/audio-store";
+import { usePlayHistorySync } from "@/hooks/use-play-history-sync";
 import { TRPCReactProvider } from "@/trpc/client";
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import { PortalHost } from "@rn-primitives/portal";
@@ -55,6 +56,7 @@ const TRACK_PLAYER_NOTIFICATION_URL = "trackplayer://notification.click";
 
 function AudioBootstrap() {
 	const restoreAudio = useAudioStore((s) => s.restoreAudio);
+	usePlayHistorySync();
 
 	useEffect(() => {
 		let didRestore = false;
@@ -208,6 +210,7 @@ const InitialLayout = () => {
 						<Stack.Screen name="channels" />
 						<Stack.Screen name="channels/[channelId]" />
 						<Stack.Screen name="channel-updates" />
+						<Stack.Screen name="channel-update-settings" />
 						<Stack.Screen name="play-history" />
 						<Stack.Screen name="search" />
 						<Stack.Screen name="settings" />

@@ -15,6 +15,7 @@ export type AudioOptionsSheetProps = {
 	onAddArt: () => void;
 	onAddToAlbum: () => void;
 	onAddToPlaylist: () => void;
+	onRename: () => void;
 	onClose: () => void;
 	onComment: () => void;
 	onOpenLocalServices: () => void;
@@ -116,6 +117,12 @@ export function AudioOptionsSheet(props: AudioOptionsSheetProps) {
 						icon="ListMusic"
 						label="Add to playlist"
 						onPress={dismissThen(props.onAddToPlaylist)}
+						showChevron
+					/>
+					<AudioOptionRow
+						icon="Pencil"
+						label="Rename audio"
+						onPress={dismissThen(props.onRename)}
 						showChevron
 					/>
 					<AudioOptionRow

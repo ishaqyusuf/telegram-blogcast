@@ -7,6 +7,7 @@ import { Image, ScrollView, Text, View } from "react-native";
 import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";
 import { getAudioDisplayTitle } from "@/lib/audio-title";
+import { rememberAudioDetailFromMedia } from "@/lib/audio-detail-preview";
 import { getMediaFileUrl } from "@/lib/media-source";
 import { minuteToString } from "@/lib/utils";
 import { useColors } from "@/hooks/use-color";
@@ -265,10 +266,11 @@ export function BlogHomeRecentlyPlayed() {
           return (
             <Pressable
               key={item.id}
-              onPress={() =>
-                item.Media?.blog?.id &&
-                router.push(`/blog-view-2/${item.Media.blog.id}` as any)
-              }
+              onPress={() => {
+                if (!item.Media?.blog?.id) return;
+                rememberAudioDetailFromMedia(item.Media);
+                router.push(`/blog-view-2/${item.Media.blog.id}` as any);
+              }}
               className="w-[130px] active:opacity-80"
             >
               {/* Thumbnail */}

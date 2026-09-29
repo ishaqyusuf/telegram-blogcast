@@ -3,6 +3,9 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
 import { Text } from "@/components/ui/text";
+import { Toast } from "@/components/ui/toast";
+import { useChannelAutoUpdate } from "@/hooks/use-channel-auto-update";
+import { useAppSettingsStore } from "@/store/app-settings-store";
 import { useLocalServicesSession } from "@/components/local-services";
 import {
   completeChannelUpdateCheck,
@@ -174,7 +177,9 @@ function OtpInput({
 }
 
 export function ChannelUpdatePrompt() {
-  const modal = useModal();
+  useChannelAutoUpdate();
+  const autoUpdateEnabled = useAppSettingsStore((s) => s.channelAutoUpdateEnabled);
+  const { ref: modalRef, present: presentModal, dismiss: dismissModal } = useModal();
   const router = useRouter();
   const {
     activeGatewayUrl,
@@ -199,8 +204,13 @@ export function ChannelUpdatePrompt() {
       return localApiClient.channel.startRecentUpdateJob.mutate(input);
     },
     onSuccess: () => {
-      modal.dismiss();
-      router.push("/channel-updates" as any);
+      dismissModal();
+      Toast.show("Channel updates started in the background.", {
+        type: "success", position: "bottom",
+      });
+    },
+    onError: (error) => {
+      setAuthMessage(error.message);
     },
   });
   const sendCodeMutation = useMutation({
@@ -264,8 +274,9 @@ export function ChannelUpdatePrompt() {
 
   const presentPrompt = useCallback(() => {
     const present = () => {
+      if (useAppSettingsStore.getState().channelAutoUpdateEnabled) return;
       try {
-        modal.present();
+        presentModal();
       } catch (error) {
         console.warn("[channel-updates] prompt present failed", error);
       }
@@ -277,7 +288,7 @@ export function ChannelUpdatePrompt() {
     }
 
     setTimeout(present, 0);
-  }, [modal]);
+  }, [presentModal]);
 
   const loadPrompt = useCallback(
     async (mountedRef?: { current: boolean }): Promise<boolean> => {
@@ -359,6 +370,10 @@ export function ChannelUpdatePrompt() {
   );
 
   useEffect(() => {
+    if (autoUpdateEnabled) {
+      dismissModal();
+      return;
+    }
     if (!isEnabled || !localApiClient || !activeGatewayUrl) return;
     if (connectionStatus === "offline") {
       if (offlinePromptedIpsThisSession.has(activeGatewayUrl)) return;
@@ -388,11 +403,13 @@ export function ChannelUpdatePrompt() {
     };
   }, [
     activeGatewayUrl,
+    autoUpdateEnabled,
     connectionStatus,
     isEnabled,
     localApiClient,
     presentPrompt,
     runUpdateCheck,
+    dismissModal,
   ]);
 
   const toggleChannel = (channelId: number) => {
@@ -444,6 +461,7 @@ export function ChannelUpdatePrompt() {
       updateMutation.isPending
     )
       return;
+    setAuthMessage(null);
     updateMutation.mutate({ channelIds: selectedChannelIds });
   };
 
@@ -452,7 +470,7 @@ export function ChannelUpdatePrompt() {
 
   return (
     <Modal
-      ref={modal.ref}
+      ref={modalRef}
       title="Channel updates available"
       snapPoints={authStep === "authorized" ? ["55%"] : ["72%"]}
       keyboardBehavior="interactive"
@@ -565,6 +583,11 @@ export function ChannelUpdatePrompt() {
           )}
 
           <View className="gap-2 border-t border-border pt-3">
+            {authStep === "authorized" && authMessage && (
+              <Text accessibilityRole="alert" className="text-sm text-destructive">
+                {authMessage}
+              </Text>
+            )}
             {authStep === "unavailable" ? (
               <Button
                 disabled={loading}
@@ -640,7 +663,7 @@ export function ChannelUpdatePrompt() {
             <View className="flex-row gap-2">
               <Button
                 variant="outline"
-                onPress={() => modal.dismiss()}
+                onPress={() => dismissModal()}
                 className="min-h-11 flex-1"
               >
                 <Text>Not now</Text>
@@ -648,7 +671,7 @@ export function ChannelUpdatePrompt() {
               <Button
                 variant="ghost"
                 onPress={() => {
-                  modal.dismiss();
+                  dismissModal();
                   router.push("/channel-updates" as any);
                 }}
                 className="min-h-11 flex-1"

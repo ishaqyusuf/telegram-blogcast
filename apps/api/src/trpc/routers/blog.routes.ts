@@ -176,6 +176,7 @@ function buildBlogSearchWhere(q: string): Prisma.BlogWhereInput {
 				medias: {
 					some: {
 						OR: [
+							{ titleOverride: { contains: term, mode: "insensitive" } },
 							{ title: { contains: term, mode: "insensitive" } },
 							{
 								file: {
@@ -461,6 +462,26 @@ export const blogRoutes = createTRPCRouter({
 						},
 					},
 				},
+			});
+		}),
+
+	updateMediaTitleOverride: publicProcedure
+		.input(z.object({
+			mediaId: z.number().int().positive(),
+			titleOverride: z.string().trim().max(180).nullable(),
+		}))
+		.mutation(async ({ ctx, input }) => {
+			const media = await ctx.db.media.findUnique({
+				where: { id: input.mediaId },
+				select: { id: true, mimeType: true, file: { select: { mimeType: true } } },
+			});
+			if (!media) throw new TRPCError({ code: "NOT_FOUND", message: "Audio was not found." });
+			if (!media.mimeType.startsWith("audio/") && !media.file?.mimeType?.startsWith("audio/")) {
+				throw new TRPCError({ code: "BAD_REQUEST", message: "Only audio can be renamed." });
+			}
+			return ctx.db.media.update({
+				where: { id: input.mediaId },
+				data: { titleOverride: input.titleOverride?.trim() || null },
 			});
 		}),
 
@@ -1177,6 +1198,16 @@ export const blogRoutes = createTRPCRouter({
 		}),
 
 	// ── Play History ─────────────────────────────────────────────────────────
+
+	getPlayHistory: publicProcedure
+		.input(z.object({ mediaId: z.number().int().positive() }))
+		.query(async ({ ctx, input }) => {
+			return ctx.db.recentlyPlayed.findFirst({
+				where: { mediaId: input.mediaId, userId: 1 },
+				orderBy: [{ playedAt: "desc" }, { id: "desc" }],
+				select: { progress: true },
+			});
+		}),
 
 	getRecentlyPlayed: publicProcedure
 		.input(z.object({ limit: z.number().min(1).max(50).default(20) }))

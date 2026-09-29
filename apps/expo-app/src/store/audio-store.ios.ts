@@ -1,18 +1,14 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Audio } from "expo-av";
-import * as FileSystem from "expo-file-system";
-import * as LegacyFileSystem from "expo-file-system/legacy";
-import { Directory, File } from "expo-file-system";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
 import type { ItemProps } from "@/components/home-feed/home-feed-post-card";
 import { getAudioPlayability, isAudioPlayable } from "@/lib/audio-playability";
 import { getTelegramFileUrl } from "@/lib/get-telegram-file";
+import { getDownloadedAudio, notifyAudioDownloadsChanged } from "@/lib/downloaded-audio";
+import { cacheMedia } from "@/lib/media-cache";
 
-const Paths = {
-	document: FileSystem.Paths.document,
-};
 const CONTEXT_REWIND_MS = 1500;
 const END_REPLAY_RESET_THRESHOLD_MS = 750;
 const STALE_AUDIO_MS = 12 * 60 * 60 * 1000;
@@ -32,13 +28,6 @@ const AUDIO_PLAY_MODES: AudioPlayMode[] = [
 	"repeat-album",
 	"shuffle-album",
 ];
-
-function joinDocumentPath(...parts: string[]) {
-	return parts
-		.map((part) => part.replace(/^\/+|\/+$/g, ""))
-		.filter(Boolean)
-		.join("/");
-}
 
 function uniqueUrls(urls: (string | null | undefined)[]) {
 	return urls.filter(
@@ -173,6 +162,7 @@ interface AudioState {
 	isLoading: boolean;
 	isDownloading: boolean;
 	downloadProgress: number;
+	downloadError: string | null;
 	duration: number;
 	position: number;
 	uri: string | null;
@@ -219,6 +209,7 @@ export const useAudioStore = create<AudioState>()(
 			isLoading: false,
 			isDownloading: false,
 			downloadProgress: 0,
+			downloadError: null,
 			duration: 0,
 			position: 0,
 			uri: null,
@@ -250,8 +241,11 @@ export const useAudioStore = create<AudioState>()(
 				const shouldResetAlbumMode = !incomingAlbumId || !nextAlbumQueue?.length;
 
 				try {
+					const mediaId = (blog?.audio as any)?.mediaId as number | undefined;
+					const expectedSize = (blog?.audio as any)?.size as number | undefined;
+					const cachedUri = await getDownloadedAudio({ mediaId, blogId: blog?.id, fileName, size: expectedSize });
 					const audioPlayability = getAudioPlayability(blog?.audio as any);
-					if (!audioPlayability.canPlay) {
+					if (!cachedUri && !audioPlayability.canPlay) {
 						throw new Error(
 							audioPlayability.reason ?? "Audio cannot be played.",
 						);
@@ -297,7 +291,7 @@ export const useAudioStore = create<AudioState>()(
 						throw new Error("Audio file name is not available");
 					}
 
-					set({ isLoading: true, error: null, hasEnded: false });
+					set({ isLoading: true, error: null, downloadError: null, hasEnded: false });
 					set({
 						albumQueue: nextAlbumQueue,
 						playMode: shouldResetAlbumMode ? "off" : get().playMode,
@@ -310,21 +304,11 @@ export const useAudioStore = create<AudioState>()(
 						await existingSound.unloadAsync();
 					}
 
-					const folderPath = "al-ghurobaa/media";
-					const filePath = joinDocumentPath(folderPath, fileName);
-					const dir = new Directory(Paths.document, folderPath);
-					const folderInfo = dir.info();
-					if (!folderInfo.exists) {
-						await dir.create({ intermediates: true });
-					}
-
-					const file = new File(Paths.document, filePath);
-					const fileInfo = file.info();
 					let audioSource: string;
 
-					if (fileInfo.exists) {
-						audioSource = file.uri;
-						set({ localPath: file.uri });
+					if (cachedUri) {
+						audioSource = cachedUri;
+						set({ localPath: cachedUri });
 					} else {
 						const telegramUrl = blog?.audio?.telegramFileId
 							? (await getTelegramFileUrl(blog.audio.telegramFileId))?.url
@@ -379,7 +363,7 @@ export const useAudioStore = create<AudioState>()(
 					let loadedSource = audioSource;
 					let loadError: unknown;
 					const sourceUrls =
-						audioSource === file.uri
+						audioSource === cachedUri
 							? [audioSource]
 							: uniqueUrls([
 									audioSource,
@@ -424,40 +408,34 @@ export const useAudioStore = create<AudioState>()(
 						blog,
 					});
 
-					if (loadedSource !== file.uri) {
-						set({ isDownloading: true, downloadProgress: 0 });
-						LegacyFileSystem.createDownloadResumable(
-							loadedSource,
-							file.uri,
-							{},
-							(progress) => {
-								const expected = progress.totalBytesExpectedToWrite;
-								const written = progress.totalBytesWritten;
-								if (expected > 0) {
+					if (loadedSource !== cachedUri) {
+						set({ isDownloading: true, downloadProgress: 0, downloadError: null });
+						void cacheMedia({
+							kind: "audio",
+							cacheKey: mediaId ? `media-${mediaId}` : blog?.id,
+							fileName,
+							url: loadedSource,
+							expectedSize,
+							onProgress: (progress) => { if (get().blog?.id === blog?.id) set({ downloadProgress: progress }); },
+						})
+							.then((uri) => {
+								notifyAudioDownloadsChanged();
+								if (get().blog?.id === blog?.id) {
 									set({
-										downloadProgress: Math.max(
-											0,
-											Math.min(1, written / expected),
-										),
-									});
-								}
-							},
-						)
-							.downloadAsync()
-							.then((result) => {
-								if (result) {
-									set({
-										localPath: result.uri,
+										localPath: uri,
 										isDownloading: false,
 										downloadProgress: 1,
+										downloadError: null,
 									});
-								} else {
-									set({ isDownloading: false, downloadProgress: 0 });
 								}
 							})
 							.catch((err) => {
 								console.warn("[audio] Cache download failed:", err);
-								set({ isDownloading: false, downloadProgress: 0 });
+								if (get().blog?.id === blog?.id) set({
+									isDownloading: false,
+									downloadProgress: 0,
+									downloadError: err instanceof Error ? err.message : "Audio download failed",
+								});
 							});
 					}
 				} catch (err) {
@@ -465,6 +443,7 @@ export const useAudioStore = create<AudioState>()(
 						error: err instanceof Error ? err.message : "Failed to load audio",
 						isLoading: false,
 						isDownloading: false,
+						downloadError: null,
 					});
 				}
 			},
@@ -636,6 +615,7 @@ export const useAudioStore = create<AudioState>()(
 						isPlaying: false,
 						isDownloading: false,
 						downloadProgress: 0,
+						downloadError: null,
 						duration: 0,
 						hasEnded: false,
 						albumQueue: null,

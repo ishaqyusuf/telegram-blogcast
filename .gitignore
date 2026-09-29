@@ -103,3 +103,6 @@ __pycache__/
 
 .gstack/
 .release/runtime/
+
+# Downloaded Shamela archives, extracted databases, and local Java dependencies
+.shamela-cache/
