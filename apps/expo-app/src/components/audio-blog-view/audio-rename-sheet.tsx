@@ -11,6 +11,8 @@ export function AudioRenameSheet({
   currentOverride,
   originalTitle,
   saving,
+  error,
+  onErrorClear,
   onClose,
   onSave,
 }: {
@@ -18,6 +20,8 @@ export function AudioRenameSheet({
   currentOverride?: string | null;
   originalTitle: string;
   saving: boolean;
+  error?: string | null;
+  onErrorClear?: () => void;
   onClose: () => void;
   onSave: (value: string | null) => void;
 }) {
@@ -45,13 +49,18 @@ export function AudioRenameSheet({
         <Text style={{ color: colors.mutedForeground, fontSize: 13 }}>Original: {originalTitle}</Text>
         <BottomSheetTextInput
           value={value}
-          onChangeText={setValue}
+          onChangeText={(nextValue) => { setValue(nextValue); onErrorClear?.(); }}
           maxLength={180}
           placeholder="Audio title"
           placeholderTextColor={colors.mutedForeground}
           accessibilityLabel="New audio title"
           style={{ color: colors.foreground, backgroundColor: colors.muted, borderColor: colors.border, borderWidth: 1, borderRadius: 14, minHeight: 50, paddingHorizontal: 14, textAlign: "right" }}
         />
+        {error ? (
+          <Text accessibilityRole="alert" style={{ color: colors.destructive, fontSize: 13, lineHeight: 20 }}>
+            {error}
+          </Text>
+        ) : null}
         <View style={{ flexDirection: "row", gap: 10 }}>
           {currentOverride ? (
             <Pressable onPress={() => onSave(null)} disabled={saving} style={{ minHeight: 48, paddingHorizontal: 16, borderRadius: 14, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center" }} accessibilityLabel="Reset to original title">

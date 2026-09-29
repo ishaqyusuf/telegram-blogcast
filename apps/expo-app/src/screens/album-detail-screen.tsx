@@ -78,6 +78,7 @@ import { useTranscriptionQueue } from "@/hooks/use-transcription-queue";
 import { getPrimaryImageUrl } from "@/components/blog-card/utils";
 import { getWebUrl } from "@/lib/base-url";
 import { rememberAudioDetailFromMedia } from "@/lib/audio-detail-preview";
+import { getAudioRenameErrorMessage } from "@/lib/audio-rename-error";
 import { getTelegramFileUrl } from "@/lib/get-telegram-file";
 import { getMediaFileUrl } from "@/lib/media-source";
 import { withAlpha } from "@/lib/theme";
@@ -3194,6 +3195,7 @@ export default function AlbumDetailScreen() {
     number | null
   >(null);
   const [trackToRename, setTrackToRename] = useState<any | null>(null);
+  const [renameError, setRenameError] = useState<string | null>(null);
   const { mutateAsync: saveTitleOverride, isPending: isSavingTitleOverride } = useMutation(
     _trpc.blog.updateMediaTitleOverride.mutationOptions(),
   );
@@ -4296,20 +4298,22 @@ export default function AlbumDetailScreen() {
 
   async function saveTrackRename(value: string | null) {
     if (!trackToRename?.id) return;
+    setRenameError(null);
     try {
       await saveTitleOverride({ mediaId: trackToRename.id, titleOverride: value });
-      setTrackToRename(null);
-      setLocalTracks(null);
-      await Promise.all([
-        invalidateAlbumTrackData(),
-        qc.invalidateQueries({ queryKey: _trpc.album.getAlbum.queryKey({ id }) }),
-        qc.invalidateQueries({ queryKey: _trpc.blog.posts.queryKey() }),
-        qc.invalidateQueries({ queryKey: _trpc.blog.search.queryKey() }),
-      ]);
-      Toast.show(value ? "Audio renamed" : "Original title restored", { type: "success", position: "bottom" });
     } catch (error) {
-      Toast.show(error instanceof Error ? error.message : "Could not rename audio", { type: "error", position: "bottom" });
+      setRenameError(getAudioRenameErrorMessage(error));
+      return;
     }
+    setTrackToRename(null);
+    setLocalTracks(null);
+    void Promise.all([
+      invalidateAlbumTrackData(),
+      qc.invalidateQueries({ queryKey: _trpc.album.getAlbum.queryKey({ id }) }),
+      qc.invalidateQueries({ queryKey: _trpc.blog.posts.queryKey() }),
+      qc.invalidateQueries({ queryKey: _trpc.blog.search.queryKey() }),
+    ]).catch((error) => console.warn("[album] Rename refresh failed:", error));
+    Toast.show(value ? "Audio renamed" : "Original title restored", { type: "success", position: "bottom" });
   }
 
   function openSelectedTrackMovePicker() {
@@ -5919,7 +5923,7 @@ export default function AlbumDetailScreen() {
         isBusy={isRemovingMedia || isMovingMedia || isResettingTrack}
         onClose={() => setSelectedTrackForActions(null)}
         onMoveRequest={openTrackMovePicker}
-        onRename={() => setTrackToRename(selectedTrackForActions)}
+        onRename={() => { setRenameError(null); setTrackToRename(selectedTrackForActions); }}
         onOpenPost={() => openSelectedTrackPost(false)}
         onShare={() => {
           void shareSelectedTrackPost();
@@ -5940,7 +5944,9 @@ export default function AlbumDetailScreen() {
         currentOverride={trackToRename?.titleOverride}
         originalTitle={trackToRename?.title || trackToRename?.file?.fileName || "Untitled"}
         saving={isSavingTitleOverride}
-        onClose={() => setTrackToRename(null)}
+        error={renameError}
+        onErrorClear={() => setRenameError(null)}
+        onClose={() => { setRenameError(null); setTrackToRename(null); }}
         onSave={(value) => { void saveTrackRename(value); }}
       />
       <TrackMoveAlbumSheet

@@ -9,7 +9,7 @@
         "dev:app": "node ./scripts/dev-with-transcriber.mjs",
         "dev:next:app": "bunx next dev -p 3501",
         "dev:prod": "bunx env-cmd -f .env.production env TZ=UTC next dev -p 3501",
-        "build": "NODE_ENV=production next build --turbopack",
+        "build": "NODE_ENV=production next build --webpack",
         "start": "next start",
         "lint": "next lint",
         "typecheck": "tsc --noEmit",

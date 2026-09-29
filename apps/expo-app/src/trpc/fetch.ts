@@ -27,19 +27,10 @@ export const trpcFetch: typeof fetch = async (input, init) => {
 		);
 		headers.set("x-book-import-token", await getBookImportToken());
 		response = await fetch(input, { ...init, headers });
-	} catch (error) {
-		console.error("[tRPC] Network request failed before reaching endpoint.", {
-			url: requestUrl,
-			method,
-			error,
-		});
-
-		throw new Error(
-			`Network request failed for ${requestUrl}. In Expo dev, make sure apps/api is running on the same machine and that the mobile device can reach it over the local network.`,
-		);
+	} catch {
+		throw new Error("Could not reach the API. Check your connection and try again.");
 	}
 
-	const url = requestUrl;
 	const contentType = response.headers.get("content-type");
 	const shouldInspectBody =
 		!response.ok || !contentType || !contentType.includes("json");
@@ -75,27 +66,11 @@ export const trpcFetch: typeof fetch = async (input, init) => {
 		isJson = parsed !== null && typeof parsed === "object";
 	} catch {}
 	if (!isJson) {
-		console.error("[tRPC] Expected JSON but received a non-JSON response.", {
-			url,
-			status: response.status,
-			contentType,
-			bodyPreview,
-		});
-
 		throw new Error(
 			response.status === 413
 				? "The captured content is too large for the server. Your previously saved page is unchanged."
 				: `The server returned an invalid response (${response.status}). Please try again.`,
 		);
-	}
-
-	if (!response.ok) {
-		console.error("[tRPC] Non-OK response from endpoint.", {
-			url,
-			status: response.status,
-			contentType,
-			bodyPreview,
-		});
 	}
 
 	return response;

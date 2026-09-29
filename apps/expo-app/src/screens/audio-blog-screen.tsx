@@ -76,6 +76,7 @@ import {
 	getAudioPlayability,
 } from "@/lib/audio-playability";
 import { getAudioDisplayTitle } from "@/lib/audio-title";
+import { getAudioRenameErrorMessage } from "@/lib/audio-rename-error";
 import { getAudioDetailPreview } from "@/lib/audio-detail-preview";
 import { type BlobMediaUpload, uploadBlogMediaAsset } from "@/lib/blob-upload";
 import { getTelegramFileUrl } from "@/lib/get-telegram-file";
@@ -2143,6 +2144,7 @@ export default function AudioBlogScreen() {
 		useState(false);
 	const [isQueueingTranscription, setIsQueueingTranscription] = useState(false);
 	const [renameVisible, setRenameVisible] = useState(false);
+	const [renameError, setRenameError] = useState<string | null>(null);
 	const [isCopyingFullTranscript, setIsCopyingFullTranscript] = useState(false);
 	const [addingAlbumId, setAddingAlbumId] = useState<number | null>(null);
 	const [dismissedRelatedAlbumMediaId, setDismissedRelatedAlbumMediaId] =
@@ -3418,19 +3420,21 @@ export default function AudioBlogScreen() {
 
 	async function saveAudioRename(value: string | null) {
 		if (!mediaId) return;
+		setRenameError(null);
 		try {
 			await saveTitleOverride({ mediaId, titleOverride: value });
-			setRenameVisible(false);
-			await Promise.all([
-				qc.invalidateQueries({ queryKey: _trpc.blog.getBlog.queryKey({ id }) }),
-				qc.invalidateQueries({ queryKey: _trpc.blog.posts.queryKey() }),
-				qc.invalidateQueries({ queryKey: _trpc.blog.search.queryKey() }),
-				qc.invalidateQueries({ queryKey: _trpc.album.getAlbumTracks.queryKey() }),
-			]);
-			Toast.show(value ? "Audio renamed" : "Original title restored", { type: "success", position: "bottom" });
 		} catch (error) {
-			Toast.show(error instanceof Error ? error.message : "Could not rename audio", { type: "error", position: "bottom" });
+			setRenameError(getAudioRenameErrorMessage(error));
+			return;
 		}
+		setRenameVisible(false);
+		void Promise.all([
+			qc.invalidateQueries({ queryKey: _trpc.blog.getBlog.queryKey({ id }) }),
+			qc.invalidateQueries({ queryKey: _trpc.blog.posts.queryKey() }),
+			qc.invalidateQueries({ queryKey: _trpc.blog.search.queryKey() }),
+			qc.invalidateQueries({ queryKey: _trpc.album.getAlbumTracks.queryKey() }),
+		]).catch((error) => console.warn("[audio] Rename refresh failed:", error));
+		Toast.show(value ? "Audio renamed" : "Original title restored", { type: "success", position: "bottom" });
 	}
 
 	async function copyFullTranscript() {
@@ -4154,7 +4158,7 @@ export default function AudioBlogScreen() {
 				onOpenLocalServices={requestLocalServicesSetup}
 				onOpenTranscript={openTranscriptModal}
 				onTranscribe={handleQueueCurrentTranscriptionPress}
-				onRename={() => setRenameVisible(true)}
+				onRename={() => { setRenameError(null); setRenameVisible(true); }}
 				transcriptionActionLabel={transcriptionActionLabel}
 				transcriptStatusLabel={
 					transcriptBadge.show ? transcriptBadge.label : null
@@ -4175,7 +4179,9 @@ export default function AudioBlogScreen() {
 				currentOverride={media?.titleOverride}
 				originalTitle={media?.title || media?.file?.fileName || "Untitled"}
 				saving={isSavingTitleOverride}
-				onClose={() => setRenameVisible(false)}
+				error={renameError}
+				onErrorClear={() => setRenameError(null)}
+				onClose={() => { setRenameError(null); setRenameVisible(false); }}
 				onSave={(value) => { void saveAudioRename(value); }}
 			/>
 
