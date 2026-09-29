@@ -9,4 +9,10 @@ describe("audio rename errors", () => {
   test("shows a useful connection error", () => {
     expect(getAudioRenameErrorMessage(new Error("Network request failed"))).toContain("Could not reach the API");
   });
+
+  test("does not expose database diagnostics in the form", () => {
+    const text = getAudioRenameErrorMessage(new Error("Invalid prisma.media.update() invocation: Unknown argument titleOverride"));
+    expect(text).toContain("Could not save the new name");
+    expect(text).not.toContain("prisma");
+  });
 });

@@ -15,9 +15,9 @@ mock.module("expo-file-system/legacy", () => ({
 
 mock.module("./media-cache", () => ({
 	getMediaTargetUri: async ({ cacheKey, fileName }: { cacheKey: string | number; fileName: string }) =>
-		`${scoped}/${cacheKey}-${fileName}`,
-	getPrivateMediaTargetUri: async ({ cacheKey, fileName }: { cacheKey: string | number; fileName: string }) =>
 		`${privateDir}/${cacheKey}-${fileName}`,
+	getLegacyAndroidMediaTargetUri: async ({ cacheKey, fileName }: { cacheKey: string | number; fileName: string }) =>
+		`${scoped}/${cacheKey}-${fileName}`,
 	getUsableCachedMediaUri: async (uri: string) =>
 		(files.get(uri) ?? 0) > 0 ? uri : null,
 }));
@@ -34,7 +34,7 @@ describe("downloaded audio lookup", () => {
 			.toBe(`${scoped}/media-42-audio.mp3`);
 	});
 
-	test("finds a verified file from an older private directory or filename", async () => {
+	test("finds a verified file under an older filename", async () => {
 		files.clear();
 		files.set(`${privateDir}/media-42-old-name.mp3`, 100);
 		files.set(`${scoped}/media-42-new-name.mp3.part`, 100);

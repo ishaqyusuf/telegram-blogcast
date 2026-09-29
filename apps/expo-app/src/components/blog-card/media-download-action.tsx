@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
 import { ActivityIndicator, AppState, Text } from "react-native";
-import * as FileSystem from "expo-file-system/legacy";
 import { Icon } from "@/components/ui/icon";
 import { Pressable } from "@/components/ui/pressable";
-import { cacheMedia, getMediaTargetUri, getUsableCachedMediaUri, type MediaCacheKind } from "@/lib/media-cache";
+import { cacheMedia, getExistingCachedMediaUri, type MediaCacheKind } from "@/lib/media-cache";
 
 export function MediaDownloadAction({ kind, cacheKey, fileName, url, expectedSize }: {
   kind: MediaCacheKind;
@@ -19,10 +18,8 @@ export function MediaDownloadAction({ kind, cacheKey, fileName, url, expectedSiz
   useEffect(() => {
     let active = true;
     const check = async () => {
-      const target = await getMediaTargetUri({ kind, cacheKey, fileName });
-      const cached = await getUsableCachedMediaUri(target);
-      const info = cached ? await FileSystem.getInfoAsync(cached) : null;
-      if (active) setSaved(Boolean(cached && info?.exists && (!expectedSize || info.size === expectedSize)));
+      const cached = await getExistingCachedMediaUri({ kind, cacheKey, fileName, expectedSize });
+      if (active) setSaved(Boolean(cached));
     };
     void check().catch(() => undefined);
     const listener = AppState.addEventListener("change", (state) => { if (state === "active") void check(); });

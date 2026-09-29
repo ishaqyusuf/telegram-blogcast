@@ -1,5 +1,5 @@
 import * as FileSystem from "expo-file-system/legacy";
-import { getMediaTargetUri, getPrivateMediaTargetUri, getUsableCachedMediaUri } from "./media-cache";
+import { getMediaTargetUri, getLegacyAndroidMediaTargetUri, getUsableCachedMediaUri } from "./media-cache";
 
 export type AudioDownloadIdentity = {
 	mediaId?: number | null;
@@ -32,9 +32,10 @@ export async function getDownloadedAudio(input: AudioDownloadIdentity) {
 		} as const;
 		const candidates = new Set([
 			await getMediaTargetUri(target),
-			await getPrivateMediaTargetUri(target),
+			await getLegacyAndroidMediaTargetUri(target),
 		]);
 		for (const uri of candidates) {
+			if (!uri) continue;
 			const found = await getUsableCachedMediaUri(uri);
 			if (!found) continue;
 			const info = await FileSystem.getInfoAsync(uri);
@@ -49,6 +50,7 @@ export async function getDownloadedAudio(input: AudioDownloadIdentity) {
 		// previously verified final file by stable ID when its size is known.
 		if (typeof cacheKey === "string" && input.size && input.size > 0) {
 			for (const targetUri of candidates) {
+				if (!targetUri) continue;
 				const directory = targetUri.slice(0, targetUri.lastIndexOf("/"));
 				const names = await FileSystem.readDirectoryAsync(directory).catch(() => []);
 				for (const name of names) {

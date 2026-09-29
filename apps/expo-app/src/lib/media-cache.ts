@@ -57,24 +57,23 @@ async function getPrivateMediaDirectoryUri(kind: MediaCacheKind) {
 }
 
 async function getMediaDirectoryUri(kind: MediaCacheKind) {
-	if (Platform.OS !== "android" || !androidMediaStorage) {
-		return getPrivateMediaDirectoryUri(kind);
-	}
+	// Expo FileSystem can download a .part file under Android/media, but cannot
+	// promote it to its final media extension there. App-private documents allow
+	// completed files to be written and reused on the current native build.
+	return getPrivateMediaDirectoryUri(kind);
+}
 
-	let directoryUri: string;
+async function getLegacyAndroidMediaDirectoryUri(kind: MediaCacheKind) {
+	if (Platform.OS !== "android" || !androidMediaStorage) return null;
 	try {
-		directoryUri = await androidMediaStorage.getMediaDirectory(kind);
+		const directoryUri = await androidMediaStorage.getMediaDirectory(kind);
+		const applicationId = Application.applicationId;
+		return !applicationId || directoryUri.includes(`/Android/media/${applicationId}/`)
+			? directoryUri
+			: null;
 	} catch {
-		return getPrivateMediaDirectoryUri(kind);
+		return null;
 	}
-	const applicationId = Application.applicationId;
-	const ownsDirectory =
-		!applicationId || directoryUri.includes(`/Android/media/${applicationId}/`);
-
-	// Older development builds pointed at the production package's scoped
-	// directory, which Android correctly refuses to write. Keep those builds
-	// functional while the native module is upgraded with the next app build.
-	return ownsDirectory ? directoryUri : getPrivateMediaDirectoryUri(kind);
 }
 
 export async function getMediaTargetUri({
@@ -94,18 +93,38 @@ export async function getMediaTargetUri({
   return joinFileUri(directoryUri, `${prefix}${safeFileName}`);
 }
 
-/** Find files created by builds that used app-private storage. */
-export async function getPrivateMediaTargetUri({
-  cacheKey,
-  fileName,
-  kind,
+/** Read-only lookup for downloads saved by older Android builds. */
+export async function getLegacyAndroidMediaTargetUri({
+	cacheKey,
+	fileName,
+	kind,
 }: Pick<CacheMediaOptions, "cacheKey" | "fileName" | "kind">) {
-  const directoryUri = await getPrivateMediaDirectoryUri(kind);
-  const safeFileName = sanitizeMediaFileName(fileName, `${kind}-${cacheKey ?? Date.now()}`);
-  const prefix = cacheKey === null || cacheKey === undefined || cacheKey === ""
-    ? ""
-    : `${sanitizeMediaFileName(String(cacheKey), kind)}-`;
-  return joinFileUri(directoryUri, `${prefix}${safeFileName}`);
+	const directoryUri = await getLegacyAndroidMediaDirectoryUri(kind);
+	if (!directoryUri) return null;
+	const safeFileName = sanitizeMediaFileName(fileName, `${kind}-${cacheKey ?? Date.now()}`);
+	const prefix = cacheKey === null || cacheKey === undefined || cacheKey === ""
+		? ""
+		: `${sanitizeMediaFileName(String(cacheKey), kind)}-`;
+	return joinFileUri(directoryUri, `${prefix}${safeFileName}`);
+}
+
+export async function getExistingCachedMediaUri(
+	options: Pick<CacheMediaOptions, "cacheKey" | "fileName" | "kind" | "expectedSize">,
+) {
+	const candidates = [
+		await getMediaTargetUri(options),
+		await getLegacyAndroidMediaTargetUri(options),
+	];
+	for (const candidate of candidates) {
+		if (!candidate) continue;
+		const uri = await getUsableCachedMediaUri(candidate);
+		if (!uri) continue;
+		const info = await LegacyFileSystem.getInfoAsync(uri);
+		if (!options.expectedSize || (info.exists && info.size === options.expectedSize)) {
+			return uri;
+		}
+	}
+	return null;
 }
 
 export async function getUsableCachedMediaUri(uri: string) {
@@ -123,16 +142,12 @@ export async function getUsableCachedMediaUri(uri: string) {
 
 async function downloadMedia(options: CacheMediaOptions) {
   const targetUri = await getMediaTargetUri(options);
-  const cachedUri = await getUsableCachedMediaUri(targetUri);
+  const cachedUri = await getExistingCachedMediaUri(options);
   if (cachedUri) {
-		const cachedInfo = await LegacyFileSystem.getInfoAsync(cachedUri);
-		const expectedSize = options.expectedSize ?? 0;
-		if (!(expectedSize > 0 && cachedInfo.exists && cachedInfo.size !== expectedSize)) {
-			options.onProgress?.(1);
-			return cachedUri;
-		}
-		await LegacyFileSystem.deleteAsync(cachedUri, { idempotent: true });
+    options.onProgress?.(1);
+    return cachedUri;
   }
+	await LegacyFileSystem.deleteAsync(targetUri, { idempotent: true }).catch(() => undefined);
 
 	const partialUri = `${targetUri}.part`;
 	await LegacyFileSystem.deleteAsync(partialUri, { idempotent: true }).catch(
@@ -170,12 +185,19 @@ async function downloadMedia(options: CacheMediaOptions) {
 		) {
       throw new Error("The media download did not produce a readable file.");
     }
+		// Promote only a fully validated download; app-private storage supports
+		// this move, so interrupted copies cannot appear as complete files.
 		await LegacyFileSystem.moveAsync({ from: downloadedUri, to: targetUri });
 		const promotedUri = await getUsableCachedMediaUri(targetUri);
 		if (!promotedUri) {
 			throw new Error(
 				"The media download could not be promoted to local storage.",
 			);
+		}
+		const promotedInfo = await LegacyFileSystem.getInfoAsync(promotedUri);
+		if (expectedSize > 0 && promotedInfo.exists && promotedInfo.size !== expectedSize) {
+			await LegacyFileSystem.deleteAsync(promotedUri, { idempotent: true });
+			throw new Error("The saved media file is incomplete.");
 		}
     options.onProgress?.(1);
 		return promotedUri;

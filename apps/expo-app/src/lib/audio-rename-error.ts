@@ -6,5 +6,5 @@ export function getAudioRenameErrorMessage(error: unknown) {
   if (/fetch failed|network request failed|failed to fetch/i.test(message)) {
     return "Could not reach the API. Check your connection and try again.";
   }
-  return message || "Could not rename audio. Please try again.";
+  return "Could not save the new name. Please try again.";
 }

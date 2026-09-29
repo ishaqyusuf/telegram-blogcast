@@ -100,25 +100,15 @@ export default function PdfBlogScreen() {
         setDownloadProgress(1);
         setLocalPdfUri(storedPdf.localUri);
       })
-      .catch((error) => {
+      .catch(() => {
         if (!isActive) return;
-        setPdfError(
-          error instanceof Error
-            ? error.message
-            : "The PDF could not be downloaded.",
-        );
+        setPdfError("The PDF could not be downloaded. Check your connection and try again.");
       });
 
     return () => {
       isActive = false;
     };
   }, [attempt, canQuery, documentFileName, documentMedia?.file?.fileSize, documentUrl, id]);
-
-  useEffect(() => {
-    if (!pdfRenderer.error) return;
-
-    console.warn("[pdf] native renderer unavailable", pdfRenderer.error);
-  }, [pdfRenderer.error]);
 
   return (
     <SafeAreaView
@@ -178,13 +168,8 @@ export default function PdfBlogScreen() {
               setCurrentPage(page);
               setPageCount(pages);
             }}
-            onError={(error) => {
-              console.error("[pdf] render failed", { error, localPdfUri });
-              setPdfError(
-                error instanceof Error
-                  ? error.message
-                  : "The downloaded PDF could not be displayed.",
-              );
+            onError={() => {
+              setPdfError("The downloaded PDF could not be displayed. Try downloading it again.");
             }}
             renderActivityIndicator={() => (
               <ActivityIndicator color={colors.primary} />
@@ -207,9 +192,7 @@ export default function PdfBlogScreen() {
               }
             />
             <Text className="text-xs font-semibold text-muted-foreground">
-              {Platform.OS === "android"
-                ? "Saved to Android media/document"
-                : "PDF saved inside the app"}
+              PDF saved inside the app
             </Text>
           </View>
         </View>
