@@ -1,6 +1,6 @@
 # Task: Audio Screen Design Workshop
 
-- Status: In Progress — native UI fidelity revision
+- Status: Done — native UI fidelity revision published
 - Created: 2026-09-29
 - Updated: 2026-09-30
 - Artifact: [Audio screen comparison](../../artifacts/audio-screen-workshop/index.html)

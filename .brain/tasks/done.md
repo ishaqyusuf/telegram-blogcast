@@ -3,6 +3,9 @@
 ### [Audio Download Badge Visibility](2026-09-30-audio-download-badge.md)
 - Status: Done — Android Preview OTA published
 
+### [Audio Screen Design Workshop](2026-09-29-audio-screen-workshop.md)
+- Status: Done — native UI fidelity revision published
+
 ### [Audio Offline Status, Detail Preview, and Transcript Cache](2026-09-29-audio-offline-detail-transcript-cache.md)
 - Status: Done locally — device UI verification unavailable
 
