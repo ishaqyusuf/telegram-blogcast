@@ -38,8 +38,9 @@ export function SelectableTranscriptSurface(
 	const fontScaleRef = useRef(fontScale);
 	const [surfaceReady, setSurfaceReady] = useState(false);
 	const surfaceBackgroundColor =
-		props.presentation === "karaoke" ? "transparent" : "#080807";
-	fontScaleRef.current = fontScale;
+		props.presentation === "karaoke" ? "transparent" : "#141e2b";
+	const effectiveFontScale = fontScale * (props.fontScaleMultiplier ?? 1);
+	fontScaleRef.current = effectiveFontScale;
 	latestPropsRef.current = props;
 	const documentKey = useMemo(
 		() => getTranscriptDocumentKey(props.document),
@@ -113,8 +114,8 @@ export function SelectableTranscriptSurface(
 	]);
 
 	useEffect(() => {
-		if (loadedRef.current) post({ type: "font-scale", fontScale });
-	}, [fontScale, post]);
+		if (loadedRef.current) post({ type: "font-scale", fontScale: effectiveFontScale });
+	}, [effectiveFontScale, post]);
 
 	useEffect(() => {
 		if (loadedRef.current && previousSelectionRef.current && !props.selection) {

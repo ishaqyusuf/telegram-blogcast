@@ -62,3 +62,11 @@ The Expo development build on an Android emulator was checked for the full-scree
 The Android Preview update is [published on Expo](https://expo.dev/accounts/ishaqyusuf/projects/alghurobaa/updates/9ea27ce0-e9b7-4e80-a9cf-628f5a9665db) as `2026.09.29.01` for runtime `1.0.111`.
 
 Screenshots: [player](assets/native-player.png), [Comments](assets/native-comments.png), [Details](assets/native-details.png), [Books](assets/native-books.png), and [comment keyboard](assets/native-comment-keyboard.png).
+
+## Native Android fidelity revision — 2026-09-30
+
+The prior Preview still used the older Read view and placed a large art/title block beneath the transcript. The revised Android player puts the lesson title above the transcript and reserves the lower portion for the scrubber and transport. Read now uses the selected direction's dark reading surface, context header, follow status, text-size and Tashkeel tools, selection-only actions, and compact playback dock. The inline Details, Comments, and Books sections share the dark lesson palette. A light floating transport that could cover them was removed; the Player shortcut remains in each section.
+
+The Pixel 3a Android emulator was visually checked in the full-screen player, Read, Details, Comments, Books, and keyboard-open comment states. Read scrolling, text-size control, selection actions, and its Comment shortcut were exercised. The screenshot files below are captures from the native Android build after this revision; the lesson uses its existing cached transcript and content, and no comment was submitted.
+
+Screenshots: [revised player](assets/native-player-revised.png), [revised Read mode](assets/native-reader-revised.png), [revised Details](assets/native-details-revised.png), [revised Comments](assets/native-comments-revised.png), [revised Books](assets/native-books-revised.png), and [keyboard-open composer](assets/native-comment-keyboard-revised.png).

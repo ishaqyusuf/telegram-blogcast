@@ -15,6 +15,7 @@ type TranscriptReadModeProps = {
 	document: TranscriptDocument;
 	autoScroll?: boolean;
 	positionSecOverride?: number;
+	textScale?: number;
 	selection: TranscriptTextSelection | null;
 	onSelectionChange: (selection: TranscriptTextSelection | null) => void;
 	onStartReached?: () => void;
@@ -30,6 +31,7 @@ export function TranscriptReadMode({
 	document,
 	autoScroll = true,
 	positionSecOverride,
+	textScale = 1,
 	selection,
 	onSelectionChange,
 	onStartReached,
@@ -108,12 +110,13 @@ export function TranscriptReadMode({
 
 	const follow = autoScroll && !followPaused && !surfaceSelection;
 	return (
-		<View style={{ flex: 1, backgroundColor: "#080807" }}>
+		<View style={{ flex: 1, backgroundColor: "#141e2b" }}>
 			<SelectableTranscriptSurface
 				document={document}
 				presentation="read"
 				selectionEnabled
-				contentPaddingVertical={120}
+				contentPaddingVertical={34}
+				fontScaleMultiplier={textScale}
 				activeSegmentIndex={activeSegmentIndex}
 				activeWordIndex={activeWordIndex}
 				follow={follow}
@@ -141,13 +144,13 @@ export function TranscriptReadMode({
 						minWidth: 44,
 						minHeight: 44,
 						borderRadius: 22,
-						backgroundColor: "rgba(255,255,255,0.92)",
+						backgroundColor: "#bfdbfe",
 						paddingHorizontal: 14,
 						alignItems: "center",
 						justifyContent: "center",
 					}}
 				>
-					<Text style={{ color: "#111111", fontSize: 12, fontWeight: "800" }}>
+					<Text style={{ color: "#1e3a5f", fontSize: 12, fontWeight: "800" }}>
 						Live
 					</Text>
 				</Pressable>

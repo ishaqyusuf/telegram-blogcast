@@ -9,15 +9,15 @@ export const SELECTABLE_TRANSCRIPT_HTML = `<!doctype html>
     body { opacity: 0; overflow-y: auto; }
     #root {
       box-sizing: border-box; min-height: 100vh; padding: 120px 24px;
-      color: rgba(255,255,255,.48); direction: rtl; text-align: right;
+      color: #9aaabd; direction: rtl; text-align: right;
       unicode-bidi: plaintext; white-space: pre-wrap; word-break: normal;
       overflow-wrap: normal; hyphens: none; font-family: system-ui, sans-serif;
-      font-size: 26px; line-height: 40px; font-weight: 700;
+      font-size: 23px; line-height: 47px; font-weight: 600;
       -webkit-user-select: text; user-select: text;
     }
-    .segment { color: rgba(255,255,255,.48); }
-    .segment.active-segment { color: rgba(255,255,255,.86); }
-    .run.active-word { color: #fff; background: rgba(255,255,255,.08); }
+    .segment { color: #9aaabd; }
+    .segment.active-segment { color: #e9f1fb; }
+    .run.active-word { color: #fff; }
     ::selection { background: rgba(96,165,250,.42); color: #fff; }
   </style>
 </head>
@@ -39,13 +39,14 @@ export const SELECTABLE_TRANSCRIPT_HTML = `<!doctype html>
   function setFontScale(value) {
     const scale = Number.isFinite(value) ? Math.max(.8, value) : 1;
     state.fontScale = scale;
-    const fontSize = state.presentation === 'karaoke' ? 28 : 26;
-    root.style.fontSize = (fontSize * scale) + 'px'; root.style.lineHeight = (40 * scale) + 'px';
+    const fontSize = state.presentation === 'karaoke' ? 22 : 23;
+    const lineHeight = state.presentation === 'karaoke' ? 43 : 47;
+    root.style.fontSize = (fontSize * scale) + 'px'; root.style.lineHeight = (lineHeight * scale) + 'px';
   }
 
   function applyPresentation(message) {
     state.presentation = message.presentation === 'karaoke' ? 'karaoke' : 'read';
-    const background = state.presentation === 'karaoke' ? 'transparent' : '#080807';
+    const background = state.presentation === 'karaoke' ? 'transparent' : '#141e2b';
     document.documentElement.style.background = background;
     document.body.style.background = background;
     state.selectionEnabled = message.selectionEnabled !== false;

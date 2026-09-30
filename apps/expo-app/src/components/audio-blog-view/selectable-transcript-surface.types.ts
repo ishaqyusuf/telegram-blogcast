@@ -13,6 +13,7 @@ export type SelectableTranscriptSurfaceProps = {
 	presentation: TranscriptSurfacePresentation;
 	selectionEnabled: boolean;
 	contentPaddingVertical: number;
+	fontScaleMultiplier?: number;
 	activeSegmentIndex: number;
 	activeWordIndex: number;
 	follow: boolean;

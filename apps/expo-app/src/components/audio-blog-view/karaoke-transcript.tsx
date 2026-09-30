@@ -94,12 +94,12 @@ export function KaraokeTranscript({
 				onPressSegment={handlePressSegment}
 				onLongPressSegment={handleLongPressSegment}
 			/>
-			<View style={{ minHeight: 48, flexDirection: "row", alignItems: "center", paddingHorizontal: 8 }}>
+			<View style={{ minHeight: 44, flexDirection: "row", alignItems: "center", paddingHorizontal: 8 }}>
 				<Pressable
 					onPress={onReadPress}
 					accessibilityRole="button"
 					accessibilityLabel="Read transcript"
-					style={{ minHeight: 44, minWidth: 44, paddingHorizontal: 12, alignItems: "center", justifyContent: "center", borderRadius: 22, borderWidth: 1, borderColor: "rgba(255,255,255,0.3)", backgroundColor: "transparent" }}
+					style={{ minHeight: 44, minWidth: 44, paddingHorizontal: 8, alignItems: "center", justifyContent: "center", backgroundColor: "transparent" }}
 				>
 					<Text style={{ color: "#fff", fontSize: 12, fontWeight: "700" }}>Read</Text>
 				</Pressable>
@@ -109,9 +109,9 @@ export function KaraokeTranscript({
 					disabled={!autoScroll}
 					accessibilityRole="button"
 					accessibilityLabel="Return to live transcript position"
-					style={{ minWidth: 44, minHeight: 44, borderRadius: 22, backgroundColor: followPaused ? "rgba(255,255,255,0.92)" : "rgba(255,255,255,0.16)", paddingHorizontal: 14, alignItems: "center", justifyContent: "center", opacity: autoScroll ? 1 : 0.6 }}
+					style={{ minWidth: 44, minHeight: 44, borderRadius: 22, backgroundColor: followPaused ? "#bfdbfe" : "rgba(191,219,254,0.16)", paddingHorizontal: 14, alignItems: "center", justifyContent: "center", opacity: autoScroll ? 1 : 0.6 }}
 				>
-					<Text style={{ color: followPaused ? "#111111" : "#ffffff", fontSize: 12, fontWeight: "800" }}>Live</Text>
+					<Text style={{ color: followPaused ? "#1e3a5f" : "#ffffff", fontSize: 12, fontWeight: "800" }}>Live</Text>
 				</Pressable>
 			</View>
 		</View>

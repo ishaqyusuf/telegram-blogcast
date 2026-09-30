@@ -30,6 +30,7 @@ interface CommentInputProps {
   onClose?: () => void;
   timestampMode?: boolean;
   onFocus?: () => void;
+  dark?: boolean;
 }
 
 export function CommentInput({
@@ -41,6 +42,7 @@ export function CommentInput({
   onClose,
   timestampMode,
   onFocus,
+  dark = false,
 }: CommentInputProps) {
   const colors = useColors();
   const qc = useQueryClient();
@@ -155,25 +157,25 @@ export function CommentInput({
       </View>
     </View>
   ) : (
-    <View className="border-t border-border bg-background px-3 py-2">
+    <View className={`border-t px-3 py-2 ${dark ? "border-[#2c4057] bg-[#101c2f]" : "border-border bg-background"}`}>
       <View className="flex-row items-end gap-2">
         {/* Avatar */}
-        <View className="size-8 rounded-full bg-muted items-center justify-center shrink-0 mb-1">
-          <Text className="text-xs font-bold text-muted-foreground">ME</Text>
+        <View className={`size-8 rounded-full items-center justify-center shrink-0 mb-1 ${dark ? "bg-[#23364e]" : "bg-muted"}`}>
+          <Text className={`text-xs font-bold ${dark ? "text-[#9fb2c8]" : "text-muted-foreground"}`}>ME</Text>
         </View>
 
         {/* Input container */}
-        <View className="flex-1 flex-row items-end bg-card rounded-2xl border border-border px-3 py-2 gap-2">
+        <View className={`flex-1 flex-row items-end rounded-2xl border px-3 py-2 gap-2 ${dark ? "border-[#2c4057] bg-[#1c2a3a]" : "border-border bg-card"}`}>
           {timestampMode && timestampEnabled && (
             <Pressable
               onPress={handleTimestampPress}
-              className="mb-0.5 flex-row items-center gap-1 rounded-md bg-muted px-2 py-1 active:opacity-70"
+              className={`mb-0.5 flex-row items-center gap-1 rounded-md px-2 py-1 active:opacity-70 ${dark ? "bg-[#23364e]" : "bg-muted"}`}
             >
-              <Icon name="Timer" size={13} className="text-muted-foreground" />
-              <Text className="text-xs font-bold text-muted-foreground">
+              <Icon name="Timer" size={13} color={dark ? "#9fb2c8" : colors.mutedForeground} />
+              <Text className={`text-xs font-bold ${dark ? "text-[#9fb2c8]" : "text-muted-foreground"}`}>
                 {timestampLabel}
               </Text>
-              <Icon name="Plus" size={11} className="text-muted-foreground" />
+              <Icon name="Plus" size={11} color={dark ? "#9fb2c8" : colors.mutedForeground} />
             </Pressable>
           )}
           <TextInput
@@ -199,7 +201,7 @@ export function CommentInput({
             className="mb-0.5 active:opacity-60"
             hitSlop={8}
           >
-            <Icon name="Timer" size={18} className="text-muted-foreground" />
+            <Icon name="Timer" size={18} color={dark ? "#9fb2c8" : colors.mutedForeground} />
           </Pressable>
         </View>
 
@@ -208,12 +210,12 @@ export function CommentInput({
           <Pressable
             onPress={handleSend}
             disabled={isPending}
-            className="size-9 rounded-full bg-primary items-center justify-center mb-0.5 active:opacity-80 disabled:opacity-40 shrink-0"
+            className={`size-9 rounded-full items-center justify-center mb-0.5 active:opacity-80 disabled:opacity-40 shrink-0 ${dark ? "bg-[#bfdbfe]" : "bg-primary"}`}
           >
             <Icon
               name="ArrowUp"
               size={18}
-              className="text-primary-foreground"
+              color={dark ? "#112b4c" : colors.primaryForeground}
             />
           </Pressable>
         )}

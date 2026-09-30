@@ -50,10 +50,8 @@ import { useLocalServicesSession } from "@/components/local-services";
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
 import { TranscriptionRequestModal } from "@/components/transcription-request-modal";
-import { AnimatedMarquee } from "@/components/ui/animated-marquee";
 import { FloatingBottomSheet } from "@/components/ui/floating-bottom-sheet";
 import { Icon, type IconKeys } from "@/components/ui/icon";
-import { ScrollToTopButton } from "@/components/ui/scroll-to-top-button";
 import { Toast } from "@/components/ui/toast";
 import {
 	getTranscriptCache,
@@ -63,7 +61,8 @@ import type {
 	CachedTranscriptWindow,
 	ServerTranscriptWindow,
 } from "@/db/transcript-cache-repository";
-import { useColors } from "@/hooks/use-color";
+import { ScopedColorsProvider, useColors } from "@/hooks/use-color";
+import { THEME } from "@/lib/theme";
 import { useLocalMediaPlayback } from "@/hooks/use-local-media-playback";
 import { useScrollChrome } from "@/hooks/use-scroll-chrome";
 import { useTashkeelTranscript } from "@/hooks/use-tashkeel-transcript";
@@ -104,10 +103,25 @@ import { useRecentlyViewedStore } from "@/store/recently-viewed-store";
 import { getLargeMediaExternalMedia } from "@acme/blog/facebook-media";
 import type { RouterInputs } from "@api/trpc/routers/_app";
 import * as DocumentPicker from "expo-document-picker";
-import { Image } from "expo-image";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
+
+const AUDIO_LESSON_COLORS = {
+	...THEME.dark,
+	background: "#101c2f",
+	foreground: "#e9f1fb",
+	card: "#1c2a3a",
+	cardForeground: "#e9f1fb",
+	primary: "#bfdbfe",
+	primaryForeground: "#112b4c",
+	muted: "#23364e",
+	mutedForeground: "#9fb2c8",
+	border: "#2c4057",
+	input: "#23364e",
+	accent: "#355171",
+	accentForeground: "#e9f1fb",
+};
 
 const ALBUM_COLORS = [
 	"#1e40af",
@@ -838,6 +852,7 @@ function AnimatedPlayButton({
 	onPress,
 	size = 64,
 	disabledReason,
+	theme = "light",
 }: {
 	isPlaying: boolean;
 	isLoading: boolean;
@@ -846,8 +861,11 @@ function AnimatedPlayButton({
 	onPress: () => void;
 	size?: number;
 	disabledReason?: string | null;
+	theme?: "light" | "dark";
 }) {
 	const colors = useColors();
+	const buttonColor = theme === "dark" ? "#bfdbfe" : colors.primary;
+	const buttonForeground = theme === "dark" ? "#112b4c" : colors.primaryForeground;
 	const pulse = useRef(new Animated.Value(0)).current;
 	const busy = isLoading || isDownloading;
 	const isDisabled = isLoading || Boolean(disabledReason);
@@ -897,7 +915,7 @@ function AnimatedPlayButton({
 				width: size,
 				height: size,
 				borderRadius: size / 2,
-				backgroundColor: disabledReason ? colors.muted : colors.primary,
+				backgroundColor: disabledReason ? colors.muted : buttonColor,
 				opacity: isLoading ? 0.92 : disabledReason ? 0.68 : 1,
 			}}
 		>
@@ -909,7 +927,7 @@ function AnimatedPlayButton({
 						width: size + 12,
 						height: size + 12,
 						borderRadius: (size + 12) / 2,
-						backgroundColor: colors.primary,
+						backgroundColor: buttonColor,
 						opacity,
 						transform: [{ scale }],
 					}}
@@ -944,11 +962,11 @@ function AnimatedPlayButton({
 			) : null}
 			{busy ? (
 				<View style={{ alignItems: "center", gap: size >= 60 ? 2 : 0 }}>
-					<ActivityIndicator color={colors.primaryForeground} />
+					<ActivityIndicator color={buttonForeground} />
 					{isDownloading && size >= 60 ? (
 						<Text
 							style={{
-								color: colors.primaryForeground,
+								color: buttonForeground,
 								fontSize: 10,
 								fontWeight: "800",
 								lineHeight: 12,
@@ -963,7 +981,7 @@ function AnimatedPlayButton({
 					name={disabledReason ? "Lock" : isPlaying ? "Pause" : "Play"}
 					size={size >= 60 ? 28 : 22}
 					color={
-						disabledReason ? colors.mutedForeground : colors.primaryForeground
+							disabledReason ? colors.mutedForeground : buttonForeground
 					}
 				/>
 			)}
@@ -1064,6 +1082,7 @@ function PlayerSection({
 	playDisabledReason,
 	onSeek,
 	onPlusPress,
+	onCommentPress,
 }: {
 	theme?: "light" | "dark";
 	isActiveAudio: boolean;
@@ -1077,6 +1096,7 @@ function PlayerSection({
 	playDisabledReason?: string | null;
 	onSeek?: (positionMillis: number) => void | Promise<void>;
 	onPlusPress?: () => void;
+	onCommentPress?: () => void;
 }) {
 	const colors = useColors();
 	const playbackRate = useAudioStore((s) => s.playbackRate);
@@ -1265,7 +1285,7 @@ function PlayerSection({
 							position: "absolute",
 							left: 0,
 							height: 5,
-							backgroundColor: theme === "dark" ? "#ffffff" : colors.primary,
+							backgroundColor: theme === "dark" ? "#93c5fd" : colors.primary,
 							borderRadius: 9999,
 							width: fillWidth,
 						}}
@@ -1276,7 +1296,7 @@ function PlayerSection({
 								position: "absolute",
 								width: KNOB,
 								height: KNOB,
-								backgroundColor: "#ffffff",
+								backgroundColor: theme === "dark" ? "#bfdbfe" : "#ffffff",
 								borderRadius: 9999,
 								borderWidth: theme === "dark" ? 0 : 2,
 								borderColor: colors.primary,
@@ -1316,8 +1336,12 @@ function PlayerSection({
 				<View className="flex-row items-center gap-2">
 					<Pressable
 						onPress={cycleSpeed}
-						className="rounded-md px-2 py-1 active:opacity-70"
-						style={{ backgroundColor: trackBgColor }}
+						style={{
+							borderRadius: 6,
+							paddingHorizontal: 8,
+							paddingVertical: 4,
+							backgroundColor: theme === "dark" ? "transparent" : trackBgColor,
+						}}
 					>
 						<Text
 							style={{ fontSize: 12, fontWeight: "700", color: mutedFgColor }}
@@ -1328,14 +1352,14 @@ function PlayerSection({
 				</View>
 				<View className="flex-row items-center gap-6">
 					<Pressable
-						className="p-2 active:opacity-50"
 						disabled={!canSeek}
 						onPress={() => onSeek?.(Math.max(0, position - 5000))}
-						style={{ opacity: canSeek ? 1 : 0.45 }}
+						style={{ padding: 8, opacity: canSeek ? 1 : 0.45 }}
 					>
 						<Icon name="Backward5" size={32} color={fgColor} />
 					</Pressable>
 					<AnimatedPlayButton
+						theme={theme}
 						isPlaying={isPlaying}
 						isLoading={isLoading}
 						isDownloading={isDownloading}
@@ -1344,15 +1368,23 @@ function PlayerSection({
 						disabledReason={playDisabledReason}
 					/>
 					<Pressable
-						className="p-2 active:opacity-50"
 						disabled={!canSeek}
 						onPress={() => onSeek?.(Math.min(duration, position + 5000))}
-						style={{ opacity: canSeek ? 1 : 0.45 }}
+						style={{ padding: 8, opacity: canSeek ? 1 : 0.45 }}
 					>
 						<Icon name="Forward5" size={32} color={fgColor} />
 					</Pressable>
 				</View>
-				{onPlusPress ? (
+				{onCommentPress ? (
+					<Pressable
+						className="p-2 active:opacity-50"
+						onPress={onCommentPress}
+						accessibilityRole="button"
+						accessibilityLabel="Comment at current time"
+					>
+						<Icon name="MessageSquare" size={22} color={mutedFgColor} />
+					</Pressable>
+				) : onPlusPress ? (
 					<Pressable className="p-2 active:opacity-50" onPress={onPlusPress}>
 						<Icon name="Plus" size={22} color={mutedFgColor} />
 					</Pressable>
@@ -1364,120 +1396,9 @@ function PlayerSection({
 	);
 }
 
-function FloatingPlayerWidget({
-	visible,
-	isActiveAudio,
-	isPlaying,
-	position,
-	duration,
-	isLoading,
-	isDownloading,
-	downloadProgress,
-	onPlayPause,
-	playDisabledReason,
-	onSeek,
-	onPlusPress,
-}: {
-	visible: boolean;
-	isActiveAudio: boolean;
-	isPlaying: boolean;
-	position: number;
-	duration: number;
-	isLoading: boolean;
-	isDownloading: boolean;
-	downloadProgress: number;
-	onPlayPause: () => void;
-	playDisabledReason?: string | null;
-	onSeek?: (positionMillis: number) => void;
-	onPlusPress?: () => void;
-}) {
-	const colors = useColors();
-	const playbackRate = useAudioStore((s) => s.playbackRate);
-	const setPlaybackRate = useAudioStore((s) => s.setPlaybackRate);
-	const canSeek = isActiveAudio && Boolean(onSeek) && duration > 0;
-
-	const cycleSpeed = () => {
-		setPlaybackRate(getNextPlaybackRate(playbackRate));
-	};
-
-	if (!visible) return null;
-
-	return (
-		<View
-			pointerEvents="box-none"
-			style={{
-				position: "absolute",
-				left: 16,
-				right: 16,
-				bottom: 16,
-			}}
-		>
-			<View className="overflow-hidden rounded-2xl border border-border bg-card/95 px-4 py-3 shadow-2xl">
-				<View className="mb-3 h-1 overflow-hidden rounded-full bg-muted">
-					<View
-						style={{
-							width: `${duration > 0 ? (position / duration) * 100 : 0}%`,
-							height: "100%",
-							backgroundColor: colors.primary,
-						}}
-					/>
-				</View>
-				<View className="flex-row items-center justify-between">
-					<Pressable
-						onPress={cycleSpeed}
-						className="rounded-md bg-muted px-2 py-1 active:opacity-70"
-					>
-						<Text
-							style={{
-								color: colors.mutedForeground,
-								fontSize: 12,
-								fontWeight: "800",
-							}}
-						>
-							{playbackRate}x
-						</Text>
-					</Pressable>
-					<Pressable
-						className="p-2 active:opacity-50"
-						disabled={!canSeek}
-						onPress={() => onSeek?.(Math.max(0, position - 5000))}
-						style={{ opacity: canSeek ? 1 : 0.45 }}
-					>
-						<Icon name="Backward5" size={24} color={colors.mutedForeground} />
-					</Pressable>
-					<AnimatedPlayButton
-						isPlaying={isPlaying}
-						isLoading={isLoading}
-						isDownloading={isDownloading}
-						downloadProgress={downloadProgress}
-						onPress={onPlayPause}
-						disabledReason={playDisabledReason}
-						size={48}
-					/>
-					<Pressable
-						className="p-2 active:opacity-50"
-						disabled={!canSeek}
-						onPress={() => onSeek?.(Math.min(duration, position + 5000))}
-						style={{ opacity: canSeek ? 1 : 0.45 }}
-					>
-						<Icon name="Forward5" size={24} color={colors.mutedForeground} />
-					</Pressable>
-					{onPlusPress ? (
-						<Pressable className="p-2 active:opacity-50" onPress={onPlusPress}>
-							<Icon name="Plus" size={22} color={colors.foreground} />
-						</Pressable>
-					) : (
-						<View style={{ width: 38 }} />
-					)}
-				</View>
-			</View>
-		</View>
-	);
-}
-
 // ── Info tab ──────────────────────────────────────────────────────────────────
 
-function InfoTab({ blog }: { blog: any }) {
+function InfoTab({ blog, dark = false }: { blog: any; dark?: boolean }) {
 	const colors = useColors();
 	const tags =
 		blog.blogTags?.map((bt: any) => bt.tags?.title).filter(Boolean) ?? [];
@@ -1493,27 +1414,27 @@ function InfoTab({ blog }: { blog: any }) {
 
 	return (
 		<View className="gap-4 pb-8">
-			<View className="flex-row items-center gap-3 py-4 border-b border-border">
-				<View className="size-10 rounded-full bg-muted items-center justify-center">
-					<Text className="text-sm font-bold text-muted-foreground">
+			<View className={`flex-row items-center gap-3 py-4 border-b ${dark ? "border-[#2c4057]" : "border-border"}`}>
+				<View className={`size-10 rounded-full items-center justify-center ${dark ? "bg-[#23364e]" : "bg-muted"}`}>
+					<Text className={`text-sm font-bold ${dark ? "text-[#9fb2c8]" : "text-muted-foreground"}`}>
 						{getInitials(channelName)}
 					</Text>
 				</View>
 				<View className="flex-1">
-					<Text className="text-xs text-muted-foreground font-medium">
+					<Text className={`text-xs font-medium ${dark ? "text-[#9fb2c8]" : "text-muted-foreground"}`}>
 						Channel
 					</Text>
-					<Text className="text-sm font-bold text-foreground" numberOfLines={1}>
+					<Text className={`text-sm font-bold ${dark ? "text-[#e9f1fb]" : "text-foreground"}`} numberOfLines={1}>
 						{channelName}
 					</Text>
 					{channelHandle ? (
-						<Text className="text-xs text-muted-foreground" numberOfLines={1}>
+						<Text className={`text-xs ${dark ? "text-[#9fb2c8]" : "text-muted-foreground"}`} numberOfLines={1}>
 							{channelHandle}
 						</Text>
 					) : null}
 				</View>
-				<Pressable className="px-4 py-1.5 rounded-full border border-border active:bg-muted">
-					<Text className="text-xs font-bold text-muted-foreground">
+				<Pressable className={`px-4 py-1.5 rounded-full border ${dark ? "border-[#2c4057] active:bg-[#23364e]" : "border-border active:bg-muted"}`}>
+					<Text className={`text-xs font-bold ${dark ? "text-[#9fb2c8]" : "text-muted-foreground"}`}>
 						Follow
 					</Text>
 				</Pressable>
@@ -1536,9 +1457,9 @@ function InfoTab({ blog }: { blog: any }) {
 						{tags.map((tag: string) => (
 							<Pressable
 								key={tag}
-								className="px-3 py-1 bg-muted rounded-lg active:opacity-70"
+								className={`px-3 py-1 rounded-lg active:opacity-70 ${dark ? "bg-[#23364e]" : "bg-muted"}`}
 							>
-								<Text className="text-sm font-medium text-primary">#{tag}</Text>
+								<Text className={`text-sm font-medium ${dark ? "text-[#bfdbfe]" : "text-primary"}`}>#{tag}</Text>
 							</Pressable>
 						))}
 					</View>
@@ -2130,6 +2051,7 @@ export default function AudioBlogScreen() {
 		useState<number | null>(null);
 	const [showFloatingControls, setShowFloatingControls] = useState(false);
 	const [transcriptModalVisible, setTranscriptModalVisible] = useState(false);
+	const [readerTextScale, setReaderTextScale] = useState(1);
 	const [audioArtSheetVisible, setAudioArtSheetVisible] = useState(false);
 	const [channelPicturePickerVisible, setChannelPicturePickerVisible] =
 		useState(false);
@@ -3018,20 +2940,14 @@ export default function AudioBlogScreen() {
 
 	const channelName =
 		blog?.channel?.title || blog?.channel?.username || "Unknown channel";
-	const dominantColor = media?.album
-		? albumColor(media.albumId)
-		: colors.primary;
-	const audioGradientColors = useMemo(
-		() => [dominantColor, dominantColor, "#5a2b0d", "#15100c"] as const,
-		[dominantColor],
-	);
+	const dominantColor = "#183e64";
 
 	useEffect(() => {
     void SystemUI.setBackgroundColorAsync(dominantColor);
 		return () => {
 			void SystemUI.setBackgroundColorAsync(colors.background);
 		};
-  }, [colors.background, dominantColor]);
+  }, [colors.background]);
 
 	const markViewed = useRecentlyViewedStore((s) => s.markViewed);
 	useEffect(() => {
@@ -3651,8 +3567,7 @@ export default function AudioBlogScreen() {
 
 	return (
 		<View
-			className="flex-1 bg-background"
-			style={{ backgroundColor: colors.background }}
+			style={{ flex: 1, backgroundColor: "#101c2f" }}
 		>
 				<StatusBar
 					style="light"
@@ -3671,7 +3586,7 @@ export default function AudioBlogScreen() {
 						scrollEventThrottle={mainScroll.scrollEventThrottle}
 						contentContainerStyle={{
 							paddingBottom: 120 + keyboardHeight,
-							backgroundColor: colors.background,
+							backgroundColor: "#101c2f",
 						}}
 						onScroll={(event) => {
 							mainScroll.onScroll(event);
@@ -3687,8 +3602,8 @@ export default function AudioBlogScreen() {
 						ListHeaderComponent={
 							<>
 								<LinearGradient
-									colors={audioGradientColors}
-									locations={[0, 0.46, 0.78, 1]}
+									colors={["#183e64", "#152c48", "#101c2f"]}
+									locations={[0, 0.45, 1]}
 									style={{
                   height: Math.max(0, windowHeight - NEXT_CONTENT_PEEK_HEIGHT),
 										paddingTop: 12,
@@ -3708,6 +3623,18 @@ export default function AudioBlogScreen() {
 										}
 										onOpenMore={() => setMoreMenuVisible(true)}
 									/>
+
+									<View style={{ paddingHorizontal: 24, paddingTop: 9, paddingBottom: 14 }}>
+										<Text
+											numberOfLines={2}
+											style={{ color: "#f1f5f9", fontSize: 24, lineHeight: 38, fontWeight: "700", textAlign: "right", writingDirection: "rtl" }}
+										>
+											{audioTitle}
+										</Text>
+										<Text style={{ color: "#9fb2c8", fontSize: 13, textAlign: "right", marginTop: 2 }}>
+											{channelName}
+										</Text>
+									</View>
 
 									{/* Transcript area */}
 									<Pressable
@@ -3801,104 +3728,7 @@ export default function AudioBlogScreen() {
 											),
 										}}
 									>
-										{/* Title & Small Album Art Marquee */}
-										<View className="flex-row items-center px-6 gap-4">
-											<Pressable
-												onPress={() => setAudioArtSheetVisible(true)}
-												accessibilityLabel="Add or edit audio art"
-												style={{
-													width: 56,
-													height: 56,
-													borderRadius: 8,
-													backgroundColor: media?.album
-														? albumColor(media.albumId)
-														: "rgba(255,255,255,0.2)",
-													alignItems: "center",
-													justifyContent: "center",
-													overflow: "hidden",
-												}}
-											>
-												{audioArtUrl ? (
-													<Image
-														source={{ uri: audioArtUrl }}
-														style={{ width: "100%", height: "100%" }}
-														contentFit="cover"
-													/>
-												) : (
-													<Text
-														style={{
-															color: "#fff",
-															fontWeight: "800",
-															fontSize: 20,
-														}}
-													>
-														{getInitials(media?.album?.name ?? audioTitle)}
-													</Text>
-												)}
-												<View
-													style={{
-														position: "absolute",
-														right: 4,
-														bottom: 4,
-														width: 18,
-														height: 18,
-														borderRadius: 999,
-														alignItems: "center",
-														justifyContent: "center",
-														backgroundColor: "rgba(0,0,0,0.48)",
-													}}
-												>
-													<Icon name="Pencil" size={10} color="#fff" />
-												</View>
-											</Pressable>
-											<View
-												style={{
-													flex: 1,
-													overflow: "hidden",
-													justifyContent: "center",
-												}}
-											>
-												<AnimatedMarquee
-													text={audioTitle}
-													style={{
-														fontSize: 24,
-														fontWeight: "800",
-														color: "#fff",
-													}}
-												/>
-												<Text
-													style={{
-														fontSize: 16,
-														color: "rgba(255,255,255,0.7)",
-														textAlign: "right",
-														marginTop: 2,
-													}}
-												>
-													{channelName}
-												</Text>
-											</View>
-											{media?.album ? (
-												<Pressable
-													className="p-2 active:opacity-50"
-													onPress={() =>
-														router.push(`/albums/${media.albumId}` as any)
-													}
-													accessibilityLabel="Open album"
-												>
-													<Icon name="Disc3" size={26} color="#fff" />
-												</Pressable>
-											) : (
-												<Pressable
-													className="p-2 active:opacity-50"
-													onPress={() => setAlbumPickerVisible(true)}
-													accessibilityLabel="Add to album"
-												>
-													<Icon name="Plus" size={28} color="#fff" />
-												</Pressable>
-											)}
-										</View>
-
-										{/* Player controls */}
+									{/* Player controls */}
                   <View className="px-6 pt-5">
 											<PlayerSection
 												theme="dark"
@@ -3912,11 +3742,7 @@ export default function AudioBlogScreen() {
 												onPlayPause={handleViewedPlayPause}
 												playDisabledReason={playDisabledReason}
 												onSeek={isViewedAudioActive ? seekAudio : undefined}
-												onPlusPress={
-													media?.album
-														? undefined
-														: () => setAlbumPickerVisible(true)
-												}
+												onCommentPress={() => revealTab("comments")}
 											/>
 
 										{effectiveExternalMedia ? (
@@ -3966,10 +3792,12 @@ export default function AudioBlogScreen() {
 										</View>
 									</View>
 								</LinearGradient>
+								<ScopedColorsProvider colors={AUDIO_LESSON_COLORS}>
+									<View style={{ backgroundColor: "#101c2f", minHeight: windowHeight }}>
 
               {/* Inline lesson tabs */}
               <View
-                className="mx-6 mt-4 flex-row rounded-xl bg-muted p-1"
+                style={{ flexDirection: "row", marginHorizontal: 16, marginTop: 8, padding: 4, borderRadius: 9, backgroundColor: "#192a3e", borderWidth: 1, borderColor: "#2c4057" }}
                 accessibilityRole="tablist"
               >
                 {(["details", "comments", "books"] as Tab[]).map((tab) => (
@@ -3978,10 +3806,10 @@ export default function AudioBlogScreen() {
                     onPress={() => revealTab(tab)}
                     accessibilityRole="tab"
                     accessibilityState={{ selected: activeTab === tab }}
-                    className={`min-h-11 flex-1 items-center justify-center rounded-lg ${activeTab === tab ? "bg-card shadow-sm" : ""}`}
+									style={{ minHeight: 40, flex: 1, alignItems: "center", justifyContent: "center", borderRadius: 7, backgroundColor: activeTab === tab ? "#355171" : "transparent" }}
 									>
 											<Text
-                      className={`text-sm font-bold ${activeTab === tab ? "text-foreground" : "text-muted-foreground"}`}
+											style={{ color: activeTab === tab ? "#e9f1fb" : "#9fb2c8", fontSize: 13, fontWeight: "700" }}
 											>
                       {tab === "details"
                         ? "Details"
@@ -3994,20 +3822,15 @@ export default function AudioBlogScreen() {
               </View>
 
               <View className="mt-4 px-6 pb-8">
-                <Pressable
-                  onPress={mainScroll.scrollToTop}
-                  accessibilityRole="button"
-                  className="mb-4 min-h-11 flex-row items-center gap-2 self-start rounded-full border border-border px-4"
-												>
-                  <Icon
-                    name="ArrowUp"
-                    size={15}
-                    className="text-muted-foreground"
-                  />
-                  <Text className="text-xs font-bold text-muted-foreground">
-                    Full-screen player
-												</Text>
-                </Pressable>
+								<View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
+									<Text style={{ color: "#e9f1fb", fontSize: 18, fontWeight: "700" }}>
+										{activeTab === "details" ? "Lesson details" : activeTab === "comments" ? `Comments (${commentsState.comments?.length ?? 0})` : "Linked books"}
+									</Text>
+									<Pressable onPress={mainScroll.scrollToTop} accessibilityRole="button" accessibilityLabel="Return to full-screen player" style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 8 }}>
+										<Icon name="ArrowUp" size={14} color="#9fc4e8" />
+										<Text style={{ color: "#9fc4e8", fontSize: 12, fontWeight: "700" }}>Player</Text>
+									</Pressable>
+								</View>
                 {activeTab === "details" ? (
                   <View className="gap-4">
                     <View className="flex-row gap-2">
@@ -4025,21 +3848,21 @@ export default function AudioBlogScreen() {
                         accessibilityLabel={
                           downloadedUri ? "Audio downloaded" : "Download audio"
                         }
-                        className="min-h-12 flex-1 items-center justify-center gap-1 rounded-xl border border-border bg-card p-2 disabled:opacity-50"
+                        className="min-h-12 flex-1 items-center justify-center gap-1 rounded-xl border border-[#2c4057] bg-[#1c2a3a] p-2 disabled:opacity-50"
                       >
                         {isDownloadOnlyBusy ? (
                           <ActivityIndicator
                             size="small"
-                            color={colors.primary}
+                            color="#bfdbfe"
                           />
                         ) : (
                           <Icon
                             name={downloadedUri ? "Check" : "Download"}
                             size={18}
-                            className="text-primary"
+                            color="#bfdbfe"
                           />
 											)}
-                        <Text className="text-xs font-bold text-foreground">
+                        <Text className="text-xs font-bold text-[#e9f1fb]">
                           {downloadedUri
                             ? "Saved"
                             : isDownloadOnlyBusy
@@ -4065,21 +3888,21 @@ export default function AudioBlogScreen() {
                               ? "Full transcription in progress"
                               : "Transcribe full audio"
                         }
-                        className="min-h-12 flex-1 items-center justify-center gap-1 rounded-xl border border-border bg-card p-2 disabled:opacity-50"
+                        className="min-h-12 flex-1 items-center justify-center gap-1 rounded-xl border border-[#2c4057] bg-[#1c2a3a] p-2 disabled:opacity-50"
                       >
                         {isFullTranscriptionBusy ? (
                           <ActivityIndicator
                             size="small"
-                            color={colors.primary}
+                            color="#bfdbfe"
                           />
                         ) : (
 										<Icon
                             name={fullTranscriptReady ? "Check" : "Captions"}
                             size={18}
-                            className="text-primary"
+                            color="#bfdbfe"
 										/>
                         )}
-                        <Text className="text-xs font-bold text-foreground">
+                        <Text className="text-xs font-bold text-[#e9f1fb]">
                           {fullTranscriptReady
                             ? "Transcribed"
                             : fullTranscriptionRunning
@@ -4098,21 +3921,21 @@ export default function AudioBlogScreen() {
                         disabled={!mediaId || isCopyingFullTranscript}
                         accessibilityRole="button"
                         accessibilityLabel="Copy full transcript"
-                        className="min-h-12 flex-1 items-center justify-center gap-1 rounded-xl border border-border bg-card p-2 disabled:opacity-50"
+                        className="min-h-12 flex-1 items-center justify-center gap-1 rounded-xl border border-[#2c4057] bg-[#1c2a3a] p-2 disabled:opacity-50"
                       >
                         {isCopyingFullTranscript ? (
                           <ActivityIndicator
                             size="small"
-                            color={colors.primary}
+                            color="#bfdbfe"
                           />
                         ) : (
                           <Icon
                             name="Copy"
                             size={18}
-                            className="text-primary"
+                            color="#bfdbfe"
                           />
 								)}
-                        <Text className="text-xs font-bold text-foreground">
+                        <Text className="text-xs font-bold text-[#e9f1fb]">
                           Copy
                         </Text>
                       </Pressable>
@@ -4131,18 +3954,18 @@ export default function AudioBlogScreen() {
                           router.push(`/albums/${media.albumId}` as any)
                         }
                         accessibilityRole="button"
-                        className="min-h-12 flex-row items-center gap-3 rounded-xl border border-border bg-card px-4"
+                        className="min-h-12 flex-row items-center gap-3 rounded-xl border border-[#2c4057] bg-[#1c2a3a] px-4"
 											>
-                        <Icon name="Disc3" size={18} className="text-primary" />
+                        <Icon name="Disc3" size={18} color="#bfdbfe" />
                         <View className="flex-1">
 												<Text
-                            className="text-sm font-bold text-foreground"
+                            className="text-sm font-bold text-[#e9f1fb]"
                             numberOfLines={1}
 												>
                             {media.album.name}
 												</Text>
                           {media.albumAudioIndex?.index ? (
-                            <Text className="text-xs text-muted-foreground">
+                            <Text className="text-xs text-[#9fb2c8]">
                               Track {media.albumAudioIndex.index}
                             </Text>
                           ) : null}
@@ -4150,20 +3973,17 @@ export default function AudioBlogScreen() {
                         <Icon
                           name="ChevronRight"
                           size={16}
-                          className="text-muted-foreground"
+											color="#9fb2c8"
                         />
                       </Pressable>
                     ) : null}
-                    <InfoTab blog={blog ?? {}} />
+                    <InfoTab blog={blog ?? {}} dark />
 								</View>
                 ) : activeTab === "comments" ? (
                   <View className="gap-3">
-                    <Text className="text-lg font-bold text-foreground">
-                      Comments ({commentsState.comments?.length ?? 0})
-                    </Text>
                     <CommentsList state={commentsState} inline />
 											<View ref={commentInputRef} collapsable={false}>
-												<CommentInput blogId={id} timestampMode onCommentAdded={commentsState.refetch} onFocus={() => scrollComposerAboveKeyboard(Keyboard.metrics()?.height ?? 300)} />
+												<CommentInput blogId={id} timestampMode dark onCommentAdded={commentsState.refetch} onFocus={() => scrollComposerAboveKeyboard(Keyboard.metrics()?.height ?? 300)} />
 											</View>
                   </View>
                 ) : mediaId ? (
@@ -4179,35 +3999,12 @@ export default function AudioBlogScreen() {
 										</View>
 									)}
 								</View>
+									</View>
+								</ScopedColorsProvider>
 							</>
 						}
 					/>
 			</SafeArea>
-
-				<ScrollToTopButton
-					visible={mainScroll.showScrollTop}
-					onPress={mainScroll.scrollToTop}
-					bottom={showFloatingControls ? 108 : 24}
-				/>
-
-      {!sound && (
-				<FloatingPlayerWidget
-					visible={showFloatingControls}
-					isActiveAudio={isViewedAudioActive}
-					isPlaying={playerIsPlaying}
-					position={playerPositionMs}
-					duration={playerDurationMs}
-					isLoading={playerIsLoading}
-					isDownloading={playerIsDownloading}
-					downloadProgress={playerDownloadProgress}
-					onPlayPause={handleViewedPlayPause}
-					playDisabledReason={playDisabledReason}
-					onSeek={isViewedAudioActive ? seekAudio : undefined}
-					onPlusPress={
-						media?.album ? undefined : () => setAlbumPickerVisible(true)
-					}
-				/>
-			)}
 
 			{showRelatedAlbumSuggestion && relatedAlbumSuggestion ? (
 				<RelatedAlbumSuggestionSheet
@@ -4283,163 +4080,110 @@ export default function AudioBlogScreen() {
 				navigationBarTranslucent
 				onRequestClose={() => setTranscriptModalVisible(false)}
 			>
-				<View style={{ flex: 1, backgroundColor: "#080807" }}>
-					<StatusBar style="light" backgroundColor="#080807" translucent />
-					<SafeAreaView
-						edges={["top", "bottom"]}
-						style={{ flex: 1, backgroundColor: "#080807" }}
-					>
-						<View className="flex-row items-center justify-between px-4 py-2">
+				<View style={{ flex: 1, backgroundColor: "#141e2b" }}>
+					<StatusBar style="light" backgroundColor="#141e2b" translucent />
+					<SafeAreaView edges={["top", "bottom"]} style={{ flex: 1, backgroundColor: "#141e2b" }}>
+						<View style={{ minHeight: 58, flexDirection: "row", alignItems: "center", paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: "#ffffff20" }}>
 							<Pressable
 								onPress={() => setTranscriptModalVisible(false)}
 								className="size-11 items-center justify-center rounded-full active:bg-white/10"
+								accessibilityRole="button"
+								accessibilityLabel="Close reader"
 							>
-								<Icon name="ChevronDown" size={26} color="#ffffff" />
+								<Icon name="ChevronDown" size={22} color="#c9d8e8" />
 							</Pressable>
-							<Text
-								className="min-w-0 flex-1 px-3 text-center text-sm font-bold"
-								numberOfLines={1}
-								style={{ color: "rgba(255,255,255,0.82)" }}
-							>
-								{audioTitle}
-							</Text>
-							<View className="flex-row items-center gap-2">
-								<TashkeelToggle
-									enabled={transcriptTashkeelEnabled}
-									isLoading={isTashkeelLoading}
-									onPress={toggleTranscriptTashkeel}
-								/>
-								<Pressable
-									onPress={() => void handleViewedPlayPause()}
-									disabled={playerIsLoading && !playerIsPlaying}
-									className={
-										playerIsLoading && !playerIsPlaying
-											? "size-11 items-center justify-center rounded-full opacity-50"
-											: "size-11 items-center justify-center rounded-full active:bg-white/10"
-									}
-									accessibilityRole="button"
-									accessibilityLabel={
-										playerIsPlaying ? "Pause audio" : "Play audio"
-									}
-								>
-									{playerIsLoading && !playerIsPlaying ? (
-										<ActivityIndicator size="small" color="#ffffff" />
-									) : (
-										<Icon
-											name={playerIsPlaying ? "Pause" : "Play"}
-											size={20}
-											color="#ffffff"
-										/>
-									)}
-								</Pressable>
+							<View style={{ flex: 1, alignItems: "center", paddingHorizontal: 8 }}>
+								<Text style={{ color: "#96abc2", fontSize: 10, letterSpacing: 1, fontWeight: "700", textTransform: "uppercase" }}>
+									Reading transcript
+								</Text>
+								<Text numberOfLines={1} style={{ color: "#e9f1fb", fontSize: 14, fontWeight: "700", textAlign: "center" }}>
+									{media?.album?.name || audioTitle}
+								</Text>
 							</View>
+							<Pressable
+								onPress={() => setMoreMenuVisible(true)}
+								className="size-11 items-center justify-center rounded-full active:bg-white/10"
+								accessibilityRole="button"
+								accessibilityLabel="Audio options"
+							>
+								<Icon name="MoreHorizontal" size={22} color="#c9d8e8" />
+							</Pressable>
 						</View>
-						<View style={{ flex: 1 }}>
+						<View style={{ minHeight: 46, flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20 }}>
+							<Text style={{ color: "#9fb2c8", fontSize: 10, fontWeight: "700", letterSpacing: 0.8, textTransform: "uppercase" }}>
+								<Text style={{ color: "#7dd3c7" }}>● </Text>{playerIsPlaying ? "Following audio" : "Audio paused"}
+							</Text>
+							<View style={{ flexDirection: "row", alignItems: "center", gap: 2 }}>
+								<Pressable
+									onPress={() => setReaderTextScale((current) => current >= 1.3 ? 0.9 : Math.round((current + 0.1) * 10) / 10)}
+									className="size-10 items-center justify-center rounded-full active:bg-white/10"
+									accessibilityRole="button"
+									accessibilityLabel="Change transcript text size"
+								>
+										<Text style={{ color: "#e9f1fb", fontSize: 16, fontWeight: "700" }}>Aa</Text>
+								</Pressable>
+								<TashkeelToggle enabled={transcriptTashkeelEnabled} isLoading={isTashkeelLoading} onPress={toggleTranscriptTashkeel} size="compact" />
+								<Pressable
+									onPress={() => void copyFullTranscript()}
+									disabled={isCopyingFullTranscript}
+									className="size-10 items-center justify-center rounded-full active:bg-white/10"
+										accessibilityRole="button"
+									accessibilityLabel="Copy full transcript"
+								>
+									<Icon name="Copy" size={18} color="#e9f1fb" />
+							</Pressable>
+						</View>
+					</View>
+						<View style={{ flex: 1, minHeight: 0 }}>
 							<TranscriptReadMode
 								document={transcriptDocument}
-								autoScroll
+								autoScroll={isViewedAudioActive}
+								textScale={readerTextScale}
 								selection={markedTranscriptSelection}
 								onSelectionChange={setMarkedTranscriptSelection}
 								onStartReached={requestPreviousTranscriptWindow}
 								onEndReached={requestNextTranscriptWindow}
 								onPressSegment={handleReadModeSegmentPress}
-								positionSecOverride={
-									isViewedAudioActive ? undefined : transcriptAnchorSec
-								}
+								positionSecOverride={isViewedAudioActive ? undefined : transcriptAnchorSec}
 							/>
 						</View>
-						<View
-							style={{
-								borderTopWidth: 1,
-								borderTopColor: "rgba(255,255,255,0.12)",
-								paddingHorizontal: 16,
-								paddingTop: 10,
-								paddingBottom: 18,
-								backgroundColor: "rgba(0,0,0,0.72)",
-							}}
-						>
-							{markedTranscriptSelection ? (
-								<>
-									<Text
-										style={{
-											color: "rgba(255,255,255,0.54)",
-											fontSize: 11,
-											fontWeight: "700",
-											marginBottom: 5,
-											textAlign: "right",
-										}}
-									>
-										Starts at{" "}
-										{formatMs(markedTranscriptSelection.timestampSec * 1000)}
-									</Text>
-									<Text
-										selectable
-										numberOfLines={2}
-										style={{
-											color: "rgba(255,255,255,0.82)",
-											fontSize: 14,
-											lineHeight: 20,
-											textAlign: "right",
-											writingDirection: "rtl",
-										}}
-									>
-										{markedTranscriptSelection.text}
-									</Text>
-									<View className="mt-3 flex-row items-center gap-2">
-										<Pressable
-											onPress={copyMarkedTranscriptText}
-											className="h-11 flex-1 flex-row items-center justify-center gap-2 rounded-full bg-white/10 active:opacity-75"
-										>
-											<Icon name="Copy" size={16} color="#ffffff" />
-											<Text className="text-sm font-bold text-white">Copy</Text>
-										</Pressable>
-										<Pressable
-											onPress={commentMarkedTranscriptText}
-											disabled={isAddingTranscriptComment}
-											className="h-11 flex-1 flex-row items-center justify-center gap-2 rounded-full bg-white active:opacity-75"
-											style={{ opacity: isAddingTranscriptComment ? 0.55 : 1 }}
-										>
-											<Icon name="MessageSquare" size={16} color="#111111" />
-											<Text
-												style={{
-													fontSize: 14,
-													fontWeight: "800",
-													color: "#111111",
-												}}
-											>
-												Comment
-											</Text>
-										</Pressable>
-										<Pressable
-											onPress={() => void shareMarkedTranscriptText()}
-											className="h-11 flex-1 flex-row items-center justify-center gap-2 rounded-full bg-white/10 active:opacity-75"
-										>
-											<Icon name="Share" size={16} color="#ffffff" />
-											<Text className="text-sm font-bold text-white">
-												Share
-											</Text>
-										</Pressable>
-										<Pressable
-											onPress={() => setMarkedTranscriptSelection(null)}
-											className="size-11 items-center justify-center rounded-full bg-white/10 active:opacity-75"
-											accessibilityRole="button"
-											accessibilityLabel="Clear transcript selection"
-										>
-											<Icon name="X" size={16} color="#ffffff" />
-										</Pressable>
-									</View>
-								</>
-							) : (
-								<Text
-									style={{
-										color: "rgba(255,255,255,0.54)",
-										fontSize: 12,
-										textAlign: "center",
-									}}
-								>
-									No highlighted text
-								</Text>
-							)}
+						{markedTranscriptSelection ? (
+							<View style={{ flexDirection: "row", gap: 6, padding: 9, backgroundColor: "#2c425b", borderTopWidth: 1, borderTopColor: "#92b8d53b" }}>
+								<Pressable onPress={copyMarkedTranscriptText} className="min-h-10 flex-1 flex-row items-center justify-center gap-1 rounded-lg active:bg-white/10">
+									<Icon name="Copy" size={15} color="#e9f1fb" /><Text style={{ color: "#e9f1fb", fontSize: 12 }}>Copy</Text>
+								</Pressable>
+								<Pressable onPress={commentMarkedTranscriptText} disabled={isAddingTranscriptComment} className="min-h-10 flex-1 flex-row items-center justify-center gap-1 rounded-lg bg-blue-200 active:opacity-75">
+									<Icon name="MessageSquare" size={15} color="#1e3a5f" /><Text style={{ color: "#1e3a5f", fontSize: 12, fontWeight: "700" }}>Comment</Text>
+								</Pressable>
+								<Pressable onPress={() => void shareMarkedTranscriptText()} className="min-h-10 flex-1 flex-row items-center justify-center gap-1 rounded-lg active:bg-white/10">
+									<Icon name="Share" size={15} color="#e9f1fb" /><Text style={{ color: "#e9f1fb", fontSize: 12 }}>Share</Text>
+								</Pressable>
+								<Pressable onPress={() => setMarkedTranscriptSelection(null)} className="size-10 items-center justify-center rounded-lg active:bg-white/10" accessibilityLabel="Clear transcript selection">
+									<Icon name="X" size={16} color="#e9f1fb" />
+								</Pressable>
+							</View>
+						) : null}
+						<View style={{ backgroundColor: "#1c2a3a", borderTopWidth: 1, borderTopColor: "#4a5e7440", paddingHorizontal: 18, paddingTop: 6, paddingBottom: 12 }}>
+							<View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+								<Text style={{ color: "#afbed0", fontSize: 11 }}>{playerIsPlaying ? "Playing" : "Paused"} · {formatMs(playerPositionMs)}</Text>
+								<Pressable onPress={() => { setTranscriptModalVisible(false); revealTab("comments"); }} className="min-h-9 flex-row items-center gap-2 px-2" accessibilityRole="button" accessibilityLabel="Comment at current time">
+									<Icon name="MessageSquare" size={14} color="#afbed0" /><Text style={{ color: "#afbed0", fontSize: 11 }}>Comment here</Text>
+								</Pressable>
+							</View>
+							<PlayerSection
+								theme="dark"
+								isActiveAudio={isViewedAudioActive}
+								isPlaying={playerIsPlaying}
+								position={playerPositionMs}
+								duration={playerDurationMs}
+								isLoading={playerIsLoading}
+								isDownloading={playerIsDownloading}
+								downloadProgress={playerDownloadProgress}
+								onPlayPause={handleViewedPlayPause}
+								playDisabledReason={playDisabledReason}
+								onSeek={isViewedAudioActive ? seekAudio : undefined}
+								onCommentPress={() => { setTranscriptModalVisible(false); revealTab("comments"); }}
+							/>
 						</View>
 					</SafeAreaView>
 				</View>

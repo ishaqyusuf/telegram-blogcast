@@ -1,8 +1,8 @@
 # Task: Audio Screen Design Workshop
 
-- Status: Done — Android Preview published
+- Status: In Progress — native UI fidelity revision
 - Created: 2026-09-29
-- Updated: 2026-09-29
+- Updated: 2026-09-30
 - Artifact: [Audio screen comparison](../../artifacts/audio-screen-workshop/index.html)
 - Notes and verification: [Workshop README](../../artifacts/audio-screen-workshop/README.md)
 - Related work: [Media download controls and audio rename](2026-09-29-media-download-controls-and-audio-rename.md)
@@ -12,6 +12,8 @@
 Use the user's recording of the current Android audio experience and the latest source to compare three concrete directions for listening, transcript reading, and discussion.
 
 ## Progress
+
+The 2026-09-29 Preview did not fully match direction 01. The user reopened the task on 2026-09-30, specifically identifying the Read screen and requesting Android screenshots for review. The title position, reader controls, and native visual treatment are being corrected and reverified before the next Preview update.
 
 - [x] Review the recording's key visual states and relevant audio source/Brain context.
 - [x] Build three interactive candidates: Immersive live, Reading room, and Lesson workspace.

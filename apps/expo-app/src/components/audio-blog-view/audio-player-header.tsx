@@ -47,7 +47,7 @@ export function AudioPlayerHeader({
 				<Pressable
 					disabled={!canOpenContext}
 					onPress={onOpenContext}
-					className="min-h-11 min-w-0 flex-1 justify-center px-2 py-1 active:opacity-70"
+					className="min-h-11 min-w-0 flex-1 items-center justify-center px-2 py-1 active:opacity-70"
 					accessibilityRole={canOpenContext ? "link" : undefined}
 					accessibilityLabel={`Playing from ${contextType.toLowerCase()} ${contextName}`}
 				>
@@ -58,6 +58,7 @@ export function AudioPlayerHeader({
 							fontSize: 11,
 							fontWeight: "600",
 							letterSpacing: 0.2,
+							textAlign: "center",
 						}}
 					>
 						Playing from {contextType.toLowerCase()}
@@ -71,7 +72,7 @@ export function AudioPlayerHeader({
 							fontSize: 14,
 							fontWeight: "500",
 							lineHeight: 20,
-							textAlign: isRtlContext ? "right" : "left",
+							textAlign: "center",
 							writingDirection: isRtlContext ? "rtl" : "ltr",
 						}}
 					>

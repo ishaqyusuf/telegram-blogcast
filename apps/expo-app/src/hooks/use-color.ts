@@ -1,14 +1,21 @@
 import { THEME } from "@/lib/theme";
-import { useCallback } from "react";
+import { createContext, createElement, useCallback, useContext, type ReactNode } from "react";
 import { Appearance, useColorScheme as useRNColorScheme } from "react-native";
 import { useColorScheme as useNativeWindColorScheme } from "nativewind";
 
 type AppColorScheme = "light" | "dark" | "system";
+type AppColors = typeof THEME.light;
+const ScopedColorsContext = createContext<AppColors | null>(null);
+
+export function ScopedColorsProvider({ children, colors }: { children: ReactNode; colors: AppColors }) {
+  return createElement(ScopedColorsContext.Provider, { value: colors }, children);
+}
 
 export function useColors() {
   const { colorScheme } = useColorScheme();
+	const scopedColors = useContext(ScopedColorsContext);
 
-  return colorScheme === "dark" ? THEME.dark : THEME.light;
+  return scopedColors ?? (colorScheme === "dark" ? THEME.dark : THEME.light);
 }
 
 export function useColorScheme() {
