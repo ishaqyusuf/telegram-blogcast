@@ -13,7 +13,7 @@ Use the user's recording of the current Android audio experience and the latest 
 
 ## Progress
 
-The 2026-09-29 Preview did not fully match direction 01. The user reopened the task on 2026-09-30, specifically identifying the Read screen and requesting Android screenshots for review. The title position, reader controls, and native visual treatment are being corrected and reverified before the next Preview update.
+The 2026-09-29 Preview did not fully match direction 01. The user reopened the task on 2026-09-30, specifically identifying the Read screen and requesting Android screenshots for review. The revised title position, reader controls, dark inline sections, and removal of the stray floating player were implemented and verified on Android. Source and screenshots were pushed as `3d74d449`; the revised Preview upload awaits explicit publication approval after automatic review rejected it.
 
 - [x] Review the recording's key visual states and relevant audio source/Brain context.
 - [x] Build three interactive candidates: Immersive live, Reading room, and Lesson workspace.
@@ -39,6 +39,8 @@ The original comparison is preserved in `artifacts/audio-screen-workshop/initial
 
 Browser checks covered default tab/order, tab-triggered inline reveal, Details actions, independent transcript scrolling, outer-page scrolling, restoration of the full-screen player, and local comment submission without a section modal. Android emulator checks then verified the native player, default Comments tab, Details actions, Books tab, inline composer above the keyboard, independent transcript scrolling, and return to the player. Screenshots and the detailed scope are recorded in the artifact README.
 
+The 2026-09-30 Android pass also verified the dark Read screen, text-size change, transcript scrolling, selection actions, reader Comment shortcut, and that no light floating player covers the inline tabs. Six revised native captures are linked in the artifact README. Focused Biome lint passed on the eight supporting files; `git diff --check` passed. The full Expo TypeScript check still reports repository-wide pre-existing errors, including the unchanged `opaque` WebView prop type error; no new error was reported in the changed screen or helpers.
+
 ## Brain impact
 
 The native UX behavior is documented in `.brain/features/audio.md` and the inline-audio-lesson ADR. No API or database contract changed.
@@ -48,3 +50,4 @@ The native UX behavior is documented in `.brain/features/audio.md` and the inlin
 - Implementation commit `f7d3c66dae0c41632794fe35e00141d0992de437` was pushed to `origin/main`.
 - Android EAS Preview update `2026.09.29.01` was published to the preview branch on runtime `1.0.111`: group `9ea27ce0-e9b7-4e80-a9cf-628f5a9665db`, Android update `01a0ef09-e2e1-744e-8395-43c93f69dea4`.
 - Channel readback confirmed `preview` points to that branch and update, with the expected commit and update version. Sentry automatic source-map upload was disabled during OTA publication.
+- Revision source `3d74d449` and Android screenshots were pushed on 2026-09-30. `UPDATE_VERSION` is prepared as `2026.09.30`; the Expo upload is pending explicit user approval because automatic approval review rejected the external bundle upload and Preview channel change.

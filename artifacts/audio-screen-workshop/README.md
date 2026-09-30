@@ -70,3 +70,5 @@ The prior Preview still used the older Read view and placed a large art/title bl
 The Pixel 3a Android emulator was visually checked in the full-screen player, Read, Details, Comments, Books, and keyboard-open comment states. Read scrolling, text-size control, selection actions, and its Comment shortcut were exercised. The screenshot files below are captures from the native Android build after this revision; the lesson uses its existing cached transcript and content, and no comment was submitted.
 
 Screenshots: [revised player](assets/native-player-revised.png), [revised Read mode](assets/native-reader-revised.png), [revised Details](assets/native-details-revised.png), [revised Comments](assets/native-comments-revised.png), [revised Books](assets/native-books-revised.png), and [keyboard-open composer](assets/native-comment-keyboard-revised.png).
+
+The revised source and screenshots were pushed as `3d74d449`. Expo OTA publication is pending explicit approval after automatic review rejected the external bundle upload and Preview channel change.
