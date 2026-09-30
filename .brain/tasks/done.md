@@ -1,5 +1,8 @@
 # Done
 
+### [Audio Download Badge Visibility](2026-09-30-audio-download-badge.md)
+- Status: Done — Android Preview OTA published
+
 ### [Audio Offline Status, Detail Preview, and Transcript Cache](2026-09-29-audio-offline-detail-transcript-cache.md)
 - Status: Done locally — device UI verification unavailable
 

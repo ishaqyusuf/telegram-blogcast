@@ -71,4 +71,4 @@ The Pixel 3a Android emulator was visually checked in the full-screen player, Re
 
 Screenshots: [revised player](assets/native-player-revised.png), [revised Read mode](assets/native-reader-revised.png), [revised Details](assets/native-details-revised.png), [revised Comments](assets/native-comments-revised.png), [revised Books](assets/native-books-revised.png), and [keyboard-open composer](assets/native-comment-keyboard-revised.png).
 
-The revised source and screenshots were pushed as `3d74d449`. Expo OTA publication is pending explicit approval after automatic review rejected the external bundle upload and Preview channel change.
+The revised source and screenshots were pushed as `3d74d449` and are included in [Android Preview OTA `2026.09.30.01`](https://expo.dev/accounts/ishaqyusuf/projects/alghurobaa/updates/bcfb0e29-1cf0-42f2-b4d1-b1b8840984d1), published from `64ce644c` on runtime `1.0.111` with the audio download badge refinement. Preview channel readback confirmed the source commit and update version.

@@ -1,8 +1,5 @@
 # In Progress
 
-### [Audio Download Badge Visibility](2026-09-30-audio-download-badge.md)
-- Status: In Progress
-
 ### [Audio Screen Design Workshop](2026-09-29-audio-screen-workshop.md)
 - Status: In Progress — native UI fidelity revision
 

@@ -13,7 +13,7 @@ Use the user's recording of the current Android audio experience and the latest 
 
 ## Progress
 
-The 2026-09-29 Preview did not fully match direction 01. The user reopened the task on 2026-09-30, specifically identifying the Read screen and requesting Android screenshots for review. The revised title position, reader controls, dark inline sections, and removal of the stray floating player were implemented and verified on Android. Source and screenshots were pushed as `3d74d449`; the revised Preview upload awaits explicit publication approval after automatic review rejected it.
+The 2026-09-29 Preview did not fully match direction 01. The user reopened the task on 2026-09-30, specifically identifying the Read screen and requesting Android screenshots for review. The revised title position, reader controls, dark inline sections, and removal of the stray floating player were implemented and verified on Android. Source and screenshots were pushed as `3d74d449`; that revision is now included in Android Preview OTA `2026.09.30.01`, published with the [audio download badge refinement](2026-09-30-audio-download-badge.md).
 
 - [x] Review the recording's key visual states and relevant audio source/Brain context.
 - [x] Build three interactive candidates: Immersive live, Reading room, and Lesson workspace.
@@ -50,4 +50,4 @@ The native UX behavior is documented in `.brain/features/audio.md` and the inlin
 - Implementation commit `f7d3c66dae0c41632794fe35e00141d0992de437` was pushed to `origin/main`.
 - Android EAS Preview update `2026.09.29.01` was published to the preview branch on runtime `1.0.111`: group `9ea27ce0-e9b7-4e80-a9cf-628f5a9665db`, Android update `01a0ef09-e2e1-744e-8395-43c93f69dea4`.
 - Channel readback confirmed `preview` points to that branch and update, with the expected commit and update version. Sentry automatic source-map upload was disabled during OTA publication.
-- Revision source `3d74d449` and Android screenshots were pushed on 2026-09-30. `UPDATE_VERSION` is prepared as `2026.09.30`; the Expo upload is pending explicit user approval because automatic approval review rejected the external bundle upload and Preview channel change.
+- Revision source `3d74d449` and Android screenshots were pushed on 2026-09-30. Android Preview OTA `2026.09.30.01` now includes this revision plus the download badge refinement, published from `64ce644c` on runtime `1.0.111` as [EAS group `bcfb0e29-1cf0-42f2-b4d1-b1b8840984d1`](https://expo.dev/accounts/ishaqyusuf/projects/alghurobaa/updates/bcfb0e29-1cf0-42f2-b4d1-b1b8840984d1). Channel readback confirmed its source and update version after the user's explicit OTA request.
