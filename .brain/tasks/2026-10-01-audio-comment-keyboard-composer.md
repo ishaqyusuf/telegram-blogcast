@@ -1,6 +1,6 @@
 # Audio Comment Keyboard Composer
 
-- Status: Done locally — Android Preview OTA publication in progress
+- Status: Done — Android Preview OTA published
 - Created: 2026-10-01
 - Updated: 2026-10-01
 - Evidence: [Native screenshots and verification](../../artifacts/audio-comment-composer/README.md)
@@ -22,4 +22,11 @@ Comment entry shares the existing mutation through `useCommentDraft`. New drafts
 
 ## Brain impact
 
-Updated the Audio feature and inline lesson layout ADR. No API, auth, database, or native dependency changes. The user requested commit, push, and Android Preview OTA publication. Version `2026.10.01.01` is prepared for existing runtime `1.0.111`.
+Updated the Audio feature and inline lesson layout ADR. No API, auth, database, or native dependency changes. The user requested commit, push, and Android Preview OTA publication. Android Preview OTA `2026.10.01.01` is published on existing runtime `1.0.111`.
+
+## Delivery
+
+- Source and OTA version bump committed and pushed to `main` as `d2ac3b5b1409738e23958e202d589e269a6cf229`.
+- Android Preview OTA `2026.10.01.01`: [EAS group `355225e9-9ed7-46c9-adea-c67dd3f0cac8`](https://expo.dev/accounts/ishaqyusuf/projects/alghurobaa/updates/355225e9-9ed7-46c9-adea-c67dd3f0cac8); Android update `01a0f84e-6586-74a0-94ec-fae5730c6dc4`; runtime `1.0.111`.
+- Android export and EAS publication passed. Exported source maps include the new composer and shared draft hook. Preview channel readback confirmed the exact source commit, clean working tree, Android platform, runtime, Preview app variant, and update version. [Readback evidence](../../artifacts/audio-comment-composer/preview-release-readback.json).
+- Used pinned EAS CLI `20.2.0`, the EAS Preview environment, and the existing disabled Sentry automatic source-map upload setting. No native rebuild or backend deployment was needed for this UI change. Installed-client uptake remains unverified.
