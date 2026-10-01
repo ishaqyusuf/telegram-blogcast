@@ -1,6 +1,4 @@
 import { Pressable } from "@/components/ui/pressable";
-import { useMutation, useQueryClient } from "@/lib/react-query";
-import { useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -9,17 +7,9 @@ import {
   View,
 } from "react-native";
 
-import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";
 import { useColors } from "@/hooks/use-color";
-import { useAudioStore } from "@/store/audio-store";
-
-function formatTimestamp(positionMs: number) {
-  const totalSec = Math.floor(positionMs / 1000);
-  const min = Math.floor(totalSec / 60);
-  const sec = totalSec % 60;
-  return `${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
-}
+import { useCommentDraft } from "./use-comment-draft";
 
 interface CommentInputProps {
   blogId: number;
@@ -45,45 +35,10 @@ export function CommentInput({
   dark = false,
 }: CommentInputProps) {
   const colors = useColors();
-  const qc = useQueryClient();
-  const [text, setText] = useState("");
-  const [timestampEnabled, setTimestampEnabled] = useState(Boolean(timestampMode));
-  const [timestampMs, setTimestampMs] = useState(0);
-  const position = useAudioStore((s) => s.position);
-  const timestampLabel = formatTimestamp(timestampMs || position);
-
-  const { mutate: addComment, isPending } = useMutation(
-    _trpc.blog.addComment.mutationOptions({
-      onSuccess() {
-        setText("");
-        setTimestampMs(0);
-        setTimestampEnabled(Boolean(timestampMode));
-        qc.invalidateQueries({ queryKey: _trpc.blog.getComments.queryKey() });
-        qc.invalidateQueries({
-          queryKey: _trpc.blog.getBlog.queryKey({ id: blogId }),
-        });
-        onCommentAdded?.();
-        onClose?.();
-      },
-    }),
-  );
-
-  function handleTimestampPress() {
-    setTimestampMs(position);
-    setTimestampEnabled((value) => !value || timestampMs !== position);
-  }
-
-  function handleSend() {
-    const trimmed = text.trim();
-    if (!trimmed || isPending) return;
-    addComment({
-      blogId,
-      content: trimmed,
-      timestampSeconds: timestampEnabled
-        ? Math.floor((timestampMs || position) / 1000)
-        : undefined,
-    });
-  }
+  const {
+    text, setText, error, isPending, timestampEnabled, timestampLabel,
+    handleTimestampPress, handleSend,
+  } = useCommentDraft({ blogId, timestampMode, onCommentAdded, onClose });
 
   function handleSubmitEditing() {
     if (!compact) return;
@@ -223,13 +178,19 @@ export function CommentInput({
     </View>
   );
 
-  if (noKeyboardAvoid) return inner;
+  const content = (
+    <View>
+      {inner}
+      {error ? <Text accessibilityRole="alert" style={{ color: colors.destructive, paddingHorizontal: 12, paddingBottom: 8 }}>{error}</Text> : null}
+    </View>
+  );
+  if (noKeyboardAvoid) return content;
 
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
-      {inner}
+      {content}
     </KeyboardAvoidingView>
   );
 }

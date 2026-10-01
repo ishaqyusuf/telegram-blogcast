@@ -19,3 +19,7 @@ The Read action opens a dark full-screen reader with a compact context header, f
 ## Consequences
 
 The player has more transcript space and a lower transport. Comments and books remain part of the same scroll journey. The inline comment composer must scroll above the software keyboard. Read keeps selection, Live follow, and real playback control while matching the selected visual direction. The layout does not change media, transcription, comment, or book APIs.
+
+## 2026-10-01 Comment-entry refinement
+
+The user requested the existing Ewatrade Add Option keyboard interaction for quick audio comments, then refined it to remove the inline Comments-tab input and put time inside the new input. Add a scroll-triggered comment FAB across the lesson's inline tabs and a keyboard-sticky editor with title, handle, input, and right-side send action. Time is a compact padding-free input prefix; tapping the timer toggles timestamp inclusion without changing input height. This comment-entry overlay does not introduce a floating transport. Share draft validation and mutation behavior through `useCommentDraft`; scope timestamps to the viewed blog and preserve captured zero timestamps. Register the open editor with the existing floating-sheet registry so persistent players yield. Remove the superseded inline-input keyboard scrolling and keep the outer page stationary when the panel opens. No API or database contract changes.

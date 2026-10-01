@@ -21,7 +21,7 @@ Tracks the current audio playback experience, supporting components, and future 
 - Supporting UI:
   - Global audio mini-player
   - Playback controls including skip and play/pause
-  - Footer comment form positioned above the keyboard
+  - Scroll-triggered Add Comment FAB and Ewatrade-style keyboard composer with an inline timestamp prefix
   - Audio-to-book page reference panel on the audio screen
 - Albums screen and album detail for channel-aware audio collections
 - Playlists screen and playlist detail for user-curated audio collections
@@ -67,7 +67,9 @@ Tracks the current audio playback experience, supporting components, and future 
 ### UX Notes
 - The audio detail screen uses one dark vertical lesson page: a full-screen transcript-led player followed by inline Details, Comments, and Books tabs. The album context and lesson title sit above the transcript, leaving the lower player for the scrubber and transport. Comments is selected by default. Selecting a tab reveals it with part of the transport still visible; scrolling up restores the player. The player shortcut in each inline section returns to the top.
 - Transcript text scrolls independently of the lesson page. Read is a transparent ghost action at the left of its footer; Live sits at the far right and resumes follow after manual transcript scrolling when the viewed audio is active. The separate Live transcript heading is removed.
-- Download/Saved, full Transcribe/Transcribed, and Copy are in Details. The Comments tab uses the existing timestamped comment list and composer, including keyboard-aware reveal. Audio options and comment deep links open that inline tab. A local floating transport and scroll-to-top bubble do not cover the inline sections; the global bar may still appear for a different active track.
+- Download/Saved, full Transcribe/Transcribed, and Copy are in Details. The Comments tab uses the existing timestamped comment list; comment entry is opened through the scroll-triggered FAB. Audio options and comment deep links open that inline tab. A local floating transport and scroll-to-top bubble do not cover the inline sections; the global bar may still appear for a different active track.
+- After the outer lesson page scrolls more than 28 points, an Add Comment FAB appears above any registered floating footer. It remains available across inline tabs and hides at the player top, during keyboard editing, and while another sheet is open. The Comments tab has no inline input; the FAB is its comment-entry action.
+- The FAB opens the Ewatrade Add Option interaction adapted for comments: top handle, fixed title and close control, rounded auto-focused input directly above the keyboard with an optional timestamp prefix, and an always-visible right-side send action. Blank and pending sends are disabled. The prefix has no extra padding or height: tapping its timer toggles the timestamp text within the input. The timestamp is captured when starting a draft, including a valid 00:00, and never comes from a different playing lesson. Closing or pressing Android Back retains the draft and timestamp until submission or leaving the route; failures preserve the text with inline retry feedback. Successful submission uses the existing comment mutation and refreshes Comments before closing. The keyboard panel shares the footer suppression registry and uses the existing KeyboardStickyView runtime.
 - Persistent mini-player is a core interaction pattern.
 - The mini-player is suppressed throughout Search and on an audio detail route whose viewed media matches the active media; playback continues and eligible routes restore the player normally.
 - Opening an audio detail screen is passive: it may show the viewed audio's metadata and duration, but it must not replace, stop, seek, or pause the currently active audio until the user presses play on the viewed audio.

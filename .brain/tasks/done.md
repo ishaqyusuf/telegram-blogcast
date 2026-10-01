@@ -1,5 +1,8 @@
 # Done
 
+### [Audio Comment Keyboard Composer](2026-10-01-audio-comment-keyboard-composer.md)
+- Status: Done locally — Android keyboard layout verified
+
 ### [Audio Screen Keep Awake](2026-10-01-audio-screen-keep-awake.md)
 - Status: Done — Android Preview OTA published; device verification pending
 

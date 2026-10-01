@@ -26,6 +26,6 @@ describe("bottom-sheet player layering", () => {
 
   test("keeps the global audio bar hidden while a sheet is registered", () => {
     expect(globalAudioBarSource).toContain("hasOpenFloatingSheet");
-    expect(globalAudioBarSource).toContain("!hasOpenFloatingSheet");
+    expect(globalAudioBarSource).toContain("sheetOpen: hasOpenFloatingSheet");
   });
 });

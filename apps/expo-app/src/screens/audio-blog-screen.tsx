@@ -16,7 +16,6 @@ import {
 	Animated,
 	Clipboard,
 	FlatList,
-	Keyboard,
 	Linking,
 	Modal,
 	PanResponder,
@@ -28,6 +27,7 @@ import {
 	useWindowDimensions,
 } from "react-native";
 
+import { AudioCommentComposer } from "@/components/audio-blog-view/audio-comment-composer";
 import { AudioOptionsSheet } from "@/components/audio-blog-view/audio-options-sheet";
 import { AudioRenameSheet } from "@/components/audio-blog-view/audio-rename-sheet";
 import { AudioPlayerHeader } from "@/components/audio-blog-view/audio-player-header";
@@ -45,7 +45,6 @@ import {
 import { BlogCard, type BlogItem } from "@/components/blog-card";
 import { AddToPlaylistModal } from "@/components/channel-chat/add-to-playlist-modal";
 import { useCommentsState } from "@/components/comments-sheet";
-import { CommentInput } from "@/components/comments-sheet/comment-input";
 import { CommentsList } from "@/components/comments-sheet/comments-list";
 import { useLocalServicesSession } from "@/components/local-services";
 import { SafeArea } from "@/components/safe-area";
@@ -1995,31 +1994,8 @@ export default function AudioBlogScreen() {
 	} = useLocalServicesSession();
 	const { height: windowHeight } = useWindowDimensions();
 	const mainScroll = useScrollChrome<FlatList<any>>();
-	const commentInputRef = useRef<View>(null);
-	const outerScrollYRef = useRef(0);
-
-	const scrollComposerAboveKeyboard = useCallback((keyboardHeight: number) => {
-		setTimeout(() => {
-			commentInputRef.current?.measureInWindow((_x, y, _width, height) => {
-				const overlap = y + height - (windowHeight - keyboardHeight - 16);
-				if (overlap > 0) {
-					mainScroll.ref.current?.scrollToOffset({
-						offset: outerScrollYRef.current + overlap + 24,
-						animated: true,
-					});
-				}
-			});
-		}, 250);
-	}, [mainScroll.ref, windowHeight]);
-
-	useEffect(() => {
-		const show = Keyboard.addListener("keyboardDidShow", (event) => {
-			setKeyboardHeight(event.endCoordinates.height);
-			scrollComposerAboveKeyboard(event.endCoordinates.height);
-		});
-		const hide = Keyboard.addListener("keyboardDidHide", () => setKeyboardHeight(0));
-		return () => { show.remove(); hide.remove(); };
-	}, [scrollComposerAboveKeyboard]);
+  const [commentComposerVisible, setCommentComposerVisible] = useState(false);
+  const [showCommentFab, setShowCommentFab] = useState(false);
 	const {
 		blogId,
 		openComments: openCommentsParam,
@@ -2036,7 +2012,6 @@ export default function AudioBlogScreen() {
 	const hasSeekTarget = Number.isFinite(seekTargetSec) && seekTargetSec >= 0;
 
   const [activeTab, setActiveTab] = useState<Tab>("comments");
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const pendingInitialCommentsRevealRef = useRef(openCommentsParam === "1");
 	const [moreMenuVisible, setMoreMenuVisible] = useState(false);
 	const [sleepTimerVisible, setSleepTimerVisible] = useState(false);
@@ -3552,6 +3527,7 @@ export default function AudioBlogScreen() {
 	}
 
 	function updateFloatingControls(scrollY: number) {
+    setShowCommentFab(scrollY > 28);
 		setShowFloatingControls(
       scrollY > windowHeight - NEXT_CONTENT_PEEK_HEIGHT - 80,
 		);
@@ -3587,12 +3563,11 @@ export default function AudioBlogScreen() {
 						nestedScrollEnabled
 						scrollEventThrottle={mainScroll.scrollEventThrottle}
 						contentContainerStyle={{
-							paddingBottom: 120 + keyboardHeight,
+							paddingBottom: 120,
 							backgroundColor: "#101c2f",
 						}}
 						onScroll={(event) => {
 							mainScroll.onScroll(event);
-							outerScrollYRef.current = event.nativeEvent.contentOffset.y;
 							updateFloatingControls(event.nativeEvent.contentOffset.y);
 						}}
           onContentSizeChange={() => {
@@ -3984,9 +3959,7 @@ export default function AudioBlogScreen() {
                 ) : activeTab === "comments" ? (
                   <View className="gap-3">
                     <CommentsList state={commentsState} inline />
-											<View ref={commentInputRef} collapsable={false}>
-												<CommentInput blogId={id} timestampMode dark onCommentAdded={commentsState.refetch} onFocus={() => scrollComposerAboveKeyboard(Keyboard.metrics()?.height ?? 300)} />
-											</View>
+
                   </View>
                 ) : mediaId ? (
 										<AudioBookReferences
@@ -4007,6 +3980,16 @@ export default function AudioBlogScreen() {
 						}
 					/>
 			</SafeArea>
+      <ScopedColorsProvider colors={AUDIO_LESSON_COLORS}>
+        <AudioCommentComposer
+          key={id}
+          blogId={id}
+          scrolled={showCommentFab}
+          visible={commentComposerVisible}
+          onVisibleChange={setCommentComposerVisible}
+          onCommentAdded={commentsState.refetch}
+        />
+      </ScopedColorsProvider>
 
 			{showRelatedAlbumSuggestion && relatedAlbumSuggestion ? (
 				<RelatedAlbumSuggestionSheet
