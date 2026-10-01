@@ -1,7 +1,7 @@
 # Done
 
 ### [Audio Screen Keep Awake](2026-10-01-audio-screen-keep-awake.md)
-- Status: Done locally — device verification pending
+- Status: Done — Android Preview OTA published; device verification pending
 
 ### [Audio Download Badge Visibility](2026-09-30-audio-download-badge.md)
 - Status: Done — Android Preview OTA published
