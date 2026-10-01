@@ -1,4 +1,5 @@
 import { useAudioDownload } from "@/hooks/use-audio-download";
+import { useFocusedKeepAwake } from "@/hooks/use-focused-keep-awake";
 import { Pressable } from "@/components/ui/pressable";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { BottomSheetFlatList } from "@gorhom/bottom-sheet";
@@ -1974,6 +1975,7 @@ function AddToAlbumPicker({
 // ── Main screen ───────────────────────────────────────────────────────────────
 
 export default function AudioBlogScreen() {
+	useFocusedKeepAwake();
 	const router = useRouter();
 	const qc = useQueryClient();
 	const colors = useColors();

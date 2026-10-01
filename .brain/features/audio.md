@@ -17,6 +17,7 @@ Tracks the current audio playback experience, supporting components, and future 
 
 ### Current Surfaces
 - Primary screen: `audio-blog-screen.tsx`
+- The audio detail screen prevents automatic screen sleep while focused, including paused playback, transcript reading, and inline tabs. Leaving the route releases its wake lock; background playback alone does not keep the display on.
 - Supporting UI:
   - Global audio mini-player
   - Playback controls including skip and play/pause
