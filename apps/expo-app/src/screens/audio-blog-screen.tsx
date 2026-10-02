@@ -81,6 +81,7 @@ import { type BlobMediaUpload, uploadBlogMediaAsset } from "@/lib/blob-upload";
 import { getTelegramFileUrl } from "@/lib/get-telegram-file";
 import { getLocalApiQueryKey } from "@/lib/local-api-query";
 import { getMediaFileUrl } from "@/lib/media-source";
+import { diacritizeTextOnDevice } from "@/lib/on-device-tashkeel";
 import {
   cacheFullTranscript,
   FULL_TRANSCRIPT_WINDOW_SEC,
@@ -3346,6 +3347,11 @@ export default function AudioBlogScreen() {
               index,
             ),
           ) ?? [];
+			if (transcriptTashkeelEnabled) {
+				for (const segment of segments) {
+					segment.text = await diacritizeTextOnDevice(segment.text);
+				}
+			}
 			const text = buildTranscriptDocument(segments).fullText;
 			if (!text) throw new Error("No saved transcript is available yet.");
 			Clipboard.setString(text);

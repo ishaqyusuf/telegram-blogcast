@@ -1,5 +1,8 @@
 # In Progress
 
+### [Transcript Copy Arabic Vowels](2026-10-02-transcript-copy-arabic-vowels.md)
+- Status: In Progress — implementation complete; Preview OTA pending
+
 ### [Media Download Controls, Audio Rename, and Transcript Actions](2026-09-29-media-download-controls-and-audio-rename.md)
 - Status: In Progress
 
