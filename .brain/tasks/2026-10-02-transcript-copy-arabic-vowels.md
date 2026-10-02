@@ -1,6 +1,6 @@
 # Transcript Copy Arabic Vowels
 
-- Status: In Progress — implementation complete; commit, push, and Preview OTA pending
+- Status: Done — committed, pushed, and Android Preview OTA published
 - Created: 2026-10-02
 - Updated: 2026-10-02
 
@@ -18,4 +18,7 @@ Updated the Audio feature. No API, database, native dependency, or architecture 
 
 ## Delivery
 
-Commit, push, and Android Preview OTA publication pending.
+- Source and OTA version committed and pushed to `main` as `412bcd99b9f64020e04b11dca0b85a4977148a30`.
+- Android Preview OTA `2026.10.02`: [EAS group `44ce243c-dfe1-422f-8742-4680fd0b3f9f`](https://expo.dev/accounts/ishaqyusuf/projects/alghurobaa/updates/44ce243c-dfe1-422f-8742-4680fd0b3f9f); Android update `01a0fe9f-d026-7b6a-882f-b8377a852920`; runtime `1.0.111`.
+- Android export and publication succeeded with pinned EAS CLI `20.2.0` and the EAS Preview environment. Provider readback confirms the source commit, Preview branch, Android platform, and runtime. Installed-client uptake and clipboard behavior were not tested, as requested.
+- The active Expo session belonged to another account; the existing repository account runner authenticated the configured project owner before publication. No native rebuild or backend deployment was needed.

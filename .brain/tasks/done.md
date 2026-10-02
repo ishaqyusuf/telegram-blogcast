@@ -1,5 +1,8 @@
 # Done
 
+### [Transcript Copy Arabic Vowels](2026-10-02-transcript-copy-arabic-vowels.md)
+- Status: Done — Android Preview OTA published; tests skipped at user request
+
 ### [Audio Comment Keyboard Composer](2026-10-01-audio-comment-keyboard-composer.md)
 - Status: Done — Android keyboard layout verified; Preview OTA published
 
