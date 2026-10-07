@@ -24,8 +24,9 @@ In Progress
 
 ## Verification
 - Bun API bundle and local `/health` pass. A separate fresh Git archive install/build also passes after declaring `bcrypt-ts`, `dayjs`, and `dot-object` as actual shared utility dependencies; cloud installs use the frozen lockfile.
-- Eight API CORS and five-target release assurance tests pass; two Node release-source regressions pass.
-- `bun release status --preview` detects separate API, web, and Android obligations; provider plan verification is in progress.
+- Eight API CORS and five-target release assurance tests pass; four Node release-source/provider-output regressions pass.
+- `bun release status/plan --preview` detects separate API, web, and Android obligations and selects a new Android build because no finished Preview fingerprint matches.
+- Production API `https://alghurobaa-api.vercel.app` deployed at `d93eed96d` (full revision in provider metadata); public health, 168-channel database read, permitted web preflight, and unrelated-origin CORS rejection pass. The helper now reads explicit JSON CLI output, avoiding failure after a successful deployment.
 - New Vercel API project created and initial database connection configured. Additional backend credential transfer requires explicit approval after automatic review rejected the expanded local secret payload.
 - Automatic review rejected disabling Vercel SSO; protection remains enabled, with authenticated CLI checks planned for preview deployments.
 - Expo Preview remote `EXPO_PUBLIC_BASE_URL` and `EXPO_PUBLIC_TRPC_URL` updated to the standalone production API; `EXPO_PUBLIC_WEB_URL` stays on web for auth/media/discovery.

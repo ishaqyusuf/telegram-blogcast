@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { assertReleaseSource } from "./release-source.mjs";
+import { deploymentUrlFromOutput } from "./vercel-deployment-output.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
@@ -36,6 +37,7 @@ try {
 		[
 			"deploy",
 			"--yes",
+			"--format=json",
 			"--archive=tgz",
 			"--target",
 			production ? "production" : "preview",
@@ -56,11 +58,7 @@ try {
 	if (result.error) throw result.error;
 	if (result.status !== 0)
 		throw new Error("API deployment did not become Ready.");
-	const deploymentUrl = result.stdout
-		.trim()
-		.split(/\s+/)
-		.findLast((word) => /^https:\/\/[a-z0-9-]+\.vercel\.app$/.test(word));
-	if (!deploymentUrl) throw new Error("Vercel returned no deployment URL.");
+	const deploymentUrl = deploymentUrlFromOutput(result.stdout);
 	const metadata = JSON.parse(
 		execFileSync(
 			"vercel",
