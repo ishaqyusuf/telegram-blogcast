@@ -24,7 +24,7 @@ In Progress
 
 ## Verification
 - Bun API bundle and local `/health` pass. A separate fresh Git archive install/build also passes after declaring `bcrypt-ts`, `dayjs`, and `dot-object` as actual shared utility dependencies; cloud installs use the frozen lockfile.
-- Eight API CORS and five-target release assurance tests pass; five Node release-source/provider-output regressions pass.
+- Eight API CORS and five-target release assurance tests pass; six Node release-source/provider-output/CLI-selection regressions pass.
 - `bun release status/plan --preview` detects separate API, web, and Android obligations and selects a new Android build because no finished Preview fingerprint matches.
 - Production API `https://alghurobaa-api.vercel.app` deployed at `d93eed961c2d06df99eb68b63d5f20af39c4636c`; public health, 168-channel database read, permitted web preflight, and unrelated-origin CORS rejection pass. The helper reads explicit JSON CLI output, including Vercel's automatic agent envelope. Preview workflow verification is in progress.
 - New Vercel API project created. User approved the additional credential copy; nine existing database/Telegram/Blob/DeepSeek/Trigger variables are configured as encrypted Preview/Production project variables without displaying values. Redeployment with the approved credentials became Ready at `2adaef1c509082e9793a7d35ed0f9f1a80fa501b`; public health/database/CORS checks pass again.
@@ -33,3 +33,5 @@ In Progress
 - Scoped Expo lint passes; Android JavaScript/Hermes export succeeds. Repository-wide Expo typecheck has existing diagnostics (including test Bun types and older components); no diagnostics remain in the new search/scroll implementation.
 - User selected Preview for mobile publication. No mobile tests run.
 
+
+- Preview web became Ready at `ea4ae0693d8ecc314f06ceb50556b4c4e95ecfb2`. The operational workflow recorded its release tag, then caught Bun PATH selecting Vercel 44 instead of global 54. API helper now applies the kit's global-provider preference; resuming skips the completed web component.

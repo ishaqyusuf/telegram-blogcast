@@ -19,7 +19,7 @@ export default {
 		{
 			name: "api",
 			app: "apps/api",
-			paths: ["scripts/build-api-vercel.mjs", "scripts/deploy-api.mjs", "scripts/release-source.mjs", "scripts/vercel-deployment-output.mjs"],
+			paths: ["scripts/build-api-vercel.mjs", "scripts/deploy-api.mjs", "scripts/release-source.mjs", "scripts/vercel-deployment-output.mjs", "scripts/provider-cli.mjs"],
 			vercel: { team, projects: ["alghurobaa-api"] },
 			deploy: {
 				preview: "node scripts/deploy-api.mjs --preview --revision {sha}",

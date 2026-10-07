@@ -5,6 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { assertReleaseSource } from "./release-source.mjs";
 import { deploymentUrlFromOutput } from "./vercel-deployment-output.mjs";
+import { providerCli } from "./provider-cli.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
@@ -13,6 +14,7 @@ if (modes.length !== 1) throw new Error("Choose --preview or --production.");
 const production = modes[0] === "--production";
 const revision = args[args.indexOf("--revision") + 1];
 assertReleaseSource(root, revision);
+const vercel = providerCli("vercel");
 
 // Only committed files are uploaded. The root web project link and ignored
 // credentials/caches are never copied or relinked.
@@ -33,7 +35,7 @@ try {
 		}),
 	);
 	const result = spawnSync(
-		"vercel",
+		vercel,
 		[
 			"deploy",
 			"--yes",
@@ -61,7 +63,7 @@ try {
 	const deploymentUrl = deploymentUrlFromOutput(result.stdout);
 	const metadata = JSON.parse(
 		execFileSync(
-			"vercel",
+			vercel,
 			[
 				"api",
 				`/v13/deployments/${new URL(deploymentUrl).hostname}?teamId=team_BV5rgKHJH4fMyFL1YfscZIZK`,
@@ -82,7 +84,7 @@ try {
 	}
 	const health = JSON.parse(
 		execFileSync(
-			"vercel",
+			vercel,
 			[
 				"curl",
 				"/health",
