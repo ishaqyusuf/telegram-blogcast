@@ -1,6 +1,12 @@
 # Release assurance runbook
 
-## Before activation
+## Operational releases
+
+Use `bun release status|plan --preview` and `bun release --preview` for the shared operational flow. Main defaults to Production. `--only api,web,mobile-android` scopes a release without claiming other components were deployed. Prepare and commit `UPDATE_VERSION` before execution. The standalone API command is `bun run api:deploy --revision <full HEAD SHA>`; Preview uses `api:preview:deploy`. Both require a clean tree and preserve the root web link. Protected Preview health checks use `vercel curl`; Production also checks its public API origin. Mobile device/emulator testing is excluded for the October 7 task at the user's request.
+
+Database and jobs currently have no isolated Preview targets. Preview mobile continues to share production data; API/web preview deployments do not establish end-to-end isolation.
+
+## Before assurance activation
 
 1. Create protected GitHub `preview` and `production` environments with
    separate `ALGHUROBAA_RELEASE_EVIDENCE_ENVELOPE` and HMAC-key secrets.

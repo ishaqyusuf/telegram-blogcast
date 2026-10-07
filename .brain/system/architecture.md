@@ -16,8 +16,8 @@ Documents the main architectural decisions, runtime boundaries, and integration 
 - Server surface: Hono API with tRPC routers and REST helpers.
 - Persistence: Prisma models targeting PostgreSQL.
 - Release assurance uses a committed, SHA-pinned release-only toolkit snapshot
-  under `.release/toolkit/`. The root manifest tracks PostgreSQL/Prisma, the
-  combined Next.js web/API Vercel project, Android Expo delivery, and Trigger
+  under `.release/toolkit/`. Operational deployments use the sibling local-infra-kit component flow from `release.config.ts`; see [the standalone API ADR](../decisions/2026-10-07-component-release-and-standalone-api.md). The root manifest tracks PostgreSQL/Prisma, the
+  independent Hono API and Next.js web Vercel projects, Android Expo delivery, and Trigger
   jobs for Preview and Production. Protected CI verifies signed exact-revision
   provider evidence and performs no hosted writes. See
   [the release ADR](../decisions/2026-09-26-release-assurance-provider-evidence-boundary.md).

@@ -5,17 +5,47 @@
 		{
 			"id": "database",
 			"kind": "database",
-			"environments": ["preview", "production"],
+			"environments": [
+				"preview",
+				"production"
+			],
 			"sourcePaths": [
 				"packages/db/src/schema/**/*.prisma",
 				"packages/db/prisma.config.ts"
 			],
-			"impactTargets": ["web", "jobs"]
+			"impactTargets": [
+				"api",
+				"web",
+				"jobs"
+			]
+		},
+		{
+			"id": "api",
+			"kind": "web",
+			"environments": [
+				"preview",
+				"production"
+			],
+			"sourcePaths": [
+				"apps/api/**",
+				"packages/**",
+				"scripts/build-api-vercel.mjs",
+				"scripts/deploy-api.mjs",
+				"package.json",
+				"bun.lock",
+				"turbo.json"
+			],
+			"prerequisites": [
+				"database"
+			]
 		},
 		{
 			"id": "web",
 			"kind": "web",
-			"environments": ["preview", "production"],
+			"environments": [
+				"preview",
+				"production"
+			],
 			"sourcePaths": [
 				"apps/www/**",
 				"apps/api/**",
@@ -25,12 +55,17 @@
 				"bun.lock",
 				"turbo.json"
 			],
-			"prerequisites": ["database"]
+			"prerequisites": [
+				"database"
+			]
 		},
 		{
 			"id": "mobile",
 			"kind": "mobile",
-			"environments": ["preview", "production"],
+			"environments": [
+				"preview",
+				"production"
+			],
 			"sourcePaths": [
 				"apps/expo-app/**",
 				"apps/api/src/trpc/**",
@@ -53,12 +88,18 @@
 				"bun.lock",
 				"patches/**"
 			],
-			"prerequisites": ["web"]
+			"prerequisites": [
+				"api",
+				"web"
+			]
 		},
 		{
 			"id": "jobs",
 			"kind": "jobs",
-			"environments": ["preview", "production"],
+			"environments": [
+				"preview",
+				"production"
+			],
 			"sourcePaths": [
 				"packages/jobs/**",
 				"packages/db/**",
@@ -68,7 +109,9 @@
 				"bun.lock",
 				"turbo.json"
 			],
-			"prerequisites": ["database"]
+			"prerequisites": [
+				"database"
+			]
 		}
 	]
 }

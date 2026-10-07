@@ -1,8 +1,9 @@
 import { access, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { assertReleaseSource } from "./release-source.mjs";
 
-type Operation = "build" | "update";
+type Operation = "build" | "update" | "auth";
 type Target = "dev" | "preview" | "prod";
 type Action =
   | "build:dev"
@@ -33,13 +34,15 @@ const TARGET_PROFILES: Record<Target, string> = {
 const operation = process.argv[2] as Operation | undefined;
 const actionArgs = process.argv.slice(3);
 
-if (!operation || !["build", "update"].includes(operation)) {
+if (!operation || !["build", "update", "auth"].includes(operation)) {
   console.error(getUsage());
   process.exit(1);
 }
 
-const target = resolveTarget(operation, actionArgs);
-const action = `${operation}:${target}` as Action;
+const target = operation === "auth"
+  ? process.env.RELEASE_ENV === "production" ? "prod" : "preview"
+  : resolveTarget(operation, actionArgs);
+const action = `${operation === "auth" ? "update" : operation}:${target}` as Action;
 const env = await loadEnvFiles({ ...Bun.env }, [
   path.join(REPO_DIR, ".env"),
   path.join(REPO_DIR, ".env.local"),
@@ -50,6 +53,10 @@ delete env.EXPO_TOKEN;
 
 const account = resolveAccount(action, env, actionArgs);
 const forwardedArgs = getForwardedArgs(actionArgs);
+const expectedIndex = actionArgs.indexOf("--expected-commit");
+if (expectedIndex >= 0) {
+  assertReleaseSource(REPO_DIR, actionArgs[expectedIndex + 1]);
+}
 
 const desiredIdentifiers = new Set(
   [account.login.toLowerCase(), account.username?.toLowerCase()].filter(Boolean),
@@ -78,6 +85,20 @@ if (
   const session = await loginWithEmailAndPassword(account.login, account.password);
   await writeExpoSession(session);
   console.log(`Authenticated EAS session as ${session.username}.`);
+}
+
+if (operation === "auth") process.exit(0);
+
+// Hosted releases must never inherit the development .env public URLs/variant.
+if (target !== "dev") {
+  for (const key of Object.keys(env)) {
+    if (key.startsWith("EXPO_PUBLIC_")) delete env[key];
+  }
+  const profiles = JSON.parse(await readFile(path.join(APP_DIR, "eas.json"), "utf8"));
+  Object.assign(env, profiles.build[TARGET_PROFILES[target]].env);
+  env.EXPO_NO_DOTENV = "1";
+  env.SENTRY_DISABLE_AUTO_UPLOAD = "true";
+  env.APP_VARIANT = target === "prod" ? "production" : "preview";
 }
 
 await runOrExit([...getActionCommand(operation, target), ...forwardedArgs], {
@@ -169,8 +190,6 @@ function getActionCommand(operation: Operation, target: Target): string[] {
     return [
       "eas",
       "build",
-      "--platform",
-      "android",
       "--profile",
       TARGET_PROFILES[target],
     ];
@@ -205,6 +224,11 @@ function getForwardedArgs(args: string[]): string[] {
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
 
+    if (arg === "--expected-commit" && operation === "build") {
+      index += 1;
+      continue;
+    }
+
     if (arg === "--account" || arg === "-a") {
       index += 1;
       continue;
@@ -221,6 +245,9 @@ function getForwardedArgs(args: string[]): string[] {
     forwardedArgs.push(arg);
   }
 
+  if (operation === "build" && !forwardedArgs.includes("--platform") && !forwardedArgs.includes("-p")) {
+    forwardedArgs.push("--platform", "android");
+  }
   return forwardedArgs;
 }
 

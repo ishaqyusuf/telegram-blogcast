@@ -4,6 +4,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { assertReleaseSource } from "../../../scripts/release-source.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const appRoot = resolve(__dirname, "..");
@@ -18,6 +19,8 @@ function parseArgs(argv) {
     dryRun: false,
     skipPublish: false,
     target: null,
+    expectedCommit: null,
+    platform: "android",
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -39,6 +42,14 @@ function parseArgs(argv) {
       args.date = argv[index + 1];
       if (!args.date) throw new Error("Missing value for --date.");
       index += 1;
+    } else if (arg === "--expected-commit") {
+      args.expectedCommit = argv[++index];
+      if (!args.expectedCommit) throw new Error("Missing --expected-commit value.");
+    } else if (arg === "--platform" || arg === "-p") {
+      args.platform = argv[++index];
+      if (args.platform !== "android") throw new Error("Only Android releases are configured.");
+    } else {
+      throw new Error(`Unknown update argument: ${arg}`);
     }
   }
 
@@ -118,12 +129,22 @@ function publishUpdate(nextVersion, target) {
     environment,
     "--message",
     `OTA update ${nextVersion}`,
+    "--non-interactive",
   ]);
-  run("npx", ["sentry-expo-upload-sourcemaps", "dist"]);
+  if (process.env.SENTRY_AUTH_TOKEN && process.env.SENTRY_DISABLE_AUTO_UPLOAD !== "true") {
+    run("npx", ["sentry-expo-upload-sourcemaps", "dist"]);
+  }
 }
 
 function main() {
   const args = parseArgs(process.argv.slice(2));
+  if (args.expectedCommit) {
+    assertReleaseSource(resolve(appRoot, "../.."), args.expectedCommit);
+    const { version } = readCurrentVersion();
+    // The version must be prepared and committed before component release.
+    publishUpdate(version, args.target);
+    return;
+  }
   if (args.current && !args.dryRun) {
     throw new Error("--current is only supported with --dry-run.");
   }

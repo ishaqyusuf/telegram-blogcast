@@ -4,7 +4,7 @@
     "dev": "NODE_ENV=development TZ=UTC PORT=3006 bun run --hot src/index.ts",
     "dev:node": "tsx src/node.ts",
     "--build": "bun-vercel ./src/bun.ts",
-    "build": "./bun-vercel/build.sh ./src/bun.ts",
+    "build": "node ../../scripts/build-api-vercel.mjs",
     "deploy:vc": "vc",
     "start": "node ./dist/src/index.js",
     "lint": "biome check .",

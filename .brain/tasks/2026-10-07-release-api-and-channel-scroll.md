@@ -1,0 +1,28 @@
+# Release orchestration, standalone API, and channel scrolling
+
+## Status
+In Progress
+
+## Dates
+- Created: 2026-10-07
+- Updated: 2026-10-07
+
+## Scope and phases
+1. Compare GND, Halaalvest (`halaal-coperative`), and EwaTrade release implementations; integrate their shared `local-infra-kit` component release command.
+2. Deploy `apps/api` as a separate Vercel project, preserve web-owned media/auth/local-discovery services, update Expo's hosted API URLs, and verify release execution.
+3. Add search to channel sync/list surfaces and use the existing scroll chrome to hide the pinned audio bar across scrollable screens.
+4. Verify builds, API and release behavior, review changes, and reconcile Brain docs. Mobile device/emulator/UI tests are explicitly excluded by the user for this task.
+
+## Progress
+- Reference comparison complete: all three use `release.config.ts` and `local-infra-kit/bin/infra.ts release`; the existing vendored assurance tooling is a separate verification-only flow.
+- Existing API source is hosted inside Next.js; its old standalone Bun custom-runtime build requires Docker and needs replacement for independent hosting.
+- Working tree was clean at task start.
+
+## Verification
+- Bun API bundle and local `/health` pass.
+- Eight API CORS and five-target release assurance tests pass; two Node release-source regressions pass.
+- `bun release status --preview` detects separate API, web, and Android obligations; provider plan verification is in progress.
+- New Vercel API project created and initial database connection configured. Additional backend credential transfer requires explicit approval after automatic review rejected the expanded local secret payload.
+- Automatic review rejected disabling Vercel SSO; protection remains enabled, with authenticated CLI checks planned for preview deployments.
+- User selected Preview for mobile publication. No mobile tests run.
+

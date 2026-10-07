@@ -1,7 +1,7 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import type { Context } from "./rest/types";
 import { secureHeaders } from "hono/secure-headers";
-import { cors } from "hono/cors";
+import { apiCors } from "./api-cors";
 import { trpcServer } from "@hono/trpc-server";
 import { appRouter } from "./trpc/routers/_app";
 import { createTRPCContext } from "./trpc/init";
@@ -57,24 +57,7 @@ function isWorkerAuthorized(c: any) {
 }
 
 app.use(secureHeaders());
-if (process.env.NODE_ENV === "development")
-  app.use(
-    "/api/trpc/*",
-    cors({
-      // origin: process.env.ALLOWED_API_ORIGINS?.split(",") ?? [],
-      origin: "*",
-      allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-      allowHeaders: [
-        "Authorization",
-        "content-type",
-        "accept-language",
-        "x-book-import-token",
-        "Access-Control-Allow-Origin",
-      ],
-      exposeHeaders: ["Content-Length"],
-      maxAge: 86400,
-    }),
-  );
+app.use("/api/trpc/*", apiCors());
 app.use("/api/trpc/*", async (c) => {
   const res = fetchRequestHandler({
     router: appRouter,

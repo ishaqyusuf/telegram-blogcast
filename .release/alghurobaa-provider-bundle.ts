@@ -84,6 +84,13 @@ export type AlghurobaaProviderBundle = {
 
 export const WEB_TARGETS: VercelWebTarget[] = [
 	{
+		targetId: "api",
+		projectId: "prj_ScB6lVbLlEKjp5RHVXnqG6dac5Tw",
+		teamId: "team_BV5rgKHJH4fMyFL1YfscZIZK",
+		productionDomain: "alghurobaa-api.vercel.app",
+		dbGateCheckName: "release-assurance-production",
+	},
+	{
 		targetId: "web",
 		projectId: "prj_hzQU6ksZjPzQe2x5Gvf7zlVYrKki",
 		teamId: "team_BV5rgKHJH4fMyFL1YfscZIZK",

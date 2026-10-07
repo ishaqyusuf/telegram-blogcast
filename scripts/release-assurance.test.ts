@@ -77,10 +77,17 @@ function bundle(
 	const fingerprints = {
 		database: { kind: "schema" as const, value: "1".repeat(64) },
 		web: { kind: "configuration" as const, value: "2".repeat(64) },
+		api: { kind: "configuration" as const, value: "5".repeat(64) },
 		mobile: { kind: "native" as const, value: "3".repeat(64) },
 		jobs: { kind: "configuration" as const, value: "4".repeat(64) },
 	};
 	const descriptors = [
+		{
+			targetId: "api",
+			targetKind: "web" as const,
+			action: "web-deploy" as const,
+			provider: "vercel",
+		},
 		{
 			targetId: "database",
 			targetKind: "database" as const,
@@ -185,11 +192,12 @@ function bundle(
 }
 
 describe("Alghurobaa release manifest", () => {
-	test("maps the four owned deployment surfaces and database ordering", () => {
+	test("maps the five owned deployment surfaces and database ordering", () => {
 		const releaseManifest = manifest();
 		expect(() => validateReleaseManifest(releaseManifest)).not.toThrow();
 		expect(releaseManifest.targets.map((target) => target.id)).toEqual([
 			"database",
+			"api",
 			"web",
 			"mobile",
 			"jobs",
@@ -222,6 +230,7 @@ describe("Alghurobaa release manifest", () => {
 		});
 		expect(plan.actions.map((action) => action.targetId)).toEqual([
 			"database",
+			"api",
 			"web",
 			"jobs",
 		]);
@@ -309,7 +318,7 @@ describe("Alghurobaa signed provider gate", () => {
 				toolkitRevision,
 			});
 			expect(report.ready).toBe(true);
-			expect(report.targets).toHaveLength(4);
+			expect(report.targets).toHaveLength(5);
 			expect(
 				report.targets.every(
 					(target) =>

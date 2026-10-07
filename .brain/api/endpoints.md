@@ -11,7 +11,8 @@ High-level map of the API surface and where endpoint logic lives.
 ## Template
 
 ### Primary API Surface
-- `apps/api` is the main backend application.
+- `apps/api` is the main backend application, independently hosted by Vercel project `alghurobaa-api` at `https://alghurobaa-api.vercel.app`. The first hosted verification is pending in the [release task](../tasks/2026-10-07-release-api-and-channel-scroll.md).
+- `GET /health` is the deployment reachability check; tRPC retains `/api/trpc/*`. Better Auth, Blob upload tokens, Telegram file proxy, and local-gateway discovery remain web-owned.
 - tRPC routers live under `apps/api/src/trpc/routers`.
 - Additional server query logic lives under `apps/api/src/queries`.
 
