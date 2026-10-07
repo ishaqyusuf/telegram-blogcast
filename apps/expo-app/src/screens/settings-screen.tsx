@@ -1,3 +1,4 @@
+import { ScrollView } from "@/components/ui/scroll-surfaces";
 import { SafeArea } from "@/components/safe-area";
 import { useLocalServicesSession } from "@/components/local-services";
 import { Icon } from "@/components/ui/icon";
@@ -24,13 +25,7 @@ import { useAppSettingsStore } from "@/store/app-settings-store";
 import * as Haptics from "expo-haptics";
 import { type Href, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { ActivityIndicator, Text, TextInput, View } from "react-native";
 
 const LANGUAGES: AppLanguage[] = ["en", "ar"];
 

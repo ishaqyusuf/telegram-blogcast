@@ -16,6 +16,7 @@ Tracks the current blog-reading experience and blog-related discovery surfaces.
 - Status: Active.
 
 ### Current Capabilities
+- Channel sync and Channels support live search by title or username, including optional `@`, case-insensitive multiword matching and accent normalization. Clearing search restores the full list. Sync controls scroll with the list and are hidden during a non-empty search so results remain accessible; mutations retain original channel IDs and the full source list.
 - Blog list and detail views
 - Mobile content queries persist a bounded, environment-scoped snapshot for feed, audio detail, albums, album tracks, and channels. Disk hydration precedes query mounting, and failed background refreshes keep readable cached content.
 - Home restores its selected category, loaded pages, and saved scroll offset. Focus/reconnect checks stage newly visible posts behind a top-center “New updates” action, preserving older loaded pages and pagination until the user applies them.

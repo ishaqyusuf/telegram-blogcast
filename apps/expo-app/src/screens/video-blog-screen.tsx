@@ -1,3 +1,4 @@
+import { ScrollView } from "@/components/ui/scroll-surfaces";
 import {
 	type CommentsSheetState,
 	useCommentsState,
@@ -25,20 +26,7 @@ import { getLargeMediaExternalMedia } from "@acme/blog/facebook-media";
 import { type AVPlaybackStatus, ResizeMode, Video } from "expo-av";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-	ActivityIndicator,
-	Alert,
-	Image,
-	KeyboardAvoidingView,
-	Linking,
-	Modal,
-	Platform,
-	ScrollView,
-	Share,
-	Text,
-	TouchableWithoutFeedback,
-	View,
-} from "react-native";
+import { ActivityIndicator, Alert, Image, KeyboardAvoidingView, Linking, Modal, Platform, Share, Text, TouchableWithoutFeedback, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type BlogMedia = {

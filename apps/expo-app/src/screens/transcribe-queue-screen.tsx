@@ -1,14 +1,7 @@
+import { ScrollView } from "@/components/ui/scroll-surfaces";
 import { useRouter } from "expo-router";
 import { useCallback, useMemo, useRef, useState } from "react";
-import {
-	ActivityIndicator,
-	Alert,
-	RefreshControl,
-	ScrollView,
-	Text,
-	View,
-	useWindowDimensions,
-} from "react-native";
+import { ActivityIndicator, Alert, RefreshControl, Text, View, useWindowDimensions } from "react-native";
 import ReanimatedSwipeable, {
 	SwipeDirection,
 } from "react-native-gesture-handler/ReanimatedSwipeable";

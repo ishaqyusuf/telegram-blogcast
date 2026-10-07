@@ -17,6 +17,10 @@ In Progress
 - Reference comparison complete: all three use `release.config.ts` and `local-infra-kit/bin/infra.ts release`; the existing vendored assurance tooling is a separate verification-only flow.
 - Existing API source is hosted inside Next.js; its old standalone Bun custom-runtime build requires Docker and needs replacement for independent hosting.
 - Working tree was clean at task start.
+- Standalone Hono/Bun deployment, clean-revision archive helper, component config, and separate Expo API/web origins implemented.
+- Channel sync/list search and shared focused-screen scroll surfaces implemented. Existing scroll-chrome screens retain their handlers.
+- Production API deployment explicitly approved; mobile target remains Preview.
+- Cloud scoped install completed; Prisma CLI resolution fixed by pinning the API build dependency to 7.7.0 and resolving the installed executable.
 
 ## Verification
 - Bun API bundle and local `/health` pass.
@@ -24,5 +28,7 @@ In Progress
 - `bun release status --preview` detects separate API, web, and Android obligations; provider plan verification is in progress.
 - New Vercel API project created and initial database connection configured. Additional backend credential transfer requires explicit approval after automatic review rejected the expanded local secret payload.
 - Automatic review rejected disabling Vercel SSO; protection remains enabled, with authenticated CLI checks planned for preview deployments.
+- Expo Preview remote `EXPO_PUBLIC_BASE_URL` and `EXPO_PUBLIC_TRPC_URL` updated to the standalone production API; `EXPO_PUBLIC_WEB_URL` stays on web for auth/media/discovery.
+- Scoped Expo lint passes; Android JavaScript/Hermes export succeeds. Repository-wide Expo typecheck has existing diagnostics (including test Bun types and older components); no diagnostics remain in the new search/scroll implementation.
 - User selected Preview for mobile publication. No mobile tests run.
 

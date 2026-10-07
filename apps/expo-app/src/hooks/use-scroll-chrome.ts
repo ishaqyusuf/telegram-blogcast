@@ -1,6 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useFocusEffect, useIsFocused } from "@react-navigation/native";
+import { useCallback, useId, useRef, useState } from "react";
 
 import { useGlobalAudioBarStore } from "@/store/global-audio-bar-store";
+
+type ScrollPositionEvent = { nativeEvent: { contentOffset: { y: number } } };
 
 const HIDE_THRESHOLD = 28;
 const SHOW_THRESHOLD = -18;
@@ -13,8 +16,17 @@ type ScrollTarget = {
 
 export function useScrollChrome<T extends ScrollTarget>() {
 	const ref = useRef<T | null>(null);
-	const setGlobalAudioBarScrollHidden = useGlobalAudioBarStore(
+	const isFocused = useIsFocused();
+	const ownerId = useId();
+	const setScrollHidden = useGlobalAudioBarStore(
 		(state) => state.setScrollHidden,
+	);
+	const setGlobalAudioBarScrollHidden = useCallback(
+		(hidden: boolean) => {
+			if (hidden && !isFocused) return;
+			setScrollHidden(hidden, ownerId);
+		},
+		[isFocused, ownerId, setScrollHidden],
 	);
 	const [showScrollTop, setShowScrollTop] = useState(false);
 	const lastScrollYRef = useRef(0);
@@ -22,7 +34,8 @@ export function useScrollChrome<T extends ScrollTarget>() {
 	const audioBarScrollHiddenRef = useRef(false);
 
 	const onScroll = useCallback(
-		(event: any) => {
+		(event: ScrollPositionEvent) => {
+			if (!isFocused) return;
 			const currentY = event.nativeEvent.contentOffset?.y ?? 0;
 			const deltaY = currentY - lastScrollYRef.current;
 			lastScrollYRef.current = currentY;
@@ -64,7 +77,7 @@ export function useScrollChrome<T extends ScrollTarget>() {
 				setGlobalAudioBarScrollHidden(false);
 			}
 		},
-		[setGlobalAudioBarScrollHidden],
+		[isFocused, setGlobalAudioBarScrollHidden],
 	);
 
 	const scrollToTop = useCallback(() => {
@@ -77,16 +90,22 @@ export function useScrollChrome<T extends ScrollTarget>() {
 		target.scrollTo?.({ y: 0, animated: true });
 	}, []);
 
-	useEffect(() => {
-		return () => {
+	useFocusEffect(
+		useCallback(() => {
+			lastScrollYRef.current = 0;
+			scrollDeltaAccumulatorRef.current = 0;
 			audioBarScrollHiddenRef.current = false;
-			setGlobalAudioBarScrollHidden(false);
-		};
-	}, [setGlobalAudioBarScrollHidden]);
+			return () => {
+				audioBarScrollHiddenRef.current = false;
+				setGlobalAudioBarScrollHidden(false);
+			};
+		}, [setGlobalAudioBarScrollHidden]),
+	);
 
 	return {
 		ref,
 		onScroll,
+		setAudioBarScrollHidden: setGlobalAudioBarScrollHidden,
 		scrollToTop,
 		showScrollTop,
 		scrollEventThrottle: 16,

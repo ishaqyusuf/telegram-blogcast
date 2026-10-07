@@ -152,9 +152,7 @@ export default function BlogHomeScreen() {
   const { t } = useTranslation();
   const colors = useColors();
   const feedScroll = useScrollChrome<any>();
-  const setGlobalAudioBarScrollHidden = useGlobalAudioBarStore(
-    (s) => s.setScrollHidden,
-  );
+  const setGlobalAudioBarScrollHidden = feedScroll.setAudioBarScrollHidden;
   const setGlobalAudioBarHidden = useGlobalAudioBarStore((s) => s.setHidden);
   const lastScrollYRef = useRef(0);
   const scrollDeltaAccumulatorRef = useRef(0);

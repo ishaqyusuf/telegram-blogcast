@@ -1,3 +1,4 @@
+import { ScrollView } from "@/components/ui/scroll-surfaces";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import { Pressable } from "@/components/ui/pressable";
@@ -13,17 +14,7 @@ import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { useBookFetchBrowserStore } from "@/store/book-fetch-browser-store";
 import { useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Clipboard,
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { ActivityIndicator, Clipboard, Image, KeyboardAvoidingView, Platform, Text, TextInput, View } from "react-native";
 
 type SyncResult = {
   book: {

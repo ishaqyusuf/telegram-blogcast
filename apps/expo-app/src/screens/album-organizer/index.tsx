@@ -1,3 +1,4 @@
+import { FlatList, ScrollView } from "@/components/ui/scroll-surfaces";
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";
@@ -11,16 +12,7 @@ import {
 import type { RouterOutputs } from "@api/trpc/routers/_app";
 import { type Href, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import {
-	ActivityIndicator,
-	Alert,
-	FlatList,
-	RefreshControl,
-	ScrollView,
-	Text,
-	TextInput,
-	View,
-} from "react-native";
+import { ActivityIndicator, Alert, RefreshControl, Text, TextInput, View } from "react-native";
 
 type Channel = RouterOutputs["channel"]["getChannels"][number];
 type AlbumIndexRun = RouterOutputs["album"]["getAutomaticIndexRun"];

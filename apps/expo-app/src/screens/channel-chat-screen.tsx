@@ -1,3 +1,4 @@
+import { LegendList } from "@/components/ui/scroll-surfaces";
 import { Pressable } from "@/components/ui/pressable";
 import { formatDate } from "@acme/utils/dayjs";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
@@ -18,7 +19,7 @@ import ReanimatedSwipeable, {
   SwipeDirection,
 } from "react-native-gesture-handler/ReanimatedSwipeable";
 import type { SharedValue } from "react-native-reanimated";
-import { LegendList } from "@legendapp/list";
+
 
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";

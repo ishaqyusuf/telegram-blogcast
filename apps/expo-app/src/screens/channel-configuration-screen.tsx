@@ -1,3 +1,4 @@
+import { FlatList } from "@/components/ui/scroll-surfaces";
 import { FloatingBottomSheet } from "@/components/ui/floating-bottom-sheet";
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
@@ -14,12 +15,7 @@ import {
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  FlatList,
-  Text,
-  View,
-} from "react-native";
+import { ActivityIndicator, Text, View } from "react-native";
 
 const CONTENT_TYPES = [
   { value: "text", labelKey: "text", icon: "FilePenLine" },

@@ -1,3 +1,4 @@
+import { FlatList, ScrollView } from "@/components/ui/scroll-surfaces";
 import { BookCard } from "@/components/book/book-card";
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
@@ -8,7 +9,7 @@ import { useTranslation } from "@/lib/i18n";
 import { useQuery } from "@/lib/react-query";
 import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
-import { FlatList, ScrollView, Text, TextInput, View } from "react-native";
+import { Text, TextInput, View } from "react-native";
 
 export default function LibraryScreen() {
   const router = useRouter();

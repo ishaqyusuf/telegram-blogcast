@@ -1,3 +1,6 @@
+import { ChannelSearchInput } from "@/components/channel-search-input";
+import { filterChannels } from "@/lib/channel-search";
+import { FlatList } from "@/components/ui/scroll-surfaces";
 import { _qc, _trpc } from "@/components/static-trpc";
 import { SafeArea } from "@/components/safe-area";
 import { useLocalServicesSession } from "@/components/local-services";
@@ -11,14 +14,8 @@ import {
 } from "@/lib/local-services-session";
 import { useAppSettingsStore } from "@/store/app-settings-store";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  FlatList,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, Text, TextInput, View } from "react-native";
 
 type ChannelRow = {
   id: number;
@@ -62,6 +59,8 @@ export default function BlogImportScreen() {
   >("idle");
   const [message, setMessage] = useState("");
   const [channels, setChannels] = useState<ChannelRow[]>([]);
+  const [channelSearch, setChannelSearch] = useState("");
+  const filteredChannels = useMemo(() => filterChannels(channels, channelSearch), [channels, channelSearch]);
   const [fetcherState, setFetcherState] = useState<FetcherState | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [attemptLabel, setAttemptLabel] = useState("");
@@ -256,10 +255,7 @@ export default function BlogImportScreen() {
   }
 
   return (
-    <View
-      className="flex-1 bg-background"
-      style={{ backgroundColor: colors.background }}
-    >
+    <View className="flex-1 bg-background">
       <SafeArea>
         <View className="flex-row items-center gap-3 px-4 py-3">
           <Pressable
@@ -281,6 +277,13 @@ export default function BlogImportScreen() {
           </Pressable>
         </View>
 
+        <ChannelSearchInput value={channelSearch} onChangeText={setChannelSearch} />
+        <FlatList
+          style={{ backgroundColor: colors.background }}
+          data={filteredChannels}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          ListHeaderComponent={channelSearch.trim() ? null : (
         <View className="gap-3 border-b border-border px-4 pb-4">
           <Text className="text-xs font-semibold uppercase text-muted-foreground">
             Local API
@@ -370,7 +373,7 @@ export default function BlogImportScreen() {
 
           <View className="gap-2 rounded-xl border border-border bg-card p-3">
             <View className="flex-row items-center gap-2">
-              <Icon name="Link" size={16} className="text-muted-foreground" />
+              <Icon name="Headphones" size={16} className="text-muted-foreground" />
               <Text className="text-xs font-semibold uppercase text-muted-foreground">
                 Audio link
               </Text>
@@ -483,18 +486,17 @@ export default function BlogImportScreen() {
             </Pressable>
           </View>
         </View>
-
-        <FlatList
-          style={{ backgroundColor: colors.background }}
-          data={channels}
+          )}
           keyExtractor={(item) => String(item.id)}
-          contentContainerClassName="px-4 py-3 pb-8"
+          contentContainerClassName="py-3 pb-8"
           ListEmptyComponent={
             <View className="items-center justify-center py-16">
               <Icon name="Radio" size={42} className="text-muted-foreground" />
               <Text className="mt-3 text-sm text-muted-foreground">
-                {status === "online"
-                  ? "No channels yet. Sync channels first."
+                {channelSearch.trim()
+                  ? "No channels match your search."
+                  : status === "online"
+                  ? "No channels yet. Discover channels first."
                   : "Connect to local API first."}
               </Text>
             </View>
@@ -504,7 +506,7 @@ export default function BlogImportScreen() {
               busyAction === `start-${item.id}` ||
               busyAction === `toggle-${item.id}`;
             return (
-              <View className="mb-2 rounded-xl bg-card p-3">
+              <View className="mx-4 mb-2 rounded-xl bg-card p-3">
                 <View className="mb-3 flex-row items-center gap-3">
                   <View className="size-10 items-center justify-center rounded-full bg-muted">
                     <Icon

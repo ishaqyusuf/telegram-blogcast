@@ -16,6 +16,7 @@ Tracks important request/response expectations and typed boundaries between clie
 - Client integrations in `apps/expo-app/src/lib/trpc.ts`, `apps/expo-app/src/trpc`, and `apps/www/src/trpc`
 
 ### Expectations
+- Hosted Expo API/tRPC requests target `https://alghurobaa-api.vercel.app`; web remains a separate `EXPO_PUBLIC_WEB_URL` for Better Auth, media proxy/upload, and local-service discovery. The API keeps `/api/trpc/*` and existing typed inputs/outputs. Preview currently shares production data.
 - Prefer schema-validated inputs at API boundaries.
 - Preserve typed client/server alignment when changing router outputs.
 - Document breaking changes that require coordinated app updates.

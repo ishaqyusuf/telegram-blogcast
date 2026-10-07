@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -10,7 +11,8 @@ function run(args, cwd) {
 }
 
 // Generate on every build; Turbo's cached dist cannot restore Prisma's client.
-run(["x", "prisma", "generate"], resolve(root, "packages/db"));
+const require = createRequire(resolve(root, "apps/api/package.json"));
+run([require.resolve("prisma/build/index.js"), "generate"], resolve(root, "packages/db"));
 run(
 	[
 		"build",

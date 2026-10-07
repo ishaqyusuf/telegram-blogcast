@@ -1,3 +1,4 @@
+import { FlatList } from "@/components/ui/scroll-surfaces";
 import { Pressable } from "@/components/ui/pressable";
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
@@ -6,14 +7,7 @@ import { useColors } from "@/hooks/use-color";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { useRouter } from "expo-router";
 import { useState } from "react";
-import {
-  ActivityIndicator,
-  FlatList,
-  Modal,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { ActivityIndicator, Modal, Text, TextInput, View } from "react-native";
 
 export default function PlaylistsScreen() {
   const router = useRouter();

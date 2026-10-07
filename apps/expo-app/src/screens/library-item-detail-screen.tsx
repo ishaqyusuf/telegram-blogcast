@@ -1,3 +1,4 @@
+import { ScrollView } from "@/components/ui/scroll-surfaces";
 import { BookCard } from "@/components/book/book-card";
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
@@ -9,14 +10,7 @@ import { useQuery, useQueryClient } from "@/lib/react-query";
 import { vanillaTrpc } from "@/trpc/vanilla-client";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { ActivityIndicator, Alert, Text, TextInput, View } from "react-native";
 
 export default function LibraryItemDetailScreen() {
   const { itemId } = useLocalSearchParams<{ itemId: string }>();

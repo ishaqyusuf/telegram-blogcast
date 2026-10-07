@@ -1,10 +1,11 @@
+import { ScrollView } from "@/components/ui/scroll-surfaces";
 import { Pressable } from "@/components/ui/pressable";
 import { Icon } from "@/components/ui/icon";
 import { useAuthContext } from "@/hooks/use-auth";
 import { useColors } from "@/hooks/use-color";
 import { withAlpha } from "@/lib/theme";
 import React from "react";
-import { View, Text, Animated } from "react-native";
+import { View, Text } from "react-native";
 
 /**
  * AccessUnavailableScreen
@@ -17,7 +18,7 @@ export default function AccessUnavailableScreen() {
   const colors = useColors();
 
   return (
-    <Animated.ScrollView style={{ backgroundColor: colors.background }}>
+    <ScrollView style={{ backgroundColor: colors.background }}>
       <View
         className="flex min-h-screen w-full flex-col items-center justify-center bg-background px-6 py-12 text-center selection:bg-primary/20"
         style={{ backgroundColor: colors.background }}
@@ -126,6 +127,6 @@ export default function AccessUnavailableScreen() {
           </Pressable>
         </View>
       </View>
-    </Animated.ScrollView>
+    </ScrollView>
   );
 }

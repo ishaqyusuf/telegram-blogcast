@@ -1,5 +1,6 @@
+import { FlatList } from "@/components/ui/scroll-surfaces";
 import { useCallback, useState } from "react";
-import { ActivityIndicator, FlatList, Text, View } from "react-native";
+import { ActivityIndicator, Text, View } from "react-native";
 import { useNetInfo } from "@react-native-community/netinfo";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { SafeArea } from "@/components/safe-area";

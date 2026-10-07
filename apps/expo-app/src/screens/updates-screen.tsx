@@ -1,3 +1,4 @@
+import { ScrollView } from "@/components/ui/scroll-surfaces";
 import { Icon } from "@/components/ui/icon";
 import { useOtaRouteRestoration } from "@/components/ota-route-restoration-provider";
 import { Pressable } from "@/components/ui/pressable";
@@ -7,7 +8,7 @@ import config from "@root/app.config";
 import { useRouter } from "expo-router";
 import * as Updates from "expo-updates";
 import { useCallback, useMemo, useState } from "react";
-import { ActivityIndicator, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Text, View } from "react-native";
 
 type UpdateAction = "checking" | "downloading" | "restarting" | null;
 

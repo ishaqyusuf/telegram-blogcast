@@ -1,3 +1,5 @@
+import { useScrollChrome } from "@/hooks/use-scroll-chrome";
+import type { ScrollView } from "react-native";
 import { SafeArea } from "@/components/safe-area";
 import { ChapterImportProgress } from "@/components/book/chapter-import-progress";
 import { _trpc } from "@/components/static-trpc";
@@ -141,6 +143,7 @@ export default function BookFetchBrowserScreen() {
 	const { textAlign, writingDirection, isRtl } = useTranslation();
 	const colors = useColors();
 	const webViewRef = useRef<WebView>(null);
+	const scrollChrome = useScrollChrome<ScrollView>();
 	const { setCaptured, setCancelled } = useBookFetchBrowserStore();
 	const setGlobalAudioBarHidden = useGlobalAudioBarStore((s) => s.setHidden);
 
@@ -538,6 +541,7 @@ export default function BookFetchBrowserScreen() {
 					) : (
 						<View className="flex-1 overflow-hidden">
 							<WebView
+								onScroll={scrollChrome.onScroll}
 								ref={webViewRef}
 								source={{ uri: sourceUrl }}
 								javaScriptEnabled

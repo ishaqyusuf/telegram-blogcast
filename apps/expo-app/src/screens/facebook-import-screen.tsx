@@ -1,3 +1,4 @@
+import { FlatList, ScrollView } from "@/components/ui/scroll-surfaces";
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
 import { useLocalServicesSession } from "@/components/local-services";
@@ -18,17 +19,7 @@ import type { RouterInputs, RouterOutputs } from "@api/trpc/routers/_app";
 import { Audio, type AVPlaybackStatus } from "expo-av";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-	ActivityIndicator,
-	Alert,
-	FlatList,
-	Image,
-	Linking,
-	RefreshControl,
-	ScrollView,
-	Text,
-	View,
-} from "react-native";
+import { ActivityIndicator, Alert, Image, Linking, RefreshControl, Text, View } from "react-native";
 
 type ImportItem =
 	RouterOutputs["facebookImport"]["listMediaImports"]["items"][number];

@@ -1,3 +1,4 @@
+import { FlatList } from "@/components/ui/scroll-surfaces";
 import { useLocalServicesSession } from "@/components/local-services";
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
@@ -9,7 +10,7 @@ import { Text } from "@/components/ui/text";
 import { useQuery } from "@/lib/react-query";
 import { useAppSettingsStore } from "@/store/app-settings-store";
 import { useRouter } from "expo-router";
-import { ActivityIndicator, FlatList, View } from "react-native";
+import { ActivityIndicator, View } from "react-native";
 
 export default function ChannelUpdateSettingsScreen() {
 	const router = useRouter();

@@ -1,3 +1,4 @@
+import { ScrollView } from "@/components/ui/scroll-surfaces";
 import { SafeArea } from "@/components/safe-area";
 import { useLocalServicesSession } from "@/components/local-services";
 import { Icon } from "@/components/ui/icon";
@@ -6,7 +7,7 @@ import { Text } from "@/components/ui/text";
 import { useQuery } from "@/lib/react-query";
 import type { RouterOutputs } from "@api/trpc/routers/_app";
 import { useRouter } from "expo-router";
-import { ActivityIndicator, ScrollView, View } from "react-native";
+import { ActivityIndicator, View } from "react-native";
 
 type RecentUpdateJob =
   NonNullable<RouterOutputs["channel"]["getRecentUpdateJob"]["activeJob"]>;

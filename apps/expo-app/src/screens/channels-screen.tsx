@@ -1,7 +1,11 @@
+import { useMemo, useState } from "react";
+import { ChannelSearchInput } from "@/components/channel-search-input";
+import { filterChannels } from "@/lib/channel-search";
+import { FlatList } from "@/components/ui/scroll-surfaces";
 import { Pressable } from "@/components/ui/pressable";
 import { useQuery } from "@/lib/react-query";
 import { useRouter } from "expo-router";
-import { FlatList, Text, View } from "react-native";
+import { Text, View } from "react-native";
 
 import { SafeArea } from "@/components/safe-area";
 import { useLocalServicesSession } from "@/components/local-services";
@@ -43,11 +47,11 @@ export default function ChannelsScreen() {
     _trpc.channel.getChannels.queryOptions(),
   );
 
+  const [channelSearch, setChannelSearch] = useState("");
+  const filteredChannels = useMemo(() => filterChannels(channels, channelSearch), [channels, channelSearch]);
+
   return (
-    <View
-      className="flex-1 bg-background"
-      style={{ backgroundColor: colors.background }}
-    >
+    <View className="flex-1 bg-background">
       <SafeArea>
         {/* Header */}
         <View className="flex-row items-center px-4 py-3 gap-3">
@@ -104,9 +108,12 @@ export default function ChannelsScreen() {
           </View>
         </View>
 
+        <ChannelSearchInput value={channelSearch} onChangeText={setChannelSearch} />
         <FlatList
           style={{ backgroundColor: colors.background }}
-          data={channels}
+          data={filteredChannels}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           keyExtractor={(item) => String(item.id)}
           contentContainerClassName="px-4 pb-8 gap-2"
           renderItem={({ item: ch, index }) => (
@@ -179,7 +186,7 @@ export default function ChannelsScreen() {
                 className="text-muted-foreground mb-3"
               />
               <Text className="text-sm text-muted-foreground">
-                {isFetching ? t("loading") : t("noChannels")}
+                {isFetching ? t("loading") : channelSearch.trim() ? "No channels match your search." : t("noChannels")}
               </Text>
             </View>
           }

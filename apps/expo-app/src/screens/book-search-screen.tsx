@@ -1,14 +1,9 @@
+import { FlatList } from "@/components/ui/scroll-surfaces";
 import { Pressable } from "@/components/ui/pressable";
 import { useQuery } from "@/lib/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  FlatList,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { ActivityIndicator, Text, TextInput, View } from "react-native";
 
 import { _trpc } from "@/components/static-trpc";
 import { SafeArea } from "@/components/safe-area";

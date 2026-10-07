@@ -1,3 +1,4 @@
+import { FlatList } from "@/components/ui/scroll-surfaces";
 import { Pressable } from "@/components/ui/pressable";
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
@@ -8,7 +9,7 @@ import { rememberAudioDetailFromMedia } from "@/lib/audio-detail-preview";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { minuteToString } from "@/lib/utils";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ActivityIndicator, Alert, FlatList, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Text, View } from "react-native";
 
 export default function PlaylistDetailScreen() {
   const router = useRouter();

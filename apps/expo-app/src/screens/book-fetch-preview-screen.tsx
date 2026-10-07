@@ -1,3 +1,4 @@
+import { ScrollView } from "@/components/ui/scroll-surfaces";
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";
@@ -7,7 +8,7 @@ import { useTranslation } from "@/lib/i18n";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { withAlpha } from "@/lib/theme";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { ActivityIndicator, Alert, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Text, View } from "react-native";
 
 type StagedPreviewDocument = {
   context?: {

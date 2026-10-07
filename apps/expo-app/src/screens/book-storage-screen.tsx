@@ -1,5 +1,6 @@
+import { ScrollView } from "@/components/ui/scroll-surfaces";
 import { useEffect, useState } from "react";
-import { Platform, ScrollView, Text, View } from "react-native";
+import { Platform, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { SafeArea } from "@/components/safe-area";
 import { Pressable } from "@/components/ui/pressable";

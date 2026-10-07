@@ -1,22 +1,10 @@
+import { ScrollView } from "@/components/ui/scroll-surfaces";
 import { Pressable } from "@/components/ui/pressable";
 import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useIsFocused } from "@react-navigation/native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Alert,
-  Clipboard,
-  Keyboard,
-  type KeyboardEvent,
-  InteractionManager,
-  Platform,
-  ScrollView,
-  Share,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { ActivityIndicator, Alert, Clipboard, Keyboard, type KeyboardEvent, InteractionManager, Platform, Share, Text, TextInput, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { KeyboardAvoidingView } from "react-native-keyboard-controller";
 
