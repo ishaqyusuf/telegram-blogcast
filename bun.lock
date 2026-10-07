@@ -528,6 +528,9 @@
       "name": "@acme/utils",
       "version": "1.0.0",
       "dependencies": {
+        "bcrypt-ts": "^5.0.3",
+        "dayjs": "^1.11.18",
+        "dot-object": "^2.1.5",
         "jsonwebtoken": "^9.0.2",
         "lodash": "^4.17.21",
         "zod": "catalog:",

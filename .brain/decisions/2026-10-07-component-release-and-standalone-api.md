@@ -8,7 +8,7 @@ The user requested the operational release flow used by GND, Halaalvest, and Ewa
 
 ## Decision
 - Add the same sibling `local-infra-kit/bin/infra.ts release` entry and a root `release.config.ts`. Track database, API, web, jobs, and Android independently with the shared release tags. Retain the signed assurance commands as separate, fail-closed checks.
-- Own Vercel API project `alghurobaa-api` (`prj_ScB6lVbLlEKjp5RHVXnqG6dac5Tw`) in the existing team. Use Vercel's supported Hono/Bun runtime and bundle workspace/TypeScript aliases with Bun; regenerate Prisma on every build.
+- Own Vercel API project `alghurobaa-api` (`prj_ScB6lVbLlEKjp5RHVXnqG6dac5Tw`) in the existing team. Use Vercel's supported Hono/Bun runtime and bundle workspace/TypeScript aliases with Bun; regenerate pinned Prisma 7.7.0 on every build. Install only the API and its explicitly selected transitive workspaces with a frozen lockfile; shared packages declare runtime dependencies rather than relying on web/mobile hoisting.
 - CLI deployments upload a clean, exact-revision Git archive in a temporary directory with a pinned API project link, verify Vercel ownership/revision/Ready state, and check application health. Preserve the root web link and protected preview deployment settings.
 - Expo's API/tRPC origin becomes the standalone API; web remains the owner of Better Auth, Blob token exchange, Telegram file proxy, and local-gateway discovery. Existing web tRPC URLs remain compatible during migration.
 - Preview mobile uses the existing shared production data/backend policy. No isolated Preview database or Trigger worker exists. Database and jobs release components are Production-only until that isolation is provisioned; do not call shared infrastructure an isolated Preview release.

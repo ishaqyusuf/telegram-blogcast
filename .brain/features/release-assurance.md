@@ -47,5 +47,4 @@ Source integration and fake-provider Preview/Production verification are
 complete. Live activation remains pending protected environments/rulesets, an
 authenticated evidence collector, isolated Preview database/backend wiring,
 Vercel promotion control, and isolated Trigger Preview ownership or an approved
-short-lived waiver. Preview Expo currently uses the Production web origin, so
-it is not accepted as an isolated end-to-end Preview environment.
+short-lived waiver. Preview Expo uses the standalone Production API for data and the Production web origin for auth/media/discovery, so it is not accepted as an isolated end-to-end Preview environment.

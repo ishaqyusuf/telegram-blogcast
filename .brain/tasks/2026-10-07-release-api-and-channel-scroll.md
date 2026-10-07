@@ -20,10 +20,10 @@ In Progress
 - Standalone Hono/Bun deployment, clean-revision archive helper, component config, and separate Expo API/web origins implemented.
 - Channel sync/list search and shared focused-screen scroll surfaces implemented. Existing scroll-chrome screens retain their handlers.
 - Production API deployment explicitly approved; mobile target remains Preview.
-- API build uses pinned Prisma 7.7.0. The provider's Bun 1.3.x does not support the dependency-relation filter syntax in newer documentation; cloud install now explicitly selects the API and its eight transitive workspace dependencies.
+- API build uses pinned Prisma 7.7.0. The provider's Bun 1.3.x does not support the dependency-relation filter syntax in newer documentation; cloud install now explicitly selects the API and its seven transitive workspace dependencies.
 
 ## Verification
-- Bun API bundle and local `/health` pass.
+- Bun API bundle and local `/health` pass. A separate fresh Git archive install/build also passes after declaring `bcrypt-ts`, `dayjs`, and `dot-object` as actual shared utility dependencies; cloud installs use the frozen lockfile.
 - Eight API CORS and five-target release assurance tests pass; two Node release-source regressions pass.
 - `bun release status --preview` detects separate API, web, and Android obligations; provider plan verification is in progress.
 - New Vercel API project created and initial database connection configured. Additional backend credential transfer requires explicit approval after automatic review rejected the expanded local secret payload.

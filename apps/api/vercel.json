@@ -2,7 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "hono",
   "bunVersion": "1.x",
-  "installCommand": "bun install --filter @acme/api --filter @acme/blog --filter @acme/db --filter @acme/document --filter @acme/jobs --filter @acme/telegram --filter @acme/tsconfig --filter @acme/utils",
+  "installCommand": "bun install --frozen-lockfile --filter @acme/api --filter @acme/blog --filter @acme/db --filter @acme/document --filter @acme/jobs --filter @acme/telegram --filter @acme/tsconfig --filter @acme/utils",
   "buildCommand": "node ../../scripts/build-api-vercel.mjs",
   "regions": [
     "bom1"
