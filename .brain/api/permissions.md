@@ -11,6 +11,7 @@ Documents authentication and authorization expectations across the API surface.
 ## Template
 
 ### Current Signals In Code
+- Standalone API provider credentials are configured as encrypted Vercel Preview/Production variables with explicit user approval. Only existing database, Telegram, Blob, DeepSeek, and Trigger credentials were copied; Expo receives public service origins. Preview continues to share Production services/data.
 - Hosted standalone tRPC permits browser CORS from `https://alghurobaa.vercel.app` and explicit `ALLOWED_API_ORIGINS`; unrelated origins receive no allow-origin header. Development accepts local browser origins. Native requests preserve existing route permissions. Vercel preview deployment protection remains enabled.
 - `blog.updateMediaTitleOverride` currently uses the existing public blog-router procedure, matching adjacent write routes. It validates media type but does not enforce a per-user edit permission; adding scoped auth remains a separate API security change.
 - Auth-related middleware exists at `apps/api/src/trpc/middleware/auth-permission.ts`.
