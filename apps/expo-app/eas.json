@@ -16,8 +16,8 @@
       "env": {
         "APP_VARIANT": "preview",
         "EXPO_PUBLIC_APP_VARIANT": "preview",
-        "EXPO_PUBLIC_BASE_URL": "https://alghurobaa.vercel.app",
-        "EXPO_PUBLIC_TRPC_URL": "https://alghurobaa.vercel.app",
+        "EXPO_PUBLIC_BASE_URL": "https://alghurobaa-api.vercel.app",
+        "EXPO_PUBLIC_TRPC_URL": "https://alghurobaa-api.vercel.app",
         "EXPO_PUBLIC_WEB_URL": "https://alghurobaa.vercel.app"
       },
       "autoIncrement": true,
@@ -25,8 +25,10 @@
     },
     "production": {
       "env": {
-        "EXPO_PUBLIC_BASE_URL": "https://alghurobaa.vercel.app",
-        "EXPO_PUBLIC_TRPC_URL": "https://alghurobaa.vercel.app",
+        "APP_VARIANT": "production",
+        "EXPO_PUBLIC_APP_VARIANT": "production",
+        "EXPO_PUBLIC_BASE_URL": "https://alghurobaa-api.vercel.app",
+        "EXPO_PUBLIC_TRPC_URL": "https://alghurobaa-api.vercel.app",
         "EXPO_PUBLIC_WEB_URL": "https://alghurobaa.vercel.app"
       },
       "autoIncrement": true,

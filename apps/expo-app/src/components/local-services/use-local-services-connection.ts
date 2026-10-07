@@ -235,7 +235,7 @@ export function useLocalServicesConnection(): LocalServicesConnectionController 
 			}
 
 			const gatewayUrl = await resolveReachableLocalGateway({
-				productionBaseUrl: process.env.EXPO_PUBLIC_BASE_URL,
+				productionBaseUrl: process.env.EXPO_PUBLIC_WEB_URL,
 				checkHealth: checkLocalApiBaseUrl,
 				signal: controller.signal,
 			});

@@ -2,6 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "hono",
   "bunVersion": "1.x",
+  "installCommand": "bun install --filter '@acme/api...'",
   "buildCommand": "node ../../scripts/build-api-vercel.mjs",
   "regions": ["bom1"]
 }
