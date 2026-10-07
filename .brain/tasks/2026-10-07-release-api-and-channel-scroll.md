@@ -20,7 +20,7 @@ In Progress
 - Standalone Hono/Bun deployment, clean-revision archive helper, component config, and separate Expo API/web origins implemented.
 - Channel sync/list search and shared focused-screen scroll surfaces implemented. Existing scroll-chrome screens retain their handlers.
 - Production API deployment explicitly approved; mobile target remains Preview.
-- Cloud scoped install completed; Prisma CLI resolution fixed by pinning the API build dependency to 7.7.0 and resolving the installed executable.
+- API build uses pinned Prisma 7.7.0. The provider's Bun 1.3.x does not support the dependency-relation filter syntax in newer documentation; cloud install now explicitly selects the API and its eight transitive workspace dependencies.
 
 ## Verification
 - Bun API bundle and local `/health` pass.
