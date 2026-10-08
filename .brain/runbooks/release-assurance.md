@@ -6,6 +6,8 @@ Use `bun release status|plan --preview` and `bun release --preview` for the shar
 
 Database and jobs currently have no isolated Preview targets. Preview mobile continues to share production data; API/web preview deployments do not establish end-to-end isolation.
 
+The October 7 operational release completed with web at `ea4ae069` and API/Android at `52451d15`; the October 8 status check reports all three up to date. Android Preview build `c52aeba2-6291-4035-ba85-6a2bcbaeff3c` is FINISHED (`1.0.111`, versionCode `26`). See the [release task](../tasks/2026-10-07-release-api-and-channel-scroll.md) for deployment links and verification. This does not activate the separate signed assurance collector below.
+
 ## Before assurance activation
 
 1. Create protected GitHub `preview` and `production` environments with

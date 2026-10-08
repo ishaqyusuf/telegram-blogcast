@@ -1,8 +1,5 @@
 # In Progress
 
-### [Release orchestration, standalone API, and channel scrolling](2026-10-07-release-api-and-channel-scroll.md)
-- Status: In Progress
-
 ### [Media Download Controls, Audio Rename, and Transcript Actions](2026-09-29-media-download-controls-and-audio-rename.md)
 - Status: In Progress
 

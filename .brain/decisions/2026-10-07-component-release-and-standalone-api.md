@@ -1,7 +1,7 @@
 # Component releases and standalone API hosting
 
 ## Status
-Accepted; Production API verified, Preview mobile release in progress.
+Accepted; Production API and operational Preview API/web/Android release verified. Android Preview build 26 finished at `52451d15`; mobile UI/device testing was excluded by the user.
 
 ## Context
 The user requested the operational release flow used by GND, Halaalvest, and EwaTrade, plus independent API deployment. The existing SHA-pinned release assurance integration only plans/verifies; it does not deploy. API source already exists under `apps/api` but is executed inside Next.js in hosted use.

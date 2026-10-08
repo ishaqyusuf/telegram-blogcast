@@ -1,5 +1,8 @@
 # Done
 
+### [Release orchestration, standalone API, and channel scrolling](2026-10-07-release-api-and-channel-scroll.md)
+- Status: Done — standalone Production API verified; API/web/Android Preview released; mobile tests excluded
+
 ### [Transcript Copy Arabic Vowels](2026-10-02-transcript-copy-arabic-vowels.md)
 - Status: Done — Android Preview OTA published; tests skipped at user request
 
