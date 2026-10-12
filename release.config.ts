@@ -3,6 +3,10 @@ const team = "team_BV5rgKHJH4fMyFL1YfscZIZK";
 
 export default {
 	project: "alghurobaa",
+	// A busy checkout releases from a clean copy of HEAD; Prisma 7 doesn't
+	// generate the client on install, and the jobs deploy bundles it. Not
+	// `db:generate`: turbo refuses that interactive task without a terminal.
+	cleanCheckout: { prepare: ["bun run --cwd packages/db prisma-generate"] },
 	productionBranch: "main",
 	previewBranch: "preview",
 	remote: "origin",
