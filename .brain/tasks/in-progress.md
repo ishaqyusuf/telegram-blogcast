@@ -1,8 +1,5 @@
 # In Progress
 
-### [KetabOnline Book Acquisition And Mobile Reading](2026-10-12-ketabonline-book-import.md)
-- Status: Implemented and validated locally — production schema push and deploy await approval
-
 ### [Media Download Controls, Audio Rename, and Transcript Actions](2026-09-29-media-download-controls-and-audio-rename.md)
 - Status: In Progress
 

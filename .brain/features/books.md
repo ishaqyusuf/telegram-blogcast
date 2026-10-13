@@ -12,6 +12,7 @@
 - Imported books are read-only (`sourceType: "ketabonline"`), open in the native reader with volume/printed page labels, running chapter titles, Quran/holy-text highlights and linked footnotes, and use the existing virtualized chapters screen (verified with 2,762 chapters across 10 volumes). Shamela capture controls are hidden for provider books.
 - Offline: "Keep Available Offline" stores provider pages as cache format v2 privately on the device; they read offline with the correct provider identity and are never mirrored to the public Books folder.
 - Search categories are intentionally absent (upstream filter unverified). Decision: [ADR-003](../decisions/ADR-003-ketabonline-provider-import.md).
+- Released 2026-10-13: Production schema, Trigger worker (`20261013.1`) and API at `544e2451`; Android Preview OTA `2026.10.13`.
 - Verified locally (isolated PostgreSQL, live upstream): 29423 → 19 pages/1 chapter; 62952 → 5,444 pages, 2,762 chapters, 10 volumes in 11.2 s at 674 MB peak RSS (unchanged replay keeps every page ID and content version); 500300 → unavailable, no book created.
 
 ## Automatic Mobile Page Loading (2026-09-08)

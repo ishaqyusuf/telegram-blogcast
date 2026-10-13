@@ -1,7 +1,7 @@
 # Task: KetabOnline Book Acquisition And Mobile Reading
 
 ## Status
-In Progress — implementation and local validation complete; production schema push, Trigger deploy and release await approval.
+Done — implemented, validated, and released to Production backend plus the Android Preview OTA on 2026-10-13 with user approval.
 
 ## Priority
 High
@@ -34,8 +34,8 @@ Mobile users can search KetabOnline titles or enter a book ID, review metadata, 
 - [x] Add mobile discovery, metadata, import progress, retry, and missing-content states.
 - [x] Validate large/small/empty books plus interruption, ownership, refresh, and legacy Shamela regressions.
 - [x] Complete Brain API/database/feature/ADR updates and record actual validation and remaining release work.
-- [ ] Apply the schema to the production database (approval required; every configured DB env targets production).
-- [ ] Deploy the Trigger worker (`import-book-source`, `recover-book-source-imports`) and the API, then ship the mobile update.
+- [x] Apply the schema to the production database.
+- [x] Deploy the Trigger worker and the API, then ship the mobile update (Android Preview OTA).
 
 ## Code Map
 - Adapter (pure): `packages/document/src/book/ketabonline.ts` (+ tests).
@@ -56,6 +56,14 @@ Mobile users can search KetabOnline titles or enter a book ID, review metadata, 
 1. Approve and apply the additive schema to production (`bun db:push`). `bun db:migrate` previously demanded a destructive reset; do not accept a reset.
 2. Deploy the Trigger tasks (machine `medium-1x`, `maxDuration` 900 s, concurrency 1) before or with the API so saved jobs dispatch.
 3. Deploy the API, then ship the mobile update (route `/book-ketabonline`, cache format v2). Existing caches are untouched: provider books are new and only newer app builds write format-v2 files.
+
+## Release (2026-10-13, user-approved)
+- Commit `544e2451` pushed to `origin/main` (12 earlier local release commits were pushed with it).
+- Production DB: read-only diff was 66 lines, purely additive (nullable columns, new table, indexes, one `ON DELETE SET NULL` FK). `db push` stopped on Prisma's generic warning for the two new unique indexes; both cover new all-NULL columns, so it was applied with `--accept-data-loss` for exactly that diff. Re-diff empty. `db:migrate` not run.
+- Trigger: version `20261013.1`, 4 tasks (adds `import-book-source`, `recover-book-source-imports`).
+- API: production deploy healthy at `544e2451`, aliased `https://alghurobaa-api.vercel.app`; live `bookSource.preview` verified for 29423 (available) and 500300 (explained unavailable).
+- Mobile: Android Preview OTA `2026.10.13`, runtime `1.0.111`, update group `b0894a1b-f59d-49e5-9944-54930e316227`.
+- Not yet observed in Production: a real import run by the deployed worker (no production book was imported during release).
 
 ## Boundaries
 First provider: KetabOnline. Existing Shamela WebView capture is unchanged. Shamela issued-key integration, bulk archive decoding, and MCP recovery are separate work. Upstream category filtering remains unverified, so no category selector is shipped. No production rollout was performed.

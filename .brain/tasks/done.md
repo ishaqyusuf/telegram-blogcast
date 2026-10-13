@@ -1,5 +1,8 @@
 # Done
 
+### [KetabOnline Book Acquisition And Mobile Reading](2026-10-12-ketabonline-book-import.md)
+- Status: Done — Production DB/Trigger/API released and Android Preview OTA `2026.10.13` published; a Production import has not yet been run
+
 ### [KetabOnline and Shamela API Investigation](2026-10-12-book-api-investigation.md)
 - Status: Done — public download paths verified; Android APK/network behavior unverified
 
