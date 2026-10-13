@@ -6,6 +6,7 @@ import { z } from "zod";
 import { createTRPCRouter, publicProcedure } from "../init";
 import { bookChapterRoutes } from "./book-chapter.routes";
 import { readBookPageRecord } from "./book-page-reader";
+import { rebindPageAnnotations } from "@acme/jobs/book-page-annotations";
 import { importBookCoverFromUrl } from "../../services/book-cover-import";
 import {
   createBookDocumentFromParagraphs,
@@ -1647,87 +1648,6 @@ async function syncParsedShamelaBookTree(
 }
 
 
-async function rebindPageAnnotations(
-  db: any,
-  pageId: number,
-  previousParagraphs: { id: number; pid: number; text: string }[],
-  nextParagraphs: { id: number; pid: number; text: string }[],
-) {
-  const nextByPid = new Map(
-    nextParagraphs.map((paragraph) => [paragraph.pid, paragraph]),
-  );
-  const nextByText = new Map(
-    nextParagraphs.map((paragraph) => [paragraph.text.trim(), paragraph]),
-  );
-  const previousById = new Map(
-    previousParagraphs.map((paragraph) => [paragraph.id, paragraph]),
-  );
-
-  const rebindParagraph = (
-    paragraphId: number | null | undefined,
-    paragraphPid: number | null | undefined,
-    quoteText: string | null | undefined,
-  ) => {
-    if (paragraphPid != null && nextByPid.has(paragraphPid)) {
-      return nextByPid.get(paragraphPid) ?? null;
-    }
-
-    if (paragraphId != null) {
-      const previous = previousById.get(paragraphId);
-      if (previous && nextByPid.has(previous.pid)) {
-        return nextByPid.get(previous.pid) ?? null;
-      }
-      if (previous && nextByText.has(previous.text.trim())) {
-        return nextByText.get(previous.text.trim()) ?? null;
-      }
-    }
-
-    if (quoteText && nextByText.has(quoteText.trim())) {
-      return nextByText.get(quoteText.trim()) ?? null;
-    }
-
-    return null;
-  };
-
-  const highlights = await db.bookPageHighlight.findMany({ where: { pageId } });
-  for (const highlight of highlights) {
-    const targetParagraph = rebindParagraph(
-      highlight.paragraphId,
-      highlight.paragraphPid,
-      highlight.quoteText,
-    );
-    await db.bookPageHighlight.update({
-      where: { id: highlight.id },
-      data: {
-        paragraphId: targetParagraph?.id ?? null,
-        paragraphPid: targetParagraph?.pid ?? highlight.paragraphPid ?? null,
-        quoteText: targetParagraph?.text ?? highlight.quoteText ?? null,
-        pageShamelaPageNo: highlight.pageShamelaPageNo ?? undefined,
-      },
-    });
-  }
-
-  const comments = await db.bookPageComment.findMany({
-    where: { pageId, deletedAt: null },
-  });
-  for (const comment of comments) {
-    const targetParagraph = rebindParagraph(
-      comment.paragraphId,
-      comment.paragraphPid,
-      comment.quoteText,
-    );
-    await db.bookPageComment.update({
-      where: { id: comment.id },
-      data: {
-        paragraphId: targetParagraph?.id ?? null,
-        paragraphPid: targetParagraph?.pid ?? comment.paragraphPid ?? null,
-        quoteText: targetParagraph?.text ?? comment.quoteText ?? null,
-        pageShamelaPageNo: comment.pageShamelaPageNo ?? undefined,
-      },
-    });
-  }
-}
-
 async function saveParsedPageData(
   db: any,
   input: {
@@ -2842,8 +2762,21 @@ export const bookRoutes = createTRPCRouter({
     }),
 
   getBook: publicProcedure
-    .input(z.object({ id: z.number(), includeToc: z.boolean().default(true) }))
+    .input(
+      z.object({
+        id: z.number(),
+        includeToc: z.boolean().default(true),
+        // Provider books are imported whole; the client names the page it needs instead of
+        // receiving every page row (a single KetabOnline book can exceed 5,000 pages).
+        focusPageId: z.number().int().positive().optional(),
+      }),
+    )
     .query(async ({ ctx, input }) => {
+      const identity = await ctx.db.book.findFirstOrThrow({
+        where: { id: input.id, deletedAt: null },
+        select: { sourceProvider: true },
+      });
+      const bounded = Boolean(identity.sourceProvider);
       const book = await ctx.db.book.findFirstOrThrow({
         where: { id: input.id, deletedAt: null },
         include: {
@@ -2857,8 +2790,15 @@ export const bookRoutes = createTRPCRouter({
           },
           shelf: true,
           authors: true,
-          volumes: { orderBy: { number: "asc" } },
+          volumes: { where: { deletedAt: null }, orderBy: { number: "asc" } },
           pages: {
+            where: bounded
+              ? {
+                  deletedAt: null,
+                  status: "fetched",
+                }
+              : { deletedAt: null },
+            ...(bounded ? { take: 1 } : {}),
             orderBy: { shamelaPageNo: "asc" },
             select: {
               id: true,
@@ -2913,7 +2853,31 @@ export const bookRoutes = createTRPCRouter({
         }
       }
 
-      return { ...book, tocNodes };
+      let pages = book.pages;
+      if (bounded && input.focusPageId && !pages.some((page) => page.id === input.focusPageId)) {
+        const focus = await ctx.db.bookPage.findFirst({
+          where: { id: input.focusPageId, bookId: input.id, deletedAt: null, status: "fetched" },
+          select: {
+            id: true, shamelaPageNo: true, shamelaUrl: true, printedPageNo: true, chapterTitle: true,
+            topicTitle: true, previousShamelaPageNo: true, previousShamelaUrl: true, nextShamelaPageNo: true,
+            nextShamelaUrl: true, status: true, volumeId: true,
+          },
+        });
+        if (focus) pages = [...pages, focus].sort((a, b) => a.shamelaPageNo - b.shamelaPageNo);
+      }
+      const [totalPages, fetchedPages] = bounded
+        ? await Promise.all([
+            ctx.db.bookPage.count({ where: { bookId: input.id, deletedAt: null } }),
+            ctx.db.bookPage.count({ where: { bookId: input.id, deletedAt: null, status: "fetched" } }),
+          ])
+        : [book.pages.length, book.pages.filter((page) => page.status === "fetched").length];
+
+      return {
+        ...book,
+        pages,
+        pageCounts: { total: totalPages, fetched: fetchedPages, complete: !bounded },
+        tocNodes,
+      };
     }),
 
   createBook: publicProcedure
@@ -3217,6 +3181,8 @@ export const bookRoutes = createTRPCRouter({
               ownerUserId: true,
               shamelaId: true,
               shamelaUrl: true,
+              sourceProvider: true,
+              sourceBookId: true,
             },
           },
         },

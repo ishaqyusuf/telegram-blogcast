@@ -231,6 +231,7 @@ const InitialLayout = () => {
 						<Stack.Screen name="playlists" />
 						<Stack.Screen name="playlists/[playlistId]" />
 						<Stack.Screen name="book-fetch" />
+						<Stack.Screen name="book-ketabonline" />
 						<Stack.Screen name="book-read-source" options={{ animation: "none" }} />
 						<Stack.Screen
 							name="book-fetch-browser"

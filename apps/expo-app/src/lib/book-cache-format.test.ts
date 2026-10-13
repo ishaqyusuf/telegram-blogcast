@@ -4,6 +4,7 @@ import {
 	parseChapterFile,
 	parsePageFile,
 	serializePageFile,
+	shamelaSourceBookId,
 } from "./book-cache-format";
 
 const page = () => ({
@@ -59,6 +60,16 @@ describe("portable book cache format", () => {
 		expect(() => parsePageFile(JSON.stringify(page()), { bookId: 3, pageId: 106 })).toThrow();
 		expect(() => serializePageFile({ ...page(), formatVersion: 2 })).toThrow();
 		expect(() => serializePageFile({ ...page(), paragraphs: [{ id: 19, pid: 1, text: "short", sourceMarks: [{ kind: "c5", start: 0, end: 500 }] }] })).toThrow();
+	});
+
+	test("reads provider pages only with an explicit provider and source identity", () => {
+		const provider = { ...page(), formatVersion: 2, sourceProvider: "ketabonline" };
+		expect(parsePageFile(serializePageFile(provider), { bookId: 3, pageId: 12 })).toMatchObject({ formatVersion: 2, sourceProvider: "ketabonline" });
+		expect(shamelaSourceBookId(parsePageFile(JSON.stringify(provider), { bookId: 3, pageId: 12 }))).toBeNull();
+		expect(shamelaSourceBookId(parsePageFile(JSON.stringify(page()), { bookId: 3, pageId: 12 }))).toBe(23833);
+		expect(() => serializePageFile({ ...provider, sourceProvider: "shamela" })).toThrow();
+		expect(() => serializePageFile({ ...provider, sourceBookId: null, sourcePageNo: null })).toThrow();
+		expect(() => serializePageFile({ ...page(), sourceProvider: "ketabonline" })).toThrow();
 	});
 
 	test("does not silently export annotations or unknown private fields", () => {

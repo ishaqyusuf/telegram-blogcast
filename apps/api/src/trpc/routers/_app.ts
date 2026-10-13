@@ -6,6 +6,7 @@ import { blogRoutes } from "./blog.routes";
 import { bookRoutes } from "./book.routes";
 import { bookChapterRoutes } from "./book-chapter.routes";
 import { bookAnnotationRoutes } from "./book-annotation.routes";
+import { bookSourceRoutes } from "./book-source.routes";
 import { channelRoutes } from "./channel.route";
 import { facebookImportRoutes } from "./facebook-import.routes";
 import { libraryRoutes } from "./library.routes";
@@ -22,6 +23,7 @@ export const appRouter = createTRPCRouter({
 	book: bookRoutes,
 	bookChapter: bookChapterRoutes,
 	bookAnnotation: bookAnnotationRoutes,
+	bookSource: bookSourceRoutes,
 	library: libraryRoutes,
 });
 

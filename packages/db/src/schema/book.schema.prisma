@@ -36,6 +36,9 @@ model Book {
   coverColor     String?
   shamelaId      Int?
   shamelaUrl     String?
+  // Non-Shamela provider identity. Never inferred from shamelaId or matching titles.
+  sourceProvider String?
+  sourceBookId   Int?
   firstShamelaPageNo Int?
   firstShamelaUrl String?
   lastShamelaPageNo Int?
@@ -50,6 +53,7 @@ model Book {
   pages          BookPage[]
   tocNodes       BookTocNode[]
   chapterImports BookChapterImport[]
+  sourceImports  BookSourceImport[]
   importHistory  BookImportHistory[]
   pageImports    BookPageImportHistory[]
   rawPages       ShamelaRawPage[]
@@ -66,6 +70,7 @@ model Book {
   @@index([shelfId])
   @@index([ownerUserId])
   @@index([sourceType])
+  @@unique([sourceProvider, sourceBookId])
 }
 
 // The capture is durable before dispatch; Trigger receives only id + generation.
@@ -91,6 +96,42 @@ model BookChapterImport {
   @@index([status, updatedAt])
 }
 
+// Whole-book provider acquisition. Durable before dispatch; Trigger receives only id + generation.
+model BookSourceImport {
+  id             String    @id @default(uuid())
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  provider       String
+  sourceBookId   Int
+  bookId         Int?
+  book           Book?     @relation(fields: [bookId], references: [id])
+  ownerHash      String
+  // "<provider>:<sourceBookId>" while queued/running so duplicate starts share one job.
+  activeKey      String?   @unique
+  status         String    @default("queued")
+  phase          String    @default("queued")
+  generation     Int       @default(1)
+  runId          String?
+  title          String?
+  pagesTotal     Int?
+  pagesSaved     Int       @default(0)
+  volumesTotal   Int?
+  volumesIndexed Int       @default(0)
+  chaptersTotal  Int?
+  chaptersSaved  Int       @default(0)
+  snapshotHash   String?
+  errorCode      String?
+  errorMessage   String?
+  metricsJson    Json?
+  startedAt      DateTime?
+  completedAt    DateTime?
+
+  @@index([provider, sourceBookId, createdAt])
+  @@index([ownerHash, createdAt])
+  @@index([status, updatedAt])
+  @@index([bookId, createdAt])
+}
+
 model BookVolume {
   id        Int        @id @default(autoincrement())
   createdAt DateTime?  @default(now()) @db.Timestamp(0)
@@ -100,6 +141,7 @@ model BookVolume {
   book      Book       @relation(fields: [bookId], references: [id])
   number    Int
   title     String?
+  sourcePartId Int?
   pages     BookPage[]
 
   @@unique([bookId, number])
@@ -128,6 +170,9 @@ model BookPage {
   nextShamelaUrl String?
   rawJson       Json?
   documentJson  Json?
+  // Provider page identity, separate from reading order (shamelaPageNo) and printedPageNo.
+  sourcePageId  Int?
+  sourceContentHash String?
   status        String              @default("pending")
   paragraphs    BookPageParagraph[]
   footnotes     BookPageFootnote[]
@@ -139,6 +184,7 @@ model BookPage {
   tocNodes      BookTocNode[]
 
   @@unique([bookId, shamelaPageNo])
+  @@unique([bookId, sourcePageId])
   @@index([bookId])
   @@index([volumeId])
 }

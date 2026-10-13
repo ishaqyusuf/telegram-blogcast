@@ -1,4 +1,4 @@
-import { parseChapterFile, parsePageFile, serializePageFile, type CachedChapterFile, type CachedPageFile } from "./book-cache-format";
+import { parseChapterFile, parsePageFile, serializePageFile, shamelaSourceBookId, type CachedChapterFile, type CachedPageFile } from "./book-cache-format";
 import type { BookDownload } from "./book-cache-download";
 import { bookAnnotationMigration } from "./book-annotation-repository";
 import { protectedBookPageSql } from "./book-cache-protection";
@@ -161,18 +161,18 @@ export function createBookCacheRepository(db: CacheSqlite, transaction: CacheTra
 			return transaction(async (tx) => {
 				const old = await tx.getFirstAsync<CacheRow>("SELECT * FROM local_book_cache_pages WHERE scope=? AND page_id=?", scope, input.pageId);
 				if (old && onlyIfMissing) return false;
-				if (onlyIfMissing) await validateRestoreIdentity(tx, scope, input.bookId, input.sourceBookId);
+				if (onlyIfMissing) await validateRestoreIdentity(tx, scope, input.bookId, shamelaSourceBookId(input));
 				if (old && !(old.observed_at === 0 && observedAt > 0) && (old.content_version > input.contentVersion || (old.content_version === input.contentVersion && old.observed_at > observedAt))) return false;
 				if (old && parsePageFile(old.payload, { bookId: input.bookId, pageId: input.pageId }).bookId !== input.bookId)
 					throw new Error("Page cannot move between books");
 				const generation = (old?.generation ?? 0) + 1;
-				await tx.runAsync("INSERT OR IGNORE INTO local_book_cache_library(scope,book_id,source_book_id) VALUES (?,?,?)", scope, input.bookId, input.sourceBookId);
+				await tx.runAsync("INSERT OR IGNORE INTO local_book_cache_library(scope,book_id,source_book_id) VALUES (?,?,?)", scope, input.bookId, shamelaSourceBookId(input));
 				await tx.runAsync(`INSERT INTO local_book_cache_pages
  (scope,page_id,book_id,source_book_id,source_page_no,payload,content_version,generation,observed_at,accessed_at)
  VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(scope,page_id) DO UPDATE SET
  source_book_id=excluded.source_book_id,source_page_no=excluded.source_page_no,payload=excluded.payload,
  content_version=excluded.content_version,generation=excluded.generation,observed_at=excluded.observed_at,accessed_at=excluded.accessed_at`,
-					scope, input.pageId, input.bookId, input.sourceBookId, input.sourcePageNo, payload, input.contentVersion, generation, observedAt, Date.now());
+					scope, input.pageId, input.bookId, shamelaSourceBookId(input), input.sourcePageNo, payload, input.contentVersion, generation, observedAt, Date.now());
 				if (readerMetadata !== undefined) await tx.runAsync(`INSERT INTO local_book_cache_reader_meta(scope,page_id,payload) VALUES (?,?,?) ON CONFLICT(scope,page_id) DO UPDATE SET payload=excluded.payload`, scope, input.pageId, readerMetadata);
 				await setExportable(tx, scope, "page", input.pageId, mirror);
 				if (mirror) await enqueue(tx, scope, "page", input.pageId, input.bookId, generation);

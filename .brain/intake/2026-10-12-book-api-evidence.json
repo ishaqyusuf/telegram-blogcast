@@ -1,0 +1,621 @@
+{
+  "recorded_date": "2026-10-12",
+  "timezone": "Africa/Lagos",
+  "scope": "Public HTTP book acquisition and REA ZIP/package inventory; no APK decompilation or app traffic capture. No copyrighted page content retained in this record.",
+  "ketabonline": {
+    "metadata_url": "https://backend.ketabonline.com/api/v2/books/62952",
+    "metadata_http_status": 200,
+    "search_query": "رياض",
+    "search_http_status": 200,
+    "search_application_code": 200,
+    "books": [
+      {
+        "book_id": 62952,
+        "title": "مصنف عبد الرزاق - ط التأصيل الثانية",
+        "zip_bytes": 5267564,
+        "zip_sha256": "0ea51917adb13b3287dfb6bd1849707032e524a89c5a9ccd04b56236e35b4bdc",
+        "json_member": "62952.data.json",
+        "json_bytes": 69781888,
+        "pages_declared": 5444,
+        "pages_actual": 5444,
+        "unique_page_ids": 5444,
+        "pages_with_content": 5444,
+        "parts": 10,
+        "embedded_index_entries": 3,
+        "index_declared": 2762,
+        "complete_index_entries": 2762,
+        "unique_index_ids": 2762,
+        "missing_index_page_targets": 0,
+        "index_volumes": [
+          {
+            "part": 1,
+            "application_code": 200,
+            "index_count": 301
+          },
+          {
+            "part": 2,
+            "application_code": 200,
+            "index_count": 234
+          },
+          {
+            "part": 3,
+            "application_code": 200,
+            "index_count": 218
+          },
+          {
+            "part": 4,
+            "application_code": 200,
+            "index_count": 239
+          },
+          {
+            "part": 5,
+            "application_code": 200,
+            "index_count": 289
+          },
+          {
+            "part": 6,
+            "application_code": 200,
+            "index_count": 325
+          },
+          {
+            "part": 7,
+            "application_code": 200,
+            "index_count": 343
+          },
+          {
+            "part": 8,
+            "application_code": 200,
+            "index_count": 282
+          },
+          {
+            "part": 9,
+            "application_code": 200,
+            "index_count": 246
+          },
+          {
+            "part": 10,
+            "application_code": 200,
+            "index_count": 285
+          }
+        ],
+        "page_fields": [
+          "id",
+          "page",
+          "index",
+          "content",
+          "seal",
+          "quran",
+          "hadeeth",
+          "shrooh",
+          "rowa",
+          "part",
+          "reciters"
+        ]
+      },
+      {
+        "book_id": 29423,
+        "title": "قيام الليل .. رياض الصالحين .. وملاذ المحبين",
+        "zip_bytes": 20591,
+        "zip_sha256": "a473d0e923a3872469b21b4ccfa923a1d0015c5d5e28d3073053fa4987f46c20",
+        "json_member": "29423.data.json",
+        "json_bytes": 161179,
+        "pages_declared": 19,
+        "pages_actual": 19,
+        "unique_page_ids": 19,
+        "pages_with_content": 19,
+        "parts": 1,
+        "embedded_index_entries": 1,
+        "index_declared": 1,
+        "complete_index_entries": 1,
+        "unique_index_ids": 1,
+        "missing_index_page_targets": 0,
+        "index_volumes": [],
+        "page_fields": [
+          "id",
+          "page",
+          "index",
+          "content",
+          "seal",
+          "quran",
+          "hadeeth",
+          "shrooh",
+          "rowa",
+          "part",
+          "reciters"
+        ]
+      }
+    ]
+  },
+  "shamela": {
+    "evidence_origin": "Parallel investigation using official pages and live HTTP probes",
+    "official_database_url": "https://dev.shamela.ws/downloads/shamela-database-1448.zip",
+    "head_http_status": 200,
+    "content_length": 13294044352,
+    "last_modified": "2026-07-30",
+    "range_probe": "HTTP 200 rather than 206; timed out after partial response",
+    "partial_sqlite_sample": {
+      "path_in_archive": "database/book/000/1000.db",
+      "page_rows": 3224,
+      "title_rows": 998,
+      "page_columns": [
+        "id",
+        "part",
+        "page",
+        "number",
+        "services"
+      ],
+      "title_columns": [
+        "id",
+        "page",
+        "parent"
+      ],
+      "text_storage": "unresolved; neither table has content"
+    },
+    "mcp_url": "https://shamela.ws/mcp",
+    "mcp_get_http_status": 404,
+    "mcp_initialize_post_http_status": 404,
+    "issued_key_book_download": "not tested"
+  },
+  "rea_version": "6.4.0",
+  "rea_evidence": [
+    {
+      "evidence_id": "ev_045b2695b309aac1e34e560d05a67ff58337db916e5780eb56af216143f55425",
+      "subject": {
+        "name": "alghurobaa-ketab-62952.data.zip",
+        "digest": {
+          "sha256": "0ea51917adb13b3287dfb6bd1849707032e524a89c5a9ccd04b56236e35b4bdc"
+        },
+        "format": "zip",
+        "architecture": null,
+        "local_path": "/private/tmp/alghurobaa-ketab-62952.data.zip"
+      },
+      "provider": {
+        "id": "rea-artifact-graph",
+        "name": "REA safe artifact graph provider",
+        "version": "1"
+      },
+      "analysis_profile": null,
+      "predicate_type": "rea.analysis",
+      "operation": "inspect_artifact",
+      "parameters": {
+        "integrity_policy": "fail"
+      },
+      "raw_result": null,
+      "normalized_result": {
+        "inspection_id": "ai_0854e6bd22aaace46cd1b8029622cfb0bfdc37e7fb0869cfe52b606669ef6d5c",
+        "subject": {
+          "manifest_id": "agm_b08932a12ca96d157227e1f15912b853c880e8610046337373ebbee100a650d2",
+          "root_artifact_id": "art_edaf472c23bfd96c1dd78dd046229bb47123a52244c998bf296d31f0f3109f9d",
+          "root_sha256": "0ea51917adb13b3287dfb6bd1849707032e524a89c5a9ccd04b56236e35b4bdc",
+          "root_format": "zip"
+        },
+        "substeps": [
+          {
+            "substep_id": "ais_1fecac2c4ffaef8c13df7de88ad13d89685f421f5d5212220ac78b8608e16539",
+            "operation": "inventory_artifact",
+            "status": "completed",
+            "evidence_id": "ev_b7f8c53fc94eaba8a5751571a30fb8159ee162a85b0fb6334418a2c960bacf8b",
+            "evidence": {
+              "evidence_id": "ev_b7f8c53fc94eaba8a5751571a30fb8159ee162a85b0fb6334418a2c960bacf8b",
+              "subject": {
+                "name": "alghurobaa-ketab-62952.data.zip",
+                "digest": {
+                  "sha256": "0ea51917adb13b3287dfb6bd1849707032e524a89c5a9ccd04b56236e35b4bdc"
+                },
+                "format": "zip",
+                "architecture": null,
+                "local_path": "/private/tmp/alghurobaa-ketab-62952.data.zip"
+              },
+              "provider": {
+                "id": "rea-artifact-graph",
+                "name": "REA safe artifact graph provider",
+                "version": "1"
+              },
+              "analysis_profile": null,
+              "predicate_type": "rea.analysis",
+              "operation": "inventory_artifact",
+              "parameters": {
+                "integrity_policy": "fail"
+              },
+              "raw_result": null,
+              "normalized_result": {
+                "manifest": {
+                  "manifest_id": "agm_b08932a12ca96d157227e1f15912b853c880e8610046337373ebbee100a650d2",
+                  "root_artifact_id": "art_edaf472c23bfd96c1dd78dd046229bb47123a52244c998bf296d31f0f3109f9d",
+                  "root_sha256": "0ea51917adb13b3287dfb6bd1849707032e524a89c5a9ccd04b56236e35b4bdc",
+                  "root_format": "zip",
+                  "graph_sha256": "70b3ae48b7ad5d39b5626e62cc013afad837664f035124adc51037309e4bca8a",
+                  "node_count": 2,
+                  "occurrence_count": 2,
+                  "edge_count": 1
+                },
+                "nodes": [
+                  {
+                    "artifact_id": "art_adb3e011a5a581445aad97db366dbc3670da330f29677114b31e163b46550cd5",
+                    "format": "file",
+                    "sha256": "ecf347c641be73adb4e1d69cae75be20831a22ec2d022da37dbd5cb14be3d68e",
+                    "size": 69781888,
+                    "media_type": null,
+                    "architecture": null,
+                    "content_state": "embedded",
+                    "limitations": []
+                  },
+                  {
+                    "artifact_id": "art_edaf472c23bfd96c1dd78dd046229bb47123a52244c998bf296d31f0f3109f9d",
+                    "format": "zip",
+                    "sha256": "0ea51917adb13b3287dfb6bd1849707032e524a89c5a9ccd04b56236e35b4bdc",
+                    "size": 5267564,
+                    "media_type": null,
+                    "architecture": null,
+                    "content_state": "materialized",
+                    "limitations": []
+                  }
+                ],
+                "occurrences": [
+                  {
+                    "occurrence_id": "occ_0e819f4597c0bcc0ca755cde61c8872312063cf54405cf0f8e3be0cc44726894",
+                    "artifact_id": "art_edaf472c23bfd96c1dd78dd046229bb47123a52244c998bf296d31f0f3109f9d",
+                    "parent_occurrence_id": null,
+                    "logical_path": ".",
+                    "entry_kind": "file",
+                    "artifact_kind": "container",
+                    "artifact_format": "zip",
+                    "declared_size": 5267564,
+                    "compressed_size": null,
+                    "executable": false,
+                    "encrypted": false,
+                    "hash_status": "verified",
+                    "source_location": null,
+                    "limitations": []
+                  },
+                  {
+                    "occurrence_id": "occ_20837ce34020233dc5e6e608d38544a5d7f57e31f003ac7fe99c1225859ee74a",
+                    "artifact_id": "art_adb3e011a5a581445aad97db366dbc3670da330f29677114b31e163b46550cd5",
+                    "parent_occurrence_id": "occ_0e819f4597c0bcc0ca755cde61c8872312063cf54405cf0f8e3be0cc44726894",
+                    "logical_path": "62952.data.json",
+                    "entry_kind": "file",
+                    "artifact_kind": "resource",
+                    "artifact_format": "file",
+                    "declared_size": 69781888,
+                    "compressed_size": 5267436,
+                    "executable": false,
+                    "encrypted": false,
+                    "hash_status": "verified",
+                    "source_location": null,
+                    "limitations": []
+                  }
+                ],
+                "edges": [
+                  {
+                    "edge_id": "edge_4f9207c668650b3e482fc6e62494ae3624652cea6d7bbdc6221ed5127be982c9",
+                    "ordinal": 0,
+                    "parent_artifact_id": "art_edaf472c23bfd96c1dd78dd046229bb47123a52244c998bf296d31f0f3109f9d",
+                    "relation": "contains",
+                    "occurrence_id": "occ_20837ce34020233dc5e6e608d38544a5d7f57e31f003ac7fe99c1225859ee74a",
+                    "producer": null
+                  }
+                ],
+                "provenance": [],
+                "integrity_contradictions": [],
+                "limitations": [
+                  "ZIP inventory lists central-directory entries only. Bytes after the central directory, including an APK Signing Block or a ZIP comment, are not occurrences."
+                ]
+              },
+              "confidence": "observed",
+              "authority": "shipped-artifact",
+              "environment": null,
+              "limitations": [
+                "ZIP inventory lists central-directory entries only. Bytes after the central directory, including an APK Signing Block or a ZIP comment, are not occurrences."
+              ],
+              "locations": [],
+              "evidence_links": []
+            }
+          }
+        ],
+        "observations": [
+          {
+            "observation_id": "aio_901a86af53fe0a1cecc3dbe1a27744c2fa4b478b271c961d38cb7a7e1a0a3ef0",
+            "kind": "root-manifest",
+            "subject": "art_edaf472c23bfd96c1dd78dd046229bb47123a52244c998bf296d31f0f3109f9d",
+            "value": {
+              "manifest_id": "agm_b08932a12ca96d157227e1f15912b853c880e8610046337373ebbee100a650d2",
+              "root_artifact_id": "art_edaf472c23bfd96c1dd78dd046229bb47123a52244c998bf296d31f0f3109f9d",
+              "root_sha256": "0ea51917adb13b3287dfb6bd1849707032e524a89c5a9ccd04b56236e35b4bdc",
+              "root_format": "zip",
+              "graph_sha256": "70b3ae48b7ad5d39b5626e62cc013afad837664f035124adc51037309e4bca8a",
+              "node_count": 2,
+              "occurrence_count": 2,
+              "edge_count": 1
+            },
+            "evidence_id": "ev_b7f8c53fc94eaba8a5751571a30fb8159ee162a85b0fb6334418a2c960bacf8b"
+          }
+        ],
+        "hypotheses": [],
+        "contradictions": [],
+        "unexplored_branches": [],
+        "next_probes": [],
+        "coverage": {
+          "status": "complete-within-substeps",
+          "substeps_completed": 1,
+          "observations_retained": 1,
+          "observations_omitted": 0,
+          "hypotheses_retained": 0,
+          "hypotheses_omitted": 0,
+          "unexplored_branches_retained": 0,
+          "unexplored_branches_omitted": 0,
+          "next_probes_retained": 0,
+          "next_probes_omitted": 0
+        },
+        "evidence_links": [
+          "ev_b7f8c53fc94eaba8a5751571a30fb8159ee162a85b0fb6334418a2c960bacf8b"
+        ],
+        "limitations": [
+          "Inspection derives bounded static hypotheses and next probes; it does not execute the artifact or claim format-specific semantics.",
+          "ZIP inventory lists central-directory entries only. Bytes after the central directory, including an APK Signing Block or a ZIP comment, are not occurrences."
+        ]
+      },
+      "confidence": "observed",
+      "authority": "shipped-artifact",
+      "environment": null,
+      "limitations": [
+        "Inspection derives bounded static hypotheses and next probes; it does not execute the artifact or claim format-specific semantics.",
+        "ZIP inventory lists central-directory entries only. Bytes after the central directory, including an APK Signing Block or a ZIP comment, are not occurrences."
+      ],
+      "locations": [],
+      "evidence_links": [
+        "ev_b7f8c53fc94eaba8a5751571a30fb8159ee162a85b0fb6334418a2c960bacf8b"
+      ]
+    },
+    {
+      "evidence_id": "ev_4f6234a35305a77a24254b2d43f5cada5bf3ad15512fab706664616efbc62830",
+      "subject": null,
+      "provider": {
+        "id": "adb",
+        "name": "Android Debug Bridge",
+        "version": "37.0.1-15733141"
+      },
+      "analysis_profile": null,
+      "predicate_type": "rea.analysis",
+      "operation": "resolve_adb_packages",
+      "parameters": {
+        "serial": "emulator-5554",
+        "query": "ketab"
+      },
+      "raw_result": null,
+      "normalized_result": {
+        "client": {
+          "binary_path": "/Users/M1PRO/Library/Android/sdk/platform-tools/adb",
+          "path_source": "environment",
+          "version": "37.0.1-15733141",
+          "installed_path": "/Users/M1PRO/Library/Android/sdk/platform-tools/adb"
+        },
+        "serial": "emulator-5554",
+        "query": "ketab",
+        "matches": [],
+        "exact_match": false,
+        "coverage": "complete"
+      },
+      "confidence": "observed",
+      "authority": "shipped-artifact",
+      "environment": null,
+      "limitations": [
+        "Artifact identity is unavailable for this observation.",
+        "Matching is a case-insensitive substring over package names; application display labels are not part of pm output"
+      ],
+      "locations": [],
+      "evidence_links": []
+    },
+    {
+      "evidence_id": "ev_08f559f694373e99a3ea18291e39d6be74cede4e050a39248d1f86b5fd8175c7",
+      "subject": null,
+      "provider": {
+        "id": "adb",
+        "name": "Android Debug Bridge",
+        "version": "37.0.1-15733141"
+      },
+      "analysis_profile": null,
+      "predicate_type": "rea.analysis",
+      "operation": "resolve_adb_packages",
+      "parameters": {
+        "serial": "emulator-5554",
+        "query": "sham"
+      },
+      "raw_result": null,
+      "normalized_result": {
+        "client": {
+          "binary_path": "/Users/M1PRO/Library/Android/sdk/platform-tools/adb",
+          "path_source": "environment",
+          "version": "37.0.1-15733141",
+          "installed_path": "/Users/M1PRO/Library/Android/sdk/platform-tools/adb"
+        },
+        "serial": "emulator-5554",
+        "query": "sham",
+        "matches": [],
+        "exact_match": false,
+        "coverage": "complete"
+      },
+      "confidence": "observed",
+      "authority": "shipped-artifact",
+      "environment": null,
+      "limitations": [
+        "Artifact identity is unavailable for this observation.",
+        "Matching is a case-insensitive substring over package names; application display labels are not part of pm output"
+      ],
+      "locations": [],
+      "evidence_links": []
+    }
+  ],
+  "demo_follow_up": {
+    "date": "2026-10-12",
+    "homepage": "https://demo.ketabonline.workers.dev/",
+    "homepage_http_status": 200,
+    "browser_homepage": "categories rendered",
+    "browser_category": "book list rendered",
+    "empty_book": {
+      "id": 500300,
+      "browser_pages": 0,
+      "browser_index_entries": 0,
+      "zip_http_status": 200,
+      "zip_bytes": 1410,
+      "json_pages": 0,
+      "json_index_entries": 0,
+      "metadata_http_status": 404
+    },
+    "control_book": {
+      "id": 29423,
+      "url": "https://demo.ketabonline.workers.dev/book/29423",
+      "browser_pages": 19,
+      "browser_index_entries": 1,
+      "text_rendered": true
+    },
+    "captured_console_errors": [],
+    "limitation": "Exact user-facing failure unknown; user-specific or intermittent network failure not ruled out.",
+    "additional_diagnosis": {
+      "large_book": {
+        "id": 62952,
+        "url": "https://demo.ketabonline.workers.dev/book/62952",
+        "http_status": 503,
+        "body": "error code: 1102\n",
+        "bytes": 17,
+        "duration_seconds": 6.166084,
+        "cloudflare_error_meaning": "CPU or memory resource limits exceeded",
+        "which_limit": "unknown without Worker logs"
+      },
+      "category_filter_probes": [
+        {
+          "case": "unfiltered",
+          "code": 200,
+          "ids": [
+            500300,
+            500301,
+            500302
+          ],
+          "categories": [
+            [
+              {
+                "name": "",
+                "id": 304
+              },
+              {
+                "name": "",
+                "id": 306
+              }
+            ],
+            [
+              {
+                "name": "",
+                "id": 304
+              },
+              {
+                "name": "",
+                "id": 306
+              }
+            ],
+            [
+              {
+                "name": "التفاسير والترجمات",
+                "id": 304
+              },
+              {
+                "name": "الترجمات",
+                "id": 306
+              }
+            ]
+          ]
+        },
+        {
+          "case": "category_1",
+          "code": 200,
+          "ids": [
+            500300,
+            500301,
+            500302
+          ],
+          "categories": [
+            [
+              {
+                "name": "",
+                "id": 304
+              },
+              {
+                "name": "",
+                "id": 306
+              }
+            ],
+            [
+              {
+                "name": "",
+                "id": 304
+              },
+              {
+                "name": "",
+                "id": 306
+              }
+            ],
+            [
+              {
+                "name": "التفاسير والترجمات",
+                "id": 304
+              },
+              {
+                "name": "الترجمات",
+                "id": 306
+              }
+            ]
+          ]
+        },
+        {
+          "case": "category_2",
+          "code": 200,
+          "ids": [
+            500300,
+            500301,
+            500302
+          ],
+          "categories": [
+            [
+              {
+                "name": "",
+                "id": 304
+              },
+              {
+                "name": "",
+                "id": 306
+              }
+            ],
+            [
+              {
+                "name": "",
+                "id": 304
+              },
+              {
+                "name": "",
+                "id": 306
+              }
+            ],
+            [
+              {
+                "name": "التفاسير والترجمات",
+                "id": 304
+              },
+              {
+                "name": "الترجمات",
+                "id": 306
+              }
+            ]
+          ]
+        }
+      ],
+      "browser_arabic_search": {
+        "query": "رياض",
+        "matching_ids_observed": [
+          24631,
+          29423,
+          98273
+        ],
+        "console_errors": []
+      },
+      "fix_deployed": false
+    }
+  }
+}

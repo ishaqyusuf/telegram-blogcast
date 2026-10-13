@@ -28,6 +28,11 @@ Summarizes where the database schema lives and which major data domains exist.
 - `user.schema.prisma`
 - `runtime.schema.prisma`
 
+### Book Provider Identity (2026-10-12)
+- `Book.sourceProvider`, `Book.sourceBookId` (unique together); `BookPage.sourcePageId` (unique per book) and `BookPage.sourceContentHash`; `BookVolume.sourcePartId`.
+- `BookSourceImport`: durable whole-book import job (`provider`, `sourceBookId`, optional `bookId`, `ownerHash`, unique nullable `activeKey`, `status`, `phase`, `generation`, `runId`, progress counters, `snapshotHash`, `errorCode/Message`, `metricsJson`, timestamps).
+- All additive/nullable; see [ADR-003](../decisions/ADR-003-ketabonline-provider-import.md).
+
 ### Working Notes
 - `BookChapterImport` is the durable chapter-capture outbox: bookId, optional returnPageId, unique (bookId,captureHash), retained raw HTML, status, generation, Trigger runId, counts/errors/timestamps, and nullable hashed installation ownership. No Trigger credentials are stored in rows. Production schema updates are additive.
 - `BookTocNode` remains the canonical hierarchy with parentId and optional existing pageId. The worker uses 500-row upserts, hashed source identity in legacy treePath, source page number, title, depth, and ordering. It writes no per-node URL or metadata JSON. Legacy columns remain compatible; no empty BookPage records are created.

@@ -1,6 +1,8 @@
 import { z } from "zod";
 
 export const BOOK_CACHE_FORMAT_VERSION = 1;
+export const PROVIDER_PAGE_FORMAT_VERSION = 2;
+export const BOOK_CACHE_PROVIDERS = ["ketabonline"] as const;
 export const PREFERRED_BOOKS_DIRECTORY = "Android/media/com.alghurobaa.podcast/Books";
 export const MAX_BOOK_CACHE_FILE_BYTES = 8 * 1024 * 1024;
 
@@ -34,8 +36,7 @@ const paragraphSchema = z.strictObject({
 	sourceMarks: z.array(z.strictObject({ kind: z.literal("c5"), start: ordinal, end: ordinal })).nullable().optional(),
 }).refine((p) => !p.sourceMarks?.some((m) => m.start >= m.end || m.end > p.text.length), "Invalid paragraph source range");
 
-const pageSchema = z.strictObject({
-	formatVersion: z.literal(BOOK_CACHE_FORMAT_VERSION),
+const pageFields = {
 	bookId: id,
 	pageId: id,
 	sourceBookId: id.nullable(),
@@ -49,14 +50,29 @@ const pageSchema = z.strictObject({
 	footnotes: z.array(z.strictObject({ id, marker: z.string(), content: z.string(), type: nullableText, linkedParagraphs: nullableText.optional(), items: z.json().optional() })),
 	document: documentSchema.nullable(),
 	contentHtml: nullableText,
-}).superRefine((page, context) => {
+};
+
+function checkPage(page: { paragraphs: { id: number }[]; footnotes: { id: number }[]; sourceBookId: number | null; sourcePageNo: number | null }, context: z.RefinementCtx) {
 	for (const key of ["paragraphs", "footnotes"] as const) {
 		if (new Set(page[key].map((row) => row.id)).size !== page[key].length)
 			context.addIssue({ code: "custom", path: [key], message: `Duplicate ${key} IDs` });
 	}
 	if (page.sourcePageNo !== null && page.sourceBookId === null)
 		context.addIssue({ code: "custom", path: ["sourceBookId"], message: "Source page requires a source book" });
-});
+}
+
+// Version 1 is unchanged: Shamela (sourceBookId = Shamela book ID) or user pages.
+const pageSchemaV1 = z.strictObject({ formatVersion: z.literal(BOOK_CACHE_FORMAT_VERSION), ...pageFields }).superRefine(checkPage);
+// Version 2 names its provider explicitly so provider IDs are never read as Shamela IDs.
+// sourcePageNo is the book's local reading sequence, which chapter trees target.
+const pageSchemaV2 = z.strictObject({
+	formatVersion: z.literal(PROVIDER_PAGE_FORMAT_VERSION),
+	sourceProvider: z.enum(BOOK_CACHE_PROVIDERS),
+	...pageFields,
+	sourceBookId: id,
+	sourcePageNo: id,
+}).superRefine(checkPage);
+const pageSchema = z.union([pageSchemaV1, pageSchemaV2]);
 
 const chapterSchema = z.strictObject({
 	formatVersion: z.literal(BOOK_CACHE_FORMAT_VERSION),
@@ -72,6 +88,11 @@ const chapterSchema = z.strictObject({
 });
 
 export type CachedPageFile = z.infer<typeof pageSchema>;
+
+/** The Shamela book identity used for source-URL lookup; provider pages never have one. */
+export function shamelaSourceBookId(page: CachedPageFile) {
+	return page.formatVersion === BOOK_CACHE_FORMAT_VERSION ? page.sourceBookId : null;
+}
 export type CachedChapterFile = z.infer<typeof chapterSchema>;
 
 export function bookCachePaths(bookId: number, pageId: number) {

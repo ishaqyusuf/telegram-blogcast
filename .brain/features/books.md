@@ -1,5 +1,19 @@
 # Books Feature
 
+## External Book Acquisition Research (2026-10-12)
+- [KetabOnline/Shamela investigation](../intake/2026-10-12-book-api-investigation.md) verified key-free KetabOnline whole-book JSON ZIP retrieval and complete per-volume chapter indexes. ZIP indexes can be incomplete even when all pages exist.
+- Shamela's community v4 SDK requires issued credentials and configured endpoints; its official full-library archive needs separate text-storage/parser investigation. The documented public MCP endpoint returned 404 during testing.
+- Android APK/network behavior was not observed; the import uses only the public HTTP contracts above.
+- Implemented as the KetabOnline provider import below ([task](../tasks/2026-10-12-ketabonline-book-import.md), [handoff](../plans/2026-10-12-ketabonline-book-import-handoff.md)).
+
+## KetabOnline Provider Import (2026-10-12)
+- Mobile: Add-book screen → **KetabOnline** opens `/book-ketabonline` (optional `?q=` prefill). One field accepts an Arabic title, a positive book ID or a `ketabonline.com` book link. Flat RTL result rows show author, pages, volumes and an "In library" badge; tapping opens a floating preview sheet with pages/volumes/chapters, source, and Import / Open book / Update from KetabOnline. Missing text (e.g. 500300) is explained in the sheet and cannot be imported.
+- Imports run on the Trigger worker and survive leaving the screen or closing the app. The screen's Imports section and the book detail card reconcile from the server (polling only while active and foregrounded): phase, pages saved / total, volumes indexed, owner-only Cancel and Retry, and Read saved pages as soon as text exists. Chapters are complete only after every volume's index validates.
+- Imported books are read-only (`sourceType: "ketabonline"`), open in the native reader with volume/printed page labels, running chapter titles, Quran/holy-text highlights and linked footnotes, and use the existing virtualized chapters screen (verified with 2,762 chapters across 10 volumes). Shamela capture controls are hidden for provider books.
+- Offline: "Keep Available Offline" stores provider pages as cache format v2 privately on the device; they read offline with the correct provider identity and are never mirrored to the public Books folder.
+- Search categories are intentionally absent (upstream filter unverified). Decision: [ADR-003](../decisions/ADR-003-ketabonline-provider-import.md).
+- Verified locally (isolated PostgreSQL, live upstream): 29423 → 19 pages/1 chapter; 62952 → 5,444 pages, 2,762 chapters, 10 volumes in 11.2 s at 674 MB peak RSS (unchanged replay keeps every page ID and content version); 500300 → unavailable, no book created.
+
 ## Automatic Mobile Page Loading (2026-09-08)
 - Pasted Shamela page links, chapter titles, and missing adjacent pages open the native reader skeleton through `/book-read-source`.
 - One shared concealed WebView observes stable page content, captures HTML automatically, and reuses existing stage/promote APIs. No direct HTTP source fallback is used.

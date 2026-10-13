@@ -171,6 +171,15 @@ describe("transactional book cache", () => {
 		expect(await repository.findSourcePage("user:2", 23833, 106)).toBeNull();
 	});
 
+	test("provider pages resolve within their book but never match a Shamela source link", async () => {
+		const { repository } = fixture();
+		const ketab: CachedPageFile = { ...page(12), formatVersion: 2, sourceProvider: "ketabonline", bookId: 4, sourceBookId: 23833, sourcePageNo: 106 };
+		await repository.savePage("guest", ketab, 100);
+		expect(await repository.findPage("guest", 4, 106)).toBe(12);
+		expect(await repository.findSourcePage("guest", 23833, 106)).toBeNull();
+		expect(await repository.readPage("guest", 4, 12)).toMatchObject({ formatVersion: 2, sourceProvider: "ketabonline" });
+	});
+
 	test("download checkpoints and library entries survive reopening without mixing accounts", async () => {
 		const { repository, reopen } = fixture();
 		const job: BookDownload = { scope: "user:1", bookId: 3, cursor: 12, completed: 1, chaptersSaved: false, status: "paused", error: null, manifest: { bookId: 3, nameAr: null, nameEn: "My Book", sourceBookId: 23833, maxPageId: 13, totalPages: 2, revision: "r1" } };

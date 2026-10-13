@@ -1,5 +1,8 @@
 # Done
 
+### [KetabOnline and Shamela API Investigation](2026-10-12-book-api-investigation.md)
+- Status: Done — public download paths verified; Android APK/network behavior unverified
+
 ### [Release orchestration, standalone API, and channel scrolling](2026-10-07-release-api-and-channel-scroll.md)
 - Status: Done — standalone Production API verified; API/web/Android Preview released; mobile tests excluded
 

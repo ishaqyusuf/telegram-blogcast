@@ -13,6 +13,7 @@ import { BookChapterImportStatus } from "@/components/book/book-chapter-import-s
 import { BookDownloadButton } from "@/components/book/book-download-button";
 import { BookDetailHero } from "@/components/book/book-detail-hero";
 import { BookSourceCapture } from "@/components/book/book-source-capture";
+import { BookSourceImportStatus } from "@/components/book/book-source-import-status";
 import { useBookOfflineStore } from "@/store/book-offline-store";
 import { vanillaTrpc } from "@/trpc/vanilla-client";
 import { useTranslation } from "@/lib/i18n";
@@ -104,7 +105,11 @@ export default function BookDetailScreen() {
 	const [showBookmarks, setShowBookmarks] = useState(false);
 
 	const { data: book, isLoading, refetch: refetchBook } = useQuery(
-		_trpc.book.getBook.queryOptions({ id: bookIdNum, includeToc: false }),
+		_trpc.book.getBook.queryOptions({
+			id: bookIdNum,
+			includeToc: false,
+			focusPageId: getLastPage(bookIdNum) ?? undefined,
+		}),
 	);
 	const { data: pageImportHistory } = useQuery(
 		_trpc.book.getBookPageImportHistory.queryOptions({
@@ -146,8 +151,10 @@ export default function BookDetailScreen() {
 			? `https://shamela.ws/book/${book.shamelaId}/${nextSourcePageNo}`
 			: null);
 
-	const fetchedCount = book.pages.filter((p) => p.status === "fetched").length;
-	const totalCount = book.pages.length;
+	// Provider books return a bounded page list, so counts come from the server.
+	const fetchedCount = book.pageCounts.fetched;
+	const totalCount = book.pageCounts.total;
+	const isProviderBook = Boolean(book.sourceProvider);
 	const isImportedBook =
 		book.editable === false ||
 		book.sourceType === "shamela" ||
@@ -351,6 +358,7 @@ export default function BookDetailScreen() {
 							</View>
 						) : null}
 						<BookChapterImportStatus bookId={bookIdNum} />
+						{isProviderBook ? <BookSourceImportStatus bookId={bookIdNum} /> : null}
 					{isImportedBook && (
 						<View
 							style={[
@@ -390,8 +398,9 @@ export default function BookDetailScreen() {
 									{ writingDirection: "rtl" },
 								]}
 							>
-								Pages can be refreshed from the Shamela source. Direct editing
-								stays disabled.
+								{isProviderBook
+									? "Imported from KetabOnline. The text is read-only; highlights and notes stay yours."
+									: "Pages can be refreshed from the Shamela source. Direct editing stays disabled."}
 							</Text>
 							{book.shamelaUrl ? (
 								<Text
@@ -615,6 +624,10 @@ export default function BookDetailScreen() {
 								</View>
 							</KeyboardAvoidingView>
 						) : (
+							isProviderBook ? (
+								// Provider books are imported whole; page-by-page Shamela capture does not apply.
+								<BookDownloadButton bookId={bookIdNum} />
+							) : (
 							<View style={{ gap: 8 }}>
 								<View style={{ flexDirection: "row", gap: 8 }}>
 									<Pressable
@@ -671,6 +684,7 @@ export default function BookDetailScreen() {
 										pages={book.pages}
 									/>
 							</View>
+							)
 						)}
 					</View>
 

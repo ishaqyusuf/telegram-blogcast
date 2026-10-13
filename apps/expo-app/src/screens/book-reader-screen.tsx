@@ -839,7 +839,7 @@ export default function BookReaderScreen() {
 
   const pageSwipeGesture = useMemo(
     () => {
-      const sourceReadsRightToLeft = isRtl || Boolean(page?.book?.shamelaId);
+      const sourceReadsRightToLeft = isRtl || Boolean(page?.book?.shamelaId || page?.book?.sourceProvider);
       const nativeScroll = Gesture.Native().disallowInterruption(false).runOnJS(true);
       const pan = Gesture.Pan()
         .enabled(Boolean(page) && mode === "read")

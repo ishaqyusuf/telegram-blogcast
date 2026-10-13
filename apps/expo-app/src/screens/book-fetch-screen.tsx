@@ -443,6 +443,25 @@ export default function BookFetchScreen() {
             contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 40 }}
             keyboardShouldPersistTaps="handled"
           >
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => router.push("/book-ketabonline" as never)}
+              className="flex-row items-center gap-3 rounded-xl bg-card p-3.5"
+            >
+              <View className="size-10 items-center justify-center rounded-full bg-primary/10">
+                <Icon name="BookOpen" size={20} className="text-primary" />
+              </View>
+              <View className="flex-1 gap-0.5">
+                <Text className="text-[15px] font-bold text-foreground">
+                  KetabOnline
+                </Text>
+                <Text className="text-[13px] text-muted-foreground">
+                  Search and import whole books with chapters
+                </Text>
+              </View>
+              <Icon name="ChevronRight" size={18} className="text-muted-foreground" />
+            </Pressable>
+
             <View className="gap-1.5 rounded-xl border border-primary/20 bg-primary/10 p-3.5">
               <Text
                 style={{

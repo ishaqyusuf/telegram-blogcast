@@ -25,7 +25,9 @@ export async function restoreBookFiles(files: BookFileAccess, repository: Return
 		try {
 			if (await repository.readPage(scope, bookId, pageId)) { skipped++; continue; }
 			const saved = await readRecoverableBookFile(files, bookCachePaths(bookId, pageId).page, (text) => parsePageFile(text, { bookId, pageId }));
-			if (!saved || saved.value.sourceBookId !== manifest.value.sourceBookId) throw new Error(`Page ${pageId} does not match the book manifest.`);
+			// Shared folders only ever contain exportable Shamela captures (format 1); provider
+			// pages are private-cache only and must never be restored under a Shamela manifest.
+			if (!saved || saved.value.formatVersion !== 1 || saved.value.sourceBookId !== manifest.value.sourceBookId) throw new Error(`Page ${pageId} does not match the book manifest.`);
 			if (options.signal?.aborted) break;
 			// No server metadata or mirror job: restored files stay local and unverified until an online refresh.
 			if (await repository.savePage(scope, saved.value, 0, false, undefined, true)) restored++;

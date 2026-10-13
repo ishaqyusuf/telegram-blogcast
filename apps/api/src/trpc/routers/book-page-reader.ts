@@ -33,7 +33,7 @@ async function readBookPageAttempt(db: Database, pageId: number, sourcePageNo: (
     }),
     db.bookPageComment.findMany({ where: { pageId, deletedAt: null }, orderBy: { createdAt: "asc" } }),
     page.volumeId == null ? null : db.bookVolume.findUnique({ where: { id: page.volumeId }, select: { id: true, number: true, title: true } }),
-    db.book.findUniqueOrThrow({ where: { id: page.bookId }, select: { id: true, sourceType: true, editable: true, ownerUserId: true, shamelaId: true, shamelaUrl: true, blog: { select: { published: true } } } }),
+    db.book.findUniqueOrThrow({ where: { id: page.bookId }, select: { id: true, sourceType: true, editable: true, ownerUserId: true, shamelaId: true, shamelaUrl: true, sourceProvider: true, sourceBookId: true, blog: { select: { published: true } } } }),
     adjacentNumbers.length ? db.bookPage.findMany({
       where: { bookId: page.bookId, shamelaPageNo: { in: adjacentNumbers }, deletedAt: null },
       select: { id: true, shamelaPageNo: true, shamelaUrl: true, status: true },

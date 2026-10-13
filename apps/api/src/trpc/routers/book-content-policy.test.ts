@@ -10,3 +10,9 @@ test("only published read-only Shamela content is eligible for portable mirrors"
   expect(canExportBookContent({ ...published, editable: true })).toBe(false);
   expect(canExportBookContent({ ...published, shamelaId: null })).toBe(false);
 });
+
+test("provider imports are never exportable, even when published and read-only", () => {
+  const ketab = { sourceType: "ketabonline", sourceProvider: "ketabonline", sourceBookId: 29423, shamelaId: null, editable: false, blog: { published: true } };
+  expect(canExportBookContent(ketab)).toBe(false);
+  expect(canExportBookContent({ ...ketab, sourceType: "shamela", shamelaId: 29423 })).toBe(false);
+});

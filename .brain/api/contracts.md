@@ -78,6 +78,12 @@ Tracks important request/response expectations and typed boundaries between clie
 - `/facebook-import` mobile flow talks to tRPC `facebookImport.getSummary`, `facebookImport.listMediaImports`, `facebookImport.checkBridge`, and `facebookImport.startMediaImport`.
 - `/facebook-saved-sync` loads known identities through `facebookImport.getSavedSyncState`, captures Facebook Saved inside an authenticated WebView, and submits the completed delta through `facebookImport.syncSavedPosts`.
 
+### Book Source Import Contracts
+- Import view (`bookSource.status|start|retry|cancel|mine|latestForBook`): `{id, provider, sourceBookId, bookId, status: queued|running|complete|failed|cancelled|unavailable, phase: queued|metadata|download|pages|chapters|done, generation, title, pagesTotal, pagesSaved, volumesTotal, volumesIndexed, chaptersTotal, chaptersSaved, createdAt, updatedAt, completedAt, canManage, errorCode, errorMessage, firstPageId}`. `errorCode`/`errorMessage` are `null` unless `canManage`.
+- Upstream errors map to tRPC codes: invalid ID → `BAD_REQUEST`; not found/unavailable → `NOT_FOUND` (preview returns `available: false` instead); rate limited → `TOO_MANY_REQUESTS`; oversized → `PAYLOAD_TOO_LARGE`; other upstream/archive/format failures → `BAD_GATEWAY`. HTML error pages are reported as unreadable responses, never JSON parse crashes.
+- Reader page/book selects include `sourceProvider` and `sourceBookId`. Provider pages: `shamelaPageNo` = local reading sequence, `shamelaUrl` = `""`, adjacency from that sequence; `rawJson` carries `{provider, sourcePageId, partName, printedPageNo, converter, sourceParagraphIds, unsupportedFields, contentVersion, contentUpdatedAt}`.
+- Mobile offline page files: format 1 unchanged; format 2 adds `sourceProvider: "ketabonline"` and requires provider `sourceBookId` and local-sequence `sourcePageNo`.
+
 ### TODO
 - `book.promoteStagedShamelaPageParse` persists readable page content independently of chapter completeness and additionally returns `requiresFullToc` and `shamelaBookId`. Promoted-stage retries retain the original saved page ID.
 - `bookChapter.capture({ bookId, pageId, finalUrl, html })` accepts a matching HTTPS Shamela root and an already-saved page. It persists an idempotent capture (maximum 3 MB UTF-8), then enqueues Trigger. Acceptance returns import status, not a completed tree. The worker validates completeness and publishes atomically without page stubs or content changes.

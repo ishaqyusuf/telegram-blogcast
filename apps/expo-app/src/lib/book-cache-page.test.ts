@@ -60,9 +60,31 @@ describe("cached reader pages", () => {
 	});
 
 	test("restored files without private metadata default to read-only", () => {
-		const page = decodeReaderPage({ ...file(), sourceBookId: null, sourcePageNo: null }, null);
+		const page = decodeReaderPage({ ...file(), formatVersion: 1, sourceBookId: null, sourcePageNo: null }, null);
 		expect(page.book.editable).toBe(false);
 		expect(page.audioReferences).toEqual([]);
 		expect(page.adjacentPages.next.page).toBeNull();
+	});
+
+	test("provider pages keep their provider offline and never synthesize Shamela links", () => {
+		const shamela = decodeReaderPage(file(), null);
+		const ketab = {
+			...shamela,
+			shamelaPageNo: 106, shamelaUrl: "", previousShamelaUrl: null, nextShamelaUrl: null,
+			book: { ...shamela.book, shamelaId: null, shamelaUrl: null, sourceProvider: "ketabonline", sourceBookId: 23833, sourceType: "ketabonline" },
+			localCache: undefined,
+		};
+		const encoded = encodeReaderPage(ketab);
+		expect(encoded.file).toMatchObject({ formatVersion: 2, sourceProvider: "ketabonline", sourceBookId: 23833, sourcePageNo: 106 });
+		expect(encoded.exportable).toBe(false);
+		const restored = decodeReaderPage(encoded.file, null);
+		expect(restored.book).toMatchObject({ sourceProvider: "ketabonline", sourceBookId: 23833, shamelaId: null, shamelaUrl: null, sourceType: "ketabonline" });
+		expect(restored.shamelaUrl).toBe("");
+		expect(restored.nextShamelaUrl).toBeNull();
+		expect(restored.adjacentPages.next.shamelaUrl).toBeNull();
+		expect(JSON.stringify(restored)).not.toContain("shamela.ws");
+
+		const unknownProvider = encodeReaderPage({ ...ketab, book: { ...ketab.book, sourceProvider: "other" } });
+		expect(unknownProvider.file).toMatchObject({ formatVersion: 1, sourceBookId: null, sourcePageNo: null });
 	});
 });

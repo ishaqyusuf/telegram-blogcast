@@ -21,6 +21,9 @@ Documents authentication and authorization expectations across the API surface.
   active lease. `PUT` and `DELETE` require a constant-time-checked bearer token
   from `LOCAL_SERVICES_DISCOVERY_TOKEN`; the token is never shipped in Expo.
 
+- `bookSource.start/retry/cancel` require a valid `x-book-import-token`; only the installation that started an import may retry/cancel it or read its error details. Anyone may read compact status. Starts are limited to 20 per installation per hour and 10 generations per job.
+- Provider books are not editable through page/book edit routes; personal highlights, comments and audio references remain allowed. `canExportBookContent` is false for any book with `sourceProvider`.
+
 ### Questions To Maintain
 - Which routes are public vs authenticated?
 - Are there admin/moderation capabilities in the web surface?

@@ -121,7 +121,9 @@ export default function BookSearchScreen() {
               onChangeText={setQuery}
               placeholder={t("searchBook")}
               placeholderTextColor={colors.mutedForeground}
-              className="flex-1 text-right text-[15px] text-foreground"
+              // NativeWind's TextInput interop crashes on text-align classes; use the native prop.
+              textAlign="right"
+              className="flex-1 text-[15px] text-foreground"
               style={{ writingDirection: "rtl" }}
               autoFocus
               returnKeyType="search"

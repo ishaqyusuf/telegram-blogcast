@@ -36,7 +36,7 @@ export const bookChapterRoutes = createTRPCRouter({
 		.query(async ({ ctx, input }) => ctx.db.$transaction(async (db) => {
 			const book = await db.book.findFirstOrThrow({
 				where: { id: input.bookId, deletedAt: null },
-				select: { id: true, shamelaId: true, tocStatus: true, sourceType: true, editable: true, blog: { select: { published: true } } },
+				select: { id: true, shamelaId: true, tocStatus: true, sourceType: true, sourceProvider: true, editable: true, blog: { select: { published: true } } },
 			});
 			// One lean snapshot lets the client expand every branch without N+1 requests.
 			const rows = await db.bookTocNode.findMany({
@@ -139,7 +139,7 @@ export const bookChapterRoutes = createTRPCRouter({
 		.query(async ({ ctx, input }) => {
 			const book = await ctx.db.book.findFirstOrThrow({
 				where: { id: input.bookId, deletedAt: null },
-				select: { shamelaId: true, shamelaUrl: true },
+				select: { shamelaId: true, shamelaUrl: true, sourceProvider: true },
 			});
 			const page = await ctx.db.bookPage.findFirst({
 				where: {
@@ -151,6 +151,12 @@ export const bookChapterRoutes = createTRPCRouter({
 				select: { id: true },
 			});
 			if (page) return { pageId: page.id, sourceUrl: null };
+			// Provider books are imported whole; never fall through to a Shamela WebView URL.
+			if (book.sourceProvider)
+				throw new TRPCError({
+					code: "NOT_FOUND",
+					message: "This page is not saved yet. Open the book to finish its import.",
+				});
 			let sourceBookId = book.shamelaId;
 			if (!sourceBookId && book.shamelaUrl) {
 				try {

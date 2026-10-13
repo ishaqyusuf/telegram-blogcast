@@ -48,6 +48,9 @@ High-level map of the API surface and where endpoint logic lives.
   graceful local-runner shutdown.
 
 ### Books Router Highlights
+- `bookSource` (KetabOnline): `search({query, page})` (10 per page, `localBookId` per row), `preview({sourceBookId})` (metadata summary, `available`/`unavailableReason`, `localBookId`, `latestImport`), `start({sourceBookId})`, `status({importId})`, `mine({limit})`, `latestForBook({bookId})`, `retry({importId})`, `cancel({importId})`. Start/retry/cancel require the installation import token. Worker: Trigger `import-book-source` plus `recover-book-source-imports` (every 5 min).
+- `book.getBook` accepts optional `focusPageId`; for provider books it returns only the first fetched page (plus the focus page) and always returns `pageCounts {total, fetched, complete}`. Soft-deleted pages/volumes are excluded for all books.
+- `bookChapter.resolvePage` never builds a Shamela URL for provider books; a missing provider page is `NOT_FOUND`.
 - `book.syncBookFromShamela`: legacy metadata/AI hierarchy import with BookImportHistory; no longer creates empty page stubs. Mobile page import uses the WebView page-first capture instead.
 - `bookChapter`: durable root capture, status/latest/bookState, retry/cancel, paginated hierarchy search, and fresh saved-page resolution. Trigger handles publication outside Vercel's request lifetime.
 - `book.getBookImportHistory`: returns recent book import attempts for the fetch screen/history UI.

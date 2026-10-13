@@ -12,7 +12,11 @@
   "exports": {
     "./book-chapter-import": "./src/book-chapter-import.ts",
     "./dispatch-chapter-import": "./src/dispatch-chapter-import.ts",
-    "./schema": "./src/schema.ts"
+    "./schema": "./src/schema.ts",
+    "./book-page-annotations": "./src/book-page-annotations.ts",
+    "./book-source-import": "./src/book-source-import.ts",
+    "./dispatch-source-import": "./src/dispatch-source-import.ts",
+    "./ketabonline-client": "./src/ketabonline-client.ts"
   },
   "dependencies": {
     "@fast-csv/format": "5.0.2",
