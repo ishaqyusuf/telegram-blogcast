@@ -17,6 +17,7 @@ Repository-specific guardrails for AI contributors working on code, docs, and re
 - Do not overwrite user-authored files or docs unless explicitly requested.
 - Reflect architecture/API/database changes back into the Brain.
 - Never combine `className` and `style` on the same React Native component. Use one styling mechanism per element.
+- Never put text-align classes (`text-right`/`text-left`/`text-center`) on a `TextInput` className: NativeWind 5's interop crashes at render. Use the `textAlign` prop instead.
 
 ### Recommended Inputs For AI Tasks
 - Goal
