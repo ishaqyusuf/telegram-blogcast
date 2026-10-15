@@ -10,7 +10,7 @@ High
 2026-10-12
 
 ## Last Updated
-2026-10-13
+2026-10-15
 
 ## Request
 Prepare a Brain handoff for another agent to implement easy API-based book acquisition, using the verified KetabOnline/Shamela investigation and demo diagnosis. Then (2026-10-12): "implement ketab online book import feature".
@@ -64,6 +64,7 @@ Mobile users can search KetabOnline titles or enter a book ID, review metadata, 
 - API: production deploy healthy at `544e2451`, aliased `https://alghurobaa-api.vercel.app`; live `bookSource.preview` verified for 29423 (available) and 500300 (explained unavailable).
 - Mobile: Android Preview OTA `2026.10.13`, runtime `1.0.111`, update group `b0894a1b-f59d-49e5-9944-54930e316227`.
 - Not yet observed in Production: a real import run by the deployed worker (no production book was imported during release).
+- 2026-10-15 follow-up (user-approved): KetabOnline screen switched to an English, left-to-right interface (English placeholder, units and source label; LTR rows, search pill and preview sheet; Arabic only as content, counts placed before Arabic author names so lines keep LTR order). Verified on the emulator; Android Preview OTA `2026.10.15`.
 
 ## Boundaries
 First provider: KetabOnline. Existing Shamela WebView capture is unchanged. Shamela issued-key integration, bulk archive decoding, and MCP recovery are separate work. Upstream category filtering remains unverified, so no category selector is shipped. No production rollout was performed.

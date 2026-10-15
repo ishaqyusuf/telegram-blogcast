@@ -30,10 +30,11 @@ function useAppActive() {
 
 function bookMeta(item: { authors: string[]; pagesCount: number; partsCount?: number; volumesCount?: number }) {
 	const volumes = item.volumesCount ?? item.partsCount ?? 0;
+	// English counts lead so the line keeps LTR order; the Arabic author trails as content.
 	return [
+		item.pagesCount ? `${item.pagesCount.toLocaleString()} pages` : null,
+		volumes > 1 ? `${volumes} volumes` : null,
 		item.authors[0],
-		item.pagesCount ? `${item.pagesCount.toLocaleString()} صفحة` : null,
-		volumes > 1 ? `${volumes} مجلدات` : null,
 	]
 		.filter(Boolean)
 		.join(" · ");
@@ -99,10 +100,10 @@ export default function BookSourceSearchScreen() {
 		<View>
 			{imports.data?.length ? (
 				<View className="border-b border-border pb-2">
-					<Text className="px-4 pb-1 pt-3 text-right text-xs font-bold text-muted-foreground">Imports</Text>
+					<Text className="px-4 pb-1 pt-3 text-xs font-bold text-muted-foreground">Imports</Text>
 					{imports.data.map((job) => (
 						<View key={job.id} className="gap-1 px-4 py-2.5">
-							<Text className="text-[15px] font-semibold text-foreground text-right" numberOfLines={1}>
+							<Text className="text-[15px] font-semibold text-foreground" numberOfLines={1}>
 								{job.title ?? `KetabOnline #${job.sourceBookId}`}
 							</Text>
 							<BookSourceImportProgress job={job} onOpenPage={openPage} onOpenBook={openBook} />
@@ -122,7 +123,7 @@ export default function BookSourceSearchScreen() {
 				</Pressable>
 			) : null}
 			{titleQuery && results.length ? (
-				<Text className="px-4 pb-1 pt-3 text-right text-xs font-bold text-muted-foreground">
+				<Text className="px-4 pb-1 pt-3 text-xs font-bold text-muted-foreground">
 					Results · {(pages[0]?.data?.total ?? results.length).toLocaleString()}
 				</Text>
 			) : null}
@@ -162,16 +163,14 @@ export default function BookSourceSearchScreen() {
 					</Pressable>
 					<Text className="text-[17px] font-bold text-foreground">KetabOnline</Text>
 				</View>
-				<View className="mx-4 mb-2 h-12 flex-row-reverse items-center gap-2 rounded-full border border-border bg-card px-4">
+				<View className="mx-4 mb-2 h-12 flex-row items-center gap-2 rounded-full border border-border bg-card px-4">
 					<Icon name="Search" size={18} className="text-muted-foreground" />
 					<TextInput
 						value={query}
 						onChangeText={setQuery}
-						placeholder="عنوان الكتاب أو رقمه"
+						placeholder="Title, book ID or link"
 						placeholderTextColor={colors.mutedForeground}
 						accessibilityLabel="Search KetabOnline by title, book ID or link"
-						// NativeWind's TextInput interop crashes on text-align classes; use the native prop.
-						textAlign="right"
 						className="h-full flex-1 py-0 text-[15px] text-foreground"
 						autoCapitalize="none"
 						autoCorrect={false}
@@ -201,18 +200,18 @@ export default function BookSourceSearchScreen() {
 						<Pressable
 							accessibilityRole="button"
 							onPress={() => setSelected(item.id)}
-							className="flex-row-reverse gap-3 border-b border-border px-4 py-3"
+							className="flex-row gap-3 border-b border-border px-4 py-3"
 						>
 							<View style={{ width: 6, borderRadius: 3, backgroundColor: item.colors[0] ?? colors.border }} />
 							<View className="flex-1 gap-0.5">
-								<Text className="text-[15px] font-semibold text-foreground text-right" numberOfLines={2}>
+								<Text className="text-[15px] font-semibold text-foreground" numberOfLines={2}>
 									{item.title}
 								</Text>
-								<Text className="text-xs text-muted-foreground text-right" numberOfLines={1}>
+								<Text className="text-xs text-muted-foreground" numberOfLines={1}>
 									{bookMeta(item)}
 								</Text>
 								{item.localBookId ? (
-									<View className="flex-row-reverse">
+									<View className="flex-row">
 										<Text className="mt-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">In library</Text>
 									</View>
 								) : null}
@@ -304,17 +303,17 @@ function BookSourcePreview({
 	return (
 		<View className="gap-3 px-5 pb-5 pt-2">
 			<View className="gap-1">
-				<Text className="text-[17px] font-bold leading-7 text-foreground text-right">
+				<Text className="text-[17px] font-bold leading-7 text-foreground">
 					{book.title ?? `KetabOnline #${book.sourceBookId}`}
 				</Text>
 				{book.authors.length || book.categories.length ? (
-					<Text className="text-[13px] text-muted-foreground text-right">
-						{[book.authors.join("، "), book.categories[0]].filter(Boolean).join(" · ")}
+					<Text className="text-[13px] text-muted-foreground">
+						{[book.authors.join(", "), book.categories[0]].filter(Boolean).join(" · ")}
 					</Text>
 				) : null}
 			</View>
 			{book.available ? (
-				<View className="flex-row-reverse gap-6">
+				<View className="flex-row gap-6">
 					<Stat value={book.pagesCount} label="pages" />
 					<Stat value={book.volumesCount} label={book.volumesCount === 1 ? "volume" : "volumes"} />
 					<Stat value={book.chaptersCount} label={book.chaptersCount === 1 ? "chapter" : "chapters"} />
@@ -329,8 +328,8 @@ function BookSourcePreview({
 				</View>
 			)}
 			{book.source ? (
-				<Text className="text-xs text-muted-foreground text-right">
-					{book.source}
+				<Text className="text-xs text-muted-foreground">
+					{`Source · ${book.source}`}
 				</Text>
 			) : null}
 			{start.error ? <Text className="text-[13px] text-destructive">{start.error.message}</Text> : null}
@@ -356,7 +355,7 @@ function BookSourcePreview({
 
 function Stat({ value, label }: { value: number; label: string }) {
 	return (
-		<View className="items-end">
+		<View className="items-start">
 			<Text className="text-lg font-bold text-foreground">{value.toLocaleString()}</Text>
 			<Text className="text-xs text-muted-foreground">{label}</Text>
 		</View>

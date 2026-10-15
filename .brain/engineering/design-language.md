@@ -17,8 +17,8 @@ Captures the user-experience and visual-language constraints that shape the app 
 - Clean, media-focused presentation across audio, blog, and book experiences, with accent swatches drawn from the GND-compatible blue/teal/amber/indigo/rose palette.
 
 ### Content Direction
-- Arabic-first and RTL-aware where content requires it.
-- Prefer `writingDirection: "rtl"` and right-aligned text in Arabic reading surfaces.
+- English interface, Arabic content (decided 2026-10-13): the app chrome is English and left-to-right (labels, buttons, units, counts, row order, navigation), even though most content is Arabic. Do not design Arabic-first screens.
+- Arabic appears only as content: book/lesson/channel titles, transcripts, page text, quotes and footnotes. Long Arabic text blocks (reader pages, transcripts, post bodies) are RTL reading surfaces; Arabic titles inside LTR rows use natural/auto alignment without flipping the row.
 - Preserve readability for long-form educational content.
 
 ### Component-Level Notes
