@@ -1,0 +1,27 @@
+{
+  "id": "22b77417-4309-4df5-af67-52b2cb5c8158",
+  "status": "NEW",
+  "platform": "ANDROID",
+  "buildProfile": "preview",
+  "distribution": "INTERNAL",
+  "channel": "preview",
+  "appVersion": "1.0.112",
+  "appBuildVersion": "27",
+  "runtimeVersion": "1.0.112",
+  "gitCommitHash": "ebfeab407dbd33655ea9d2a79ec9a0b9b007c2dc",
+  "createdAt": "2026-10-28T16:48:36.830Z",
+  "message": "Preview 2026.10.28: native scroll rendering and full-height Digital Books",
+  "project": {
+    "id": "9d8a8cd8-d310-4724-8a61-db39e6b56c9a",
+    "name": "alghurobaa",
+    "slug": "alghurobaa",
+    "ownerAccount": {
+      "id": "70eae128-8ca5-4a44-993b-e70b27fc2b30",
+      "name": "ishaqyusuf"
+    }
+  },
+  "fingerprint": {
+    "id": "01a18369-e265-7bcc-9fde-377de27b4b90",
+    "hash": "32aea48b6f9eee450edf04515a2fb6246da77cc4"
+  }
+}

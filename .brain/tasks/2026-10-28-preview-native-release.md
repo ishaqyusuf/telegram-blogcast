@@ -1,6 +1,6 @@
 # Android Preview Native Release — 2026.10.28
 
-- Status: In Progress — source preparation and native Preview build
+- Status: Waiting — EAS native Preview build queued
 - Created: 2026-10-28
 - Updated: 2026-10-28
 - Request: “release preview.”
@@ -24,3 +24,9 @@
 - [ ] Record release link and complete Brain tracking.
 
 Archive inspection verified 1452 files (83.3 MiB); native patch, version configuration, lockfile and Books screen match the tested checkout. Source hashes: `artifacts/preview-native-2026-10-28/archive-source-manifest.json`.
+
+## Build submission
+
+- Build `22b77417-4309-4df5-af67-52b2cb5c8158` submitted to EAS Android Preview: app/runtime `1.0.112`, versionCode `27`, channel `preview`, source revision `ebfeab407dbd33655ea9d2a79ec9a0b9b007c2dc` plus the recorded tested working-tree snapshot.
+- [EAS build](https://expo.dev/accounts/ishaqyusuf/projects/alghurobaa/builds/22b77417-4309-4df5-af67-52b2cb5c8158). Existing remote Preview signing credentials retained.
+- Preview update endpoint returned HTTP 204 for runtime `1.0.112`; no older runtime manifest was served.
