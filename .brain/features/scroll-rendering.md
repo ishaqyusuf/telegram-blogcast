@@ -28,3 +28,9 @@ The October 28 investigation trialed a larger render buffer and viewport-specifi
 `node scripts/android-scroll-check.mjs emulator-5554 frames /tmp/scroll-frames` records a four-swipe native timing run and a settled screenshot. It does not automatically classify blur or establish a performance improvement.
 
 Execution, native coverage, limitations and evidence: [Android scroll task](../tasks/2026-10-28-android-scroll-rendering.md). No API, permission, database, migration or deployment behavior changed.
+
+## Native renderer correction
+
+Reanimated 4.1.7 has a version-pinned Bun patch that skips reapplying animated props to native state commits on RN 0.80+. React commits retain the existing animation-prop path. This removes repeated idle animated-prop mount work across scroll surfaces, including screens with animated components retained elsewhere in navigation. A native rebuild is required; a Metro reload or OTA update alone cannot install it.
+
+[Decision, upstream source and upgrade cleanup](../decisions/2026-10-28-reanimated-native-scroll-state-commits.md). [Physical diagnostic comparison](../../artifacts/android-scroll-2026-10-28/native-commit-followup/verification.md) shows lower native work and latency, with remaining missed 120 Hz deadlines. Earlier statements about no proven overall FPS gain still apply.

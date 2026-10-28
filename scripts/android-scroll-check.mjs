@@ -7,12 +7,16 @@ const [serial, mode = "frames", output = "/tmp/al-ghurobaa-scroll-check"] = proc
 if (!serial || !["frames", "expanded-row"].includes(mode)) {
 	throw new Error("Usage: node scripts/android-scroll-check.mjs SERIAL [frames|expanded-row] [OUTPUT_DIR]");
 }
-const appId = "com.alghurobaa.podcast.dev";
+const appId = process.env.ANDROID_SCROLL_APP_ID ?? "com.alghurobaa.podcast.dev";
+if (!/^com\.alghurobaa\.podcast(?:\.[a-z][a-z0-9]*)*$/.test(appId)) {
+	throw new Error("ANDROID_SCROLL_APP_ID must identify an Al-Ghurobaa app");
+}
 const adb = (...args) => execFileSync("adb", ["-s", serial, ...args], { timeout: 15_000 });
 const text = (...args) => adb(...args).toString();
 const assertForeground = () => {
 	const focus = text("shell", "dumpsys", "window").split("\n").find((line) => line.includes("mCurrentFocus"));
-	if (!focus?.includes(appId)) throw new Error(`Expected ${appId} in foreground; stopping without further input.`);
+	const focusedApp = focus?.match(/\bu\d+\s+([^/\s]+)\//)?.[1];
+	if (focusedApp !== appId) throw new Error(`Expected ${appId} in foreground; stopping without further input.`);
 };
 const dir = resolve(output);
 mkdirSync(dir, { recursive: true });
@@ -84,6 +88,7 @@ if (mode === "expanded-row") {
 	const gfx = text("shell", "dumpsys", "gfxinfo", appId);
 	if (!Number(gfx.match(/Total frames rendered: (\d+)/)?.[1])) throw new Error("No rendered frames; this is not a valid scroll measurement.");
 	writeFileSync(resolve(dir, "frames.txt"), gfx);
+	writeFileSync(resolve(dir, "framestats.txt"), text("shell", "dumpsys", "gfxinfo", appId, "framestats"));
 	screenshot("settled");
 	console.log(gfx.split("\n").filter((line) => /Total frames rendered:|Janky frames:|percentile:/.test(line)).join("\n"));
 	console.log("Timing evidence only. Inspect settled/moving text and compare the same route, data, build and device.");

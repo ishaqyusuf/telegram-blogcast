@@ -1,5 +1,8 @@
 # In Progress
 
+### [Android Scroll Rendering And T3 Code Comparison](2026-10-28-android-scroll-rendering.md)
+- Status: In Progress
+
 ### [Media Download Controls, Audio Rename, and Transcript Actions](2026-09-29-media-download-controls-and-audio-rename.md)
 - Status: In Progress
 

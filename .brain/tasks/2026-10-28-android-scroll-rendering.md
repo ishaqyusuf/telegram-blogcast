@@ -1,9 +1,8 @@
 # Android Scroll Rendering And T3 Code Comparison
 
-- Status: Done locally — shared fixes verified on physical Android and emulator
+- Status: In Progress — persistent moving-text blur; native frame-pacing investigation reopened
 - Created: 2026-10-28
 - Updated: 2026-10-28
-- Completed: 2026-10-28
 - Research: [T3 Code mobile source review](../research/2026-10-28-t3-mobile-scroll-performance.md)
 
 ## Scope
@@ -46,3 +45,21 @@ New research note, this execution task, and a scroll-rendering feature note. Exi
 - A fresh phone process was required after a retained warm-session list offset prevented reaching the post. Cold launch restored normal native movement; exact origin of that retained runtime state is unproven.
 - The reviewed slow/fling/reversal samples show no observed blank-row flash or clipping. Remaining stutter is measurable: phone 48/208 missed frame deadlines, p95 25 ms; emulator 17/93, p95 93 ms. These development-build samples do not establish fully smooth scrolling or an overall FPS gain.
 - Brain impact is this task's repeat-test record; feature behavior, API and schema documentation need no further changes.
+
+## Persistent Blur Follow-up — 2026-10-28
+
+The user still observes blur during scrolling. Earlier clipping and subscription fixes do not close this symptom. Reopened for native frame pacing, with the main feed first and shared behavior across screens.
+
+- Separate Metro port 8086 serves `--no-dev --minify`; runtime confirmed `__DEV__ === false`. Native shell remains the development build, so this is not a release benchmark. Existing 8085 service is preserved.
+- Physical Samsung four-swipe samples: 69/225 missed deadlines (p95 34 ms), then 69/200 (p95 29 ms). The phone runs at 120 Hz during gestures (8.3 ms frame interval), rather than its adaptive 60 Hz resting rate. GPU p95 is 3 ms.
+- Native atrace/Perfetto inspection found 172 batches of 56 `UPDATE_PROPS` instructions, 905 ms total, max 9.9 ms in the captured sample. Layout traversal itself is small. Reanimated 4.1.7's commit hook reapplies all registered animated props to native scroll-state commits.
+- Hypotheses ranked before intervention: row layout/mounting, swipe/animation overhead, directional chrome updates, display refresh timing. The native trace favors repeated animation-property application.
+- Investigate a narrow upstream 4.2 commit-hook fix against the installed 4.1.7 runtime; preserve Expo/RN versions and test matched unpatched/patched native builds. This is not yet a verified fix or acceptance of perceptual blur.
+
+### Native correction milestone
+
+- Backported the upstream non-React commit guard as `patches/react-native-reanimated@4.1.7.patch`; Bun package/lockfile entries pin its application. A clean temporary install verified patch application.
+- Matched initial main-feed audio/video cards at offset 3300; six-second drag reduced repeated 55-prop batches from 363 to 2 and p95 frame time from 28 to 17 ms. Frame count remained similar and missed 120 Hz deadlines remain; no universal FPS or blur-elimination claim. Pagination changed total loaded content length; [diagnostic evidence](../../artifacts/android-scroll-2026-10-28/native-commit-followup/verification.md) records limits.
+- Existing development signing credentials allowed `adb install -r` into the regular phone app, preserving app data. Native expansion/gutter checks passed again at 124/123 and 45 px.
+- Twenty focused tests pass; native ARM64 debug builds compile. The temporary positioning probe was removed. Optimized native build and broader route checks are still in progress.
+- [Native renderer decision](../decisions/2026-10-28-reanimated-native-scroll-state-commits.md) documents native rebuild requirements and removal on a compatible runtime upgrade.

@@ -1,0 +1,13 @@
+diff --git a/Common/cpp/reanimated/Fabric/ReanimatedCommitHook.cpp b/Common/cpp/reanimated/Fabric/ReanimatedCommitHook.cpp
+--- a/Common/cpp/reanimated/Fabric/ReanimatedCommitHook.cpp
++++ b/Common/cpp/reanimated/Fabric/ReanimatedCommitHook.cpp
+@@ -75,0 +76,9 @@
++#if REACT_NATIVE_MINOR_VERSION >= 80
++  // Backport Reanimated 4.2's USE_COMMIT_HOOK_ONLY_FOR_REACT_COMMITS path.
++  // Native state updates (including scroll offsets) already include animated
++  // props from the committed tree. Reapplying them adds work to every frame.
++  if (commitOptions.source != ShadowTreeCommitSource::React) {
++    return newRootShadowNode;
++  }
++#endif
++
