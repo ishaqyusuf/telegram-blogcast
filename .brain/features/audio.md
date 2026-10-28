@@ -16,6 +16,7 @@ Tracks the current audio playback experience, supporting components, and future 
 - Status: Active and partially mature.
 
 ### Current Surfaces
+- Album swipe rows and transcription queue jobs use natural idle height; shared scroll surfaces publish only control visibility changes. See [mobile scroll rendering](scroll-rendering.md).
 - Primary screen: `audio-blog-screen.tsx`
 - The audio detail screen prevents automatic screen sleep while focused, including paused playback, transcript reading, and inline tabs. Leaving the route releases its wake lock; background playback alone does not keep the display on.
 - Supporting UI:

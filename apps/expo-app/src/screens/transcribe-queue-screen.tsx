@@ -1,3 +1,4 @@
+import { getSwipeDismissStyle } from "@/lib/swipe-dismiss-style";
 import { ScrollView } from "@/components/ui/scroll-surfaces";
 import { useRouter } from "expo-router";
 import { useCallback, useMemo, useRef, useState } from "react";
@@ -7,8 +8,6 @@ import ReanimatedSwipeable, {
 } from "react-native-gesture-handler/ReanimatedSwipeable";
 import Animated, {
 	Easing,
-	Extrapolation,
-	interpolate,
 	runOnJS,
 	useAnimatedStyle,
 	useSharedValue,
@@ -192,39 +191,13 @@ function QueueJobRow({
 		[canDelete, deleteProgress, finishDelete],
 	);
 
-	const containerStyle = useAnimatedStyle(() => {
-		const measuredHeight = rowHeight.value;
-		const height =
-			measuredHeight > 0
-				? interpolate(
-						deleteProgress.value,
-						[0, 1],
-						[measuredHeight, 0],
-						Extrapolation.CLAMP,
-					)
-				: undefined;
-
-		return {
-			height,
-			opacity: interpolate(
-				deleteProgress.value,
-				[0, 0.7, 1],
-				[1, 0.35, 0],
-				Extrapolation.CLAMP,
-			),
-			overflow: "hidden",
-			transform: [
-				{
-					translateX: interpolate(
-						deleteProgress.value,
-						[0, 1],
-						[0, -Math.min(width * 0.18, 72)],
-						Extrapolation.CLAMP,
-					),
-				},
-			],
-		};
-	});
+	const containerStyle = useAnimatedStyle(() =>
+		getSwipeDismissStyle(
+			deleteProgress.value,
+			rowHeight.value,
+			Math.min(width * 0.18, 72),
+		),
+	);
 
 	const renderRightActions = useCallback(
 		(progressValue: SharedValue<number>, translation: SharedValue<number>) => (

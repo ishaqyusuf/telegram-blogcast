@@ -21,7 +21,11 @@ import { useScrollChrome } from "@/hooks/use-scroll-chrome";
 function usePlayerScroll(
 	props: Pick<ScrollViewProps, "horizontal" | "onScroll">,
 ) {
-	const { onScroll: onPlayerScroll } = useScrollChrome<NativeScrollView>();
+	// This wrapper never renders a scroll-to-top control. Tracking its visibility
+	// here would schedule a second render of the whole surface at the threshold.
+	const { onScroll: onPlayerScroll } = useScrollChrome<NativeScrollView>({
+		trackScrollTop: false,
+	});
 	const { onScroll, horizontal } = props;
 	return useCallback<NonNullable<ScrollViewProps["onScroll"]>>(
 		(event) => {

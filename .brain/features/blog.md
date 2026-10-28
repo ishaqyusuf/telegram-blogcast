@@ -16,6 +16,7 @@ Tracks the current blog-reading experience and blog-related discovery surfaces.
 - Status: Active.
 
 ### Current Capabilities
+- Shared blog/search cards preserve natural height after Read more expansion, omit disabled swipe actions, and isolate active transcript updates. Home shares thresholded scroll chrome. See [mobile scroll rendering](scroll-rendering.md).
 - Channel sync and Channels support live search by title or username, including optional `@`, case-insensitive multiword matching and accent normalization. Clearing search restores the full list. Sync controls scroll with the list and are hidden during a non-empty search so results remain accessible; mutations retain original channel IDs and the full source list.
 - Blog list and detail views
 - Mobile content queries persist a bounded, environment-scoped snapshot for feed, audio detail, albums, album tracks, and channels. Disk hydration precedes query mounting, and failed background refreshes keep readable cached content.

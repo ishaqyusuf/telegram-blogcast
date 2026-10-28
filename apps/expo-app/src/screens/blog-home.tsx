@@ -49,8 +49,6 @@ if (
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-const AUDIO_BAR_SCROLL_HIDE_THRESHOLD = 28;
-const AUDIO_BAR_SCROLL_SHOW_THRESHOLD = -18;
 const CATEGORY_TABS_PIN_HYSTERESIS = 8;
 
 function animatePostListChange() {
@@ -151,12 +149,7 @@ export default function BlogHomeScreen() {
 	);
   const { t } = useTranslation();
   const colors = useColors();
-  const feedScroll = useScrollChrome<any>();
-  const setGlobalAudioBarScrollHidden = feedScroll.setAudioBarScrollHidden;
   const setGlobalAudioBarHidden = useGlobalAudioBarStore((s) => s.setHidden);
-  const lastScrollYRef = useRef(0);
-  const scrollDeltaAccumulatorRef = useRef(0);
-  const audioBarScrollHiddenRef = useRef(false);
   const homeHeaderHiddenRef = useRef(false);
   const isFeedDragActiveRef = useRef(false);
   const pendingHomeHeaderHiddenRef = useRef<boolean | null>(null);
@@ -387,6 +380,13 @@ export default function BlogHomeScreen() {
     setShowAlbumModal(true);
   }, []);
 
+  const renderPost = useCallback(
+    ({ item }: { item: BlogItem }) => (
+      <BlogCard post={item} onDelete={handleDeletePost} onAddToAlbum={handleAddToAlbum} />
+    ),
+    [handleDeletePost, handleAddToAlbum],
+  );
+
   const handleAlbumAdded = useCallback(
     (album: { id: number; name: string }) => {
       for (const mediaId of albumMediaIds) {
@@ -434,6 +434,11 @@ export default function BlogHomeScreen() {
     pendingHomeHeaderHiddenRef.current = null;
     setHomeHeaderHidden(nextHidden);
   }, [setHomeHeaderHidden]);
+
+  const feedScroll = useScrollChrome<any>({
+    onScrollHiddenChange: requestHomeHeaderHidden,
+  });
+  const setGlobalAudioBarScrollHidden = feedScroll.setAudioBarScrollHidden;
 
   const setCategoryTabsPinnedSafely = useCallback((pinned: boolean) => {
     if (categoryTabsPinnedRef.current === pinned) return;
@@ -493,66 +498,19 @@ export default function BlogHomeScreen() {
     }
   }, [refetch]);
 
+  const onFeedScroll = feedScroll.onScroll;
   const handleScroll = useCallback(
     (event: any) => {
-      feedScroll.onScroll(event);
+      onFeedScroll(event);
       const currentY = event.nativeEvent.contentOffset?.y ?? 0;
-      const deltaY = currentY - lastScrollYRef.current;
-      lastScrollYRef.current = currentY;
       updateCategoryTabsPinnedForScroll(currentY);
-
-      if (currentY <= 0) {
-        scrollDeltaAccumulatorRef.current = 0;
-        requestHomeHeaderHidden(false);
-        setCategoryTabsPinnedSafely(false);
-        if (audioBarScrollHiddenRef.current) {
-          audioBarScrollHiddenRef.current = false;
-          setGlobalAudioBarScrollHidden(false);
-        }
-        return;
-      }
-
-      if (Math.abs(deltaY) < 2) return;
-
-      const previousAccumulated = scrollDeltaAccumulatorRef.current;
-      const changedDirection =
-        (previousAccumulated > 0 && deltaY < 0) ||
-        (previousAccumulated < 0 && deltaY > 0);
-
-      scrollDeltaAccumulatorRef.current = changedDirection
-        ? deltaY
-        : previousAccumulated + deltaY;
-
-      if (scrollDeltaAccumulatorRef.current > AUDIO_BAR_SCROLL_HIDE_THRESHOLD) {
-        requestHomeHeaderHidden(true);
-        scrollDeltaAccumulatorRef.current = 0;
-        if (!audioBarScrollHiddenRef.current) {
-          audioBarScrollHiddenRef.current = true;
-          setGlobalAudioBarScrollHidden(true);
-        }
-      } else if (
-        scrollDeltaAccumulatorRef.current < AUDIO_BAR_SCROLL_SHOW_THRESHOLD
-      ) {
-        requestHomeHeaderHidden(false);
-        scrollDeltaAccumulatorRef.current = 0;
-        if (audioBarScrollHiddenRef.current) {
-          audioBarScrollHiddenRef.current = false;
-          setGlobalAudioBarScrollHidden(false);
-        }
-      }
+      if (currentY <= 0) setCategoryTabsPinnedSafely(false);
     },
-    [
-      feedScroll,
-      requestHomeHeaderHidden,
-      setCategoryTabsPinnedSafely,
-      setGlobalAudioBarScrollHidden,
-      updateCategoryTabsPinnedForScroll,
-    ],
+    [onFeedScroll, setCategoryTabsPinnedSafely, updateCategoryTabsPinnedForScroll],
   );
 
   useEffect(() => {
     return () => {
-      audioBarScrollHiddenRef.current = false;
       isFeedDragActiveRef.current = false;
       pendingHomeHeaderHiddenRef.current = null;
       setGlobalAudioBarScrollHidden(false);
@@ -612,15 +570,7 @@ export default function BlogHomeScreen() {
 						initialScrollOffset={savedFeedState?.offsets?.[category] ?? 0}
             style={{ backgroundColor: colors.background }}
             data={isCategoryLoading ? [] : visiblePosts}
-            renderItem={({ item }) => (
-              <View>
-                <BlogCard
-                  post={item}
-                  onDelete={handleDeletePost}
-                  onAddToAlbum={handleAddToAlbum}
-                />
-              </View>
-            )}
+            renderItem={renderPost}
             keyExtractor={(item) => String(item.id)}
             ListHeaderComponent={
               <View>
@@ -685,9 +635,9 @@ export default function BlogHomeScreen() {
 							flushPendingHomeHeaderHidden();
 							saveScrollOffset(event.nativeEvent.contentOffset.y);
 						}}
-						onMomentumScrollEnd={(event) =>
-							saveScrollOffset(event.nativeEvent.contentOffset.y)
-						}
+						onMomentumScrollEnd={(event) => {
+							saveScrollOffset(event.nativeEvent.contentOffset.y);
+						}}
             scrollEventThrottle={16}
             onEndReached={() => {
               if (hasNextPage && !isFetching) {

@@ -23,9 +23,12 @@ export const useGlobalAudioBarStore = create<GlobalAudioBarState>((set) => ({
 		set((state) => {
 			if (!scrollHidden && ownerId && state.scrollOwnerId !== ownerId)
 				return state;
+			const nextOwnerId = scrollHidden ? (ownerId ?? null) : null;
+			if (state.scrollHidden === scrollHidden && state.scrollOwnerId === nextOwnerId)
+				return state;
 			return {
 				scrollHidden,
-				scrollOwnerId: scrollHidden ? (ownerId ?? null) : null,
+				scrollOwnerId: nextOwnerId,
 			};
 		}),
 	setAudioDetailPlayerVisible: (audioDetailPlayerVisible) =>

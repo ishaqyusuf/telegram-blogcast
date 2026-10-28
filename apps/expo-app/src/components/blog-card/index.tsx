@@ -1,3 +1,4 @@
+import { getSwipeDismissStyle } from "@/lib/swipe-dismiss-style";
 import { Pressable } from "@/components/ui/pressable";
 import {
 	SwipeDeleteAction,
@@ -11,8 +12,6 @@ import ReanimatedSwipeable, {
 } from "react-native-gesture-handler/ReanimatedSwipeable";
 import Animated, {
 	Easing,
-	Extrapolation,
-	interpolate,
 	runOnJS,
 	useAnimatedStyle,
 	useSharedValue,
@@ -135,47 +134,13 @@ export function BlogCard({
 		);
 	};
 
-	const containerStyle = useAnimatedStyle(() => {
-		const measuredHeight = rowHeight.value;
-		const height =
-			measuredHeight > 0
-				? interpolate(
-						deleteProgress.value,
-						[0, 1],
-						[measuredHeight, 0],
-						Extrapolation.CLAMP,
-					)
-				: undefined;
-
-		return {
-			height,
-			opacity: interpolate(
-				deleteProgress.value,
-				[0, 0.7, 1],
-				[1, 0.35, 0],
-				Extrapolation.CLAMP,
-			),
-			overflow: "hidden",
-			transform: [
-				{
-					translateX: interpolate(
-						deleteProgress.value,
-						[0, 1],
-						[0, -Math.min(width * 0.18, 72)],
-						Extrapolation.CLAMP,
-					),
-				},
-				{
-					scale: interpolate(
-						deleteProgress.value,
-						[0, 1],
-						[1, 0.98],
-						Extrapolation.CLAMP,
-					),
-				},
-			],
-		};
-	});
+	const containerStyle = useAnimatedStyle(() =>
+		getSwipeDismissStyle(
+			deleteProgress.value,
+			rowHeight.value,
+			Math.min(width * 0.18, 72),
+		),
+	);
 
 	const renderRightActions = useCallback(
 		(progress: SharedValue<number>, translation: SharedValue<number>) => (
@@ -206,19 +171,21 @@ export function BlogCard({
 				overshootRight={false}
 				rightThreshold={fullSwipeThreshold}
 				onSwipeableWillOpen={handleSwipeWillOpen}
-				renderRightActions={renderRightActions}
+				renderRightActions={onDelete ? renderRightActions : undefined}
 			>
 				<Pressable
 					disabled={isDeletingRef.current}
 					onPress={handlePress}
-          className="border-b bg-background px-4 py-4 active:bg-muted/40"
-					style={{
-						backgroundColor: colors.background,
+					style={({ pressed }) => ({
+            borderBottomWidth: 1,
+            paddingHorizontal: 16,
+            paddingVertical: 16,
+						backgroundColor: pressed ? colors.muted : colors.background,
             borderBottomColor:
               colors.background === "rgb(10, 10, 10)"
                 ? "rgba(255, 255, 255, 0.06)"
                 : colors.border,
-					}}
+					})}
 				>
 					<CardHeader
 						post={post}

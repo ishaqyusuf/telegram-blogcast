@@ -1,0 +1,11 @@
+# Android scroll rendering verification — 2026-10-28
+
+- Source comparison: `.brain/research/2026-10-28-t3-mobile-scroll-performance.md`, pinned to T3 Code `5211acfe95a0c6d82a60e2524b5e46b47fe67a3e`.
+- Physical device: Samsung SM-S928U1, 1080×2340, 450 dpi; final native expansion control 124 px, required 123, pass.
+- Emulator: GreenTill_API34, Android 14, 720×1616, 280 dpi. Original expanded audio card clips Play to 27 px; fixed card keeps 77 px, required 77. Both Light and Dark were inspected. Normal-motion checks used scales 1; original reduced-motion scales 0 were restored after testing.
+- Regression command: `node scripts/android-scroll-check.mjs SERIAL expanded-row OUTPUT_DIR` with a collapsed, playable audio post centered on screen. It verifies the selected row's native bounds and stops if the app loses foreground.
+- Native route sweep: feed; populated search results (2,584 audio posts); channels and populated channel timeline; albums and album detail (11 tracks); books and a cached book-reader page; play history (50 rows); book storage; channel configuration; offline search entry. Transcription queue had 0 jobs and playlists were empty, so those checks do not cover populated row interactions.
+- Evidence selected for Git: `expanded-row-original/expanded.png`, `expanded-row-fixed/expanded.png`, `physical-expanded-fixed/expanded.png`, and their result JSON files. Additional route screenshots and a dark-feed scroll recording remain local artifacts in this directory.
+- Twenty focused tests passed; scoped ESLint passed; final Android/Hermes export passed. Full workspace typecheck has existing errors elsewhere and no diagnostics in the task's touched production files or new tests.
+- No FPS gain is claimed. Initial physical observation: 44/181 deadline misses, p95 32 ms. Final guarded physical sample: 33/188 misses, p95 69 ms, with different content/warm-up. Emulator buffer/viewport-activation experiments did not establish a gain and were removed. These are development-build samples, not release benchmarks.
+- No API/database changes or deployment. The physical phone's font, theme and animation settings were not changed. The emulator remains running; original settings were restored.
