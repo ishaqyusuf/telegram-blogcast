@@ -52,3 +52,26 @@ services/facebook-media-bridge/cache/
 __pycache__/
 *.py[cod]
 .gstack/
+
+# Keep local QA captures and agent state out of mobile build uploads.
+artifacts/
+.brain/
+.agents/
+.codex/
+.scratch/
+
+# Repository-only exports, caches and personal project notes are not build inputs.
+/exports/
+/shamela-raw/
+/.shamela-cache/
+/gemini/
+/snippets/
+/paytime.md
+/.channel-auto-updates.json
+/.vercel/
+/.npm-cache/
+/.claude/
+/.tmp/
+
+# EAS records the source revision before upload; Git objects are not build inputs.
+/.git
