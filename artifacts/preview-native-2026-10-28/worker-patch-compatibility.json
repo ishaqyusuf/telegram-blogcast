@@ -1,0 +1,7 @@
+{
+  "workerBun": "1.2.20",
+  "freshInstall": true,
+  "samePatchedNativeSource": true,
+  "commitHookSha256": "3815951bd4ba2bbe4894de96666ca39d053bb0083e7a9ea06ced9aa9e9a29096",
+  "note": "EAS image uses Bun 1.2.20 despite packageManager 1.3.9. Fresh isolated install applies the same native hook patch; no repository dependencies changed."
+}

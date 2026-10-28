@@ -1,6 +1,6 @@
 # Android Preview Native Release — 2026.10.28
 
-- Status: Waiting — EAS native Preview build queued
+- Status: Building — EAS Android native compilation
 - Created: 2026-10-28
 - Updated: 2026-10-28
 - Request: “release preview.”
@@ -30,3 +30,10 @@ Archive inspection verified 1452 files (83.3 MiB); native patch, version configu
 - Build `22b77417-4309-4df5-af67-52b2cb5c8158` submitted to EAS Android Preview: app/runtime `1.0.112`, versionCode `27`, channel `preview`, source revision `ebfeab407dbd33655ea9d2a79ec9a0b9b007c2dc` plus the recorded tested working-tree snapshot.
 - [EAS build](https://expo.dev/accounts/ishaqyusuf/projects/alghurobaa/builds/22b77417-4309-4df5-af67-52b2cb5c8158). Existing remote Preview signing credentials retained.
 - Preview update endpoint returned HTTP 204 for runtime `1.0.112`; no older runtime manifest was served.
+
+## Cloud build verification
+
+- EAS assigned an Android worker at 17:28 UTC after about 40 minutes in the queue. Dependency installation, prebuild, credentials configuration, runtime calculation and JavaScript bundling succeeded; Gradle compilation is running.
+- The worker uses Bun `1.2.20` despite the root `packageManager` declaration of `1.3.9`. A fresh isolated install using the worker's Bun version applies the same native commit-hook patch byte-for-byte as the tested checkout. Evidence: `artifacts/preview-native-2026-10-28/worker-patch-compatibility.json`.
+- Expo Doctor reports three existing checks: local EAS CLI, React Native Directory metadata for Track Player/ONNX, and seven Expo patch-version mismatches. The cloud build continues. No dependency upgrades are bundled into this release.
+- Phone disconnected during the queue wait. The authorized Android emulator fallback is ready for verification of the actual Preview APK.
