@@ -1,5 +1,8 @@
 # Done
 
+### [Android Scroll Rendering And T3 Code Comparison](2026-10-28-android-scroll-rendering.md)
+- Status: Done locally — physical Samsung scroll feel accepted by user
+
 ### [Floating Player Workshop And Essential Strip](2026-10-28-floating-player-workshop.md)
 - Status: Done locally — selected revision implemented and physical Android checked
 

@@ -1,8 +1,9 @@
 # Android Scroll Rendering And T3 Code Comparison
 
-- Status: In Progress — native and Digital Books fixes verified locally; user scroll-feel check pending
+- Status: Done locally — physical Samsung scroll feel accepted by user
 - Created: 2026-10-28
 - Updated: 2026-10-28
+- Completed: 2026-10-28
 - Research: [T3 Code mobile source review](../research/2026-10-28-t3-mobile-scroll-performance.md)
 
 ## Scope
@@ -78,5 +79,9 @@ The user still observes blur during scrolling. Earlier clipping and subscription
 
 - Optimized physical UI covered populated 168-channel list, album grid → 11-track detail, and Digital Books. Vertical gestures and post-scroll captures were checked. Release Digital Books also passed the header/container regression.
 - Regular phone app was restored to Digital Books on production-mode Metro 8086; its existing data and development signing identity are retained. Original Metro 8085 remains available. The isolated scroll-test package was removed after verification. Emulator font scale is back to 1.0 and its client remains running.
-- User has been asked to check perceived scrolling in Digital Books and the main feed. That subjective acceptance remains pending; no claim that every route/state is universally blur-free is made.
+- User physically checked Digital Books and the main feed after the fixes and confirmed: “Both scroll cleanly now.” This closes the reported blur and half-screen viewport symptoms on those screens. No claim that every route/state is universally blur-free is made.
 - Brain impact: scroll-rendering and books behavior, native renderer ADR, this task, and selected native evidence. No API, permission, schema or migration changes.
+
+## User acceptance
+
+2026-10-28: user confirmed “Both scroll cleanly now” for the main feed and Digital Books on the Samsung. Code milestones: native renderer `cd4dd124`; Digital Books viewport `74d39fce`. Native builds, 20 focused tests, scoped ESLint, physical/emulator viewport checks and large-text verification passed. The task is complete locally; no remote publication was requested or performed.

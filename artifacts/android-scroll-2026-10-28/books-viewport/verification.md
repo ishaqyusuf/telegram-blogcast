@@ -12,3 +12,5 @@ They now form the FlatList's ListHeaderComponent. The toolbar stays fixed; the r
 - Scoped Expo ESLint passed. Optimized ARM64 Android build passed with the updated screen included.
 
 These bounds/movement checks cover the reported half-screen scroll bug. They do not classify perceptual motion blur or prove every reader/transcript route is smooth.
+
+User acceptance on the Samsung: “Both scroll cleanly now” for Digital Books and the main feed, 2026-10-28.
