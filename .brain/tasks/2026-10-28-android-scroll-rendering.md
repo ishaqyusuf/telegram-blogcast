@@ -1,6 +1,6 @@
 # Android Scroll Rendering And T3 Code Comparison
 
-- Status: In Progress — persistent moving-text blur; native frame-pacing investigation reopened
+- Status: In Progress — native and Digital Books fixes verified locally; user scroll-feel check pending
 - Created: 2026-10-28
 - Updated: 2026-10-28
 - Research: [T3 Code mobile source review](../research/2026-10-28-t3-mobile-scroll-performance.md)
@@ -63,3 +63,20 @@ The user still observes blur during scrolling. Earlier clipping and subscription
 - Existing development signing credentials allowed `adb install -r` into the regular phone app, preserving app data. Native expansion/gutter checks passed again at 124/123 and 45 px.
 - Twenty focused tests pass; native ARM64 debug builds compile. The temporary positioning probe was removed. Optimized native build and broader route checks are still in progress.
 - [Native renderer decision](../decisions/2026-10-28-reanimated-native-scroll-state-commits.md) documents native rebuild requirements and removal on a compatible runtime upgrade.
+
+## Digital Books scroll viewport correction
+
+- User reported that only half of Digital Books scrolled. Native check reproduced it: Explore books was outside any vertical scroll ancestor at y=1128.
+- Moved the reading card, filters, bookmarks and grid heading into the FlatList header; kept the toolbar fixed, retained the existing grid gutter and moved loading/empty states into the list. Preserved the unrelated pre-existing toolbar search action.
+- Native regression check now passes on Samsung (viewport y=264; upper-body swipe moved heading 1063→687) and emulator (y=146; heading 737→434). [Evidence](../../artifacts/android-scroll-2026-10-28/books-viewport/verification.md).
+- Scoped ESLint and updated optimized ARM64 Android build pass. Native release motion and remaining route checks continue.
+
+- Additional Digital Books check passed at emulator font scale 1.3; original 1.0 restored. A cold client was required after the font configuration change returned the warm runtime to Home.
+- Optimized native ARM64 build passed and ran on the Samsung in the isolated test app: 4/309 missed deadlines (1.29%), p95 15 ms. This is a release-build sample without an unpatched release baseline, not an A/B speedup claim.
+
+## Final local verification checkpoint
+
+- Optimized physical UI covered populated 168-channel list, album grid → 11-track detail, and Digital Books. Vertical gestures and post-scroll captures were checked. Release Digital Books also passed the header/container regression.
+- Regular phone app was restored to Digital Books on production-mode Metro 8086; its existing data and development signing identity are retained. Original Metro 8085 remains available. The isolated scroll-test package was removed after verification. Emulator font scale is back to 1.0 and its client remains running.
+- User has been asked to check perceived scrolling in Digital Books and the main feed. That subjective acceptance remains pending; no claim that every route/state is universally blur-free is made.
+- Brain impact: scroll-rendering and books behavior, native renderer ADR, this task, and selected native evidence. No API, permission, schema or migration changes.

@@ -107,157 +107,173 @@ export default function BooksScreen() {
           </Pressable>
         </View>
 
-        <CachedBooksShelf />
+        <FlatList
+          style={{ flex: 1, backgroundColor: colors.background }}
+          data={isLoading ? [] : books}
+          keyExtractor={(item) => String(item.id)}
+          numColumns={2}
+          ListHeaderComponent={
+            <View>
+              <CachedBooksShelf />
 
-        {shelves.length > 0 && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{
-              gap: 8,
-              paddingHorizontal: 16,
-              paddingBottom: 12,
-            }}
-          >
-            <Pressable
-              onPress={() => setSelectedShelfId(undefined)}
-              style={{ borderRadius: 999, paddingHorizontal: 15, minHeight: 34, alignItems: "center", justifyContent: "center", backgroundColor: selectedShelfId === undefined ? "#1F6E50" : colors.card }}
-            >
-              <Text
-                style={{ color: selectedShelfId === undefined ? "#FFFFFF" : colors.foreground, fontSize: 14, lineHeight: 19, fontWeight: "600" }}
-              >
-                {t("all")}
-              </Text>
-            </Pressable>
-            {shelves.map((shelf) => (
-              <Pressable
-                key={shelf.id}
-                onPress={() => setSelectedShelfId(shelf.id)}
-                style={{ borderRadius: 999, paddingHorizontal: 15, minHeight: 34, alignItems: "center", justifyContent: "center", backgroundColor: selectedShelfId === shelf.id ? "#1F6E50" : colors.card }}
-              >
-                <Text
-                  style={{ writingDirection: "rtl", fontSize: 14, lineHeight: 19, fontWeight: "600", color: selectedShelfId === shelf.id ? "#FFFFFF" : colors.foreground }}
+              {shelves.length > 0 && (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={{
+                    gap: 8,
+                    paddingHorizontal: 16,
+                    paddingBottom: 12,
+                  }}
                 >
-                  {shelf.nameAr ?? shelf.name}
-                </Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-        )}
-
-        {showBookmarks && (
-          <View
-            className="mx-4 mb-3 gap-2.5 rounded-xl border border-border bg-card px-3 py-3"
-          >
-            <View className="flex-row-reverse items-center justify-between">
-              <Text
-                style={{ writingDirection: "rtl", textAlign: "right", fontSize: 14, fontWeight: "700", color: colors.foreground }}
-              >
-                {t("bookmarks", { count: bookmarkItems.length })}
-              </Text>
-              <Icon name="Bookmark" size={15} className="text-primary" />
-            </View>
-
-            {bookmarkItems.length === 0 ? (
-              <Text
-                style={{ writingDirection: "rtl", textAlign: "right", fontSize: 13, color: colors.mutedForeground }}
-              >
-                {t("noBookmarks")}
-              </Text>
-            ) : (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={{ gap: 8 }}
-              >
-                {bookmarkItems.slice(0, 12).map((bookmark) => (
-                  <View
-                    key={`${bookmark.bookId}-${bookmark.pageId}`}
-                    className="w-[220px] rounded-lg border border-border bg-background px-3 py-2.5"
+                  <Pressable
+                    onPress={() => setSelectedShelfId(undefined)}
+                    style={{ borderRadius: 999, paddingHorizontal: 15, minHeight: 34, alignItems: "center", justifyContent: "center", backgroundColor: selectedShelfId === undefined ? "#1F6E50" : colors.card }}
                   >
+                    <Text
+                      style={{ color: selectedShelfId === undefined ? "#FFFFFF" : colors.foreground, fontSize: 14, lineHeight: 19, fontWeight: "600" }}
+                    >
+                      {t("all")}
+                    </Text>
+                  </Pressable>
+                  {shelves.map((shelf) => (
                     <Pressable
-                      onPress={() =>
-                        router.push(
-                          `/books/${bookmark.bookId}/reader/${bookmark.pageId}` as any,
-                        )
-                      }
-                      style={{ gap: 4 }}
+                      key={shelf.id}
+                      onPress={() => setSelectedShelfId(shelf.id)}
+                      style={{ borderRadius: 999, paddingHorizontal: 15, minHeight: 34, alignItems: "center", justifyContent: "center", backgroundColor: selectedShelfId === shelf.id ? "#1F6E50" : colors.card }}
                     >
                       <Text
-                        style={{ writingDirection: "rtl", textAlign: "right", fontSize: 12, fontWeight: "600", color: colors.mutedForeground }}
-                        numberOfLines={1}
+                        style={{ writingDirection: "rtl", fontSize: 14, lineHeight: 19, fontWeight: "600", color: selectedShelfId === shelf.id ? "#FFFFFF" : colors.foreground }}
                       >
-                        {bookTitles.get(bookmark.bookId) ??
-                          `${t("bookTitle")} #${bookmark.bookId}`}
+                        {shelf.nameAr ?? shelf.name}
                       </Text>
-                      <Text
-                        style={{ writingDirection: "rtl", textAlign: "right", fontSize: 13, fontWeight: "700", color: colors.foreground }}
-                        numberOfLines={2}
-                      >
-                        {bookmark.chapterTitle ??
-                          `${t("page")} ${bookmark.pageNo ?? bookmark.pageId}`}
-                      </Text>
-                      {bookmark.pageNo != null ? (
-                        <Text className="text-[11px] text-muted-foreground">
-                          {t("pageShort", { number: bookmark.pageNo })}
-                        </Text>
-                      ) : null}
                     </Pressable>
-                    <Pressable
-                      onPress={() =>
-                        removeBookmark(bookmark.bookId, bookmark.pageId)
-                      }
-                      hitSlop={10}
-                      style={{ position: "absolute", left: 8, top: 8 }}
+                  ))}
+                </ScrollView>
+              )}
+
+              {showBookmarks && (
+                <View
+                  className="mx-4 mb-3 gap-2.5 rounded-xl border border-border bg-card px-3 py-3"
+                >
+                  <View className="flex-row-reverse items-center justify-between">
+                    <Text
+                      style={{ writingDirection: "rtl", textAlign: "right", fontSize: 14, fontWeight: "700", color: colors.foreground }}
                     >
-                      <Icon
-                        name="X"
-                        size={14}
-                        className="text-muted-foreground"
-                      />
-                    </Pressable>
+                      {t("bookmarks", { count: bookmarkItems.length })}
+                    </Text>
+                    <Icon name="Bookmark" size={15} className="text-primary" />
                   </View>
-                ))}
-              </ScrollView>
-            )}
-          </View>
-        )}
 
-        <View style={{ paddingHorizontal: 16, paddingTop: 5, paddingBottom: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
-          <Text style={{ color: colors.foreground, fontSize: 18, fontWeight: "800" }}>{isRtl ? "استكشف الكتب" : "Explore books"}</Text>
-          <Text style={{ color: colors.mutedForeground, fontSize: 11, fontWeight: "700" }}>{isLoading ? "" : isRtl ? `${books.length} كتاب` : `${books.length} books`}</Text>
-        </View>
+                  {bookmarkItems.length === 0 ? (
+                    <Text
+                      style={{ writingDirection: "rtl", textAlign: "right", fontSize: 13, color: colors.mutedForeground }}
+                    >
+                      {t("noBookmarks")}
+                    </Text>
+                  ) : (
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={{ gap: 8 }}
+                    >
+                      {bookmarkItems.slice(0, 12).map((bookmark) => (
+                        <View
+                          key={`${bookmark.bookId}-${bookmark.pageId}`}
+                          className="w-[220px] rounded-lg border border-border bg-background px-3 py-2.5"
+                        >
+                          <Pressable
+                            onPress={() =>
+                              router.push(
+                                `/books/${bookmark.bookId}/reader/${bookmark.pageId}` as any,
+                              )
+                            }
+                            style={{ gap: 4 }}
+                          >
+                            <Text
+                              style={{ writingDirection: "rtl", textAlign: "right", fontSize: 12, fontWeight: "600", color: colors.mutedForeground }}
+                              numberOfLines={1}
+                            >
+                              {bookTitles.get(bookmark.bookId) ??
+                                `${t("bookTitle")} #${bookmark.bookId}`}
+                            </Text>
+                            <Text
+                              style={{ writingDirection: "rtl", textAlign: "right", fontSize: 13, fontWeight: "700", color: colors.foreground }}
+                              numberOfLines={2}
+                            >
+                              {bookmark.chapterTitle ??
+                                `${t("page")} ${bookmark.pageNo ?? bookmark.pageId}`}
+                            </Text>
+                            {bookmark.pageNo != null ? (
+                              <Text className="text-[11px] text-muted-foreground">
+                                {t("pageShort", { number: bookmark.pageNo })}
+                              </Text>
+                            ) : null}
+                          </Pressable>
+                          <Pressable
+                            onPress={() =>
+                              removeBookmark(bookmark.bookId, bookmark.pageId)
+                            }
+                            hitSlop={10}
+                            style={{ position: "absolute", left: 8, top: 8 }}
+                          >
+                            <Icon
+                              name="X"
+                              size={14}
+                              className="text-muted-foreground"
+                            />
+                          </Pressable>
+                        </View>
+                      ))}
+                    </ScrollView>
+                  )}
+                </View>
+              )}
 
-        {isLoading ? (
-          <View className="flex-1 items-center justify-center">
-            <Text className="text-muted-foreground">{t("loading")}</Text>
-          </View>
-        ) : books.length === 0 ? (
-          <View className="flex-1 items-center justify-center gap-3">
-            <Icon name="BookOpen" size={48} className="text-muted-foreground" />
-            <Text className="text-muted-foreground">{t("noBooks")}</Text>
-          </View>
-        ) : (
-          <FlatList
-            style={{ backgroundColor: colors.background }}
-            data={books}
-            keyExtractor={(item) => String(item.id)}
-            numColumns={2}
-            contentContainerStyle={{
-              paddingHorizontal: 16,
-              paddingBottom: 120,
-            }}
-            columnWrapperStyle={{ gap: 12, marginBottom: 18 }}
-            renderItem={({ item, index }) => (
-              <BookCard
-                book={item}
-                index={index}
-                onPress={() => openBook(item)}
-                onDetails={() => router.push(`/books/${item.id}`)}
-              />
-            )}
-          />
-        )}
+              <View style={{ paddingHorizontal: 16, paddingTop: 5, paddingBottom: 12, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                <Text style={{ color: colors.foreground, fontSize: 18, fontWeight: "800" }}>{isRtl ? "استكشف الكتب" : "Explore books"}</Text>
+                <Text style={{ color: colors.mutedForeground, fontSize: 11, fontWeight: "700" }}>{isLoading ? "" : isRtl ? `${books.length} كتاب` : `${books.length} books`}</Text>
+              </View>
+            </View>
+          }
+          ListEmptyComponent={
+            <View
+              style={{
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 12,
+                paddingVertical: 48,
+              }}
+            >
+              {isLoading ? (
+                <Text className="text-muted-foreground">{t("loading")}</Text>
+              ) : (
+                <>
+                  <Icon
+                    name="BookOpen"
+                    size={48}
+                    className="text-muted-foreground"
+                  />
+                  <Text className="text-muted-foreground">{t("noBooks")}</Text>
+                </>
+              )}
+            </View>
+          }
+          contentContainerStyle={{ paddingBottom: 120 }}
+          columnWrapperStyle={{
+            gap: 12,
+            marginBottom: 18,
+            paddingHorizontal: 16,
+          }}
+          renderItem={({ item, index }) => (
+            <BookCard
+              book={item}
+              index={index}
+              onPress={() => openBook(item)}
+              onDetails={() => router.push(`/books/${item.id}`)}
+            />
+          )}
+        />
       </SafeArea>
     </View>
   );

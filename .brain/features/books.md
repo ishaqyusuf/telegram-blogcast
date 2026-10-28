@@ -42,7 +42,7 @@ Tracks the current scope, architecture, and roadmap for the books experience acr
 
 ### Current Surfaces
 - Screens:
-  - `/books` via `books-screen.tsx`: library grid and shelf filter; tapping a book opens its first fetched page when available, otherwise falls back to book detail.
+  - `/books` via `books-screen.tsx`: one vertical list owns the reading card, shelf filter, bookmarks and two-column book grid below a fixed toolbar. The header scrolls with the books, so cached-library content cannot consume a fixed half-screen. Tapping a book opens its first fetched page when available, otherwise falls back to book detail.
   - `/books/library` via `library-screen.tsx`: physical home-library catalog list with search, linked/unlinked filters, location filters, and create action.
   - `/books/library/new`, `/books/library/[itemId]`, and `/books/library/[itemId]/edit`: physical catalog create/detail/edit flow with metadata, shelf/location, labels, purchase info, and optional digital book link.
   - `/books/[bookId]` via `book-detail-screen.tsx`: book metadata, imported/read-only source status, and chapter tree.

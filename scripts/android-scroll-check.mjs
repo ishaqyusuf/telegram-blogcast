@@ -4,8 +4,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const [serial, mode = "frames", output = "/tmp/al-ghurobaa-scroll-check"] = process.argv.slice(2);
-if (!serial || !["frames", "expanded-row"].includes(mode)) {
-	throw new Error("Usage: node scripts/android-scroll-check.mjs SERIAL [frames|expanded-row] [OUTPUT_DIR]");
+if (!serial || !["frames", "expanded-row", "books-viewport"].includes(mode)) {
+	throw new Error("Usage: node scripts/android-scroll-check.mjs SERIAL [frames|expanded-row|books-viewport] [OUTPUT_DIR]");
 }
 const appId = process.env.ANDROID_SCROLL_APP_ID ?? "com.alghurobaa.podcast.dev";
 if (!/^com\.alghurobaa\.podcast(?:\.[a-z][a-z0-9]*)*$/.test(appId)) {
@@ -50,7 +50,40 @@ const playControl = (nodes, row) => nodes.find((node) => {
 	return false;
 });
 
-if (mode === "expanded-row") {
+if (mode === "books-viewport") {
+	const nodes = readNodes();
+	if (!nodes.some((node) => ["Digital Books", "الكتب الرقمية"].includes(node.text))) {
+		throw new Error("Open Digital Books before repeating the viewport check");
+	}
+	const visible = (node) => node.rect && node.rect[3] > node.rect[1];
+	const heading = nodes.find((node) => visible(node) && ["Explore books", "استكشف الكتب"].includes(node.text))
+		?? nodes.find((node) => visible(node) && ["Keep reading", "متابعة القراءة"].includes(node.text));
+	if (!heading) throw new Error("Show the Digital Books header before repeating the viewport check");
+	let scroll;
+	for (let parent = heading.parent; parent; parent = parent.parent) {
+		if (parent.class === "android.widget.ScrollView" && parent.scrollable === "true") { scroll = parent; break; }
+	}
+	screenshot("before");
+	const fullViewport = Boolean(scroll?.rect && scroll.rect[1] < height * 0.2);
+	let afterTop = heading.rect?.[1];
+	if (fullViewport) {
+		assertForeground();
+		text("shell", "input", "swipe", String(Math.round(width * 0.5)), String(Math.round(height * 0.36)), String(Math.round(width * 0.5)), String(Math.round(height * 0.18)), "600");
+		const afterNodes = readNodes();
+		if (!afterNodes.some((node) => ["Digital Books", "الكتب الرقمية"].includes(node.text))) {
+			throw new Error("The gesture left Digital Books instead of scrolling its body");
+		}
+		const after = afterNodes.find((node) => node.text === heading.text);
+		afterTop = after?.rect?.[1] ?? 0;
+		screenshot("after");
+	}
+	const beforeTop = heading.rect?.[1] ?? 0;
+	const passed = fullViewport && beforeTop - afterTop > 20;
+	const result = { mode, serial, scrollTop: scroll?.rect?.[1] ?? null, screenHeight: height, beforeTop, afterTop, passed };
+	writeFileSync(resolve(dir, "result.json"), JSON.stringify(result, null, 2));
+	console.log(result);
+	if (!passed) process.exitCode = 1;
+} else if (mode === "expanded-row") {
 	const nodes = readNodes();
 	const more = nodes.find((node) => node.text === "Read more" && node.rect && node.rect[1] > 150 && node.rect[3] < height - 400 && playControl(nodes, cardFor(node)));
 	if (!more) throw new Error("Place a collapsed audio post's Read more control in the middle of the screen, then repeat.");

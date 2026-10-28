@@ -34,3 +34,7 @@ Execution, native coverage, limitations and evidence: [Android scroll task](../t
 Reanimated 4.1.7 has a version-pinned Bun patch that skips reapplying animated props to native state commits on RN 0.80+. React commits retain the existing animation-prop path. This removes repeated idle animated-prop mount work across scroll surfaces, including screens with animated components retained elsewhere in navigation. A native rebuild is required; a Metro reload or OTA update alone cannot install it.
 
 [Decision, upstream source and upgrade cleanup](../decisions/2026-10-28-reanimated-native-scroll-state-commits.md). [Physical diagnostic comparison](../../artifacts/android-scroll-2026-10-28/native-commit-followup/verification.md) shows lower native work and latency, with remaining missed 120 Hz deadlines. Earlier statements about no proven overall FPS gain still apply.
+
+## Digital Books viewport
+
+Digital Books keeps only its toolbar outside the vertical FlatList. Reading shortcuts, shelf chips, bookmarks and the Explore books heading are its list header; loading/empty content is its empty component. Each grid row owns its horizontal inset, preserving the header's existing gutter. The native `books-viewport` checker fails on the original half-screen layout and passes after an upper-body swipe moves the header within the full body viewport. [Evidence](../../artifacts/android-scroll-2026-10-28/books-viewport/verification.md).
