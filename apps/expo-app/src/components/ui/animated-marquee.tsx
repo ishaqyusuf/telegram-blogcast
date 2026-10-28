@@ -1,83 +1,134 @@
-import React, { useEffect, useRef, useState } from "react";
-import { Animated, Easing, LayoutChangeEvent, ScrollView, Text, View, StyleProp, TextStyle } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import {
+	AccessibilityInfo,
+	Animated,
+	AppState,
+	Easing,
+	type StyleProp,
+	Text,
+	type TextStyle,
+	View,
+} from "react-native";
 
-interface AnimatedMarqueeProps {
-  text: string;
-  style?: StyleProp<TextStyle>;
-  duration?: number;
-  delay?: number;
-}
+export function AnimatedMarquee({
+	text,
+	style,
+	duration,
+	delay = 1600,
+}: {
+	text: string;
+	style?: StyleProp<TextStyle>;
+	duration?: number;
+	delay?: number;
+}) {
+	const [containerWidth, setContainerWidth] = useState(0);
+	const [textWidth, setTextWidth] = useState(0);
+	const [reduceMotion, setReduceMotion] = useState(true);
+	const [active, setActive] = useState(AppState.currentState === "active");
+	const translateX = useRef(new Animated.Value(0)).current;
+	const firstLetter = text.match(/\p{L}/u)?.[0] ?? "";
+	const rtl = /[\u0590-\u08ff]/.test(firstLetter);
+	const singleLine = text.replace(/\s+/g, " ");
+	const width = Math.max(containerWidth, textWidth + 1);
+	const overflow = Math.max(0, width - containerWidth);
+	const start = rtl ? -overflow : 0;
 
-export function AnimatedMarquee({ text, style, duration = 6000, delay = 2000 }: AnimatedMarqueeProps) {
-  const [containerWidth, setContainerWidth] = useState(0);
-  const [textWidth, setTextWidth] = useState(0);
-  const translateX = useRef(new Animated.Value(0)).current;
+	useEffect(() => {
+		let mounted = true;
+		void AccessibilityInfo.isReduceMotionEnabled().then((enabled) => {
+			if (mounted) setReduceMotion(enabled);
+		});
+		const motion = AccessibilityInfo.addEventListener(
+			"reduceMotionChanged",
+			setReduceMotion,
+		);
+		const app = AppState.addEventListener("change", (state) =>
+			setActive(state === "active"),
+		);
+		return () => {
+			mounted = false;
+			motion.remove();
+			app.remove();
+		};
+	}, []);
 
-  const shouldAnimate = textWidth > containerWidth && containerWidth > 0;
+	useEffect(() => {
+		translateX.stopAnimation();
+		translateX.setValue(start);
+		if (!active || reduceMotion || containerWidth <= 0 || overflow <= 4) return;
+		const animation = Animated.loop(
+			Animated.sequence([
+				Animated.delay(delay),
+				Animated.timing(translateX, {
+					toValue: rtl ? 0 : -overflow,
+					duration: duration ?? Math.max(2000, overflow * 32),
+					easing: Easing.linear,
+					useNativeDriver: true,
+				}),
+				Animated.delay(1400),
+				Animated.timing(translateX, {
+					toValue: start,
+					duration: 0,
+					useNativeDriver: true,
+				}),
+			]),
+		);
+		animation.start();
+		return () => animation.stop();
+	}, [
+		active,
+		containerWidth,
+		delay,
+		duration,
+		overflow,
+		reduceMotion,
+		rtl,
+		singleLine,
+		start,
+		translateX,
+	]);
 
-  useEffect(() => {
-    if (!shouldAnimate) {
-      translateX.setValue(0);
-      return;
-    }
-
-    const distance = textWidth - containerWidth;
-    
-    // We animate from 0 to -distance because we are in RTL or LTR?
-    // Let's assume standard LTR for the transform, RTL handles text alignment.
-    // If it's Arabic, it usually starts from right and moves left.
-    // So we move translateX from 0 to distance (since it's RTL, moving positive X might move it right? Let's check).
-    // Actually, React Native RTL reverses X axis.
-    const anim = Animated.loop(
-      Animated.sequence([
-        Animated.delay(delay),
-        Animated.timing(translateX, {
-          toValue: -distance - 40, // move past the edge slightly
-          duration: duration,
-          easing: Easing.linear,
-          useNativeDriver: true,
-        }),
-        Animated.timing(translateX, {
-          toValue: 0,
-          duration: 0,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-
-    anim.start();
-
-    return () => anim.stop();
-  }, [shouldAnimate, textWidth, containerWidth, translateX, duration, delay]);
-
-  return (
-    <View
-      style={{ overflow: "hidden", width: "100%", flexShrink: 1 }}
-      onLayout={(e: LayoutChangeEvent) => {
-        setContainerWidth(e.nativeEvent.layout.width);
-      }}
-    >
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} scrollEnabled={false}>
-        <Animated.View style={{ transform: [{ translateX }], flexDirection: "row" }}>
-          <Text
-            onLayout={(e: LayoutChangeEvent) => {
-              setTextWidth(e.nativeEvent.layout.width);
-            }}
-            style={[style, { writingDirection: "rtl" }]}
-            numberOfLines={1}
-          >
-            {text}
-          </Text>
-          {shouldAnimate && (
-            <Text
-              style={[style, { paddingLeft: 40, writingDirection: "rtl" }]}
-              numberOfLines={1}
-            >
-              {text}
-            </Text>
-          )}
-        </Animated.View>
-      </ScrollView>
-    </View>
-  );
+	return (
+		<View
+			style={{ overflow: "hidden", width: "100%" }}
+			onLayout={(event) => setContainerWidth(event.nativeEvent.layout.width)}
+		>
+			<Animated.View style={{ width, transform: [{ translateX }] }}>
+				<Text
+					numberOfLines={1}
+					ellipsizeMode="clip"
+					style={[
+						style,
+						{
+							writingDirection: rtl ? "rtl" : "ltr",
+							textAlign: rtl ? "right" : "left",
+						},
+					]}
+				>
+					{singleLine}
+				</Text>
+			</Animated.View>
+			<Text
+				accessible={false}
+				accessibilityElementsHidden
+				importantForAccessibility="no-hide-descendants"
+				pointerEvents="none"
+				numberOfLines={1}
+				onTextLayout={(event) =>
+					setTextWidth(event.nativeEvent.lines[0]?.width ?? 0)
+				}
+				style={[
+					style,
+					{
+						position: "absolute",
+						width: 100000,
+						opacity: 0,
+						writingDirection: rtl ? "rtl" : "ltr",
+					},
+				]}
+			>
+				{singleLine}
+			</Text>
+		</View>
+	);
 }

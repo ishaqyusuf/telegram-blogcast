@@ -1,5 +1,8 @@
 # Done
 
+### [Floating Player Workshop And Essential Strip](2026-10-28-floating-player-workshop.md)
+- Status: Done locally — selected revision implemented and physical Android checked
+
 ### [KetabOnline Book Acquisition And Mobile Reading](2026-10-12-ketabonline-book-import.md)
 - Status: Done — Production DB/Trigger/API released and Android Preview OTA `2026.10.13` published; a Production import has not yet been run
 

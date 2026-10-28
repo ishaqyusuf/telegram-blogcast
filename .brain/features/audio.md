@@ -136,3 +136,7 @@ Tracks the current audio playback experience, supporting components, and future 
 - Richer transcript integration
 - Smarter queueing and playlists
 - Playlist drag/drop reordering UI; API reorder support exists.
+
+### Essential Floating Player (2026-10-28)
+
+The floating audio footer uses the selected Workshop Essential strip: a compact title/time area beside back-five/play/forward-five controls and a thin progress line. The title uses its entire available width and scrolls horizontally only when its full text overflows; Arabic/Latin direction, reduced motion and app backgrounding are respected. Tapping the title opens audio details; holding it (also exposed as an accessibility action) opens the shared Playback options sheet for speed, album mode when available, timestamped comments and full-player access. That sheet suppresses the footer and reserves bottom navigation clearance. Sleep time appends to elapsed/duration. Existing playback, expiry and keyboard/sheet/scroll visibility policies remain in place. See [selection and verification](../tasks/2026-10-28-floating-player-workshop.md).
