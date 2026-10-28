@@ -38,3 +38,11 @@ The first foreground physical-feed four-swipe run reported 44/181 missed frame d
 ## Brain Impact
 
 New research note, this execution task, and a scroll-rendering feature note. Existing unrelated working-tree edits must be preserved and excluded from the commit. No API, auth, schema, or deployment changes.
+
+## Requested Repeat Test — 2026-10-28
+
+- [Retest 02 evidence](../../artifacts/android-scroll-2026-10-28/retest-02/verification.md) tests implementation `f254da42` without changing application code.
+- Twenty focused tests passed. Native expanded controls/gutters passed again: Samsung 123/45 px and emulator 77/28 px.
+- A fresh phone process was required after a retained warm-session list offset prevented reaching the post. Cold launch restored normal native movement; exact origin of that retained runtime state is unproven.
+- The reviewed slow/fling/reversal samples show no observed blank-row flash or clipping. Remaining stutter is measurable: phone 48/208 missed frame deadlines, p95 25 ms; emulator 17/93, p95 93 ms. These development-build samples do not establish fully smooth scrolling or an overall FPS gain.
+- Brain impact is this task's repeat-test record; feature behavior, API and schema documentation need no further changes.
