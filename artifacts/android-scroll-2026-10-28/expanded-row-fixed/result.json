@@ -3,5 +3,6 @@
   "serial": "emulator-5554",
   "controlHeight": 77,
   "minimum": 77,
+  "contentGutter": 28,
   "passed": true
 }

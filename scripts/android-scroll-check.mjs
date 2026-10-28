@@ -67,8 +67,9 @@ if (mode === "expanded-row") {
 	// A fully clipped control is absent from the tree: never accept a later row's button.
 	const controlHeight = play?.rect ? play.rect[3] - play.rect[1] : 0;
 	const minimum = Math.floor(44 * density / 160);
+	const contentGutter = disclosure.rect[0] - row.rect[0];
 	screenshot("expanded");
-	const result = { mode, serial, controlHeight, minimum, passed: controlHeight >= minimum };
+	const result = { mode, serial, controlHeight, minimum, contentGutter, passed: controlHeight >= minimum && contentGutter > 0 };
 	writeFileSync(resolve(dir, "result.json"), JSON.stringify(result, null, 2));
 	console.log(result);
 	if (!result.passed) process.exitCode = 1;

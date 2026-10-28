@@ -176,16 +176,16 @@ export function BlogCard({
 				<Pressable
 					disabled={isDeletingRef.current}
 					onPress={handlePress}
-					style={({ pressed }) => ({
+					style={{
             borderBottomWidth: 1,
             paddingHorizontal: 16,
             paddingVertical: 16,
-						backgroundColor: pressed ? colors.muted : colors.background,
+						backgroundColor: colors.background,
             borderBottomColor:
               colors.background === "rgb(10, 10, 10)"
                 ? "rgba(255, 255, 255, 0.06)"
                 : colors.border,
-					})}
+					}}
 				>
 					<CardHeader
 						post={post}
