@@ -1,5 +1,8 @@
 # Done
 
+### [Album Organizer Channel Review Workshop](2026-11-04-album-organizer-channel-workshop.md)
+- Status: Done. Interactive comparison published for design review.
+
 ### [Android Scroll Rendering And T3 Code Comparison](2026-10-28-android-scroll-rendering.md)
 - Status: Done locally — physical Samsung scroll feel accepted by user
 
