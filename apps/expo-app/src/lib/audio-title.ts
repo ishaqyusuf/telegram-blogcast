@@ -58,3 +58,10 @@ export function getAudioDisplayTitle(
     appendDistinct(primary, mediaLabel) ?? clean(media?.blog?.content) ?? fallback
   );
 }
+
+export function hasCustomAudioTitle(source: AudioTitleSource | null | undefined) {
+  const media = Array.isArray(source?.media)
+    ? source.media[0]
+    : source?.media ?? source?.medias?.[0];
+  return Boolean(clean(source?.audio?.titleOverride) ?? clean(media?.titleOverride));
+}

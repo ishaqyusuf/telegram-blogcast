@@ -3,6 +3,7 @@ import {
 	getAudioDetailPreview,
 	rememberAudioDetailFromMedia,
 	rememberAudioDetailFromPost,
+	updateAudioDetailPreviewTitle,
 } from "./audio-detail-preview";
 
 describe("audio detail preview", () => {
@@ -34,4 +35,13 @@ describe("audio detail preview", () => {
 		expect(detail?.medias[0]?.album?.name).toBe("Series");
 		expect(detail?.medias[0]?.file?.fileName).toBe("second.mp3");
 	});
+	test("a successful rename and restore update the navigation preview immediately", () => {
+		rememberAudioDetailFromMedia({ id: 45, title: "Original", blog: { id: 103 }, file: { fileName: "third.mp3" } });
+		updateAudioDetailPreviewTitle(45, "Renamed");
+		expect(getAudioDetailPreview(103)?.medias[0]?.titleOverride).toBe("Renamed");
+		updateAudioDetailPreviewTitle(45, null);
+		expect(getAudioDetailPreview(103)?.medias[0]?.titleOverride).toBeNull();
+		expect(getAudioDetailPreview(103)?.medias[0]?.title).toBe("Original");
+	});
+
 });

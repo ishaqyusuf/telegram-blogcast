@@ -1,3 +1,6 @@
+import { hasCustomAudioTitle } from "@/lib/audio-title";
+import { ALBUM_QUERY_CACHE, getAlbumVisibleTracks } from "@/lib/player-album";
+import { useRenameAudio } from "@/hooks/use-rename-audio";
 import { getSwipeDismissStyle } from "@/lib/swipe-dismiss-style";
 import { useAudioDownload } from "@/hooks/use-audio-download";
 import { AudioDownloadBadge } from "@/components/audio-blog-view/audio-download-badge";
@@ -1990,10 +1993,11 @@ function TrackRow({
               flex: 1,
               fontSize: 14,
               fontWeight: isActiveTrack ? "800" : "600",
-              color: isActiveTrack ? colors.primary : colors.foreground,
+              color: hasCustomAudioTitle({ media }) ? colors.customAudioTitle : isActiveTrack ? colors.primary : colors.foreground,
               textAlign: "right",
             }}
             numberOfLines={1}
+            accessibilityLabel={hasCustomAudioTitle({ media }) ? `Custom title: ${getTrackTitle(media)}` : undefined}
           >
             {getTrackTitle(media)}
           </Text>
@@ -3150,7 +3154,6 @@ export default function AlbumDetailScreen() {
   const activeAudioBlog = useAudioStore((s) => s.blog);
   const activeAudioIsPlaying = useAudioStore((s) => s.isPlaying);
   const activeAudioIsLoading = useAudioStore((s) => s.isLoading);
-  const activeAudioIsDownloading = useAudioStore((s) => s.isDownloading);
   const loadAudio = useAudioStore((s) => s.loadAudio);
   const playAudio = useAudioStore((s) => s.play);
   const pauseAudio = useAudioStore((s) => s.pause);
@@ -3169,20 +3172,23 @@ export default function AlbumDetailScreen() {
   >(null);
   const [trackToRename, setTrackToRename] = useState<any | null>(null);
   const [renameError, setRenameError] = useState<string | null>(null);
-  const { mutateAsync: saveTitleOverride, isPending: isSavingTitleOverride } = useMutation(
-    _trpc.blog.updateMediaTitleOverride.mutationOptions(),
-  );
+  const { mutateAsync: saveTitleOverride, isPending: isSavingTitleOverride } = useRenameAudio();
 
   const {
     data: album,
     isFetching: isFetchingAlbum,
     isLoading,
     refetch: refetchAlbum,
-  } = useQuery(_trpc.album.getAlbum.queryOptions({ id }));
+  } = useQuery(
+    _trpc.album.getAlbum.queryOptions(
+      { id },
+      ALBUM_QUERY_CACHE,
+    ),
+  );
   const trimmedTrackSearchQuery = trackSearchQuery.trim();
   const {
     data: paginatedTracks = [],
-    hasNextPage: hasNextTrackPage,
+    hasNextPage: hasNextPaginatedTrackPage,
     isFetching: isFetchingTracks,
     isRefetching: isRefetchingTracks,
     fetchNextPage: fetchNextTrackPage,
@@ -3192,7 +3198,7 @@ export default function AlbumDetailScreen() {
     route: _trpc.album.getAlbumTracks,
     input: { albumId: id, limit: 30 },
     filter: { q: trimmedTrackSearchQuery || undefined },
-    queryOptions: { staleTime: 60 * 1000, gcTime: 5 * 60 * 1000 },
+    queryOptions: { ...ALBUM_QUERY_CACHE, enabled: Boolean(trimmedTrackSearchQuery) || !album },
   });
   const { refetch: refetchAlbumPlaybackQueue } = useQuery({
     ..._trpc.album.getAlbumPlaybackQueue.queryOptions({
@@ -3271,10 +3277,11 @@ export default function AlbumDetailScreen() {
   const trackSearchInputRef = useRef<TextInput>(null);
 
   const rawTracks: any[] = useMemo(
-    () => localTracks ?? paginatedTracks ?? [],
-    [localTracks, paginatedTracks],
+    () => getAlbumVisibleTracks({ localTracks, paginatedTracks, albumTracks: album?.medias, search: trimmedTrackSearchQuery }),
+    [localTracks, paginatedTracks, album?.medias, trimmedTrackSearchQuery],
   );
-  const totalTrackCount =
+  const hasNextTrackPage = (Boolean(trimmedTrackSearchQuery) || !album) && hasNextPaginatedTrackPage;
+  const totalTrackCount = !trimmedTrackSearchQuery && album ? album.medias.length :
     ((albumTracksQueryData?.pages?.[0] as any)?.meta?.totalCount as
       | number
       | undefined) ??
@@ -4280,12 +4287,7 @@ export default function AlbumDetailScreen() {
     }
     setTrackToRename(null);
     setLocalTracks(null);
-    void Promise.all([
-      invalidateAlbumTrackData(),
-      qc.invalidateQueries({ queryKey: _trpc.album.getAlbum.queryKey({ id }) }),
-      qc.invalidateQueries({ queryKey: _trpc.blog.posts.queryKey() }),
-      qc.invalidateQueries({ queryKey: _trpc.blog.search.queryKey() }),
-    ]).catch((error) => console.warn("[album] Rename refresh failed:", error));
+
     Toast.show(value ? "Audio renamed" : "Original title restored", { type: "success", position: "bottom" });
   }
 
@@ -5260,10 +5262,8 @@ export default function AlbumDetailScreen() {
                               isActiveTrack && activeAudioIsPlaying
                             }
                             isTrackLoading={
-                              isPendingTrack ||
-                              (isActiveTrack &&
-                                (activeAudioIsLoading ||
-                                  activeAudioIsDownloading))
+                              !(isActiveTrack && activeAudioIsPlaying) &&
+                              (isPendingTrack || (isActiveTrack && activeAudioIsLoading))
                             }
                             canPlay={canPlayAlbumTrack(media)}
                             selectionMode={selectedTrackCount > 0}

@@ -1,0 +1,9 @@
+# Player Album Sheet, Immediate Renames, and Streaming Controls
+
+- Status: Done locally
+- Created: 2026-11-05
+- Updated: 2026-11-05
+- Scope: Preload the audio player’s album, open a floating track sheet at the current track, and reuse its data in full-screen album navigation. Distinguish custom titles and apply successful renames immediately. Keep Pause usable while streaming and downloading the offline copy.
+- Implementation: The player mounts a query-backed album sheet before it opens. The sheet uses a virtualized list with font-scaled row geometry, automatic current-track reveal, full-screen navigation, and cached/error/retry states. Full album detail reuses the complete ordered metadata response for unfiltered tracks; searches retain server pagination. A shared successful-rename hook cancels stale fetches and patches album, feed, search, preview and active-player title data before closing the editor. Custom titles use a semantic teal foreground and accessibility labels. Download hooks reflect the current playback cache download independently of playback loading.
+- Validation: 13 focused title/cache/album/preview/sheet-layering tests pass (43 assertions); focused ESLint passes; git diff whitespace check passes. Full Expo typecheck reports existing unrelated errors, with none in changed files. On AlGhurobaa_API34, a 49-track fixture was already cached before opening; the sheet revealed the last track and its full-screen CTA reused the list. A successful mocked rename passed through the real editor save callback and immediately updated the album cache. A throttled local WAV played natively while its download badge reported 12% and Pause remained enabled. Debugger timeouts prevented a reliable continuous JS progress trace; no live rename or transcription write was performed. iOS was not exercised.
+- Delivery: Local implementation only; no push, OTA or deployment requested.

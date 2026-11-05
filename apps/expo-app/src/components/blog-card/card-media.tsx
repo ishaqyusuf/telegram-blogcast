@@ -13,7 +13,7 @@ import { WebView } from "react-native-webview";
 
 import { Icon } from "@/components/ui/icon";
 import { useColors } from "@/hooks/use-color";
-import { getAudioDisplayTitle } from "@/lib/audio-title";
+import { getAudioDisplayTitle, hasCustomAudioTitle } from "@/lib/audio-title";
 import { buildTelegramFileProxy } from "@/lib/media-source";
 import { TELEGRAM_BOT_DOWNLOAD_LIMIT_BYTES } from "@/lib/audio-playability";
 import { MediaDownloadAction } from "./media-download-action";
@@ -173,18 +173,20 @@ function ExpandableLinkifiedText({
 
 function CardText({ post }: { post: BlogItem }) {
   const colors = useColors();
+  const customTitle = post.type === "audio" && hasCustomAudioTitle(post);
   const content =
+    (customTitle ? getAudioDisplayTitle(post) : null) ||
     getInlinePreviewText(post.content) ||
     getInlinePreviewText(post.caption) ||
     (post.type === "audio" ? getAudioDisplayTitle(post, "") : "");
   if (!content) return null;
 
   return (
-    <View className="mb-3">
+    <View className="mb-3" accessibilityLabel={customTitle ? `Custom title: ${content}` : undefined}>
       <ExpandableLinkifiedText
         content={content}
         className="text-[15px] leading-6 text-foreground"
-        color={colors.foreground}
+        color={customTitle ? colors.customAudioTitle : colors.foreground}
         linkColor={colors.primary}
         collapsedLines={3}
       />

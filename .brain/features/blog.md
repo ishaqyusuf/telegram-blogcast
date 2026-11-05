@@ -43,6 +43,7 @@ Tracks the current blog-reading experience and blog-related discovery surfaces.
 - Opening the local/admin web Blog or Telegram dashboard checks downloaded Telegram channels once per browser session, presents updated and other downloaded channels in a shared selection dialog, and sends selected refreshes to the dashboard terminal. The Telegram update procedures reject non-local hosts.
 
 ### Important Surface Areas
+- Renamed audio titles take precedence over captions in feed/search cards and use the shared custom-title tint. Successful rename updates patch existing caches immediately; restoring the original also removes the tint. Playback remains pausable during background audio downloads. See [player album and rename task](../tasks/2026-11-05-player-album-sheet.md).
 - Proposed rich authoring: [Blog rich text editor plan](../plans/2026-09-29-feature-blog-rich-text-editor.md). Current New/Edit Blog still uses a plain multiline input with token-colored preview; rich authoring is not implemented.
 - `apps/expo-app/src/screens/blog-home.tsx`
 - `apps/expo-app/src/screens/text-blog-screen.tsx`

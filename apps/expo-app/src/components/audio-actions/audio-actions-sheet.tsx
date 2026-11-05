@@ -1,3 +1,4 @@
+import { useRenameAudio } from "@/hooks/use-rename-audio";
 import { BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import { useRef, useState } from "react";
 import { Share, Text, View } from "react-native";
@@ -45,9 +46,7 @@ export function AudioActionsSheet({
 	const running = useRef(false);
 	const completedIds = useRef(new Map<string, Set<number>>());
 	const remove = useMutation(_trpc.album.removeMembership.mutationOptions());
-	const rename = useMutation(
-		_trpc.blog.updateMediaTitleOverride.mutationOptions(),
-	);
+	const rename = useRenameAudio();
 	const deletePosts = useMutation(
 		_trpc.blog.deleteAudioPosts.mutationOptions(),
 	);
@@ -195,7 +194,6 @@ export function AudioActionsSheet({
 							mediaId: single.audio.mediaId,
 							titleOverride: value,
 						});
-						await invalidateAudioQueries(client);
 					})
 				}
 			/>

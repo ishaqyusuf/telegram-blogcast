@@ -71,7 +71,6 @@ export function GlobalAudioBar() {
 	const sound = useAudioStore((s) => s.sound);
 	const isPlaying = useAudioStore((s) => s.isPlaying);
 	const isLoading = useAudioStore((s) => s.isLoading);
-	const isDownloading = useAudioStore((s) => s.isDownloading);
 	const blog = useAudioStore((s) => s.blog);
 	const position = useAudioStore((s) => s.position);
 	const duration = useAudioStore((s) => s.duration);
@@ -163,7 +162,7 @@ export function GlobalAudioBar() {
 			: null;
 	const canUseAlbumPlayMode = Boolean(albumName && albumQueue?.length);
 	const playModeMeta = PLAY_MODE_META[playMode];
-	const isPlaybackBusy = isLoading || isDownloading;
+	const isPlaybackBusy = isLoading && !isPlaying;
 	const cycleSpeed = () => {
 		setPlaybackRate(getNextPlaybackRate(playbackRate));
 	};

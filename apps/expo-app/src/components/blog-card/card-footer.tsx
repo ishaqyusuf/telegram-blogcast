@@ -67,7 +67,7 @@ export function CardFooter({
 
 	const isPlaying = isCurrent && globalIsPlaying;
 	const isLoading =
-		playbackPending || (isCurrent && (globalIsLoading || globalIsDownloading));
+		!isPlaying && (playbackPending || (isCurrent && globalIsLoading));
 	const audioPlayability = getAudioPlayability(post.audio as any);
 	const isPlayBlocked = !downloadedUri && !audioPlayability.canPlay;
 	const isPlayControlDisabled = isLoading || isPlayBlocked;

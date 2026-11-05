@@ -16,6 +16,9 @@ Tracks the current audio playback experience, supporting components, and future 
 - Status: Active and partially mature.
 
 ### Current Surfaces
+- Audio-player album headers open a preloaded floating track sheet, revealing the playing track when it belongs to the album (otherwise the viewed track). Selecting another track opens its player and starts playback; **Open full album** reuses the same cached ordered list and reveals the selected track without paging through earlier tracks. Cold/error states retain the viewed track and offer retry. See [player album sheet](../tasks/2026-11-05-player-album-sheet.md).
+- Successful audio renames patch cached album tracks, detail, feed/search results, navigation previews and the active player immediately, including restore-original. Custom album/sheet titles use the `customAudioTitle` theme color and an accessible “Custom title” label. Imported titles remain unchanged in storage.
+- Streaming playback and offline caching have independent controls: downloading animates the download badge, while an active stream retains Pause. Download failure does not block playback; saved files still take priority on subsequent loads.
 - Album swipe rows and transcription queue jobs use natural idle height; shared scroll surfaces publish only control visibility changes. See [mobile scroll rendering](scroll-rendering.md).
 - Primary screen: `audio-blog-screen.tsx`
 - The audio detail screen prevents automatic screen sleep while focused, including paused playback, transcript reading, and inline tabs. Leaving the route releases its wake lock; background playback alone does not keep the display on.

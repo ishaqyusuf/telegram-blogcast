@@ -1,3 +1,4 @@
+import { useColors } from "@/hooks/use-color";
 import { Pressable } from "@/components/ui/pressable";
 import { Linking, View, Text, Image, ImageBackground } from "react-native";
 import { useRouter } from "expo-router";
@@ -6,7 +7,7 @@ import { HomeFeedPostFooter } from "./home-feed-post-footer";
 import { HomeFeedAudioPlayer } from "./home-feed-audio-player";
 import { RouterOutputs } from "@api/trpc/routers/_app";
 import { formatDate } from "@acme/utils/dayjs";
-import { getAudioDisplayTitle } from "@/lib/audio-title";
+import { getAudioDisplayTitle, hasCustomAudioTitle } from "@/lib/audio-title";
 import { rememberAudioDetailFromPost } from "@/lib/audio-detail-preview";
 import { minuteToString } from "@/lib/utils";
 import { getBlogHref, getPrimaryImageUrl } from "@/components/blog-card/utils";
@@ -15,6 +16,8 @@ import { Icon } from "@/components/ui/icon";
 export type ItemProps = RouterOutputs["podcasts"]["posts"]["data"][number];
 
 function AudioPost({ post }: { post: ItemProps }) {
+  const colors = useColors();
+  const customTitle = hasCustomAudioTitle(post);
   const caption = post.caption?.trim();
   const title = getAudioDisplayTitle(post);
   const shouldShowCaption = Boolean(caption && !title.startsWith(caption));
@@ -22,7 +25,7 @@ function AudioPost({ post }: { post: ItemProps }) {
   return (
     <>
       <View className="mb-4">
-        <Text className="text-xl font-bold text-foreground mb-2 leading-tight text-right">
+        <Text accessibilityLabel={customTitle ? `Custom title: ${title}` : undefined} style={{ fontSize: 20, fontWeight: "700", marginBottom: 8, textAlign: "right", color: customTitle ? colors.customAudioTitle : colors.foreground }}>
           {title}
         </Text>
         {shouldShowCaption ? (

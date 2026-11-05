@@ -1,3 +1,4 @@
+import { AudioDownloadBadge } from "@/components/audio-blog-view/audio-download-badge";
 import { useAudioDownload } from "@/hooks/use-audio-download";
 import { useFocusedKeepAwake } from "@/hooks/use-focused-keep-awake";
 import { Pressable } from "@/components/ui/pressable";
@@ -75,6 +76,8 @@ import {
 	getAudioPlayability,
 } from "@/lib/audio-playability";
 import { getAudioDisplayTitle } from "@/lib/audio-title";
+import { PlayerAlbumSheet } from "@/components/audio-blog-view/player-album-sheet";
+import { useRenameAudio } from "@/hooks/use-rename-audio";
 import { getAudioRenameErrorMessage } from "@/lib/audio-rename-error";
 import { getAudioDetailPreview } from "@/lib/audio-detail-preview";
 import { type BlobMediaUpload, uploadBlogMediaAsset } from "@/lib/blob-upload";
@@ -868,8 +871,8 @@ function AnimatedPlayButton({
 	const buttonColor = theme === "dark" ? "#bfdbfe" : colors.primary;
 	const buttonForeground = theme === "dark" ? "#112b4c" : colors.primaryForeground;
 	const pulse = useRef(new Animated.Value(0)).current;
-	const busy = isLoading || isDownloading;
-	const isDisabled = isLoading || Boolean(disabledReason);
+	const busy = isLoading && !isPlaying;
+	const isDisabled = (isLoading && !isPlaying) || Boolean(disabledReason);
 
 	useEffect(() => {
 		if (!busy) {
@@ -907,12 +910,15 @@ function AnimatedPlayButton({
 	const progress = isLoading ? 0 : downloadProgress;
 
 	return (
+		<View style={{ width: size, height: size }}>
 		<Pressable
 			onPress={onPress}
 			disabled={isDisabled}
-			accessibilityLabel={disabledReason ?? "Play audio"}
-			className="items-center justify-center active:opacity-90"
+			accessibilityRole="button"
+			accessibilityLabel={disabledReason ?? (isPlaying ? "Pause audio" : "Play audio")}
 			style={{
+				alignItems: "center",
+				justifyContent: "center",
 				width: size,
 				height: size,
 				borderRadius: size / 2,
@@ -987,6 +993,8 @@ function AnimatedPlayButton({
 				/>
 			)}
 		</Pressable>
+		{isDownloading ? <AudioDownloadBadge downloaded={false} downloading progress={downloadProgress} onPress={() => undefined} /> : null}
+		</View>
 	);
 }
 
@@ -2017,6 +2025,7 @@ export default function AudioBlogScreen() {
 	const [moreMenuVisible, setMoreMenuVisible] = useState(false);
 	const [sleepTimerVisible, setSleepTimerVisible] = useState(false);
 	const [albumPickerVisible, setAlbumPickerVisible] = useState(false);
+	const [playerAlbumVisible, setPlayerAlbumVisible] = useState(false);
 	const [playlistPickerVisible, setPlaylistPickerVisible] = useState(false);
 	const [transcriptionRequestVisible, setTranscriptionRequestVisible] =
 		useState(false);
@@ -2129,6 +2138,8 @@ export default function AudioBlogScreen() {
 
 	const media = blog?.medias?.[0];
 	const mediaId = media?.id;
+	const openPlayerAlbum = useCallback(() => setPlayerAlbumVisible(true), []);
+
 	useFocusEffect(
 		useCallback(() => {
 			setViewedAudioMediaId(mediaId ?? null);
@@ -2244,6 +2255,8 @@ export default function AudioBlogScreen() {
 			date: blog.blogDate,
 			audio: {
 				mediaId: media.id,
+				albumId: media.albumId,
+				albumName: media.album?.name,
 				source: file.source ?? "telegram",
 				telegramFileId,
 				url: mediaUrl,
@@ -2413,7 +2426,7 @@ export default function AudioBlogScreen() {
   const hasFailedFullTranscription =
     fullTranscriptionJob?.status === "failed" && !fullTranscriptReady;
   const { mutateAsync: saveTitleOverride, isPending: isSavingTitleOverride } =
-    useMutation(_trpc.blog.updateMediaTitleOverride.mutationOptions());
+    useRenameAudio();
 	const fullTranscriptQuery = useQuery({
 		..._trpc.blog.getTranscript.queryOptions({ mediaId: mediaId ?? 0 }),
 		enabled: false,
@@ -3318,12 +3331,7 @@ export default function AudioBlogScreen() {
 			return;
 		}
 		setRenameVisible(false);
-		void Promise.all([
-			qc.invalidateQueries({ queryKey: _trpc.blog.getBlog.queryKey({ id }) }),
-			qc.invalidateQueries({ queryKey: _trpc.blog.posts.queryKey() }),
-			qc.invalidateQueries({ queryKey: _trpc.blog.search.queryKey() }),
-			qc.invalidateQueries({ queryKey: _trpc.album.getAlbumTracks.queryKey() }),
-		]).catch((error) => console.warn("[audio] Rename refresh failed:", error));
+
     Toast.show(value ? "Audio renamed" : "Original title restored", {
       type: "success",
       position: "bottom",
@@ -3601,9 +3609,7 @@ export default function AudioBlogScreen() {
 										contextName={media?.album?.name || channelName}
 										contextType={media?.album ? "Album" : "Channel"}
 										onClose={() => router.back()}
-										onOpenContext={() =>
-											router.push(`/albums/${media?.albumId}` as any)
-										}
+										onOpenContext={openPlayerAlbum}
 										onOpenMore={() => setMoreMenuVisible(true)}
 									/>
 
@@ -3933,9 +3939,7 @@ export default function AudioBlogScreen() {
                     ) : null}
                     {media?.album ? (
 											<Pressable
-                        onPress={() =>
-                          router.push(`/albums/${media.albumId}` as any)
-                        }
+                        onPress={openPlayerAlbum}
                         accessibilityRole="button"
                         className="min-h-12 flex-row items-center gap-3 rounded-xl border border-[#2c4057] bg-[#1c2a3a] px-4"
 											>
@@ -4029,7 +4033,7 @@ export default function AudioBlogScreen() {
 				onAddToPlaylist={() => {
 					if (mediaId) setPlaylistPickerVisible(true);
 				}}
-				onViewAlbum={() => router.push(`/albums/${media?.albumId}` as any)}
+				onViewAlbum={openPlayerAlbum}
 				onSleepTimer={() => setSleepTimerVisible(true)}
 				onToggleTashkeel={toggleTranscriptTashkeel}
 				tashkeelEnabled={transcriptTashkeelEnabled}
@@ -4209,6 +4213,8 @@ export default function AudioBlogScreen() {
 				}}
 				onDelete={deleteChannelPicture}
 			/>
+
+			{media?.albumId ? <PlayerAlbumSheet key={`${id}:${media.albumId}`} visible={playerAlbumVisible} onClose={() => setPlayerAlbumVisible(false)} media={media} /> : null}
 
 			{/* Album picker */}
 			<AddToAlbumPicker

@@ -1,3 +1,4 @@
+import { useAudioStore } from "@/store/audio-store";
 import { useCallback, useState } from "react";
 import { useDownloadedAudio } from "@/hooks/use-downloaded-audio";
 import { getTelegramFileUrl } from "@/lib/get-telegram-file";
@@ -15,12 +16,17 @@ type AudioDownloadOptions = {
 
 export function useAudioDownload(options: AudioDownloadOptions) {
   const downloadedUri = useDownloadedAudio(options);
+  const matchesActive = (state: ReturnType<typeof useAudioStore.getState>) =>
+    options.mediaId ? state.blog?.audio?.mediaId === options.mediaId : Boolean(options.blogId && state.blog?.id === options.blogId);
+  const activeDownloading = useAudioStore((state) => matchesActive(state) && state.isDownloading);
+  const activeProgress = useAudioStore((state) => matchesActive(state) ? state.downloadProgress : 0);
+  const activeError = useAudioStore((state) => matchesActive(state) ? state.downloadError : null);
   const [isDownloading, setIsDownloading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   const download = useCallback(async (sourceUrl?: string | null) => {
-    if (isDownloading || downloadedUri) return downloadedUri;
+    if (isDownloading || activeDownloading || downloadedUri) return downloadedUri;
     if (!options.fileName || (!options.mediaId && !options.blogId)) {
       setError("This audio has no downloadable file.");
       return null;
@@ -50,7 +56,7 @@ export function useAudioDownload(options: AudioDownloadOptions) {
     } finally {
       setIsDownloading(false);
     }
-  }, [downloadedUri, isDownloading, options.blogId, options.fileName, options.mediaId, options.size, options.telegramFileId, options.url]);
+  }, [downloadedUri, activeDownloading, isDownloading, options.blogId, options.fileName, options.mediaId, options.size, options.telegramFileId, options.url]);
 
-  return { downloadedUri, isDownloading, progress, error, download };
+  return { downloadedUri, isDownloading: isDownloading || activeDownloading, progress: activeDownloading ? activeProgress : progress, error: error || activeError, download };
 }

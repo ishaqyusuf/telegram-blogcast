@@ -10,6 +10,16 @@ export function getAudioDetailPreview(blogId: number) {
 	return previews.get(blogId);
 }
 
+export function updateAudioDetailPreviewTitle(mediaId: number, titleOverride: string | null) {
+	for (const [id, preview] of previews) {
+		if (!preview.medias.some((media) => media.id === mediaId)) continue;
+		previews.set(id, {
+			...preview,
+			medias: preview.medias.map((media) => media.id === mediaId ? { ...media, titleOverride } : media),
+		});
+	}
+}
+
 function rememberPreview(blogId: number, preview: AudioDetail) {
 	previews.delete(blogId);
 	previews.set(blogId, preview);

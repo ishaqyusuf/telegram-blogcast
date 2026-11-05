@@ -38,6 +38,7 @@ export const THEME = {
 		downloaded: "rgb(37, 99, 235)",
 		downloadedForeground: "rgb(255, 255, 255)",
     mediaForeground: "rgb(255, 255, 255)",
+    customAudioTitle: "rgb(15, 105, 105)",
 
     radius: "0.65rem",
 
@@ -85,6 +86,7 @@ export const THEME = {
 		downloaded: "rgb(37, 99, 235)",
 		downloadedForeground: "rgb(255, 255, 255)",
     mediaForeground: "rgb(255, 255, 255)",
+    customAudioTitle: "rgb(124, 205, 198)",
 
     radius: "0.65rem",
 

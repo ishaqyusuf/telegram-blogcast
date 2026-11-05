@@ -1,5 +1,8 @@
 # Done
 
+### [Player Album Sheet, Immediate Renames, and Streaming Controls](2026-11-05-player-album-sheet.md)
+- Status: Done locally — native Android and focused regression checks passed.
+
 ### [Audio Search And Album Actions](2026-11-05-audio-search-workshop.md)
 - Status: Done — existing API and EAS Preview 2026.11.05 released; native acceptance assigned to user.
 

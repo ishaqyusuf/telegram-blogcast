@@ -42,6 +42,7 @@ export type FloatingBottomSheetProps = {
 	accessibilityLabel?: string;
 	scrollableContent?: boolean;
 	onDismissed?: () => void;
+	onPresented?: () => void;
 	keyboardBehavior?: BottomSheetModalProps["keyboardBehavior"];
 	keyboardBlurBehavior?: BottomSheetModalProps["keyboardBlurBehavior"];
 	androidKeyboardInputMode?: BottomSheetModalProps["android_keyboardInputMode"];
@@ -62,6 +63,7 @@ export function FloatingBottomSheet({
 	accessibilityLabel,
 	scrollableContent = false,
 	onDismissed,
+	onPresented,
 	keyboardBehavior,
 	keyboardBlurBehavior,
 	androidKeyboardInputMode,
@@ -170,6 +172,7 @@ export function FloatingBottomSheet({
 			backdropComponent={renderBackdrop}
 			handleComponent={renderHandle}
 			onDismiss={handleDismiss}
+			onChange={(index) => { if (index >= 0) onPresented?.(); }}
 			accessibilityLabel={accessibilityLabel}
 			keyboardBehavior={keyboardBehavior}
 			keyboardBlurBehavior={keyboardBlurBehavior}

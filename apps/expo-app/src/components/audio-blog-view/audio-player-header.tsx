@@ -48,7 +48,7 @@ export function AudioPlayerHeader({
 					disabled={!canOpenContext}
 					onPress={onOpenContext}
 					className="min-h-11 min-w-0 flex-1 items-center justify-center px-2 py-1 active:opacity-70"
-					accessibilityRole={canOpenContext ? "link" : undefined}
+					accessibilityRole={canOpenContext ? "button" : undefined}
 					accessibilityLabel={`Playing from ${contextType.toLowerCase()} ${contextName}`}
 				>
 					<Text

@@ -20,7 +20,7 @@ export function HomeFeedAudioPlayer({
   const isCurrent = store.blog?.id === post?.id;
   const isPlayying = isCurrent && store.isPlaying;
   const isBusy =
-    playbackPending || (isCurrent && (store.isLoading || store.isDownloading));
+    !isPlayying && (playbackPending || (isCurrent && store.isLoading));
   const audioPlayability = getAudioPlayability(post.audio as any);
   const isPlayBlocked = !externalMedia && !audioPlayability.canPlay;
   const isDisabled = isBusy || isPlayBlocked;
@@ -54,7 +54,7 @@ export function HomeFeedAudioPlayer({
           onPress={playPause}
           disabled={isDisabled}
           className="w-10 h-10 rounded-full bg-primary items-center justify-center"
-          accessibilityLabel={audioPlayability.reason ?? "Play audio"}
+          accessibilityLabel={audioPlayability.reason ?? (isPlayying ? "Pause audio" : "Play audio")}
           style={{
             backgroundColor: isPlayBlocked ? colors.muted : colors.primary,
             opacity: isPlayBlocked ? 0.62 : 1,
