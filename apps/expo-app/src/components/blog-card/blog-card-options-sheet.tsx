@@ -1,3 +1,8 @@
+import { BottomSheetScrollView } from "@gorhom/bottom-sheet";
+import { AudioActionsSheet } from "@/components/audio-actions/audio-actions-sheet";
+import { _trpc } from "@/components/static-trpc";
+import { useQuery } from "@/lib/react-query";
+import { toBlogCardPost } from "@/lib/search-results";
 import { Pressable } from "@/components/ui/pressable";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
@@ -126,6 +131,17 @@ export function BlogCardOptionsSheet({
 	audioTranscriptStatus,
 	audioTranscriptionJobStatus,
 }: Props) {
+	const [audioAction, setAudioAction] = useState<
+		"album" | "remove" | "menu" | null
+	>(null);
+	const detail = useQuery(
+		_trpc.blog.getBlog.queryOptions(
+			{ id: Number(blogId) },
+			{ enabled: !!audioMediaId, staleTime: 15_000 },
+		),
+	);
+	const audioPost = detail.data ? toBlogCardPost(detail.data) : null;
+
 	const router = useRouter();
 	const colors = useColors();
 	const {
@@ -346,13 +362,28 @@ export function BlogCardOptionsSheet({
 		);
 	};
 
+	if (audioAction && audioPost)
+		return (
+			<AudioActionsSheet
+				posts={[audioPost]}
+				initialAction={audioAction}
+				onClose={() => setAudioAction(null)}
+				onCompleted={() => router.back()}
+			/>
+		);
+
 	return (
 		<FloatingBottomSheet
 			visible
 			onClose={() => router.back()}
 			accessibilityLabel="Post options"
+			scrollableContent
+			snapPoints={["85%"]}
+			enableDynamicSizing={false}
 		>
-			<View className="px-4 pb-8">
+			<BottomSheetScrollView
+				contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}
+			>
 				<View className="pb-4">
 					<View className="mb-3 flex-row items-center gap-2">
 						<View
@@ -390,6 +421,59 @@ export function BlogCardOptionsSheet({
 				</View>
 
 				<View className="gap-1">
+					{audioPost?.audio ? (
+						<>
+							<ActionRow
+								label={
+									audioPost.audio.albumId ? "Change album" : "Add to album"
+								}
+								description="Choose an existing album or create one"
+								icon="Plus"
+								onPress={() => setAudioAction("album")}
+							/>
+							{audioPost.audio.albumId ? (
+								<>
+									<ActionRow
+										label="Open album"
+										description={
+											audioPost.audio.albumName || "View album tracks"
+										}
+										icon="Disc3"
+										onPress={() =>
+											router.replace(
+												`/albums/${audioPost.audio!.albumId}` as never,
+											)
+										}
+									/>
+									<ActionRow
+										label="Remove from album"
+										description="Keep the post and audio file"
+										icon="X"
+										danger
+										onPress={() => setAudioAction("remove")}
+									/>
+								</>
+							) : null}
+							<ActionRow
+								label="More audio actions"
+								description="Download, playlist, rename and more"
+								icon="Music"
+								onPress={() => setAudioAction("menu")}
+							/>
+						</>
+					) : audioMediaId ? (
+						<ActionRow
+							label={
+								detail.isError
+									? "Retry audio actions"
+									: "Loading audio actions…"
+							}
+							description={detail.error?.message || "Checking album membership"}
+							icon="Disc3"
+							onPress={() => void detail.refetch()}
+						/>
+					) : null}
+
 					<ActionRow
 						label="Open post"
 						description="View the full post and media"
@@ -441,9 +525,7 @@ export function BlogCardOptionsSheet({
 					{canQueueTranscription ? (
 						<ActionRow
 							label={
-								localServicesEnabled
-									? "Transcribe"
-									: "Enable local services"
+								localServicesEnabled ? "Transcribe" : "Enable local services"
 							}
 							description={
 								localServicesEnabled
@@ -489,7 +571,7 @@ export function BlogCardOptionsSheet({
 					danger
 					onPress={onComingSoon}
 				/>
-			</View>
+			</BottomSheetScrollView>
 		</FloatingBottomSheet>
 	);
 }

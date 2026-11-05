@@ -1,4 +1,5 @@
-import type { Database, Prisma } from "@acme/db";
+import { albumSearchInput, searchAlbums } from "../../queries/album-discovery";
+import { Prisma, type Database } from "@acme/db";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
@@ -24,6 +25,33 @@ import {
 	saveOrganizerReview,
 } from "../../services/album-organizer-review";
 import { createTRPCRouter, publicProcedure } from "../init";
+
+const membershipSnapshot = z
+	.array(
+		z.object({
+			mediaId: z.number().int().positive(),
+			albumId: z.number().int().positive().nullable(),
+		}),
+	)
+	.min(1)
+	.max(200);
+const manualMediaInput = z
+	.object({
+		mediaIds: z.array(z.number().int().positive()).min(1).max(200),
+		confirmCrossChannel: z.boolean().default(false),
+		expectedMembership: membershipSnapshot.optional(),
+	})
+	.refine(
+		(input) =>
+			!input.expectedMembership ||
+			(input.expectedMembership.length === new Set(input.mediaIds).size &&
+				new Set(input.expectedMembership.map((x) => x.mediaId)).size ===
+					input.expectedMembership.length &&
+				input.expectedMembership.every((x) =>
+					input.mediaIds.includes(x.mediaId),
+				)),
+		{ message: "Membership snapshot must match the selected audio." },
+	);
 
 const suggestedMediaInput = z.object({
 	albumId: z.number(),
@@ -538,6 +566,123 @@ export const albumRoutes = createTRPCRouter({
 			}),
 		)
 		.mutation(({ ctx, input }) => approveOrganizerReview(ctx.db, input)),
+	search: publicProcedure
+		.input(albumSearchInput)
+		.query(({ ctx, input }) => searchAlbums(ctx.db, input)),
+	getPickerContext: publicProcedure
+		.input(
+			z.object({
+				mediaIds: z.array(z.number().int().positive()).min(1).max(200),
+			}),
+		)
+		.query(async ({ ctx, input }) => {
+			const media = await ctx.db.media.findMany({
+				where: { id: { in: input.mediaIds }, blog: { deletedAt: null } },
+				select: {
+					id: true,
+					albumId: true,
+					mimeType: true,
+					file: { select: { mimeType: true } },
+					blog: {
+						select: {
+							channelId: true,
+							channel: { select: { id: true, title: true, username: true } },
+						},
+					},
+				},
+			});
+			if (
+				media.length !== new Set(input.mediaIds).size ||
+				media.some(
+					(m) =>
+						!(
+							m.mimeType.toLowerCase().startsWith("audio/") ||
+							m.file?.mimeType?.toLowerCase().startsWith("audio/")
+						),
+				)
+			)
+				throw new TRPCError({
+					code: "BAD_REQUEST",
+					message: "Some selected audio is no longer available.",
+				});
+			return media;
+		}),
+	createAlbumWithMedia: publicProcedure
+		.input(
+			manualMediaInput.and(
+				z.object({
+					name: z.string().trim().min(1).max(180),
+					authorId: z.number().int().positive().optional(),
+				}),
+			),
+		)
+		.mutation(({ ctx, input }) =>
+			ctx.db.$transaction(async (tx) => {
+				const album = await tx.album.create({
+					data: { name: input.name, albumAuthorId: input.authorId },
+				});
+				await addAlbumMedia(
+					tx,
+					{ albumId: album.id, mediaIds: input.mediaIds },
+					{
+						allowCrossChannel: input.confirmCrossChannel,
+						expectedMembership: input.expectedMembership,
+					},
+				);
+				return { id: album.id, name: album.name };
+			}),
+		),
+	removeMembership: publicProcedure
+		.input(z.object({ expectedMembership: membershipSnapshot }))
+		.mutation(({ ctx, input }) =>
+			ctx.db.$transaction(async (tx) => {
+				const ids = input.expectedMembership.map((x) => x.mediaId);
+				await tx.$queryRaw`SELECT "id" FROM "Media" WHERE "id" IN (${Prisma.join(ids)}) ORDER BY "id" FOR UPDATE`;
+				const rows = await tx.media.findMany({
+					where: { id: { in: ids }, blog: { deletedAt: null } },
+					select: {
+						id: true,
+						albumId: true,
+						mediaIndexId: true,
+						mimeType: true,
+						file: { select: { mimeType: true } },
+					},
+				});
+				if (
+					rows.length !== new Set(ids).size ||
+					rows.some(
+						(row) =>
+							!(
+								row.mimeType.toLowerCase().startsWith("audio/") ||
+								row.file?.mimeType?.toLowerCase().startsWith("audio/")
+							) ||
+							input.expectedMembership.find((x) => x.mediaId === row.id)
+								?.albumId !== row.albumId,
+					)
+				)
+					throw new TRPCError({
+						code: "CONFLICT",
+						message:
+							"Album membership changed. Refresh and select the audio again.",
+					});
+				await tx.albumAudioIndex.updateMany({
+					where: {
+						blogAudioId: {
+							in: rows.flatMap((row) =>
+								row.mediaIndexId ? [row.mediaIndexId] : [],
+							),
+						},
+					},
+					data: { albumId: null },
+				});
+				await tx.media.updateMany({
+					where: { id: { in: ids } },
+					data: { albumId: null },
+				});
+				return { removed: rows.length };
+			}),
+		),
+
 	getAlbums: publicProcedure.query(async ({ ctx }) => {
 		return ctx.db.album.findMany({
 			where: { deletedAt: null },
@@ -1807,14 +1952,16 @@ export const albumRoutes = createTRPCRouter({
 
 	addMediaToAlbum: publicProcedure
 		.input(
-			z.object({
-				albumId: z.number(),
-				mediaIds: z.array(z.number()).min(1),
-			}),
+			manualMediaInput.and(z.object({ albumId: z.number().int().positive() })),
 		)
-		.mutation(async ({ ctx, input }) => {
-			return addMediaIdsToAlbum(ctx.db, input);
-		}),
+		.mutation(({ ctx, input }) =>
+			ctx.db.$transaction((tx) =>
+				addAlbumMedia(tx, input, {
+					allowCrossChannel: input.confirmCrossChannel,
+					expectedMembership: input.expectedMembership,
+				}),
+			),
+		),
 
 	removeMediaFromAlbum: publicProcedure
 		.input(

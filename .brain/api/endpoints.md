@@ -63,3 +63,7 @@ High-level map of the API surface and where endpoint logic lives.
 ### Album Organizer Swipe Review
 
 The public album router additionally exposes `getOrganizerAlbums`, `startOrganizerDiscovery`, `continueOrganizerDiscovery`, `saveOrganizerReview`, and `approveOrganizerReview`. These use the existing album-router permission boundary. See [contracts](contracts.md) for inputs, progress and approval guarantees.
+
+### Audio search and manual album additions — 2026-11-05
+
+Added queries `blog.searchFacets`, `album.search`, `album.getPickerContext`; added mutations `album.createAlbumWithMedia`, `album.removeMembership`, `blog.deleteAudioPosts`. `blog.search` supports optional lean count-free paging; `album.addMediaToAlbum` supports confirmed manual cross-channel destinations and stale-membership snapshots. All remain under the existing tRPC API origin and publicProcedure policy. See [contracts](contracts.md). No new service or Preview project.

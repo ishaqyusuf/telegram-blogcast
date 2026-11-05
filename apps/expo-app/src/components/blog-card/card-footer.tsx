@@ -25,7 +25,13 @@ export function CardFooter({
 	const tags = post.tags?.slice(0, 2) ?? [];
 	const router = useRouter();
 	const colors = useColors();
-	const { downloadedUri, isDownloading: isDownloadOnlyBusy, progress: downloadOnlyProgress, download: downloadOnly, error: downloadOnlyError } = useAudioDownload({
+	const {
+		downloadedUri,
+		isDownloading: isDownloadOnlyBusy,
+		progress: downloadOnlyProgress,
+		download: downloadOnly,
+		error: downloadOnlyError,
+	} = useAudioDownload({
 		mediaId: post.audio?.mediaId,
 		blogId: post.id,
 		fileName: post.audio?.fileName,
@@ -36,11 +42,19 @@ export function CardFooter({
 	const playColor = downloadedUri
 		? colors.downloadedForeground
 		: colors.primary;
-	const loadedBlogId = useAudioStore((s) => s.blog?.id);
-	const globalIsPlaying = useAudioStore((s) => s.isPlaying);
-	const globalIsLoading = useAudioStore((s) => s.isLoading);
-	const globalIsDownloading = useAudioStore((s) => s.isDownloading);
-	const globalDownloadError = useAudioStore((s) => s.downloadError);
+	const isCurrent = useAudioStore((s) => s.blog?.id === post.id);
+	const globalIsPlaying = useAudioStore(
+		(s) => s.blog?.id === post.id && s.isPlaying,
+	);
+	const globalIsLoading = useAudioStore(
+		(s) => s.blog?.id === post.id && s.isLoading,
+	);
+	const globalIsDownloading = useAudioStore(
+		(s) => s.blog?.id === post.id && s.isDownloading,
+	);
+	const globalDownloadError = useAudioStore((s) =>
+		s.blog?.id === post.id ? s.downloadError : null,
+	);
 	const pauseAudio = useAudioStore((s) => s.pause);
 	const playAudio = useAudioStore((s) => s.play);
 	const loadAudio = useAudioStore((s) => s.loadAudio);
@@ -50,7 +64,7 @@ export function CardFooter({
 		post.audio?.telegramFileId ||
 		(post.audio as any)?.url
 	);
-	const isCurrent = loadedBlogId === post.id;
+
 	const isPlaying = isCurrent && globalIsPlaying;
 	const isLoading =
 		playbackPending || (isCurrent && (globalIsLoading || globalIsDownloading));
@@ -184,48 +198,60 @@ export function CardFooter({
 					<Icon name="Share" className="text-muted-foreground" />
 				</Pressable>
 				<View style={{ width: 52, height: 52 }}>
-				<Pressable
-					accessibilityLabel={
-						downloadedUri
-							? `${isPlaying ? "Pause" : "Play"} audio — Downloaded, available offline`
-							: (audioPlayability.reason ?? "Play audio")
-					}
-					disabled={isPlayControlDisabled}
-					onPress={(e) => {
-						e.stopPropagation();
-						void playPause();
-					}}
-					style={{
-						width: 44,
-						height: 44,
-						alignItems: "center",
-						justifyContent: "center",
-						borderRadius: 22,
-						backgroundColor: downloadedUri
-							? colors.downloaded
-							: isPlayBlocked
-							? colors.muted
-							: withAlpha(colors.primary, isCurrent ? 0.18 : 0.1),
-						opacity: isPlayBlocked ? 0.62 : 1,
-					}}
-				>
-					{isLoading ? (
-						<ActivityIndicator size="small" color={playColor} />
-					) : (
-						<Icon
-							name={isPlayBlocked ? "Lock" : isPlaying ? "Pause" : "Play"}
-							color={isPlayBlocked ? colors.mutedForeground : playColor}
-						/>
-					)}
-				</Pressable>
-				<AudioDownloadBadge
-					downloaded={Boolean(downloadedUri)}
-					downloading={isDownloadOnlyBusy || (isCurrent && globalIsDownloading)}
-					error={downloadOnlyError || (isCurrent ? globalDownloadError : null)}
-					progress={downloadOnlyProgress}
-					disabled={isPlayBlocked || !post.audio?.fileName}
-					onPress={() => { void downloadOnly().then((uri) => { if (!uri) Toast.show("Audio download failed", { type: "error", position: "bottom" }); }); }}
-				/>
+					<Pressable
+						accessibilityLabel={
+							downloadedUri
+								? `${isPlaying ? "Pause" : "Play"} audio — Downloaded, available offline`
+								: (audioPlayability.reason ?? "Play audio")
+						}
+						disabled={isPlayControlDisabled}
+						onPress={(e) => {
+							e.stopPropagation();
+							void playPause();
+						}}
+						style={{
+							width: 44,
+							height: 44,
+							alignItems: "center",
+							justifyContent: "center",
+							borderRadius: 22,
+							backgroundColor: downloadedUri
+								? colors.downloaded
+								: isPlayBlocked
+									? colors.muted
+									: withAlpha(colors.primary, isCurrent ? 0.18 : 0.1),
+							opacity: isPlayBlocked ? 0.62 : 1,
+						}}
+					>
+						{isLoading ? (
+							<ActivityIndicator size="small" color={playColor} />
+						) : (
+							<Icon
+								name={isPlayBlocked ? "Lock" : isPlaying ? "Pause" : "Play"}
+								color={isPlayBlocked ? colors.mutedForeground : playColor}
+							/>
+						)}
+					</Pressable>
+					<AudioDownloadBadge
+						downloaded={Boolean(downloadedUri)}
+						downloading={
+							isDownloadOnlyBusy || (isCurrent && globalIsDownloading)
+						}
+						error={
+							downloadOnlyError || (isCurrent ? globalDownloadError : null)
+						}
+						progress={downloadOnlyProgress}
+						disabled={isPlayBlocked || !post.audio?.fileName}
+						onPress={() => {
+							void downloadOnly().then((uri) => {
+								if (!uri)
+									Toast.show("Audio download failed", {
+										type: "error",
+										position: "bottom",
+									});
+							});
+						}}
+					/>
 				</View>
 			</View>
 		);

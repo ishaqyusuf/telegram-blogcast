@@ -1,6 +1,6 @@
 # Audio Search And Album Actions
 
-- Status: Workshop ready — published and browser-verified. Product implementation awaits design selection.
+- Status: Implementation complete; release preparation in progress. Direction 01 selected by user.
 - Created: 2026-11-05
 - Workshop: https://workshop.localhost/al-ghurobaa/audio/search
 - Source: `/Users/M1PRO/Documents/code/workshop/work/al-ghurobaa/audio/search/`
@@ -41,7 +41,7 @@ The requested author was `claude-opus-5-5` with explicit `--effort high`. A mini
 - Verified 320 × 568 with no horizontal overflow; simulated keyboard leaves a 219px scrollable picker body and reachable Cancel/Create controls.
 - Verified light theme, config collapse/reopen, and preserved size/theme while switching local views/states.
 - Final v3 smoke checks covered all three directions at 320 × 568, empty counts, full album detail, picker search and confirmation Back preserving its query, and filter changes clearing selection. No browser console errors were captured in the final check.
-- Verification metadata and screenshots are saved under the Workshop source `verification/` directory. The permanent comparison was left open for review. No revision is selected and no implementation receipt exists.
+- Verification metadata and screenshots are saved under the Workshop source `verification/` directory. The permanent comparison was left open for review. Direction 01 revision `d404fd44-dd6d-4535-8c41-56fecdb49055` was selected and recorded; implementation receipt follows committed delivery.
 - Native device acceptance and real performance measurements remain implementation work. The software keyboard in the HTML Workshop is simulated, not evidence of native keyboard behavior.
 
 ## Brain Impact
@@ -50,4 +50,27 @@ Added this task, an engineering plan and the confirmed product-decision ADR; add
 
 ## Next Step
 
-Review and select a direction or combination. Record the exact accepted Workshop revision before implementing native UI, scroll repair, query/cache improvements and cross-channel server support. Keep the existing uncommitted checkout changes outside this task's commit.
+Publish the committed Android update to EAS Preview. The user explicitly canceled device/emulator testing and requested Preview for their own acceptance. Keep Preview connected to current production services; do not add Preview infrastructure or change endpoints. The current live API returns NOT_FOUND for album.search, so dependent server code must be available before mobile publication. Production API publication requires clarification of the EAS-only release scope.
+
+## Implementation — 2026-11-05
+
+- Selected Familiar layers: Audio Tracks/Albums, source/home-channel filters, membership chips, Select/long press, loaded selection bounded to 200 and footer above the player.
+- Shared audio actions cover album add/change/remove, open album, playlist, download, share, single rename, transcribe and confirmed soft deletion. Download/transcribe batches process sequentially and retry only failures. Blog More exposes album actions directly.
+- One sheet owns the album picker and registered BottomSheetSectionList. Same-channel and other-channel groups are paged independently; search/create fields are separate; keyboard-aware inputs, explicit loading/error/retry and cross-channel confirmation retain the draft. Existing home, channel and album-detail entry points use it.
+- Search rows and facets have independent React Query keys/TTLs (45s rows, 60s counts, 10m GC); suggestions debounce 250ms. Search is memory-cached, not added to persisted content. Album discovery/picker pages are bounded. Membership writes patch matching cached results immediately, then invalidate affected audio/album data. Background revalidation keeps matching cached content.
+- API adds bounded album discovery, picker context, transactional create+add, stale-membership protection and atomic bulk removal/deletion. Manual cross-channel acknowledgment defaults false; organizer callers remain channel-restricted. Source Blog.channelId is never rewritten.
+- No Prisma/schema or infrastructure change. Actual database indexes inspected; no media membership/blog index is declared/deployed. Count fan-out removal was measured before proposing DDL. Substring/transcript search remains the existing semantics; no unvalidated full-text migration.
+
+## Implementation Verification
+
+- Real PostgreSQL integration: 3 tests, 27 assertions, including mixed image/audio membership, tied/null-date paging, source filters, default cross-channel rejection, confirmed add, retry idempotency, stale snapshot rejection, organizer restriction, atomic create rollback and removal retaining posts. Every fixture and mutation rolled back.
+- Client cache/group tests: 4 tests, 9 assertions. Existing album suggestion tests: 2 passed, preserving channel constraints.
+- Android Hermes export succeeded. Focused new-module Biome checks pass. Full TypeScript check has 74 existing repository diagnostics; no diagnostics in new mobile search/action/picker/cache modules (pre-existing API errors remain).
+- Alternating same-query/next-page benchmark, 5 samples per mode on the same database/network: legacy count median 3746ms (1846–5352); lean median 873ms (808–969), a 77% reduction in this small sample. Payload sizes essentially unchanged. No p95, frame-rate, offline or native visual claim.
+- Native scroll/keyboard, TalkBack, light/dark and end-to-end actions remain user acceptance in Preview, per latest explicit instruction to skip emulator/device testing.
+
+## Release Constraints
+
+- User authorized push and EAS Preview update. Existing current checkout only; unrelated dirty work excluded from commits and release. No worktrees.
+- Shared operational release helper internally creates a Git worktree when dirty, which conflicts with standing user instructions. Use an independent clean clone/archive of committed source for provider publishing instead.
+- Vercel CLI login restored with user email verification. No Vercel deployment or infrastructure mutation has been made in this task.

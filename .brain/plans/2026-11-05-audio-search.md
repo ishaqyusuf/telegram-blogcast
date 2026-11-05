@@ -1,6 +1,6 @@
 # Audio Search: Engineering Plan
 
-- Status: Planned; design Workshop awaits selection. No production code, schema, live query plan, or performance benchmark changed in this phase.
+- Status: Direction 01 selected and implemented. See task for checks, measured paging improvement and remaining Preview release/acceptance. No schema change.
 - Task: [Audio search and album actions](../tasks/2026-11-05-audio-search-workshop.md)
 - Workshop: https://workshop.localhost/al-ghurobaa/audio/search
 - Decision: [Confirmed cross-channel additions](../decisions/2026-11-05-confirmed-cross-channel-albums.md)

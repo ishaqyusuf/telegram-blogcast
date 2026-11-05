@@ -1212,14 +1212,7 @@ export default function ChannelChatScreen() {
 
       {/* Add to Album bottom sheet */}
       {showAlbumModal && (
-        <FloatingBottomSheet
-          visible={showAlbumModal}
-          onClose={() => setShowAlbumModal(false)}
-          accessibilityLabel="Add to album"
-          snapPoints={["72%"]}
-          enableDynamicSizing={false}
-        >
-          <AddToAlbumModal
+        <AddToAlbumModal
             mediaIds={albumMediaIds}
             authorId={albumAuthorId}
             onAdded={handleAlbumAdded}
@@ -1228,7 +1221,6 @@ export default function ChannelChatScreen() {
               clearSelection();
             }}
           />
-        </FloatingBottomSheet>
       )}
 
       <AddToPlaylistModal

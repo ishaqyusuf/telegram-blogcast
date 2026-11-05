@@ -5,8 +5,8 @@ import {
 	getSwipeDeleteThreshold,
 } from "@/components/ui/swipe-delete-action";
 import { useRouter } from "expo-router";
-import { useCallback, useMemo, useRef } from "react";
-import { useWindowDimensions } from "react-native";
+import { memo, useCallback, useMemo, useRef } from "react";
+import { View, Text, useWindowDimensions } from "react-native";
 import ReanimatedSwipeable, {
 	SwipeDirection,
 } from "react-native-gesture-handler/ReanimatedSwipeable";
@@ -39,17 +39,23 @@ import {
 
 export type { BlogItem } from "./types";
 
-export function BlogCard({
+export const BlogCard = memo(function BlogCard({
 	post,
 	onDelete,
 	onAddToAlbum,
 	onPress,
+	onLongPress,
+	selectionMode = false,
+	selected = false,
 	hideChannelName,
 }: {
 	post: BlogItem;
 	onDelete?: (post: BlogItem) => Promise<void> | void;
 	onAddToAlbum?: (post: BlogItem) => void;
 	onPress?: (post: BlogItem) => void;
+	onLongPress?: (post: BlogItem) => void;
+	selectionMode?: boolean;
+	selected?: boolean;
 	hideChannelName?: boolean;
 }) {
 	const router = useRouter();
@@ -69,11 +75,11 @@ export function BlogCard({
 	);
 
 	const handlePress = () => {
-		rememberAudioDetailFromPost(post);
 		if (onPress) {
 			onPress(post);
 			return;
 		}
+		rememberAudioDetailFromPost(post);
 		markViewed({
 			id: post.id,
 			title: getAudioDisplayTitle(post, "Untitled"),
@@ -165,7 +171,7 @@ export function BlogCard({
 		>
 			<ReanimatedSwipeable
 				ref={swipeRef}
-				enabled={Boolean(onDelete)}
+				enabled={Boolean(onDelete) && !selectionMode}
 				friction={1.15}
 				overshootFriction={8}
 				overshootRight={false}
@@ -176,28 +182,49 @@ export function BlogCard({
 				<Pressable
 					disabled={isDeletingRef.current}
 					onPress={handlePress}
+					onLongPress={onLongPress ? () => onLongPress(post) : undefined}
+					delayLongPress={350}
+					accessibilityRole={selectionMode ? "checkbox" : "button"}
+					accessibilityState={selectionMode ? { checked: selected } : undefined}
+					accessibilityLabel={
+						selectionMode
+							? `${selected ? "Selected" : "Select"} ${getAudioDisplayTitle(post, "Audio")}`
+							: undefined
+					}
 					style={{
-            borderBottomWidth: 1,
-            paddingHorizontal: 16,
-            paddingVertical: 16,
+						borderBottomWidth: 1,
+						paddingHorizontal: 16,
+						paddingVertical: 16,
 						backgroundColor: colors.background,
-            borderBottomColor:
-              colors.background === "rgb(10, 10, 10)"
-                ? "rgba(255, 255, 255, 0.06)"
-                : colors.border,
+						borderBottomColor:
+							colors.background === "rgb(10, 10, 10)"
+								? "rgba(255, 255, 255, 0.06)"
+								: colors.border,
 					}}
 				>
-					<CardHeader
-						post={post}
-						variant={variant}
-						onOpenOptions={handleOpenOptions}
-						hideChannelName={hideChannelName}
-					/>
-					<CardMedia post={post} variant={variant} onOpen={handlePress} />
-					<TranscriptPreview post={post} />
-					<CardFooter post={post} onAddToAlbum={onAddToAlbum} />
+					{selectionMode ? (
+						<Text className="text-primary font-bold mb-2">
+							{selected ? "✓ Selected" : "○ Select"}
+						</Text>
+					) : null}
+					<View
+						pointerEvents={selectionMode ? "none" : "auto"}
+						importantForAccessibility={
+							selectionMode ? "no-hide-descendants" : "auto"
+						}
+					>
+						<CardHeader
+							post={post}
+							variant={variant}
+							onOpenOptions={handleOpenOptions}
+							hideChannelName={hideChannelName}
+						/>
+						<CardMedia post={post} variant={variant} onOpen={handlePress} />
+						<TranscriptPreview post={post} />
+						<CardFooter post={post} onAddToAlbum={onAddToAlbum} />
+					</View>
 				</Pressable>
 			</ReanimatedSwipeable>
 		</Animated.View>
 	);
-}
+});

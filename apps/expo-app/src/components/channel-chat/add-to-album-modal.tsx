@@ -1,441 +1,374 @@
-import { Pressable } from "@/components/ui/pressable";
-import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
-import { useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
-  FlatList,
-  type ScrollViewProps,
-  Text,
-  TextInput,
-  View,
-  useWindowDimensions,
-} from "react-native";
-import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
-
+	BottomSheetSectionList,
+	BottomSheetTextInput,
+} from "@gorhom/bottom-sheet";
+import { useMemo, useRef, useState } from "react";
+import { ActivityIndicator, Keyboard, Text, View } from "react-native";
 import { _trpc } from "@/components/static-trpc";
+import { FloatingBottomSheet } from "@/components/ui/floating-bottom-sheet";
+import { Pressable } from "@/components/ui/pressable";
 import { Icon } from "@/components/ui/icon";
 import { Toast } from "@/components/ui/toast";
 import { useColors } from "@/hooks/use-color";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
+import {
+	useInfiniteQuery,
+	useMutation,
+	useQuery,
+	useQueryClient,
+} from "@/lib/react-query";
+import { reconcileAudioMembership } from "@/lib/audio-membership-cache";
+import { requiresCrossChannelConfirmation } from "@/lib/album-destination";
 
-const ALBUM_COLORS = [
-  "#1e40af",
-  "#0f766e",
-  "#b45309",
-  "#4f46e5",
-  "#be123c",
-  "#0369a1",
-];
-const ADD_TO_ALBUM_KEYBOARD_OFFSET = 112;
+type Destination = {
+	id: number;
+	name: string;
+	channelId: number | null;
+	channel?: { title: string | null; username: string | null } | null;
+	_count: { medias: number };
+};
+type Props = {
+	mediaIds: number[];
+	authorId?: number;
+	onClose: () => void;
+	onAdded?: (album: { id: number; name: string }) => void;
+};
 
-function renderKeyboardAwareScrollView(props: ScrollViewProps) {
-  return (
-    <KeyboardAwareScrollView
-      {...props}
-      bottomOffset={ADD_TO_ALBUM_KEYBOARD_OFFSET}
-      disableScrollOnKeyboardHide
-    />
-  );
+// Own the sheet as well as its registered scrollable: callers cannot accidentally
+// nest an unbounded list in a fixed BottomSheetView or another native Modal.
+export function AddToAlbumModal(props: Props) {
+	return (
+		<FloatingBottomSheet
+			visible
+			onClose={props.onClose}
+			title="Choose album"
+			accessibilityLabel="Add to album"
+			snapPoints={["82%"]}
+			enableDynamicSizing={false}
+			scrollableContent
+			keyboardBehavior="extend"
+			keyboardBlurBehavior="restore"
+			androidKeyboardInputMode="adjustResize"
+		>
+			<AlbumDestinationPicker {...props} />
+		</FloatingBottomSheet>
+	);
 }
 
-function getInitials(name?: string | null) {
-  if (!name) return "AL";
-  return name
-    .split(" ")
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? "")
-    .join("");
-}
-
-function normalizeAlbumFilterText(value?: string | number | null) {
-  return String(value ?? "")
-    .normalize("NFKD")
-    .replace(/[\u0610-\u061a\u064b-\u065f\u0670]/g, "")
-    .replace(/[\u200c\u200d]/g, "")
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-interface Props {
-  mediaIds: number[];
-  authorId?: number;
-  onClose: () => void;
-  onAdded?: (album: { id: number; name: string }) => void;
-}
-
-export function AddToAlbumModal({
-  mediaIds,
-  authorId,
-  onClose,
-  onAdded,
+function AlbumDestinationPicker({
+	mediaIds,
+	authorId,
+	onClose,
+	onAdded,
 }: Props) {
-  const queryClient = useQueryClient();
-  const colors = useColors();
-  const { height: windowHeight } = useWindowDimensions();
-  const [newAlbumName, setNewAlbumName] = useState("");
-  const selectedAlbumRef = useRef<{ id: number; name: string } | null>(null);
-  const singleMediaId = mediaIds.length === 1 ? (mediaIds[0] ?? null) : null;
+	const colors = useColors();
+	const client = useQueryClient();
+	const [search, setSearch] = useState("");
+	const [name, setName] = useState("");
+	const [pending, setPending] = useState<Destination | "create" | null>(null);
+	const [error, setError] = useState<string | null>(null);
+	const submitting = useRef(false);
+	const q = useDebouncedValue(search.trim());
+	const ids = useMemo(
+		() => [...new Set(mediaIds)].sort((a, b) => a - b),
+		[mediaIds],
+	);
+	const context = useQuery(
+		_trpc.album.getPickerContext.queryOptions(
+			{ mediaIds: ids },
+			{ staleTime: 0 },
+		),
+	);
+	const channelIds = useMemo(
+		() =>
+			[
+				...new Set(
+					context.data?.flatMap((row) =>
+						row.blog?.channelId ? [row.blog.channelId] : [],
+					) ?? [],
+				),
+			].sort((a, b) => a - b),
+		[context.data],
+	);
+	const same = useInfiniteQuery(
+		_trpc.album.search.infiniteQueryOptions(
+			{ q, channelIds, group: "same", limit: 30 },
+			{
+				enabled: !!context.data,
+				staleTime: 30_000,
+				gcTime: 300_000,
+				getNextPageParam: (page) => page.cursor,
+			},
+		),
+	);
+	const other = useInfiniteQuery(
+		_trpc.album.search.infiniteQueryOptions(
+			{ q, channelIds, group: "other", limit: 30 },
+			{
+				enabled: !!context.data,
+				staleTime: 30_000,
+				gcTime: 300_000,
+				getNextPageParam: (page) => page.cursor,
+			},
+		),
+	);
+	const add = useMutation(_trpc.album.addMediaToAlbum.mutationOptions());
+	const create = useMutation(
+		_trpc.album.createAlbumWithMedia.mutationOptions(),
+	);
+	const busy = add.isPending || create.isPending;
+	const sources = context.data?.map((row) => row.blog?.channelId ?? null) ?? [];
+	const sections = [
+		{
+			title: "Existing albums · Same channel",
+			key: "same",
+			data: same.data?.pages.flatMap((page) => page.data) ?? [],
+			query: same,
+		},
+		{
+			title: "From other channels",
+			key: "other",
+			data: other.data?.pages.flatMap((page) => page.data) ?? [],
+			query: other,
+		},
+	];
+	async function save(destination: Destination | "create", confirmed = false) {
+		if (!context.data || submitting.current) return;
+		const crossChannel =
+			destination === "create"
+				? new Set(sources).size > 1
+				: requiresCrossChannelConfirmation(sources, destination.channelId);
+		Keyboard.dismiss();
+		if (crossChannel && !confirmed) {
+			setPending(destination);
+			return;
+		}
+		submitting.current = true;
+		setError(null);
+		try {
+			const input = {
+				mediaIds: ids,
+				confirmCrossChannel: confirmed,
+				expectedMembership: context.data.map((row) => ({
+					mediaId: row.id,
+					albumId: row.albumId,
+				})),
+			};
+			let album: { id: number; name: string };
+			if (destination === "create")
+				album = await create.mutateAsync({
+					...input,
+					name: name.trim(),
+					authorId,
+				});
+			else {
+				await add.mutateAsync({ ...input, albumId: destination.id });
+				album = destination;
+			}
 
-  const { data: albums = [], isLoading } = useQuery(
-    _trpc.album.getAlbums.queryOptions(),
-  );
-  const {
-    data: recommendedAlbum,
-    isLoading: isRecommendationLoading,
-  } = useQuery({
-    ..._trpc.album.getRelatedAlbumForMedia.queryOptions({
-      mediaId: singleMediaId ?? 0,
-    }),
-    enabled: singleMediaId !== null,
-  });
-  const sortedAlbums = useMemo(
-    () =>
-      [...albums].sort((a, b) => {
-        const aChannel = a.channel?.title ?? a.channel?.username ?? "";
-        const bChannel = b.channel?.title ?? b.channel?.username ?? "";
-        const channelCompare = aChannel.localeCompare(bChannel);
-        if (channelCompare !== 0) return channelCompare;
-        return a.name.localeCompare(b.name);
-      }),
-    [albums],
-  );
-  const albumFilterTerms = useMemo(
-    () =>
-      normalizeAlbumFilterText(newAlbumName)
-        .split(" ")
-        .filter(Boolean),
-    [newAlbumName],
-  );
-  const filteredAlbums = useMemo(() => {
-    const otherAlbums = recommendedAlbum
-      ? sortedAlbums.filter((album) => album.id !== recommendedAlbum.id)
-      : sortedAlbums;
-    if (albumFilterTerms.length === 0) return otherAlbums;
-    return otherAlbums.filter((album) => {
-      const searchText = normalizeAlbumFilterText(
-        [
-          album.name,
-          album.author?.name,
-          album.author?.nameAr,
-          album.channel?.title,
-          album.channel?.username,
-        ].join(" "),
-      );
-      return albumFilterTerms.every((term) => searchText.includes(term));
-    });
-  }, [albumFilterTerms, recommendedAlbum, sortedAlbums]);
-
-  const addMedia = useMutation(
-    _trpc.album.addMediaToAlbum.mutationOptions({
-      onSuccess: () => {
-        queryClient.invalidateQueries(_trpc.album.getAlbums.queryOptions());
-        if (singleMediaId !== null) {
-          queryClient.setQueryData(
-            _trpc.album.getRelatedAlbumForMedia.queryKey({
-              mediaId: singleMediaId,
-            }),
-            null,
-          );
-        }
-        if (selectedAlbumRef.current) {
-          onAdded?.(selectedAlbumRef.current);
-          Toast.show(`Added to ${selectedAlbumRef.current.name}`, {
-            type: "success",
-            position: "bottom",
-          });
-        }
-        onClose();
-      },
-    }),
-  );
-
-  const createAlbum = useMutation(
-    _trpc.album.createAlbum.mutationOptions({
-      onSuccess: (newAlbum) => {
-        selectedAlbumRef.current = { id: newAlbum.id, name: newAlbum.name };
-        addMedia.mutate({ albumId: newAlbum.id, mediaIds });
-      },
-    }),
-  );
-
-  function handleSelectAlbum(album: { id: number; name: string }) {
-    selectedAlbumRef.current = { id: album.id, name: album.name };
-    addMedia.mutate({ albumId: album.id, mediaIds });
-  }
-
-  function handleCreate() {
-    const name = newAlbumName.trim();
-    if (!name) return;
-    createAlbum.mutate({ name, authorId });
-  }
-
-  const isBusy = addMedia.isPending || createAlbum.isPending;
-
-  return (
-    <View
-      className="bg-card rounded-t-3xl"
-      style={{
-        backgroundColor: colors.card,
-        maxHeight: Math.min(Math.max(360, windowHeight * 0.72), windowHeight - 24),
-        overflow: "hidden",
-        width: "100%",
-      }}
-    >
-      <FlatList
-        data={isLoading ? [] : filteredAlbums}
-        keyExtractor={(item) => String(item.id)}
-        keyboardDismissMode="interactive"
-        keyboardShouldPersistTaps="handled"
-        renderScrollComponent={renderKeyboardAwareScrollView}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{
-          flexGrow: 1,
-          paddingBottom: 24,
-          paddingHorizontal: 16,
-          paddingTop: 16,
-        }}
-        ListHeaderComponent={
-          <>
-            {/* Handle */}
-        <View
-          className="w-10 h-1 rounded-full bg-muted self-center mb-4"
-          style={{ backgroundColor: colors.muted }}
-        />
-
-        <Text
-          className="text-base font-bold text-foreground mb-4"
-          style={{ color: colors.foreground }}
-        >
-          Add to album
-        </Text>
-
-        {singleMediaId !== null &&
-        (isRecommendationLoading || recommendedAlbum) ? (
-          <View className="mb-5">
-            <View className="mb-3 flex-row items-center gap-2">
-              <Icon name="Sparkles" size={15} className="text-primary" />
-              <Text
-                className="text-xs font-semibold uppercase tracking-wider text-primary"
-              >
-                Recommended album
-              </Text>
-            </View>
-
-            {isRecommendationLoading ? (
-              <View
-                className="h-20 flex-row items-center justify-center gap-3 rounded-2xl border border-border bg-muted"
-              >
-                <ActivityIndicator size="small" color={colors.primary} />
-                <Text
-                  className="text-sm font-medium text-muted-foreground"
-                >
-                  Finding the best match…
-                </Text>
-              </View>
-            ) : recommendedAlbum ? (
-              <View
-                className="rounded-2xl border border-primary/30 bg-muted p-3"
-              >
-                <View className="flex-row items-center gap-3">
-                  <View
-                    style={{
-                      width: 44,
-                      height: 44,
-                      borderRadius: 10,
-                      alignItems: "center",
-                      justifyContent: "center",
-                      flexShrink: 0,
-                      backgroundColor:
-                        ALBUM_COLORS[recommendedAlbum.id % ALBUM_COLORS.length],
-                    }}
-                  >
-                    <Text className="text-sm font-bold text-white">
-                      {getInitials(recommendedAlbum.name)}
-                    </Text>
-                  </View>
-                  <View className="min-w-0 flex-1">
-                    <Text
-                      numberOfLines={1}
-                      className="text-sm font-bold text-foreground"
-                    >
-                      {recommendedAlbum.name}
-                    </Text>
-                    <Text
-                      numberOfLines={1}
-                      className="mt-1 text-xs text-muted-foreground"
-                    >
-                      {recommendedAlbum._count.medias} tracks
-                      {recommendedAlbum.channel?.title
-                        ? ` · ${recommendedAlbum.channel.title}`
-                        : ""}
-                    </Text>
-                  </View>
-                </View>
-
-                <View className="mt-3 flex-row gap-2">
-                  <Pressable
-                    accessibilityLabel="Cancel adding to recommended album"
-                    onPress={onClose}
-                    disabled={isBusy}
-                    className="h-10 flex-1 items-center justify-center rounded-xl bg-background active:opacity-70"
-                  >
-                    <Text className="text-xs font-semibold text-foreground">
-                      Cancel
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    accessibilityLabel={`Add to recommended album ${recommendedAlbum.name}`}
-                    onPress={() => handleSelectAlbum(recommendedAlbum)}
-                    disabled={isBusy}
-                    className={`h-10 flex-[2] flex-row items-center justify-center gap-2 rounded-xl bg-primary active:opacity-80 ${isBusy ? "opacity-50" : "opacity-100"}`}
-                  >
-                    {addMedia.isPending &&
-                    selectedAlbumRef.current?.id === recommendedAlbum.id ? (
-                      <ActivityIndicator
-                        size="small"
-                        color={colors.primaryForeground}
-                      />
-                    ) : (
-                      <Icon
-                        name="Plus"
-                        size={16}
-                        className="text-primary-foreground"
-                      />
-                    )}
-                    <Text className="text-xs font-bold text-primary-foreground">
-                      Yes, add here
-                    </Text>
-                  </Pressable>
-                </View>
-              </View>
-            ) : null}
-          </View>
-        ) : null}
-
-        {/* Create new album */}
-        <View className="flex-row gap-2 mb-5">
-          <View
-            className="flex-1 flex-row items-center bg-muted rounded-xl px-3 h-10 gap-2"
-            style={{ backgroundColor: colors.muted }}
-          >
-            <Icon name="Plus" size={16} className="text-muted-foreground" />
-            <TextInput
-              placeholder="New album name..."
-              placeholderTextColor={colors.mutedForeground}
-              value={newAlbumName}
-              onChangeText={setNewAlbumName}
-              returnKeyType="done"
-              onSubmitEditing={handleCreate}
-              style={{
-                flex: 1,
-                fontSize: 14,
-                color: colors.foreground,
-                paddingVertical: 0,
-              }}
-            />
-          </View>
-          <Pressable
-            onPress={handleCreate}
-            disabled={!newAlbumName.trim() || isBusy}
-            className={`px-4 h-10 rounded-xl bg-primary items-center justify-center active:opacity-80 ${!newAlbumName.trim() || isBusy ? "opacity-50" : "opacity-100"}`}
-          >
-            {isBusy ? (
-              <ActivityIndicator
-                size="small"
-                color={colors.primaryForeground}
-              />
-            ) : (
-              <Text className="text-xs font-bold text-primary-foreground">
-                Create
-              </Text>
-            )}
-          </Pressable>
-        </View>
-
-        <Text
-          className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3"
-          style={{ color: colors.mutedForeground }}
-        >
-          {recommendedAlbum ? "Choose another album" : "Existing Albums"}
-        </Text>
-          </>
-        }
-        ListEmptyComponent={
-          isLoading ? (
-            <View className="py-6 items-center">
-              <ActivityIndicator color={colors.primary} />
-            </View>
-          ) : (
-            <Text
-              className="text-sm text-muted-foreground text-center py-6"
-              style={{ color: colors.mutedForeground }}
-            >
-              {albumFilterTerms.length > 0
-                ? "No existing albums match"
-                : "No albums yet — create one above"}
-            </Text>
-          )
-        }
-        renderItem={({ item, index }) => (
-          <Pressable
-            onPress={() => handleSelectAlbum(item)}
-            disabled={isBusy}
-            className="flex-row items-center gap-3 py-3 border-b border-border active:opacity-70"
-          >
-            <View
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: 8,
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-                backgroundColor: ALBUM_COLORS[index % ALBUM_COLORS.length],
-              }}
-            >
-              <Text className="text-sm font-bold text-white">
-                {getInitials(item.name)}
-              </Text>
-            </View>
-            <View className="flex-1">
-              <Text
-                className="text-sm font-semibold text-foreground"
-                style={{ color: colors.foreground }}
-              >
-                {item.name}
-              </Text>
-              <Text
-                className="text-xs text-muted-foreground"
-                style={{ color: colors.mutedForeground }}
-              >
-                {item._count.medias} tracks
-                {item.channel?.title ? ` · ${item.channel.title}` : ""}
-              </Text>
-            </View>
-            <Icon
-              name="ChevronRight"
-              size={16}
-              className="text-muted-foreground"
-            />
-          </Pressable>
-        )}
-        ListFooterComponent={
-          <View className="mt-4 rounded-2xl bg-background/60 p-1">
-            <Pressable
-              onPress={onClose}
-              className="h-11 rounded-xl bg-muted items-center justify-center active:opacity-70"
-              style={{ backgroundColor: colors.muted }}
-            >
-              <Text
-                className="text-sm font-semibold text-foreground"
-                style={{ color: colors.foreground }}
-              >
-                Cancel
-              </Text>
-            </Pressable>
-          </View>
-        }
-      />
-    </View>
-  );
+			await reconcileAudioMembership(client, ids, album);
+			onAdded?.(album);
+			Toast.show(
+				`Added ${ids.length} audio ${ids.length === 1 ? "track" : "tracks"} to ${album.name}`,
+				{ type: "success" },
+			);
+			onClose();
+		} catch (cause) {
+			setError(
+				cause instanceof Error
+					? cause.message
+					: "Could not update the album. Try again.",
+			);
+		} finally {
+			submitting.current = false;
+		}
+	}
+	const inputStyle = {
+		color: colors.foreground,
+		backgroundColor: colors.muted,
+		borderRadius: 12,
+		paddingHorizontal: 14,
+		paddingVertical: 12,
+		fontSize: 14,
+	};
+	return (
+		<View style={{ flex: 1 }}>
+			{pending ? (
+				<View className="px-5 pb-3 gap-3">
+					<Text className="text-lg font-bold text-foreground">
+						Add audio from another channel?
+					</Text>
+					<Text className="text-sm text-muted-foreground">
+						{ids.length} selected.{" "}
+						{pending === "create"
+							? `Create “${name.trim()}” with audio from multiple channels.`
+							: `Add to “${pending.name}” in ${pending.channel?.title || pending.channel?.username || "an unassigned channel"}.`}{" "}
+						The original source channels stay unchanged. Source:{" "}
+						{Array.from(
+							new Set(
+								context.data?.map(
+									(row) =>
+										row.blog?.channel?.title ||
+										row.blog?.channel?.username ||
+										"No channel",
+								),
+							),
+						).join(", ")}
+						.
+					</Text>
+					<View className="flex-row gap-2">
+						<Pressable
+							disabled={busy}
+							className="min-h-12 flex-1 items-center justify-center rounded-xl bg-muted"
+							onPress={() => setPending(null)}
+						>
+							<Text className="text-foreground font-semibold">Back</Text>
+						</Pressable>
+						<Pressable
+							disabled={busy}
+							className="min-h-12 flex-1 items-center justify-center rounded-xl bg-primary"
+							onPress={() => void save(pending, true)}
+						>
+							<Text className="text-primary-foreground font-semibold">
+								{busy ? "Adding…" : "Confirm add"}
+							</Text>
+						</Pressable>
+					</View>
+				</View>
+			) : (
+				<View className="px-4 pb-3 gap-2">
+					<BottomSheetTextInput
+						accessibilityLabel="Search albums"
+						placeholder="Search albums…"
+						placeholderTextColor={colors.mutedForeground}
+						value={search}
+						onChangeText={setSearch}
+						maxLength={500}
+						style={inputStyle}
+					/>
+					<View className="flex-row gap-2">
+						<View className="flex-1">
+							<BottomSheetTextInput
+								accessibilityLabel="New album name"
+								placeholder="New album name…"
+								placeholderTextColor={colors.mutedForeground}
+								value={name}
+								onChangeText={setName}
+								maxLength={180}
+								style={inputStyle}
+							/>
+						</View>
+						<Pressable
+							accessibilityLabel="Create album and add audio"
+							disabled={!name.trim() || busy || !context.data}
+							className={`min-h-12 justify-center px-4 rounded-xl bg-primary ${!name.trim() || busy || !context.data ? "opacity-50" : ""}`}
+							onPress={() => void save("create")}
+						>
+							<Text className="text-primary-foreground font-semibold">
+								Create
+							</Text>
+						</Pressable>
+					</View>
+				</View>
+			)}
+			{error || context.error ? (
+				<View className="px-4 pb-3 gap-2">
+					<Text accessibilityRole="alert" className="text-destructive">
+						{error || context.error?.message}
+					</Text>
+					<Pressable
+						onPress={() => {
+							setError(null);
+							void context.refetch();
+						}}
+						className="py-2"
+					>
+						<Text className="text-primary">Refresh album membership</Text>
+					</Pressable>
+				</View>
+			) : null}
+			{context.isPending ? <ActivityIndicator color={colors.primary} /> : null}
+			<BottomSheetSectionList<Destination>
+				sections={pending ? [] : sections}
+				style={{ flex: 1 }}
+				contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24 }}
+				keyboardShouldPersistTaps="handled"
+				keyboardDismissMode="on-drag"
+				keyExtractor={(item) => String(item.id)}
+				stickySectionHeadersEnabled={false}
+				renderSectionHeader={({ section }) => (
+					<Text className="pt-4 pb-2 text-sm font-bold text-muted-foreground">
+						{section.title}
+					</Text>
+				)}
+				renderSectionFooter={({ section }) => (
+					<View className="py-2">
+						{section.query.isFetching ? (
+							<ActivityIndicator color={colors.primary} />
+						) : section.query.error ? (
+							<Pressable
+								onPress={() => void section.query.refetch()}
+								className="py-3"
+							>
+								<Text className="text-destructive">
+									Could not load albums. Retry
+								</Text>
+							</Pressable>
+						) : section.data.length === 0 ? (
+							<Text className="text-muted-foreground py-2">
+								No matching albums
+							</Text>
+						) : null}
+						{section.query.hasNextPage && !section.query.isFetching ? (
+							<Pressable
+								onPress={() => void section.query.fetchNextPage()}
+								className="py-3"
+							>
+								<Text className="text-primary font-semibold">
+									Load more albums
+								</Text>
+							</Pressable>
+						) : null}
+					</View>
+				)}
+				renderItem={({ item }) => (
+					<Pressable
+						disabled={busy || !context.data}
+						onPress={() => void save(item)}
+						className="min-h-20 py-3 flex-row items-center gap-3 border-b border-border"
+					>
+						<View className="size-11 rounded-xl bg-muted items-center justify-center">
+							<Icon name="Disc3" size={22} className="text-primary" />
+						</View>
+						<View className="flex-1">
+							<Text className="font-semibold text-foreground" numberOfLines={2}>
+								{item.name}
+							</Text>
+							<Text
+								className="text-xs text-muted-foreground mt-1"
+								numberOfLines={1}
+							>
+								{item._count.medias} tracks ·{" "}
+								{item.channel?.title || item.channel?.username || "No channel"}
+							</Text>
+						</View>
+						<Icon
+							name="ChevronRight"
+							size={18}
+							className="text-muted-foreground"
+						/>
+					</Pressable>
+				)}
+			/>
+			<Pressable
+				disabled={busy}
+				onPress={onClose}
+				className="mx-4 mb-4 min-h-12 rounded-xl bg-muted items-center justify-center"
+			>
+				<Text className="text-foreground font-semibold">
+					{busy ? "Saving…" : "Cancel"}
+				</Text>
+			</Pressable>
+		</View>
+	);
 }

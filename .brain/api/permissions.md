@@ -31,3 +31,7 @@ Documents authentication and authorization expectations across the API surface.
 
 ### Documentation Rule
 - When adding or changing route protection, update this file in the same change set.
+
+### Audio search/manual album writes — 2026-11-05
+
+The new bounded discovery/context reads and `createAlbumWithMedia`, `removeMembership`, `deleteAudioPosts` retain the repository's existing publicProcedure policy for album/blog writes. Numeric IDs, batch limits, live audio checks, transaction locks, membership snapshots and explicit manual cross-channel acknowledgment enforce data integrity, not authentication or authorization. The patch does not claim user-scoped write protection or alter automatic organizer channel restrictions. No credentials are embedded in the app; Preview retains its existing service connection.

@@ -14,6 +14,9 @@ export async function addAlbumMedia(
 		strictMissing?: boolean;
 		unalbumedOnly?: boolean;
 		channelId?: number;
+		// Manual picker only. Automated callers retain the single-channel rule.
+		allowCrossChannel?: boolean;
+		expectedMembership?: { mediaId: number; albumId: number | null }[];
 	} = {},
 ) {
 	const strictMissing = options.strictMissing ?? true;
@@ -23,7 +26,10 @@ export async function addAlbumMedia(
 		await db.$queryRaw`SELECT "id" FROM "Media" WHERE "id" IN (${Prisma.join(mediaIds)}) ORDER BY "id" FOR UPDATE`;
 	const mediaItems = await db.media.findMany({
 		where: { id: { in: mediaIds } },
-		include: { blog: { select: { channelId: true, deletedAt: true } } },
+		include: {
+			blog: { select: { channelId: true, deletedAt: true } },
+			file: { select: { mimeType: true } },
+		},
 	});
 	const mediaById = new Map(mediaItems.map((media) => [media.id, media]));
 	const orderedMediaItems = mediaIds
@@ -37,6 +43,19 @@ export async function addAlbumMedia(
 			message: `Media not found: ${missingIds.join(", ")}`,
 		});
 	}
+	if (
+		options.expectedMembership?.some(
+			(expected) =>
+				mediaById.get(expected.mediaId)?.albumId !== expected.albumId &&
+				mediaById.get(expected.mediaId)?.albumId !== input.albumId,
+		)
+	) {
+		throw new TRPCError({
+			code: "CONFLICT",
+			message:
+				"Album membership changed. Close the picker and review the audio again.",
+		});
+	}
 
 	if (
 		options.channelId != null &&
@@ -44,7 +63,10 @@ export async function addAlbumMedia(
 			(media) =>
 				media.blog?.channelId !== options.channelId ||
 				media.blog?.deletedAt ||
-				!media.mimeType?.toLowerCase().startsWith("audio/"),
+				!(
+					media.mimeType?.toLowerCase().startsWith("audio/") ||
+					media.file?.mimeType?.toLowerCase().startsWith("audio/")
+				),
 		)
 	) {
 		throw new TRPCError({
@@ -67,6 +89,12 @@ export async function addAlbumMedia(
 	const itemsToAdd = orderedMediaItems.filter(
 		(media) => media.albumId !== input.albumId,
 	);
+	if (orderedMediaItems.some((media) => !media.blog || media.blog.deletedAt)) {
+		throw new TRPCError({
+			code: "NOT_FOUND",
+			message: "Some audio posts are no longer available.",
+		});
+	}
 	const album = await db.album.findFirstOrThrow({
 		where: { id: input.albumId, deletedAt: null },
 		select: { channelId: true },
@@ -81,7 +109,11 @@ export async function addAlbumMedia(
 
 	if (
 		itemsToAdd.some(
-			(media) => !media.mimeType?.toLowerCase().startsWith("audio/"),
+			(media) =>
+				!(
+					media.mimeType?.toLowerCase().startsWith("audio/") ||
+					media.file?.mimeType?.toLowerCase().startsWith("audio/")
+				),
 		)
 	) {
 		throw new TRPCError({
@@ -90,7 +122,7 @@ export async function addAlbumMedia(
 		});
 	}
 
-	if (channelIds.length > 1) {
+	if (!options.allowCrossChannel && channelIds.length > 1) {
 		throw new TRPCError({
 			code: "BAD_REQUEST",
 			message: "Album media must come from one channel.",
@@ -98,6 +130,7 @@ export async function addAlbumMedia(
 	}
 
 	if (
+		!options.allowCrossChannel &&
 		album.channelId &&
 		channelIds.length > 0 &&
 		channelIds.some((channelId) => channelId !== album.channelId)

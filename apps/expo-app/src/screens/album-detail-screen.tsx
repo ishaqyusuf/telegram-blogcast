@@ -5778,29 +5778,12 @@ export default function AlbumDetailScreen() {
       />
 
       {albumModalMediaIds && (
-        <Modal
-          transparent
-          animationType="slide"
-          statusBarTranslucent
-          onRequestClose={() => setAlbumModalMediaIds(null)}
-        >
-          <Pressable
-            className="flex-1 justify-end bg-black/60"
-            onPress={() => setAlbumModalMediaIds(null)}
-          >
-            <Pressable
-              onPress={(event) => event.stopPropagation()}
-              style={{ width: "100%" }}
-            >
-              <AddToAlbumModal
+        <AddToAlbumModal
                 mediaIds={albumModalMediaIds}
                 authorId={album?.author?.id}
                 onAdded={handleAlbumModalAdded}
                 onClose={() => setAlbumModalMediaIds(null)}
               />
-            </Pressable>
-          </Pressable>
-        </Modal>
       )}
 
       <DeleteSuggestionConfirmSheet

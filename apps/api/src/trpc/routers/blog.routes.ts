@@ -1,3 +1,4 @@
+import { buildBlogSearchWhere, visibleMainBlogWhere, albumMembershipWhere } from "../../queries/search";
 import type { Prisma } from "@acme/db";
 import { consoleLog } from "@acme/utils";
 import { TRPCError } from "@trpc/server";
@@ -64,21 +65,6 @@ const transcriptionJobInclude = {
 		},
 	},
 };
-const visibleMainBlogWhere = {
-	OR: [
-		{ source: null },
-		{ source: { not: "facebook" } },
-		{
-			medias: {
-				some: {
-					fileId: {
-						not: null,
-					},
-				},
-			},
-		},
-	],
-} satisfies Prisma.BlogWhereInput;
 const blogMediaUploadSchema = z.object({
 	url: z.string().url(),
 	downloadUrl: z.string().url().optional(),
@@ -148,71 +134,6 @@ function inferBlogType(
 	return "text";
 }
 
-function buildBlogSearchWhere(q: string): Prisma.BlogWhereInput {
-	const term = q.trim();
-	if (!term) return {};
-
-	return {
-		OR: [
-			{ content: { contains: term, mode: "insensitive" } },
-			{
-				channel: {
-					is: {
-						OR: [
-							{ title: { contains: term, mode: "insensitive" } },
-							{ username: { contains: term, mode: "insensitive" } },
-						],
-					},
-				},
-			},
-			{
-				blogTags: {
-					some: {
-						tags: { title: { contains: term, mode: "insensitive" } },
-					},
-				},
-			},
-			{
-				medias: {
-					some: {
-						OR: [
-							{ titleOverride: { contains: term, mode: "insensitive" } },
-							{ title: { contains: term, mode: "insensitive" } },
-							{
-								file: {
-									fileName: {
-										contains: term,
-										mode: "insensitive",
-									},
-								},
-							},
-							{
-								file: {
-									blobPathname: {
-										contains: term,
-										mode: "insensitive",
-									},
-								},
-							},
-							{
-								transcript: {
-									segments: {
-										some: {
-											text: {
-												contains: term,
-												mode: "insensitive",
-											},
-										},
-									},
-								},
-							},
-						],
-					},
-				},
-			},
-		],
-	};
-}
 
 async function attachTagsToBlog(
 	db: any,
@@ -484,6 +405,30 @@ export const blogRoutes = createTRPCRouter({
 				data: { titleOverride: input.titleOverride?.trim() || null },
 			});
 		}),
+
+	deleteAudioPosts: publicProcedure
+		.input(
+			z.object({ ids: z.array(z.number().int().positive()).min(1).max(200) }),
+		)
+		.mutation(({ ctx, input }) =>
+			ctx.db.$transaction(async (tx) => {
+				const ids = [...new Set(input.ids)];
+				const result = await tx.blog.updateMany({
+					where: {
+						id: { in: ids },
+						deletedAt: null,
+						medias: { some: albumMembershipWhere() },
+					},
+					data: { deletedAt: new Date() },
+				});
+				if (result.count !== ids.length)
+					throw new TRPCError({
+						code: "CONFLICT",
+						message: "Some audio posts changed. Refresh before deleting.",
+					});
+				return result;
+			}),
+		),
 
 	deleteBlog: publicProcedure
 		.input(z.object({ id: z.number() }))
@@ -1379,17 +1324,51 @@ export const blogRoutes = createTRPCRouter({
 			});
 		}),
 
-	// ── Search ───────────────────────────────────────────────────────────────
+	// Facets are independently cached by keyword/channel, not recomputed per page.
+	searchFacets: publicProcedure
+		.input(
+			z.object({
+				q: z.string().trim().max(500).default(""),
+				channelIds: z.array(z.number().int().positive()).max(50).optional(),
+			}),
+		)
+		.query(async ({ ctx, input }) => {
+			const where: Prisma.BlogWhereInput = {
+				deletedAt: null,
+				...buildBlogSearchWhere(input.q),
+				...(input.channelIds?.length
+					? { channelId: { in: input.channelIds } }
+					: {}),
+				AND: [visibleMainBlogWhere, channelContentVisibilityWhere],
+			};
+			const [allCount, typeCounts] = await Promise.all([
+				ctx.db.blog.count({ where }),
+				Promise.all(
+					CHANNEL_CONTENT_TYPES.map(async (type) => ({
+						type,
+						count: await ctx.db.blog.count({
+							where: { AND: [where, getBlogContentTypeWhere(type)] },
+						}),
+					})),
+				),
+			]);
+			return {
+				allCount,
+				typeCounts: typeCounts.filter((item) => item.count > 0),
+			};
+		}),
+ // ── Search ───────────────────────────────────────────────────────────────
 
 	search: publicProcedure
 		.input(
 			z.object({
-				q: z.string().default(""),
-				limit: z.number().min(1).max(50).default(20),
+				q: z.string().trim().max(500).default(""),
+				limit: z.number().int().min(1).max(50).default(20),
 				cursor: z.number().nullish(),
-				channelIds: z.array(z.number()).optional(),
+				channelIds: z.array(z.number().int().positive()).max(50).optional(),
 				type: blogTypeSchema.optional(),
 				album: z.enum(["in", "not"]).optional(),
+				includeCounts: z.boolean().default(true),
 			}),
 		)
 		.query(async ({ ctx, input }) => {
@@ -1399,12 +1378,7 @@ export const blogRoutes = createTRPCRouter({
 			const channelWhere: Prisma.BlogWhereInput = input.channelIds?.length
 				? { channelId: { in: input.channelIds } }
 				: {};
-			const albumWhere: Prisma.BlogWhereInput =
-				input.album === "in"
-					? { medias: { some: { albumId: { not: null } } } }
-					: input.album === "not"
-						? { medias: { some: { albumId: null } } }
-						: {};
+			const albumWhere: Prisma.BlogWhereInput = input.album ? { medias: { some: albumMembershipWhere(input.album) } } : {};
 			const baseWhere: Prisma.BlogWhereInput = {
 				deletedAt: null,
 				...searchWhere,
@@ -1434,6 +1408,8 @@ export const blogRoutes = createTRPCRouter({
 						blogDate: true,
 						thumbnail: { include: { file: true } },
 						medias: {
+							...(input.type === "audio" || input.album ? { where: albumMembershipWhere(input.album) } : {}),
+							orderBy: {id:"asc"},
 							include: {
 								file: true,
 								album: { select: { id: true, name: true } },
@@ -1465,10 +1441,10 @@ export const blogRoutes = createTRPCRouter({
 						channel: { select: { id: true, title: true, username: true } },
 					},
 				}),
-				db.blog.count({ where: itemWhere }),
-				db.blog.count({ where: baseWhere }),
+				input.includeCounts ? db.blog.count({ where: itemWhere }) : Promise.resolve(null),
+				input.includeCounts ? db.blog.count({ where: baseWhere }) : Promise.resolve(null),
 				Promise.all(
-					CHANNEL_CONTENT_TYPES.map(async (type) => ({
+					(input.includeCounts ? CHANNEL_CONTENT_TYPES : []).map(async (type) => ({
 						type,
 						count: await db.blog.count({
 							where: { AND: [baseWhere, getBlogContentTypeWhere(type)] },

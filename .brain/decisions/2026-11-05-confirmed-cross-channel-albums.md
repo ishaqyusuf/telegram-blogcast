@@ -1,7 +1,7 @@
 # Manual Cross-Channel Album Additions Require Confirmation
 
 - Date: 2026-11-05
-- Status: Accepted product intent; production implementation pending design selection and contract work.
+- Status: Implemented in source; deployment pending.
 - Task: [Audio search and album actions](../tasks/2026-11-05-audio-search-workshop.md)
 
 ## Context
@@ -20,3 +20,7 @@ The implementation must revise the manual server contract, transaction and relat
 - Source-channel filters and destination album grouping must have explicit distinct semantics.
 - Existing assumptions in album suggestions, organizer approval, authors, order indexes, badges and cache invalidation need review.
 - The Workshop demonstrates confirmation with local sample data only. Current production constraints remain in force until the selected implementation is verified and released.
+
+## Implemented Contract
+
+`addMediaToAlbum` and atomic `createAlbumWithMedia` accept `confirmCrossChannel` (false by default) and a complete optional `expectedMembership` snapshot. The manual picker supplies both. Destination and media rows are locked; stale assignments fail, while an already-applied destination is idempotent. Automatic callers never receive the cross-channel override. Album.channelId remains the home channel, and each track retains Blog.channelId. Album search filters home channels; track search filters source channels. Removal changes Media/AlbumAudioIndex membership in one transaction and retains the blog. Existing public-write policy is unchanged and documented in API permissions; this is not new authentication protection.

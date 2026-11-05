@@ -689,14 +689,7 @@ export default function BlogHomeScreen() {
           <BlogHomeFab />
         </View>
         {showAlbumModal && (
-          <FloatingBottomSheet
-            visible={showAlbumModal}
-            onClose={() => setShowAlbumModal(false)}
-            accessibilityLabel="Add to album"
-            snapPoints={["72%"]}
-            enableDynamicSizing={false}
-          >
-            <AddToAlbumModal
+          <AddToAlbumModal
               mediaIds={albumMediaIds}
               authorId={albumAuthorId}
               onAdded={handleAlbumAdded}
@@ -704,7 +697,6 @@ export default function BlogHomeScreen() {
                 setShowAlbumModal(false);
               }}
             />
-          </FloatingBottomSheet>
         )}
       </SafeArea>
     </View>
