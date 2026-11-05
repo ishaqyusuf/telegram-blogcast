@@ -1,6 +1,6 @@
 # Audio Search: Engineering Plan
 
-- Status: Direction 01 selected and implemented. See task for checks, measured paging improvement and remaining Preview release/acceptance. No schema change.
+- Status: Direction 01 implemented; existing API and Android EAS Preview 2026.11.05 released. See task for checks and measured paging improvement. Native acceptance assigned to user; no schema or service configuration change.
 - Task: [Audio search and album actions](../tasks/2026-11-05-audio-search-workshop.md)
 - Workshop: https://workshop.localhost/al-ghurobaa/audio/search
 - Decision: [Confirmed cross-channel additions](../decisions/2026-11-05-confirmed-cross-channel-albums.md)
@@ -82,4 +82,4 @@ Use existing semantic light/dark tokens, English LTR controls, Arabic content wi
 
 ## Completion Evidence
 
-The finished product needs verified behavior, the native scroll regression fixed, measured performance/cache evidence, focused tests passing (or precisely documented unrelated failures), no accidental broadening of automated album operations, updated Brain contracts, committed task-owned code and an implementation receipt tied to the accepted Workshop revision. The current deliverable is the design comparison and this plan; none of those production outcomes is claimed yet.
+The finished product needs verified behavior, the native scroll regression fixed, measured performance/cache evidence, focused tests passing (or precisely documented unrelated failures), no accidental broadening of automated album operations, updated Brain contracts, committed task-owned code and an implementation receipt tied to the accepted Workshop revision. Source, focused checks, measured paging improvement, implementation receipt, API deployment and EAS Preview delivery are complete; exact evidence is in the task. The user explicitly replaced agent device/emulator acceptance with their own Preview testing, so native gesture/visual/accessibility acceptance remains unclaimed.

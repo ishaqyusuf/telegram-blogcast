@@ -1,7 +1,7 @@
 # Manual Cross-Channel Album Additions Require Confirmation
 
 - Date: 2026-11-05
-- Status: Implemented in source; deployment pending.
+- Status: Implemented and released to the existing API and EAS Preview on 2026-11-05.
 - Task: [Audio search and album actions](../tasks/2026-11-05-audio-search-workshop.md)
 
 ## Context
@@ -19,7 +19,7 @@ The implementation must revise the manual server contract, transaction and relat
 - Albums can deliberately contain manual additions from multiple source channels after this is implemented.
 - Source-channel filters and destination album grouping must have explicit distinct semantics.
 - Existing assumptions in album suggestions, organizer approval, authors, order indexes, badges and cache invalidation need review.
-- The Workshop demonstrates confirmation with local sample data only. Current production constraints remain in force until the selected implementation is verified and released.
+- The Workshop demonstrates confirmation with local sample data only. The implementation was subsequently verified with rolled-back database fixtures and released to the existing API and EAS Preview; native acceptance remains assigned to the user.
 
 ## Implemented Contract
 
