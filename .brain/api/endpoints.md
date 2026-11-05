@@ -59,3 +59,7 @@ High-level map of the API surface and where endpoint logic lives.
 - `book.importBookPageManually`: creates or reuses a book, splits pasted page text into paragraphs, stores the page, and records a `manual_paste` page-import history entry.
 - `book.getBookPageImportHistory`: returns recent page-level import attempts for a specific book.
 - `book.addHighlight`, `book.syncHighlights`, `book.addPageComment`, `book.syncComments`: now persist paragraph anchor metadata used during page re-import remapping.
+
+### Album Organizer Swipe Review
+
+The public album router additionally exposes `getOrganizerAlbums`, `startOrganizerDiscovery`, `continueOrganizerDiscovery`, `saveOrganizerReview`, and `approveOrganizerReview`. These use the existing album-router permission boundary. See [contracts](contracts.md) for inputs, progress and approval guarantees.

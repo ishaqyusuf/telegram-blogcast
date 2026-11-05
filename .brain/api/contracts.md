@@ -94,3 +94,12 @@ Tracks important request/response expectations and typed boundaries between clie
 - `bookChapter.list` uses a cursor, parentId, optional global title/page-number query, and a default 40/max 100 rows. `resolvePage` checks saved content freshly before returning either local pageId or derived sourceUrl.
 - `book.getBook({ id, includeToc: false })` omits the full chapter tree for mobile detail; the separate virtualized chapter screen uses the paginated API. Existing callers default to includeToc true.
 - Record contract notes per router as features are implemented or refactored.
+
+### Album Organizer Discovery And Review (2026-11-05)
+
+- `album.startOrganizerDiscovery({channelId, provider?})` returns an unfinished scan or creates a run with fixed Media ID coverage. With no new eligible media it returns the existing saved discovery. Legacy successful chunk snapshots are respected.
+- `album.continueOrganizerDiscovery({runId})` processes at most 50 tracks and atomically saves suggestions, raw/parsed output, unmatched IDs and coverage. Concurrent calls see an active lease. Failures retain the previous checkpoint. Both discovery mutations return `{id, status, scan, mediaCount}`. The client drives successive calls and can pause between batches.
+- `album.getOrganizerAlbums({channelId})` returns eligible existing album IDs and names, including albums with inferred channel membership.
+- `album.getAutomaticIndexRun` additionally exposes `scan`, `review` and current unalbumed `unassigned` media. Approved destination overrides in `review.targets` are hydrated into the returned album context. The channel summary includes saved scan/review metadata.
+- `album.saveOrganizerReview({runId, suggestionId, draft})` persists `{selectedIds, targetAlbumId, name}` and the pending review position. Empty selections are explicit. A late save for an approved suggestion preserves the next pending cursor.
+- `album.approveOrganizerReview` accepts the same input and returns `{albumId, added, alreadyAdded}`. It atomically validates the destination and live audio, creates an album when needed, applies selected membership/index rows, dismisses unchecked suggestions and records the next pending position. Cross-channel or moved media rejects the whole approval. Retrying an approved group returns its applied destination. Existing legacy review endpoints remain available.

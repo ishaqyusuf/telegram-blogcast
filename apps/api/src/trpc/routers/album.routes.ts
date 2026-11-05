@@ -1,4 +1,4 @@
-import { type Database, Prisma } from "@acme/db";
+import type { Database, Prisma } from "@acme/db";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
@@ -12,6 +12,17 @@ import {
 	normalizeAlbumIndexResponse,
 	requestAlbumIndex,
 } from "../../services/album-auto-index";
+import { addAlbumMedia } from "../../services/album-membership";
+import {
+	continueOrganizerDiscovery,
+	readOrganizerState,
+	reviewDraftSchema,
+	startOrganizerDiscovery,
+} from "../../services/album-organizer";
+import {
+	approveOrganizerReview,
+	saveOrganizerReview,
+} from "../../services/album-organizer-review";
 import { createTRPCRouter, publicProcedure } from "../init";
 
 const suggestedMediaInput = z.object({
@@ -170,7 +181,12 @@ function getMediaSearchText(media: {
 	file?: { fileName?: string | null } | null;
 	blog?: { content?: string | null } | null;
 }) {
-	return [media.titleOverride, media.title, media.file?.fileName, media.blog?.content]
+	return [
+		media.titleOverride,
+		media.title,
+		media.file?.fileName,
+		media.blog?.content,
+	]
 		.filter(Boolean)
 		.join(" ");
 }
@@ -212,10 +228,8 @@ function compareSuggestedMediaBySourceDate(
 	const bTime = b.blog?.blogDate?.getTime() ?? Number.POSITIVE_INFINITY;
 	if (aTime !== bTime) return aTime - bTime;
 
-	const aMessageId =
-		a.blog?.telegramMessageId ?? Number.POSITIVE_INFINITY;
-	const bMessageId =
-		b.blog?.telegramMessageId ?? Number.POSITIVE_INFINITY;
+	const aMessageId = a.blog?.telegramMessageId ?? Number.POSITIVE_INFINITY;
+	const bMessageId = b.blog?.telegramMessageId ?? Number.POSITIVE_INFINITY;
 	if (aMessageId !== bMessageId) return aMessageId - bMessageId;
 
 	return a.id - b.id;
@@ -437,134 +451,12 @@ async function resolveAlbumThumbnailId(
 	return undefined;
 }
 
-async function addMediaIdsToAlbum(
+function addMediaIdsToAlbum(
 	db: Database,
-	input: {
-		albumId: number;
-		mediaIds: number[];
-	},
+	input: { albumId: number; mediaIds: number[] },
 	options: { strictMissing?: boolean } = {},
 ) {
-	const strictMissing = options.strictMissing ?? true;
-	const mediaIds = uniqueNumbers(input.mediaIds);
-	const mediaItems = await db.media.findMany({
-		where: { id: { in: mediaIds } },
-		include: { blog: { select: { channelId: true } } },
-	});
-	const mediaById = new Map(mediaItems.map((media) => [media.id, media]));
-	const orderedMediaItems = mediaIds
-		.map((id) => mediaById.get(id))
-		.filter((media): media is (typeof mediaItems)[number] => Boolean(media));
-	const missingIds = mediaIds.filter((id) => !mediaById.has(id));
-
-	if (strictMissing && missingIds.length > 0) {
-		throw new TRPCError({
-			code: "NOT_FOUND",
-			message: `Media not found: ${missingIds.join(", ")}`,
-		});
-	}
-
-	const itemsToAdd = orderedMediaItems.filter(
-		(media) => media.albumId !== input.albumId,
-	);
-	const album = await db.album.findFirstOrThrow({
-		where: { id: input.albumId, deletedAt: null },
-		select: { channelId: true },
-	});
-	const channelIds = uniqueNumbers(
-		itemsToAdd
-			.map((media) => media.blog?.channelId)
-			.filter(
-				(channelId): channelId is number => typeof channelId === "number",
-			),
-	);
-
-	if (
-		itemsToAdd.some(
-			(media) => !media.mimeType?.toLowerCase().startsWith("audio/"),
-		)
-	) {
-		throw new TRPCError({
-			code: "BAD_REQUEST",
-			message: "Only audio media can be added to an album.",
-		});
-	}
-
-	if (channelIds.length > 1) {
-		throw new TRPCError({
-			code: "BAD_REQUEST",
-			message: "Album media must come from one channel.",
-		});
-	}
-
-	if (
-		album.channelId &&
-		channelIds.length > 0 &&
-		channelIds.some((channelId) => channelId !== album.channelId)
-	) {
-		throw new TRPCError({
-			code: "BAD_REQUEST",
-			message: "This album only accepts media from its original channel.",
-		});
-	}
-
-	const inferredChannelId = album.channelId ?? channelIds[0];
-
-	await db.$transaction(async (tx) => {
-		const maxIdx = await tx.albumAudioIndex.aggregate({
-			where: { albumId: input.albumId },
-			_max: { index: true },
-		});
-		const nextIndex = (maxIdx._max.index ?? 0) + 1;
-
-		if (!album.channelId && inferredChannelId) {
-			await tx.album.update({
-				where: { id: input.albumId },
-				data: { channelId: inferredChannelId },
-			});
-		}
-
-		if (itemsToAdd.length > 0) {
-			const itemIds = itemsToAdd.map((media) => media.id);
-			const indexRows = itemsToAdd.map((media, offset) => ({
-				blogAudioId: media.mediaIndexId ?? media.id,
-				index: nextIndex + offset,
-			}));
-
-			await tx.$executeRaw`
-				UPDATE "Media" AS media
-				SET "albumId" = ${input.albumId},
-					"mediaIndexId" = COALESCE(media."mediaIndexId", media."id")
-				WHERE media."id" IN (${Prisma.join(itemIds)})
-			`;
-
-			await tx.$executeRaw`
-				INSERT INTO "AlbumAudioIndex" ("albumId", "blogAudioId", "index", "updatedAt")
-				VALUES ${Prisma.join(
-					indexRows.map(
-						(row) =>
-							Prisma.sql`(${input.albumId}, ${row.blogAudioId}, ${row.index}, CURRENT_TIMESTAMP)`,
-					),
-				)}
-				ON CONFLICT ("blogAudioId")
-				DO UPDATE SET
-					"albumId" = EXCLUDED."albumId",
-					"index" = EXCLUDED."index",
-					"updatedAt" = CURRENT_TIMESTAMP
-			`;
-		}
-	});
-
-	const alreadyAdded = orderedMediaItems.length - itemsToAdd.length;
-
-	return {
-		added: itemsToAdd.length,
-		skipped: alreadyAdded + missingIds.length,
-		alreadyAdded,
-		missing: missingIds.length,
-		missingIds,
-		appliedMediaIds: orderedMediaItems.map((media) => media.id),
-	};
+	return db.$transaction((tx) => addAlbumMedia(tx, input, options));
 }
 
 async function refreshAutomaticIndexRunStatus(db: Database, runId: number) {
@@ -593,6 +485,59 @@ async function refreshAutomaticIndexRunStatus(db: Database, runId: number) {
 }
 
 export const albumRoutes = createTRPCRouter({
+	getOrganizerAlbums: publicProcedure
+		.input(z.object({ channelId: z.number().int().positive() }))
+		.query(({ ctx, input }) =>
+			ctx.db.album.findMany({
+				where: {
+					deletedAt: null,
+					OR: [
+						{ channelId: input.channelId },
+						{
+							channelId: null,
+							medias: {
+								some: {
+									blog: { is: { channelId: input.channelId, deletedAt: null } },
+								},
+							},
+						},
+					],
+				},
+				select: { id: true, name: true },
+				orderBy: { name: "asc" },
+			}),
+		),
+	startOrganizerDiscovery: publicProcedure
+		.input(
+			z.object({
+				channelId: z.number().int().positive(),
+				provider: albumIndexAiProviderSchema.default("deepseek"),
+			}),
+		)
+		.mutation(({ ctx, input }) => startOrganizerDiscovery(ctx.db, input)),
+	continueOrganizerDiscovery: publicProcedure
+		.input(z.object({ runId: z.number().int().positive() }))
+		.mutation(({ ctx, input }) =>
+			continueOrganizerDiscovery(ctx.db, input.runId),
+		),
+	saveOrganizerReview: publicProcedure
+		.input(
+			z.object({
+				runId: z.number().int().positive(),
+				suggestionId: z.number().int().positive(),
+				draft: reviewDraftSchema,
+			}),
+		)
+		.mutation(({ ctx, input }) => saveOrganizerReview(ctx.db, input)),
+	approveOrganizerReview: publicProcedure
+		.input(
+			z.object({
+				runId: z.number().int().positive(),
+				suggestionId: z.number().int().positive(),
+				draft: reviewDraftSchema,
+			}),
+		)
+		.mutation(({ ctx, input }) => approveOrganizerReview(ctx.db, input)),
 	getAlbums: publicProcedure.query(async ({ ctx }) => {
 		return ctx.db.album.findMany({
 			where: { deletedAt: null },
@@ -907,8 +852,16 @@ export const albumRoutes = createTRPCRouter({
 			return candidates
 				.map((media) => {
 					const titleScore =
-						scoreTextAgainstTerms(media.titleOverride ?? media.title, albumTitleTerms) * 3 +
-						scoreTextAgainstTerms(media.titleOverride ?? media.title, existingAudioTerms) * 2;
+						scoreTextAgainstTerms(
+							media.titleOverride ?? media.title,
+							albumTitleTerms,
+						) *
+							3 +
+						scoreTextAgainstTerms(
+							media.titleOverride ?? media.title,
+							existingAudioTerms,
+						) *
+							2;
 					const fileNameScore =
 						scoreTextAgainstTerms(media.file?.fileName, albumTitleTerms) * 3 +
 						scoreTextAgainstTerms(media.file?.fileName, existingAudioTerms) * 2;
@@ -1056,7 +1009,11 @@ export const albumRoutes = createTRPCRouter({
 					const suggestions = candidates
 						.map((media) => {
 							const matchScore =
-						scoreTextAgainstTerms(media.titleOverride ?? media.title, terms) * 3 +
+								scoreTextAgainstTerms(
+									media.titleOverride ?? media.title,
+									terms,
+								) *
+									3 +
 								scoreTextAgainstTerms(media.file?.fileName, terms) * 2 +
 								scoreTextAgainstTerms(media.blog?.content, terms);
 							const matchesKeyword = mediaMatchesKeywordClauses(
@@ -1141,7 +1098,9 @@ export const albumRoutes = createTRPCRouter({
 
 			const mediaText = getMediaSearchText(media);
 			const mediaTitleTerms = tokenizeSearchText(
-				[media.titleOverride, media.title, media.file?.fileName].filter(Boolean).join(" "),
+				[media.titleOverride, media.title, media.file?.fileName]
+					.filter(Boolean)
+					.join(" "),
 			).slice(0, 20);
 			const relatedAlbums = albums
 				.map((album) => {
@@ -1231,7 +1190,13 @@ export const albumRoutes = createTRPCRouter({
 				channel,
 				unalbumedAudioCount,
 				albumCount,
-				latestRun,
+				latestRun: latestRun
+					? {
+							...latestRun,
+							scan: readOrganizerState(latestRun.inputJson).scan,
+							review: readOrganizerState(latestRun.inputJson).review,
+						}
+					: null,
 			};
 		}),
 
@@ -1336,9 +1301,6 @@ export const albumRoutes = createTRPCRouter({
 			});
 
 			try {
-				if (albums.length === 0) {
-					throw new Error("No albums found for this channel.");
-				}
 				if (media.length === 0) {
 					throw new Error("No audio media found for this channel.");
 				}
@@ -1509,9 +1471,14 @@ export const albumRoutes = createTRPCRouter({
 					},
 				},
 			});
+			const organizer = readOrganizerState(run.inputJson);
 			const albumIds = uniqueNumbers(
 				run.albumSuggestions
-					.map((suggestion) => suggestion.albumId)
+					.map(
+						(suggestion) =>
+							organizer.review.targets[String(suggestion.id)] ??
+							suggestion.albumId,
+					)
 					.filter((albumId): albumId is number => typeof albumId === "number"),
 			);
 			const mediaIds = uniqueNumbers(
@@ -1560,14 +1527,31 @@ export const albumRoutes = createTRPCRouter({
 				mediaItems.map((mediaItem) => [mediaItem.id, mediaItem]),
 			);
 
+			const unassigned = await ctx.db.media.findMany({
+				where: {
+					id: { in: organizer.scan?.unassignedIds ?? [] },
+					albumId: null,
+					blog: { is: { deletedAt: null, channelId: run.channelId } },
+				},
+				select: { id: true, title: true, blog: { select: { blogDate: true } } },
+				orderBy: [{ blog: { blogDate: "desc" } }, { id: "desc" }],
+			});
 			return {
 				...run,
+				scan: organizer.scan,
+				review: organizer.review,
+				unassigned,
 				albumSuggestions: run.albumSuggestions.map((suggestion) => ({
 					...suggestion,
+					albumId:
+						organizer.review.targets[String(suggestion.id)] ??
+						suggestion.albumId,
 					album:
-						typeof suggestion.albumId === "number"
-							? (albumById.get(suggestion.albumId) ?? null)
-							: null,
+						albumById.get(
+							organizer.review.targets[String(suggestion.id)] ??
+								suggestion.albumId ??
+								0,
+						) ?? null,
 					mediaSuggestions: suggestion.mediaSuggestions.map(
 						(mediaSuggestion) => ({
 							...mediaSuggestion,

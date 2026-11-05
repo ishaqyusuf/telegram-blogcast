@@ -519,6 +519,7 @@ async function requestDeepSeekAlbumIndex(
 	const config = getDeepSeekAlbumIndexConfig();
 	const response = await fetch(`${config.baseUrl}${config.chatPath}`, {
 		method: "POST",
+		signal: AbortSignal.timeout(90000),
 		headers: {
 			Authorization: `Bearer ${apiKey}`,
 			"content-type": "application/json",
@@ -557,6 +558,7 @@ async function requestOpenAiAlbumIndex(
 		: { max_tokens: 8192 };
 	const response = await fetch(`${config.baseUrl}${config.chatPath}`, {
 		method: "POST",
+		signal: AbortSignal.timeout(90000),
 		headers: {
 			Authorization: `Bearer ${apiKey}`,
 			"content-type": "application/json",
@@ -593,6 +595,7 @@ async function requestGeminiAlbumIndex(
 		`${config.baseUrl}/models/${config.model}:generateContent?key=${encodeURIComponent(apiKey)}`,
 		{
 			method: "POST",
+			signal: AbortSignal.timeout(90000),
 			headers: { "content-type": "application/json" },
 			body: JSON.stringify({
 				contents: [{ parts: [{ text: buildPrompt(snapshot) }] }],

@@ -1,23 +1,23 @@
-import { FlatList, ScrollView } from "@/components/ui/scroll-surfaces";
 import { SafeArea } from "@/components/safe-area";
 import { _trpc } from "@/components/static-trpc";
 import { Icon } from "@/components/ui/icon";
 import { Pressable } from "@/components/ui/pressable";
+import { FlatList, ScrollView } from "@/components/ui/scroll-surfaces";
 import { useColors } from "@/hooks/use-color";
-import { useMutation, useQuery, useQueryClient } from "@/lib/react-query";
+import { useQuery } from "@/lib/react-query";
 import {
 	type AlbumOrganizerModel,
 	useAppSettingsStore,
 } from "@/store/app-settings-store";
 import type { RouterOutputs } from "@api/trpc/routers/_app";
 import { type Href, useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, RefreshControl, Text, TextInput, View } from "react-native";
+import { useEffect } from "react";
+import { ActivityIndicator, RefreshControl, Text, View } from "react-native";
+import { useDiscovery } from "./use-discovery";
 
 type Channel = RouterOutputs["channel"]["getChannels"][number];
 type AlbumIndexRun = RouterOutputs["album"]["getAutomaticIndexRun"];
 type AlbumSuggestion = AlbumIndexRun["albumSuggestions"][number];
-type MediaSuggestion = AlbumSuggestion["mediaSuggestions"][number];
 
 const ALBUM_ORGANIZER_MODELS: {
 	id: AlbumOrganizerModel;
@@ -241,13 +241,10 @@ function activeMediaCount(suggestion: AlbumSuggestion) {
 	).length;
 }
 
-function getMediaTitle(row: MediaSuggestion) {
-	return row.media?.title || row.mediaTitleSnapshot || "Untitled audio";
-}
-
 function isProposedSuggestion(suggestion?: AlbumSuggestion | null) {
 	return (
-		suggestion?.suggestionType === "proposed_album" || !suggestion?.albumId
+		suggestion?.status !== "approved" &&
+		(suggestion?.suggestionType === "proposed_album" || !suggestion?.albumId)
 	);
 }
 
@@ -260,10 +257,6 @@ function getSuggestionTitle(suggestion?: AlbumSuggestion | null) {
 	);
 }
 
-function canSelectMedia(row: MediaSuggestion) {
-	return row.status === "pending" || row.status === "failed";
-}
-
 export function AlbumOrganizerChannelsScreen() {
 	const router = useRouter();
 	const colors = useColors();
@@ -274,10 +267,7 @@ export function AlbumOrganizerChannelsScreen() {
 	} = useQuery(_trpc.channel.getChannels.queryOptions());
 
 	return (
-		<View
-			className="flex-1 bg-background"
-			style={{ backgroundColor: colors.background }}
-		>
+		<View className="flex-1 bg-background">
 			<SafeArea>
 				<Header title="Album Organizer" subtitle="Choose a channel" />
 				<FlatList
@@ -322,7 +312,6 @@ export function AlbumOrganizerChannelsScreen() {
 export function AlbumOrganizerChannelScreen() {
 	const router = useRouter();
 	const colors = useColors();
-	const qc = useQueryClient();
 	const params = useLocalSearchParams();
 	const channelId = parseRouteId(params.channelId);
 	const albumOrganizerModel = useAppSettingsStore(
@@ -348,33 +337,17 @@ export function AlbumOrganizerChannelScreen() {
 	};
 	const latestRun = summaryQuery.data?.latestRun;
 	const hasSavedRun = Boolean(latestRun?.id);
-	const { mutate: generateIndex, isPending: isGenerating } = useMutation(
-		_trpc.album.generateAutomaticIndex.mutationOptions({
-			onSuccess: async (run) => {
-				await Promise.all([
-					qc.invalidateQueries({
-						queryKey: _trpc.album.getAutomaticIndexChannelSummary.queryKey({
-							channelId,
-						}),
-					}),
-					qc.invalidateQueries({
-						queryKey: _trpc.album.getAutomaticIndexRuns.queryKey({
-							channelId,
-							limit: 20,
-						}),
-					}),
-				]);
-				router.push(routeHref(`/album-organizer/${channelId}/runs/${run.id}`));
-			},
-			onError: (error) => Alert.alert("Could not generate", error.message),
-		}),
+	const discovery = useDiscovery(channelId, (id) =>
+		router.push(routeHref(`/album-organizer/${channelId}/runs/${id}?resume=1`)),
 	);
+	const isGenerating = discovery.running;
+	const scanIncomplete = !!latestRun?.scan && !latestRun.scan.complete;
+	const generateIndex = () => {
+		void discovery.generate(albumOrganizerModel);
+	};
 
 	return (
-		<View
-			className="flex-1 bg-background"
-			style={{ backgroundColor: colors.background }}
-		>
+		<View className="flex-1 bg-background">
 			<SafeArea>
 				<Header
 					title="Album Organizer"
@@ -435,7 +408,7 @@ export function AlbumOrganizerChannelScreen() {
 									Model
 								</Text>
 								<Text className="text-xs text-muted-foreground">
-									Used for the next generated discovery run.
+									Used for a new discovery. Saved discoveries keep their model.
 								</Text>
 							</View>
 						</View>
@@ -452,7 +425,6 @@ export function AlbumOrganizerChannelScreen() {
 												? "flex-1 items-center rounded-lg bg-primary px-2 py-3"
 												: "flex-1 items-center rounded-lg bg-secondary px-2 py-3"
 										}
-										style={{ opacity: isGenerating ? 0.6 : 1 }}
 									>
 										<Text
 											className={
@@ -476,18 +448,17 @@ export function AlbumOrganizerChannelScreen() {
 					<Pressable
 						disabled={isGenerating || summaryQuery.isFetching}
 						onPress={() => {
-							if (latestRun?.id) {
+							if (latestRun?.id && !scanIncomplete) {
 								router.push(
 									routeHref(
-										`/album-organizer/${channelId}/runs/${latestRun.id}`,
+										`/album-organizer/${channelId}/runs/${latestRun.id}?resume=1`,
 									),
 								);
 								return;
 							}
-							generateIndex({ channelId, provider: albumOrganizerModel });
+							generateIndex();
 						}}
 						className="flex-row items-center justify-center gap-2 rounded-xl bg-primary px-4 py-4 active:opacity-80"
-						style={{ opacity: isGenerating ? 0.55 : 1 }}
 					>
 						{isGenerating ? (
 							<ActivityIndicator color="#fff" />
@@ -496,25 +467,37 @@ export function AlbumOrganizerChannelScreen() {
 						)}
 						<Text className="text-sm font-extrabold text-primary-foreground">
 							{isGenerating
-								? "Finding discoveries..."
+								? `${discovery.scanned} tracks scanned…`
 								: hasSavedRun
-									? "Open saved discoveries"
-									: "Proceed"}
+									? scanIncomplete
+										? "Continue discovery"
+										: "Resume review"
+									: "Generate suggestions"}
 						</Text>
 					</Pressable>
 
-					{hasSavedRun ? (
+					{discovery.error ? (
+						<Text className="text-sm text-destructive">{discovery.error}</Text>
+					) : null}
+					{isGenerating ? (
+						<Pressable
+							onPress={discovery.pause}
+							className="min-h-11 items-center justify-center"
+						>
+							<Text className="text-sm font-bold text-primary">
+								Pause after this batch
+							</Text>
+						</Pressable>
+					) : null}
+					{hasSavedRun && !scanIncomplete ? (
 						<Pressable
 							disabled={isGenerating}
-							onPress={() =>
-								generateIndex({ channelId, provider: albumOrganizerModel })
-							}
+							onPress={() => generateIndex()}
 							className="flex-row items-center justify-center gap-2 rounded-xl bg-secondary px-4 py-3 active:opacity-80"
-							style={{ opacity: isGenerating ? 0.55 : 1 }}
 						>
 							<Icon name="RefreshCw" size={16} className="text-foreground" />
 							<Text className="text-sm font-bold text-foreground">
-								Run again
+								Scan new audio
 							</Text>
 						</Pressable>
 					) : null}
@@ -581,12 +564,25 @@ export function AlbumOrganizerRunScreen() {
 		enabled: runId > 0,
 	});
 	const suggestions = runQuery.data?.albumSuggestions ?? [];
+	const resumeId =
+		runQuery.data?.review.currentSuggestionId ??
+		suggestions.find((item) =>
+			["pending", "partial", "failed"].includes(item.status),
+		)?.id;
+	const autoResume = params.resume === "1";
+	const canResume = !runQuery.data?.scan || runQuery.data.scan.complete;
+	useEffect(() => {
+		if (autoResume && resumeId && canResume) {
+			router.replace(
+				routeHref(
+					`/album-organizer/${channelId}/runs/${runId}/albums/${resumeId}`,
+				),
+			);
+		}
+	}, [autoResume, resumeId, canResume, channelId, runId, router]);
 
 	return (
-		<View
-			className="flex-1 bg-background"
-			style={{ backgroundColor: colors.background }}
-		>
+		<View className="flex-1 bg-background">
 			<SafeArea>
 				<Header
 					title="Discoveries"
@@ -629,7 +625,8 @@ export function AlbumOrganizerRunScreen() {
 										{getSuggestionTitle(item)}
 									</Text>
 									<Text className="text-xs text-muted-foreground">
-										{active} tracks · {pending} pending · {approved} approved
+										{active} {active === 1 ? "track" : "tracks"} · {pending}{" "}
+										pending · {approved} approved
 									</Text>
 								</View>
 								<View className="items-end gap-1">
@@ -650,6 +647,67 @@ export function AlbumOrganizerRunScreen() {
 							</Pressable>
 						);
 					}}
+					ListHeaderComponent={
+						<View className="gap-3 pb-4">
+							{runQuery.error ? (
+								<Text className="text-destructive">
+									{runQuery.error.message}
+								</Text>
+							) : null}
+							{runQuery.data?.error ? (
+								<Text className="text-destructive">{runQuery.data.error}</Text>
+							) : null}
+							{runQuery.data?.scan && !runQuery.data.scan.complete ? (
+								<Pressable
+									onPress={() =>
+										router.replace(routeHref(`/album-organizer/${channelId}`))
+									}
+									className="min-h-12 justify-center"
+								>
+									<Text className="text-primary">
+										Continue channel discovery
+									</Text>
+								</Pressable>
+							) : resumeId ? (
+								<Pressable
+									onPress={() =>
+										router.push(
+											routeHref(
+												`/album-organizer/${channelId}/runs/${runId}/albums/${resumeId}`,
+											),
+										)
+									}
+									className="min-h-12 items-center justify-center rounded-xl bg-primary px-4"
+								>
+									<Text className="font-bold text-primary-foreground">
+										Resume review
+									</Text>
+								</Pressable>
+							) : null}
+						</View>
+					}
+					ListFooterComponent={
+						runQuery.data?.unassigned.length ? (
+							<View className="gap-3 pt-5">
+								<Text className="text-base font-bold text-foreground">
+									{runQuery.data.unassigned.length} unassigned tracks
+								</Text>
+								<Text className="text-sm text-muted-foreground">
+									These tracks stay unalbumed because discovery found no match.
+								</Text>
+								{runQuery.data.unassigned.map((item) => (
+									<View key={item.id} className="border-b border-border py-3">
+										<Text className="text-base text-foreground">
+											{item.title || "Untitled audio"}
+										</Text>
+										<Text className="text-xs text-muted-foreground">
+											{formatDate(item.blog?.blogDate)}
+										</Text>
+									</View>
+								))}
+							</View>
+						) : null
+					}
 					ListEmptyComponent={
 						<View className="items-center justify-center py-20">
 							{runQuery.isFetching ? (
@@ -672,341 +730,4 @@ export function AlbumOrganizerRunScreen() {
 	);
 }
 
-export function AlbumOrganizerSuggestionScreen() {
-	const colors = useColors();
-	const qc = useQueryClient();
-	const params = useLocalSearchParams();
-	const channelId = parseRouteId(params.channelId);
-	const runId = parseRouteId(params.runId);
-	const suggestionId = parseRouteId(params.suggestionId);
-	const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
-	const runQuery = useQuery({
-		..._trpc.album.getAutomaticIndexRun.queryOptions({ id: runId }),
-		enabled: runId > 0,
-	});
-	const suggestion = useMemo(
-		() =>
-			runQuery.data?.albumSuggestions.find(
-				(item) => item.id === suggestionId,
-			) ?? null,
-		[runQuery.data, suggestionId],
-	);
-	const proposed = isProposedSuggestion(suggestion);
-	const [proposedName, setProposedName] = useState("");
-	const [proposedType, setProposedType] = useState("series");
-	const selectableRows = useMemo(
-		() => suggestion?.mediaSuggestions.filter(canSelectMedia) ?? [],
-		[suggestion],
-	);
-	const selectedArray = useMemo(() => Array.from(selectedIds), [selectedIds]);
-	const canApproveSuggestion = !proposed || proposedName.trim().length > 0;
-
-	useEffect(() => {
-		setProposedName(
-			suggestion?.proposedAlbumName ||
-				suggestion?.albumNameSnapshot ||
-				(suggestion ? getSuggestionTitle(suggestion) : ""),
-		);
-		setProposedType(suggestion?.proposedAlbumType || "series");
-	}, [suggestion]);
-
-	const invalidate = async (albumId?: number | null) => {
-		const targetAlbumId = albumId ?? suggestion?.albumId;
-		await Promise.all([
-			qc.invalidateQueries({
-				queryKey: _trpc.album.getAutomaticIndexRun.queryKey({ id: runId }),
-			}),
-			qc.invalidateQueries({
-				queryKey: _trpc.album.getAutomaticIndexRuns.queryKey({
-					channelId,
-					limit: 20,
-				}),
-			}),
-			qc.invalidateQueries({
-				queryKey: _trpc.album.getAutomaticIndexChannelSummary.queryKey({
-					channelId,
-				}),
-			}),
-			qc.invalidateQueries({ queryKey: _trpc.album.getAlbums.queryKey() }),
-			...(targetAlbumId
-				? [
-						qc.invalidateQueries({
-							queryKey: _trpc.album.getAlbum.queryKey({
-								id: targetAlbumId,
-							}),
-						}),
-					]
-				: []),
-		]);
-	};
-
-	const approveMutation = useMutation(
-		_trpc.album.approveAutomaticIndexAlbumSuggestion.mutationOptions({
-			onSuccess: async (result) => {
-				await invalidate(result.albumId);
-				setSelectedIds(new Set());
-				Alert.alert(
-					"Approved",
-					`${result.added} added · ${result.alreadyAdded} already in album · ${result.failed} failed`,
-				);
-			},
-			onError: (error) => Alert.alert("Could not approve", error.message),
-		}),
-	);
-	const dismissMutation = useMutation(
-		_trpc.album.dismissAutomaticIndexMediaSuggestion.mutationOptions({
-			onSuccess: async () => {
-				await invalidate();
-			},
-			onError: (error) => Alert.alert("Could not remove", error.message),
-		}),
-	);
-	const restoreMutation = useMutation(
-		_trpc.album.restoreAutomaticIndexMediaSuggestion.mutationOptions({
-			onSuccess: async () => {
-				await invalidate();
-			},
-			onError: (error) => Alert.alert("Could not restore", error.message),
-		}),
-	);
-
-	function toggleSelection(id: number) {
-		setSelectedIds((prev) => {
-			const next = new Set(prev);
-			if (next.has(id)) next.delete(id);
-			else next.add(id);
-			return next;
-		});
-	}
-
-	function approve(ids?: number[]) {
-		if (!suggestion || !canApproveSuggestion) return;
-		approveMutation.mutate({
-			suggestionId: suggestion.id,
-			mediaSuggestionIds: ids,
-			proposedAlbumName: proposed ? proposedName.trim() : undefined,
-			proposedAlbumType: proposed ? proposedType.trim() || "series" : undefined,
-		});
-	}
-
-	return (
-		<View
-			className="flex-1 bg-background"
-			style={{ backgroundColor: colors.background }}
-		>
-			<SafeArea>
-				<Header
-					title={getSuggestionTitle(suggestion)}
-					subtitle={
-						suggestion
-							? `${activeMediaCount(suggestion)} discovered tracks`
-							: undefined
-					}
-				/>
-				{proposed ? (
-					<View className="gap-3 px-4 pb-3">
-						<View className="gap-3 rounded-xl bg-card p-4">
-							<View className="flex-row items-center gap-3">
-								<View className="size-10 items-center justify-center rounded-xl bg-primary/15">
-									<Icon name="FolderPlus" size={18} className="text-primary" />
-								</View>
-								<View className="flex-1">
-									<Text className="text-sm font-extrabold text-foreground">
-										New album
-									</Text>
-									<Text className="text-xs text-muted-foreground">
-										This album will be created when approved.
-									</Text>
-								</View>
-							</View>
-							<View className="gap-2">
-								<Text className="text-xs font-bold text-muted-foreground">
-									Album name
-								</Text>
-								<TextInput
-									value={proposedName}
-									onChangeText={setProposedName}
-									placeholder="Album name"
-									placeholderTextColor={colors.mutedForeground}
-									className="rounded-xl border border-border bg-background px-3 py-3 text-sm text-foreground"
-								/>
-							</View>
-							<View className="gap-2">
-								<Text className="text-xs font-bold text-muted-foreground">
-									Type
-								</Text>
-								<TextInput
-									value={proposedType}
-									onChangeText={setProposedType}
-									placeholder="series"
-									placeholderTextColor={colors.mutedForeground}
-									className="rounded-xl border border-border bg-background px-3 py-3 text-sm text-foreground"
-								/>
-							</View>
-						</View>
-					</View>
-				) : null}
-				<View className="flex-row gap-2 px-4 pb-3">
-					<Pressable
-						disabled={selectableRows.length === 0}
-						onPress={() => {
-							if (selectedIds.size === selectableRows.length) {
-								setSelectedIds(new Set());
-								return;
-							}
-							setSelectedIds(new Set(selectableRows.map((item) => item.id)));
-						}}
-						className="flex-1 flex-row items-center justify-center gap-2 rounded-xl bg-secondary px-3 py-3"
-						style={{ opacity: selectableRows.length === 0 ? 0.45 : 1 }}
-					>
-						<Icon name="CheckCheck" size={16} className="text-foreground" />
-						<Text className="text-xs font-bold text-foreground">
-							{selectedIds.size === selectableRows.length
-								? "Clear"
-								: "Mark all"}
-						</Text>
-					</Pressable>
-					<Pressable
-						disabled={
-							approveMutation.isPending ||
-							selectableRows.length === 0 ||
-							!canApproveSuggestion
-						}
-						onPress={() =>
-							approve(selectedArray.length ? selectedArray : undefined)
-						}
-						className="flex-1 flex-row items-center justify-center gap-2 rounded-xl bg-primary px-3 py-3"
-						style={{
-							opacity:
-								approveMutation.isPending ||
-								selectableRows.length === 0 ||
-								!canApproveSuggestion
-									? 0.5
-									: 1,
-						}}
-					>
-						{approveMutation.isPending ? (
-							<ActivityIndicator color="#fff" />
-						) : (
-							<Icon name="Plus" size={16} />
-						)}
-						<Text className="text-xs font-extrabold text-primary-foreground">
-							{selectedArray.length
-								? `Add ${selectedArray.length}`
-								: "Add pending"}
-						</Text>
-					</Pressable>
-				</View>
-
-				<FlatList
-					style={{ backgroundColor: colors.background }}
-					data={suggestion?.mediaSuggestions ?? []}
-					keyExtractor={(item) => String(item.id)}
-					contentContainerClassName="gap-2 px-4 pb-10"
-					refreshControl={
-						<RefreshControl
-							refreshing={runQuery.isFetching}
-							onRefresh={runQuery.refetch}
-						/>
-					}
-					renderItem={({ item }) => {
-						const selected = selectedIds.has(item.id);
-						const selectable = canSelectMedia(item);
-						return (
-							<Pressable
-								onPress={() => selectable && toggleSelection(item.id)}
-								className={
-									selected
-										? "rounded-xl border border-primary bg-primary/10 p-3"
-										: "rounded-xl border border-border bg-card p-3"
-								}
-								style={{ opacity: item.status === "dismissed" ? 0.55 : 1 }}
-							>
-								<View className="flex-row items-center gap-3">
-									<View className="size-9 items-center justify-center rounded-full bg-secondary">
-										<Icon
-											name={
-												item.status === "approved"
-													? "Check"
-													: selected
-														? "CheckCircle2"
-														: "Music2"
-											}
-											size={16}
-											className="text-foreground"
-										/>
-									</View>
-									<View className="flex-1 gap-1">
-										<Text className="text-sm font-bold text-foreground">
-											{getMediaTitle(item)}
-										</Text>
-										<Text className="text-xs text-muted-foreground">
-											{statusLabel(item.status)}
-											{item.media?.albumId
-												? ` · already in album #${item.media.albumId}`
-												: ""}
-										</Text>
-									</View>
-									{item.status === "dismissed" ? (
-										<Pressable
-											disabled={restoreMutation.isPending}
-											onPress={() => restoreMutation.mutate({ id: item.id })}
-											className="size-10 items-center justify-center rounded-full bg-secondary"
-										>
-											<Icon
-												name="RefreshCw"
-												size={16}
-												className="text-foreground"
-											/>
-										</Pressable>
-									) : item.status === "approved" ? null : (
-										<View className="flex-row gap-2">
-											<Pressable
-												disabled={
-													approveMutation.isPending || !canApproveSuggestion
-												}
-												onPress={() => approve([item.id])}
-												className="size-10 items-center justify-center rounded-full bg-primary"
-												style={{
-													opacity:
-														approveMutation.isPending || !canApproveSuggestion
-															? 0.5
-															: 1,
-												}}
-											>
-												<Icon name="Plus" size={16} />
-											</Pressable>
-											<Pressable
-												disabled={dismissMutation.isPending}
-												onPress={() => dismissMutation.mutate({ id: item.id })}
-												className="size-10 items-center justify-center rounded-full bg-secondary"
-											>
-												<Icon name="X" size={16} className="text-foreground" />
-											</Pressable>
-										</View>
-									)}
-								</View>
-							</Pressable>
-						);
-					}}
-					ListEmptyComponent={
-						<View className="items-center justify-center py-20">
-							{runQuery.isFetching ? (
-								<ActivityIndicator color={colors.primary} />
-							) : (
-								<Icon
-									name="Music2"
-									size={44}
-									className="mb-3 text-muted-foreground"
-								/>
-							)}
-							<Text className="text-sm text-muted-foreground">
-								{runQuery.isFetching ? "Loading tracks" : "No tracks"}
-							</Text>
-						</View>
-					}
-				/>
-			</SafeArea>
-		</View>
-	);
-}
+export { AlbumOrganizerSuggestionScreen } from "./suggestion-screen";

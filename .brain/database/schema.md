@@ -55,3 +55,7 @@ Summarizes where the database schema lives and which major data domains exist.
 - `Media.titleOverride` is a nullable, searchable audio display-name override. `Media.title` and `File.fileName` remain the original fallback values; clearing the override restores that fallback.
 - `LocalGatewayLease` stores the singleton, short-lived preview ngrok origin
   under key `preview-local-gateway`, with expiry and update timestamps.
+
+### Album Organizer Run Metadata (2026-11-05)
+
+Existing `AlbumAutoIndexRun.inputJson` now supports a version-1 `scan` object with fixed coverage, committed cursor, inspected/unmatched media IDs, legacy exclusions and a lease, plus `review` with the current pending suggestion, drafts and applied destinations. Normalized suggestion records retain existing status and membership semantics. New scan runs append per-batch raw and parsed output to `rawResponseJson`. No Prisma schema change is required. See [the decision](../decisions/2026-11-05-album-organizer-resume.md).

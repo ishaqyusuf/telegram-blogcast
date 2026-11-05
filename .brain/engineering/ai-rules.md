@@ -25,3 +25,7 @@ Repository-specific guardrails for AI contributors working on code, docs, and re
 - Affected files or domains
 - Verification expectations
 - Documentation follow-up requirements
+
+### Android QA Emulator Ownership
+- Use the dedicated `AlGhurobaa_API34` AVD for this project's Android QA. Resolve the current ADB serial from the AVD name before testing.
+- `GreenTill_API34` belongs to the other app workflow. Preserve its open app and screen. Its EwaTrade task was restored after the 2026-11-05 correction.

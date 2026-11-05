@@ -1,5 +1,8 @@
 # Done
 
+### [Album Organizer Swipe Review](2026-11-05-album-organizer-swipe-review.md)
+- Status: Done locally. Dedicated Android emulator verification passed.
+
 ### [Album Organizer Channel Review Workshop](2026-11-04-album-organizer-channel-workshop.md)
 - Status: Done. Interactive comparison published for design review.
 
