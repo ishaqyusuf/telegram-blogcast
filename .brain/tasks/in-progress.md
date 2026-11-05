@@ -1,7 +1,7 @@
 # In Progress
 
 ### [Audio Search And Album Actions](2026-11-05-audio-search-workshop.md)
-- Status: Direction 01 implemented and checked; EAS Preview release in progress.
+- Status: Code pushed to preview; EAS publication awaits existing API deployment confirmation.
 
 ### [Android Preview Native Release — 2026.10.28](2026-10-28-preview-native-release.md)
 - Status: In Progress

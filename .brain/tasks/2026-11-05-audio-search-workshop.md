@@ -1,6 +1,6 @@
 # Audio Search And Album Actions
 
-- Status: Implementation complete; release preparation in progress. Direction 01 selected by user.
+- Status: Implementation committed and pushed to preview; EAS publication awaits confirmation to update the existing production API. Direction 01 selected by user.
 - Created: 2026-11-05
 - Workshop: https://workshop.localhost/al-ghurobaa/audio/search
 - Source: `/Users/M1PRO/Documents/code/workshop/work/al-ghurobaa/audio/search/`
@@ -74,3 +74,11 @@ Publish the committed Android update to EAS Preview. The user explicitly cancele
 - User authorized push and EAS Preview update. Existing current checkout only; unrelated dirty work excluded from commits and release. No worktrees.
 - Shared operational release helper internally creates a Git worktree when dirty, which conflicts with standing user instructions. Use an independent clean clone/archive of committed source for provider publishing instead.
 - Vercel CLI login restored with user email verification. No Vercel deployment or infrastructure mutation has been made in this task.
+
+## Delivery Checkpoint
+
+- Implementation commit `00d123ac340c7ad39280f560d151b16a7a6f663a` pushed to `origin/preview`, verified against the remote branch.
+- Exact clean release clone `/private/tmp/alghurobaa-audio-release-00d123ac` passed Android Hermes export and API build. Final focused suite on that committed source: 9 passed / 0 failed / 39 assertions, including real PostgreSQL fixture rollback. Clean-source full TypeScript still has 70 pre-existing diagnostics outside the new search/action modules.
+- Workshop implementation receipt: `af1580f1-6ea2-438c-a6dc-1c92c8c25d7f`, tied to selected revision `d404fd44-dd6d-4535-8c41-56fecdb49055`; native acceptance remains explicitly delegated to the user's Preview testing.
+- Provider read confirms API project `alghurobaa-api` has no Git repository link. EAS Preview's actual public URL variables still target `https://alghurobaa-api.vercel.app` and web `https://alghurobaa.vercel.app`. Live `album.search` returns `NOT_FOUND`.
+- No new projects, URL changes, database/schema changes, Vercel deployment or EAS publication performed. The user narrowed release intent to EAS Preview and questioned the need for an API update; clarification explained that the new endpoints require deploying code to the existing shared API. Approval is pending. Do not publish an app update whose required endpoints are absent.
