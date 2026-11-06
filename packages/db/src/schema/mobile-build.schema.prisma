@@ -1,0 +1,7 @@
+// Public APK release metadata only. Writes belong to the authenticated operator CLI.
+model MobileBuildRelease {
+    key         String   @id
+    value       Json
+    revision    Int
+    updatedAt   DateTime @updatedAt
+}

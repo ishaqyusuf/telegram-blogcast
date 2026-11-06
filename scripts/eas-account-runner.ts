@@ -2,6 +2,7 @@ import { access, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { assertReleaseSource } from "./release-source.mjs";
+import { buildAndRegisterPreview } from "./preview-build-publication";
 
 type Operation = "build" | "update" | "auth";
 type Target = "dev" | "preview" | "prod";
@@ -101,7 +102,30 @@ if (target !== "dev") {
   env.APP_VARIANT = target === "prod" ? "production" : "preview";
 }
 
-await runOrExit([...getActionCommand(operation, target), ...forwardedArgs], {
+const platformIndex = forwardedArgs.findIndex((arg) => arg === "--platform" || arg === "-p");
+const buildPlatform = platformIndex >= 0 ? forwardedArgs[platformIndex + 1] : undefined;
+if (operation === "build" && target === "preview" && buildPlatform === "android") {
+  const source = Bun.spawn(["git", "rev-parse", "HEAD"], { cwd: REPO_DIR, stdout: "pipe" });
+  const revision = (await new Response(source.stdout).text()).trim();
+  if (await source.exited) throw new Error("Could not resolve release revision");
+  assertReleaseSource(REPO_DIR, revision);
+  if (forwardedArgs.includes("--no-wait")) throw new Error("Preview builds now register their finished APK. Remove --no-wait.");
+  await runOrExit(["bun", "scripts/mobile-build-release.ts", "status"], { cwd: REPO_DIR, env, stdio: "inherit" });
+  const id = await buildAndRegisterPreview({
+    command: [...getActionCommand(operation, target), ...forwardedArgs], revision,
+    runJson: async (command) => {
+      const child = Bun.spawn(command, { cwd: APP_DIR, env, stdout: "pipe", stderr: "inherit", stdin: "inherit" });
+      const result = await new Response(child.stdout).text();
+      if (await child.exited) throw new Error("EAS build failed; no APK was registered");
+      return result;
+    },
+    register: async (id, commit) => {
+      const child = Bun.spawn(["bun", "scripts/mobile-build-release.ts", "publish", "--build-id", id, "--commit", commit], { cwd: REPO_DIR, env, stdout: "inherit", stderr: "inherit" });
+      if (await child.exited) throw new Error("APK registration failed");
+    },
+  });
+  console.log(`Preview build registered: https://expo.dev/accounts/ishaqyusuf/projects/alghurobaa/builds/${id}`);
+} else await runOrExit([...getActionCommand(operation, target), ...forwardedArgs], {
   cwd: APP_DIR,
   env,
   stdio: "inherit",

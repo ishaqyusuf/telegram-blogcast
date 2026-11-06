@@ -35,3 +35,7 @@ Documents authentication and authorization expectations across the API surface.
 ### Audio search/manual album writes — 2026-11-05
 
 The new bounded discovery/context reads and `createAlbumWithMedia`, `removeMembership`, `deleteAudioPosts` retain the repository's existing publicProcedure policy for album/blog writes. Numeric IDs, batch limits, live audio checks, transaction locks, membership snapshots and explicit manual cross-channel acknowledgment enforce data integrity, not authentication or authorization. The patch does not claim user-scoped write protection or alter automatic organizer channel restrictions. No credentials are embedded in the app; Preview retains its existing service connection.
+
+### Native build release permissions — 2026-11-06
+
+`mobileBuild.check` is a public read of shareable Preview APK metadata. Registration and withdrawal have no API mutation route: the operator CLI uses existing database credentials after checking exact EAS owner/project/profile/channel/revision and downloaded APK package/versionCode. The app receives no publication credential. Existing backend URLs and environment settings remain unchanged.

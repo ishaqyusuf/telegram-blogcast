@@ -1,4 +1,5 @@
 import { ScrollView } from "@/components/ui/scroll-surfaces";
+import { NativeBuildUpdateCard } from "@/components/native-build-update";
 import { Icon } from "@/components/ui/icon";
 import { useOtaRouteRestoration } from "@/components/ota-route-restoration-provider";
 import { Pressable } from "@/components/ui/pressable";
@@ -111,7 +112,8 @@ export default function UpdatesScreen() {
     if (isDownloading || action === "downloading") return "Downloading";
     if (isUpdateAvailable) return "Update found";
     if (isChecking || action === "checking") return "Checking";
-    return "Up to date";
+    if (errorMessage || checkError || downloadError) return "Update check failed";
+    return lastCheckForUpdateTimeSinceRestart ? "No update pending" : "Ready to check";
   }, [
     action,
     isChecking,
@@ -119,6 +121,10 @@ export default function UpdatesScreen() {
     isRestarting,
     isUpdateAvailable,
     isUpdatePending,
+    errorMessage,
+    checkError,
+    downloadError,
+    lastCheckForUpdateTimeSinceRestart,
   ]);
 
   const canCheck =
@@ -357,6 +363,8 @@ export default function UpdatesScreen() {
               value={formatDate(lastCheckForUpdateTimeSinceRestart)}
             />
           </View>
+
+          <NativeBuildUpdateCard />
 
           <View className="gap-2 rounded-2xl bg-card p-4">
             <View className="flex-row items-center gap-2">

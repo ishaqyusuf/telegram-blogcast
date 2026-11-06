@@ -1,4 +1,5 @@
 import { SafeArea } from "@/components/safe-area";
+import { NativeBuildUpdatePrompt } from "@/components/native-build-update";
 import {
   AppAutoUpdateStep,
   AUTO_UPDATE_STEPS,
@@ -38,6 +39,8 @@ export function AppAutoUpdateModal() {
         : "Restarting into the updated app.";
 
   return (
+    <>
+    <NativeBuildUpdatePrompt enabled={phase === "idle"} />
     <Modal
       animationType="fade"
       onRequestClose={() => undefined}
@@ -108,6 +111,7 @@ export function AppAutoUpdateModal() {
         </View>
       </SafeArea>
     </Modal>
+    </>
   );
 }
 

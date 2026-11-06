@@ -67,3 +67,7 @@ The public album router additionally exposes `getOrganizerAlbums`, `startOrganiz
 ### Audio search and manual album additions — 2026-11-05
 
 Added queries `blog.searchFacets`, `album.search`, `album.getPickerContext`; added mutations `album.createAlbumWithMedia`, `album.removeMembership`, `blog.deleteAudioPosts`. `blog.search` supports optional lean count-free paging; `album.addMediaToAlbum` supports confirmed manual cross-channel destinations and stale-membership snapshots. All remain under the existing tRPC API origin and publicProcedure policy. See [contracts](contracts.md). No new service or Preview project.
+
+### Native build discovery — 2026-11-06
+
+`mobileBuild.check({ applicationId, platform, channel, buildNumber })` returns `{ build }`, with null for no eligible active, unexpired, newer Android Preview APK. Reads the existing database registry by primary key. Native-build publication/withdrawal is operator-CLI-only; no write endpoint. See [feature](../features/mobile-build-updates.md).

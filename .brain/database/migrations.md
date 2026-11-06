@@ -31,3 +31,7 @@ Tracks how schema changes are applied and what migration workflows are expected 
 - Regenerate client if needed.
 - Verify app and API queries against schema changes.
 - Update Brain docs when domain shapes change.
+
+### 2026-11-06 — Preview build registry
+
+Prisma diff verified a single additive `CREATE TABLE MobileBuildRelease`. Both requested root workflows were attempted: migration reached existing history drift through the direct task and exited 130 without reset; `bun db:push --ui=tui` succeeded. Prisma client regenerated. No manual migration, data-loss acceptance, reset or connection-setting change. Registry transaction tests ran with full rollback before live publication.

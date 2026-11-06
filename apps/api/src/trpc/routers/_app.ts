@@ -11,9 +11,11 @@ import { channelRoutes } from "./channel.route";
 import { facebookImportRoutes } from "./facebook-import.routes";
 import { libraryRoutes } from "./library.routes";
 import { playlistRoutes } from "./playlist.routes";
+import { mobileBuildRoutes } from "./mobile-build.routes";
 import { postcastRoutes } from "./podcast.route";
 
 export const appRouter = createTRPCRouter({
+	mobileBuild: mobileBuildRoutes,
 	podcasts: postcastRoutes,
 	channel: channelRoutes,
 	blog: blogRoutes,

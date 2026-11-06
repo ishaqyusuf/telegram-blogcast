@@ -17,13 +17,22 @@
 ## Checklist
 
 - [x] Verify current APK provider status and download availability.
-- [ ] Publish and read back fresh Preview OTA.
+- [x] Publish and read back fresh Preview OTA.
 - [ ] Start and verify fresh Android Preview build.
-- [ ] Implement and test native-build discovery and registration using reference patterns.
+- [x] Implement and test native-build discovery and registration using reference patterns.
 - [ ] Deploy existing API changes and register verified build.
 - [ ] Publish updater OTA and verify delivery.
 - [ ] Commit release evidence and update Brain ledgers.
 
 ## Documentation impact
 
-Release evidence belongs here. Feature/API/database/decision documentation will be updated with the final native-build registry design. No schema or service configuration has changed during initial diagnosis.
+Feature, API, database and ADR documentation describe the native-build registry; service configuration remains unchanged.
+
+## Initial delivery and implementation evidence
+
+- Fresh OTA group `224ec7c8-dfc4-40d7-991c-ce65d5e7095e`, Android update `01a1af53-9b54-7940-a1e2-34bd5dd37494`, source `dcc6adf8917a7634d059cee8c8b6bdb3ddc0acce`, label `2026.11.06`, runtime `1.0.112`. Public Preview manifest returned that exact update ID on November 6.
+- Native build `a86d38dd-cbd3-4187-a15f-63ffd70f3f58` submitted from the same source, app/runtime `1.0.112`, Android build 28. Existing remote Preview keystore retained. Provider expiry `2026-11-20T05:27:42.797Z`. Compilation in progress.
+- Eight focused tests / 52 assertions passed: scope/version/expiry validation, provider identity, APK package checks, registration-after-build sequencing, retry without rebuilding, and real-database registry transactions. The integration test's writes rolled back; registry was empty afterward.
+- Prisma schema diff contained only `CREATE TABLE MobileBuildRelease`; root and push connection targets matched. `bun db:migrate` first hit the existing Turbo interactive-task configuration; its direct Prisma task then refused existing migration-history drift with exit 130. No reset or migration file was created. `bun db:push --ui=tui` succeeded after the sandbox permitted Bun's cache writes; existing data/settings unchanged.
+- Working-checkout TypeScript still reports 74 existing diagnostics, none in the added updater modules. Focused Biome passes. Final clean-source build/export and delivery readback pending.
+- Native UI acceptance remains with the user in Preview, following their release-for-testing instruction; automated contract/database checks do not prove installed-device behavior.

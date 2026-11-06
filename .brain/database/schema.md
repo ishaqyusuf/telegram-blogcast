@@ -59,3 +59,7 @@ Summarizes where the database schema lives and which major data domains exist.
 ### Album Organizer Run Metadata (2026-11-05)
 
 Existing `AlbumAutoIndexRun.inputJson` now supports a version-1 `scan` object with fixed coverage, committed cursor, inspected/unmatched media IDs, legacy exclusions and a lease, plus `review` with the current pending suggestion, drafts and applied destinations. Normalized suggestion records retain existing status and membership semantics. New scan runs append per-batch raw and parsed output to `rawResponseJson`. No Prisma schema change is required. See [the decision](../decisions/2026-11-05-album-organizer-resume.md).
+
+### Preview build registry — 2026-11-06
+
+`mobile-build.schema.prisma` adds `MobileBuildRelease`: primary-key scope `key`, validated public metadata `value` (JSONB), optimistic `revision`, and `updatedAt`. It stores only APK release identity, checksum/size/expiry and publication state. Existing content/auth models and connection settings are unchanged. See [the ADR](../decisions/2026-11-06-preview-native-build-registry.md).
