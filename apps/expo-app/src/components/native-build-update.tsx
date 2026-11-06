@@ -15,9 +15,10 @@ const DISMISS_KEY = "native-build-dismiss-v1";
 
 export function NativeBuildUpdatePrompt({ enabled }: { enabled: boolean }) {
 	const update = useNativeBuildUpdate(enabled);
-	const [dismissedRevision, setDismissedRevision] = useState<number | null>(
-		null,
-	);
+	const [dismissal, setDismissal] = useState<{
+		revision: number;
+		until: number;
+	} | null>(null);
 	const [ready, setReady] = useState(false);
 	const [bodyHeight, setBodyHeight] = useState(120);
 	const [footerHeight, setFooterHeight] = useState(48);
@@ -28,8 +29,13 @@ export function NativeBuildUpdatePrompt({ enabled }: { enabled: boolean }) {
 			.then((raw) => {
 				try {
 					const saved = JSON.parse(raw ?? "null");
-					if (mounted && saved?.until > Date.now())
-						setDismissedRevision(saved.revision);
+					if (
+						mounted &&
+						Number.isSafeInteger(saved?.revision) &&
+						typeof saved?.until === "number" &&
+						saved.until > Date.now()
+					)
+						setDismissal(saved);
 				} catch {
 					/* Ignore damaged preferences. */
 				}
@@ -44,14 +50,14 @@ export function NativeBuildUpdatePrompt({ enabled }: { enabled: boolean }) {
 	}, []);
 	const dismiss = () => {
 		if (!update.build || update.opening) return;
-		setDismissedRevision(update.build.revision);
-		void AsyncStorage.setItem(
-			DISMISS_KEY,
-			JSON.stringify({
-				revision: update.build.revision,
-				until: Date.now() + 86400000,
-			}),
-		).catch(() => undefined);
+		const next = {
+			revision: update.build.revision,
+			until: Date.now() + 86400000,
+		};
+		setDismissal(next);
+		void AsyncStorage.setItem(DISMISS_KEY, JSON.stringify(next)).catch(
+			() => undefined,
+		);
 	};
 	return (
 		<FloatingBottomSheet
@@ -59,7 +65,10 @@ export function NativeBuildUpdatePrompt({ enabled }: { enabled: boolean }) {
 				enabled &&
 				ready &&
 				!!update.build &&
-				update.build.revision !== dismissedRevision
+				!(
+					update.build.revision === dismissal?.revision &&
+					dismissal.until > Date.now()
+				)
 			}
 			onClose={dismiss}
 			title="New app build available"
