@@ -1,6 +1,6 @@
 # Preview native-build registry and OTA-compatible installation handoff
 
-- Status: Accepted — implementing/releasing
+- Status: Accepted — API, updater OTA and registered Preview build 28 released
 - Date: 2026-11-06
 
 The user requested an EwaTrade/GND-style in-app APK update flow, with a native build started immediately and the updater delivered later through OTA. Existing API/project/URL/database connection settings must stay unchanged.

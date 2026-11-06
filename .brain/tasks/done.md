@@ -1,5 +1,8 @@
 # Done
 
+### [Preview OTA, Native Build and In-App Build Updates](2026-11-06-preview-build-updates.md)
+- Status: Released — build 28 verified/registered, existing API live, updater OTA delivery verified.
+
 ### [Player Album Sheet, Immediate Renames, and Streaming Controls](2026-11-05-player-album-sheet.md)
 - Status: Done locally — native Android and focused regression checks passed.
 

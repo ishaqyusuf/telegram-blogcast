@@ -1,8 +1,5 @@
 # In Progress
 
-### [Preview OTA, Native Build and In-App Build Updates](2026-11-06-preview-build-updates.md)
-- Status: In Progress
-
 ### [Android Preview Native Release — 2026.10.28](2026-10-28-preview-native-release.md)
 - Status: In Progress
 
